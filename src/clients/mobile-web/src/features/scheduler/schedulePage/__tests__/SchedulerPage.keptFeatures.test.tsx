@@ -11,6 +11,7 @@
  * order), the schedule editor (REAL, not mocked: its choice takes effect on the page) and the day grid.
  * Plus the honest states: a schedule nobody chose, a schedule that has ended.
  */
+import { autoOpenFolds } from './foldTestKit';
 import React, { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -54,6 +55,7 @@ function mount(initial: CropProfile[] = [crop()], logs: DailyLog[] = LOGS, tasks
         return <SchedulerPage crops={crops} logs={logs} tasks={tasks} {...props} onUpdateCrops={next => { onUpdateCrops(next); setCrops(next); }} />;
     };
     render(<Harness />);
+    autoOpenFolds();
     return props;
 }
 const text = (id: string) => screen.getByTestId(id).textContent ?? '';
@@ -283,7 +285,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         noEnglish();
     });
 
-    it('a different schedule and a new day 0: saved, and the page now shows that schedule — two sprays, two lines', () => {
+    it('a different schedule and a new day 0: saved, and the page now shows that schedule — two sprays, two lines', async () => {
         const p = mount();
         fireEvent.click(screen.getByTestId('open-editor'));
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
@@ -298,6 +300,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
         expect(text('day-now')).toBe('8');
         expect(text('stage-line')).toContain('फुलोऱ्यापूर्वी');
+        await screen.findByTestId('owed-card'); // UI-4: the page is drawn again with its rows closed; autoOpenFolds opens them
         expect(screen.getAllByTestId('owed-spray').map(e => e.textContent)).toEqual([
             expect.stringContaining('भुरीसाठी फवारणी'), expect.stringContaining('थ्रिप्ससाठी फवारणी'),
         ]);

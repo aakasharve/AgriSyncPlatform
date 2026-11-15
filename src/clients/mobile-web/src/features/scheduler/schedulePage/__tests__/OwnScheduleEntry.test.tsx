@@ -9,6 +9,7 @@
  * nothing else on the page changes. The promise line "नियोजनात बनवता येईल" goes where the button is live (P10). A seat WITHOUT the authority
  * sees no maker and no library controls - nothing greyed; an unknown seat is hidden (fail closed).
  */
+import { autoOpenFolds } from './foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,6 +57,7 @@ function mount(props: { mayMakeOwnSchedule?: boolean; onMakeOwnSchedule?: (cropI
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} {...props} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 }
 
 beforeEach(async () => {

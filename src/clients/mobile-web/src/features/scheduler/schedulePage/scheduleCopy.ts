@@ -46,6 +46,12 @@ export const SC = {
     next3: '3 दिवस',
     next8: '8 दिवस',
     in8: '8 दिवसांत',
+    // UI-4 (D-146): the closed rows of the शेड्यूल tab.
+    doneTitle: 'झालेलं काम',
+    toolsLine: 'लायब्ररी, बदला, दिवसवार तक्ता',
+    aheadLine: (n: number) => `पुढच्या 8 दिवसांत ${n} कामं`,
+    stagesLine: (n: number) => `${n} स्टेज`,
+    followedLine: (n: number) => `${n} शेड्यूल`,
     owedSub: 'हे अजून झालेलं नाही',
     nothingOwed: 'आधीचं काहीही राहिलेलं नाही',
     tomorrow: 'उद्या',

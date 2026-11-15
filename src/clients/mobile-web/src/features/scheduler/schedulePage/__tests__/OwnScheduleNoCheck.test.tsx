@@ -8,6 +8,7 @@
  * "NotChecked" (`resolveSchedule.ts` `?? 'NotChecked'`, and the catalog's "no check = not checked"): fixed for OWN rows only. Never a
  * "not checked" badge, note or word for a schedule of his own; an OUTSIDE row with no check keeps reading "not checked" (D-91 = 1 samples).
  */
+import { autoOpenFolds } from './foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,6 +57,7 @@ const mount = (initial: CropProfile[]) => {
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 };
 const oneCrop = (): CropProfile[] => [crop([plot({ id: PLOT_1, name: 'A', schedule: { ...plot().schedule, id: 'sch-1', plotId: PLOT_1 } })])];
 

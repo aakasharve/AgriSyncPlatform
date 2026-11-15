@@ -16,6 +16,7 @@
  *   - a 404, a refusal, an error or an answer that cannot be read draws NOTHING - never a fake;
  *   - Marathi mode Marathi only, English mode English only; the count is a 44px target.
  */
+import { autoOpenFolds } from './foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,6 +89,7 @@ function mount() {
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 }
 const card = () => screen.findByTestId('stage-plan-card');
 const minHeight = (el: HTMLElement): number => Number(/min-h-\[(\d+)px\]/.exec(el.className)?.[1] ?? 0);
@@ -142,15 +144,15 @@ describe('layout B (D-99)', () => {
         expect(within(panel).getByTestId('stage-plan-chip')).toHaveAttribute('data-slot', '');
     });
 
-    it('Drawn_after_the_3_plus_1_section_and_before_the_three_buttons', async () => {
+    it('UI-4 (D-146): the stage panel sits inside the closed "स्टेज" row, under the today card (the three big buttons are gone)', async () => {
         await seedFollowing();
         serves(PLAN);
         mount();
         const panel = await card();
-        const section = screen.getByTestId('three-plus-one');
-        const tabs = screen.getByTestId('sched-tabs');
-        expect(section.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(panel.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByTestId('fold-stages-body')).toContainElement(panel);
+        const today = screen.getByTestId('today-card');
+        expect(today.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.queryByTestId('sched-tabs')).toBeNull();
     });
 });
 

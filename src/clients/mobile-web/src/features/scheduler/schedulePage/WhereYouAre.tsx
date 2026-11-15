@@ -25,6 +25,7 @@ import { GLASS } from './scheduleUi';
 import type { FollowedCheckNote } from './followedCheck';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { SCHEDULE_GATE_WORDS } from './scheduleGateCopy';
+import { ScheduleCreatorBadge } from './ScheduleCreatorBadge';
 
 /** The saved author is shown only when it is a real name, not the catalog's internal English tag. */
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
@@ -72,29 +73,36 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
         [model.totalDays !== null ? String(model.totalDays) : '—', SC.dayTotal, 'day-total'],
         [String(model.stages.length), SC.stageCount, 'stage-count'],
     ];
+    // UI-4 (D-146): the round place shows the first letter of the creator's name (a real name only), else a leaf; no picture is passed yet.
+    const creator = template.createdBy && !INTERNAL_AUTHORS.has(template.createdBy) ? template.createdBy : null;
     return (
-        <section className="rounded-3xl bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900 p-5 text-white shadow-xl shadow-stone-900/30" data-testid="sched-header">
-            <h2 className="m-0 text-[26px] font-black leading-tight tracking-tight" data-testid="sched-crop-plot">{cropName} · {plotName}</h2>
-            <p className="m-0 mt-1 text-[16px] font-bold text-white/80" data-testid="sched-name">{scheduleNameMr(template.name)}</p>
+        <section className="rounded-3xl bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900 p-4 text-white shadow-xl shadow-stone-900/30" data-testid="sched-header">
+            <div className="flex items-center gap-3">
+                <ScheduleCreatorBadge name={creator} />
+                <div className="min-w-0 flex-1">
+                    <h2 className="m-0 text-[22px] font-black leading-tight tracking-tight" data-testid="sched-crop-plot">{cropName} · {plotName}</h2>
+                    <p className="m-0 mt-0.5 text-[15px] font-bold leading-snug text-white/80" data-testid="sched-name">{scheduleNameMr(template.name)}</p>
+                </div>
+            </div>
             <OwnerBadge template={template} />
             {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
             <ScheduleCheckBadge template={template} tone="dark" testId="sched-check" />
             {checkNote && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} />}
-            <div className="mt-4 grid grid-cols-3 gap-2.5">
+            <div className="mt-3 grid grid-cols-3 gap-2">
                 {tiles.map(([n, label, id]) => (
-                    <div key={id} className="rounded-2xl bg-white/10 p-3 text-center backdrop-blur-sm">
-                        <div className="text-[32px] font-black leading-none" data-testid={id}>{n}</div>
-                        <div className="mt-1 text-[14px] font-bold text-white/75">{label}</div>
+                    <div key={id} className="rounded-2xl bg-white/10 px-2 py-2 text-center backdrop-blur-sm">
+                        <div className="text-[24px] font-black leading-none" data-testid={id}>{n}</div>
+                        <div className="mt-1 text-[13px] font-bold text-white/75">{label}</div>
                     </div>
                 ))}
             </div>
-            {!started && <p className="m-0 mt-3 text-[16px] font-bold text-amber-200" data-testid="not-started">{SC.notStarted(-model.todayDay)}</p>}
-            {model.ended && <p className="m-0 mt-3 text-[16px] font-bold text-amber-200" data-testid="sched-ended">{SC.ended}</p>}
+            {!started && <p className="m-0 mt-2 text-[15px] font-bold text-amber-200" data-testid="not-started">{SC.notStarted(-model.todayDay)}</p>}
+            {model.ended && <p className="m-0 mt-2 text-[15px] font-bold text-amber-200" data-testid="sched-ended">{SC.ended}</p>}
             {stage && (
-                <div className="mt-4 flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-3">
-                    <CategoryIcon name="sprout" size={26} className="shrink-0" />
-                    <span className="text-[19px] font-black leading-snug text-emerald-300" data-testid="stage-line">
-                        {SC.stage} {stage.index + 1} · {stage.name} <span className="text-[15px] font-bold text-emerald-200">({SC.dayN(stage.from)}–{stage.to})</span>
+                <div className="mt-3 flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-3 py-2">
+                    <CategoryIcon name="sprout" size={22} className="shrink-0" />
+                    <span className="text-[17px] font-black leading-snug text-emerald-300" data-testid="stage-line">
+                        {SC.stage} {stage.index + 1} · {stage.name} <span className="text-[14px] font-bold text-emerald-200">({SC.dayN(stage.from)}–{stage.to})</span>
                     </span>
                 </div>
             )}

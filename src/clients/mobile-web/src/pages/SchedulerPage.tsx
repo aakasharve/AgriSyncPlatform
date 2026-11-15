@@ -34,7 +34,7 @@ import { scheduleCropCode } from '../infrastructure/reference/TemplateCatalog';
 import { PlotScheduleHome } from '../features/scheduler/schedulePage/PlotScheduleHome';
 import { ScheduleDaySheet } from '../features/scheduler/schedulePage/ScheduleDaySheet';
 import { ScheduleTools } from '../features/scheduler/schedulePage/ScheduleTools';
-import type { ScheduleTab } from '../features/scheduler/schedulePage/ScheduleTabs';
+import { ScheduleFold } from '../features/scheduler/schedulePage/ScheduleFold';
 import { SC } from '../features/scheduler/schedulePage/scheduleCopy';
 import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedulePage/scheduleModel';
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
@@ -83,7 +83,6 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const [cropId, setCropId] = useState('');
     const [plotId, setPlotId] = useState('');
     const [view, setView] = useState<View>('HOME');
-    const [tab, setTab] = useState<ScheduleTab>('today');
     const [openDayKey, setOpenDayKey] = useState<string | null>(null);
     const [moneyOpen, setMoneyOpen] = useState(false);
     const [choiceNote, setChoiceNote] = useState<string | null>(null);
@@ -299,6 +298,19 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         ));
     }
 
+    const toolsBody = (
+        <ScheduleTools
+            facts={facts}
+            todaySpend={todaySpend}
+            onOpenMoney={() => setMoneyOpen(true)}
+            onCloseDay={onCloseDay}
+            libraryCount={libraryCount}
+            onLibrary={() => setView('LIBRARY')}
+            onEditor={() => setView('EDITOR')}
+            onGrid={model ? () => setView('GRID') : undefined}
+        />
+    );
+
     return shell(SC.title, onBack, (
         <>
             {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
@@ -320,7 +332,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             )}
             {crop && plot && resolved && model && (
                 <PlotScheduleHome plotId={plot.id} cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
-                    tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
+                    onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
                     mayMakeOwn={makeOwn} onMakeOwn={openMaker}
@@ -328,18 +340,11 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                         <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />
                     ) : undefined}
-                    onAddSchedule={() => { setLibraryMode('add'); setView('LIBRARY'); }} onLeaveSchedule={leaveSchedule} />
+                    onAddSchedule={() => { setLibraryMode('add'); setView('LIBRARY'); }} onLeaveSchedule={leaveSchedule}>
+                    <ScheduleFold id="tools" title={SC.toolsTitle} summary={SC.toolsLine}>{toolsBody}</ScheduleFold>
+                </PlotScheduleHome>
             )}
-            <ScheduleTools
-                facts={facts}
-                todaySpend={todaySpend}
-                onOpenMoney={() => setMoneyOpen(true)}
-                onCloseDay={onCloseDay}
-                libraryCount={libraryCount}
-                onLibrary={() => setView('LIBRARY')}
-                onEditor={() => setView('EDITOR')}
-                onGrid={model ? () => setView('GRID') : undefined}
-            />
+            {!(crop && plot && resolved && model) && <ScheduleFold id="tools" title={SC.toolsTitle} summary={SC.toolsLine}>{toolsBody}</ScheduleFold>}
             {sheet}
         </>
     ));
