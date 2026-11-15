@@ -207,6 +207,9 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsList)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 — every farm / every person across the platform: platform
+            // owners only (an FPO owner also holds this module).
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetFarmsListQuery(
                 Math.Max(1, page), Math.Clamp(pageSize, 10, 200), search, tier,
@@ -260,6 +263,9 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.AdminUsers)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 — every farm / every person across the platform: platform
+            // owners only (an FPO owner also holds this module).
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetUsersListQuery(
                 Math.Max(1, page), Math.Clamp(pageSize, 10, 200), search,

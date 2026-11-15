@@ -11,7 +11,7 @@ public sealed class GetFarmsListHandler(IAdminMisRepository misRepo)
     public async Task<Result<AdminResponseDto<FarmsListDto>>> HandleAsync(
         GetFarmsListQuery q, CancellationToken ct = default)
     {
-        var farms = await misRepo.GetFarmsListAsync(q.Page, q.PageSize, q.Search, q.Tier, ct);
+        var farms = await misRepo.GetFarmsListAsync(q.ActorId, q.Page, q.PageSize, q.Search, q.Tier, ct);
         return Result.Success(new AdminResponseDto<FarmsListDto>(farms,
             new AdminMetaDto("live-aggregated", "current", DateTime.UtcNow, 60)));
     }

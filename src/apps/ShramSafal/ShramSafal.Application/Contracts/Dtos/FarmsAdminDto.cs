@@ -10,7 +10,8 @@ public sealed record FarmSummaryDto(
     Guid FarmId,
     string Name,
     string OwnerPhone,
-    string Plan,
+    // spec: company-mis-real-numbers-2026-11-15 — always null: the farm list no longer sends a made-up plan.
+    string? Plan,
     decimal? Wvfd7d,
     string? EngagementTier,
     int Errors24h,
