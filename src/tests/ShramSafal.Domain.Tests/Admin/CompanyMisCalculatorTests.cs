@@ -1175,6 +1175,77 @@ public sealed class CompanyMisCalculatorTests
             .Should().Be(new MisValueDto(null, DenominatorZero), "no active farm: nothing to divide");
     }
 
+    [Fact]
+    public void A_farm_that_logged_before_the_loaded_rows_is_silent_on_early_previous_days()
+    {
+        // A5 inside the A9 day lists: first entry (all time) in March, the only loaded entry on 12 Nov.
+        var farm = G(1);
+        var owner = G(101);
+        var march = new DateTime(2026, 3, 1, 5, 0, 0, DateTimeKind.Utc);
+        var rows = new Seed()
+            .FarmWithHistory(farm, owner, Ist(1, 1), firstEntryUtc: march, lastEntryUtc: Ist(11, 12))
+            .Entry(farm, owner, Ist(11, 12))
+            .Build();
+
+        var dto = Compute(rows, D(11, 10), D(11, 13)); // Q = 6..9 Nov
+
+        dto.Retention.SilentFarms30Plus.PreviousByDay.Should().Equal(
+            new decimal?[] { 1m, 1m, 1m, 1m }, "on 6..9 Nov no loaded entry is on or before the day, but it logged in March");
+        dto.Retention.NeverLoggedFarms.PreviousByDay.Should().Equal(new decimal?[] { 0m, 0m, 0m, 0m });
+        dto.Retention.SilentFarms30Plus.CurrentByDay.Should().Equal(
+            new decimal?[] { 1m, 1m, 0m, 0m }, "10 and 11 Nov still silent; from 12 Nov it has logged");
+        dto.Retention.NeverLoggedFarms.CurrentByDay.Should().Equal(new decimal?[] { 0m, 0m, 0m, 0m });
+        dto.Retention.ActiveFarms0To6.CurrentByDay.Should().Equal(new decimal?[] { 0m, 0m, 1m, 1m });
+    }
+
+    [Fact]
+    public void A_test_account_is_left_out_of_every_day_value()
+    {
+        var x = G(900);
+        var r = G(101);
+        var fr = G(1);       // real farm, real farmer
+        var fr2 = G(2);      // real farm only the test account saves on
+        var excluded = new HashSet<Guid> { x };
+
+        Seed RealRows() => new Seed()
+            .Farm(fr, r, Ist(10, 1)).Farm(fr2, G(102), Ist(10, 1))
+            .Entry(fr, r, Ist(11, 8)).Entry(fr, r, Ist(11, 11))
+            .User(r, Ist(11, 7));
+
+        var withTestAccount = RealRows()
+            .Entry(fr, x, Ist(11, 10)).Entry(fr2, x, Ist(11, 12)).Entry(fr2, x, Ist(11, 7))
+            .User(x, Ist(11, 12))
+            .Build(excluded);
+        var withoutTestAccount = RealRows().Build();
+
+        var left = Compute(withTestAccount, D(11, 10), D(11, 13), excluded);
+        var plain = Compute(withoutTestAccount, D(11, 10), D(11, 13));
+
+        foreach (var (name, a, b) in new[]
+                 {
+                     ("logsRecorded", left.Overview.LogsRecorded, plain.Overview.LogsRecorded),
+                     ("signUps", left.Overview.SignUps, plain.Overview.SignUps),
+                     ("verified", left.Acquisition.Verified, plain.Acquisition.Verified),
+                     ("dau", left.Overview.Dau, plain.Overview.Dau),
+                     ("wau", left.Overview.Wau, plain.Overview.Wau),
+                     ("mau", left.Overview.Mau, plain.Overview.Mau),
+                     ("activeFarms", left.Overview.ActiveFarms, plain.Overview.ActiveFarms),
+                 })
+        {
+            a.CurrentByDay.Should().NotBeNull(name);
+            a.CurrentByDay.Should().Equal(b.CurrentByDay, "{0}: current days without the test account's rows", name);
+            a.PreviousByDay.Should().Equal(b.PreviousByDay, "{0}: previous days without the test account's rows", name);
+        }
+
+        left.Overview.ActivePeopleByDay.Should().Equal(plain.Overview.ActivePeopleByDay);
+
+        // By hand, so the comparison is not of two equally wrong lists.
+        plain.Overview.LogsRecorded.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 0m, 0m });
+        plain.Overview.ActiveFarms.CurrentByDay.Should().Equal(new decimal?[] { 1m, 1m, 1m, 1m });
+        plain.Overview.SignUps.CurrentByDay.Should().Equal(new decimal?[] { 0m, 0m, 0m, 0m });
+        plain.Overview.SignUps.PreviousByDay.Should().Equal(new decimal?[] { 0m, 1m, 0m, 0m });
+    }
+
     // ------------------------------------------------------------------
     // Harness
     // ------------------------------------------------------------------
