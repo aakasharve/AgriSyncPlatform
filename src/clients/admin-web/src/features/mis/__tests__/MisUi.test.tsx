@@ -298,3 +298,58 @@ describe('the funnel (CR-2b Task 3, B9)', () => {
     }
   });
 });
+
+describe('empty charts and the habit step (CR-2b B12, B14)', () => {
+  it('A_chart_with_no_measured_day_shows_the_reason_not_empty_axes', () => {
+    const allNull = Array(30).fill(null) as null[];
+    const cases: [Section, string, CompanyMis, string][] = [
+      // A measured number whose every day is null: the card says why, it draws no axes.
+      ['quality', 'quality.voiceSaved',
+        misFixture({ quality: { voiceRecordingsSavedPct: { ...notMeasured('denominator_zero'), currentByDay: allNull, previousByDay: allNull } } }),
+        'Not measured'],
+      ['quality', 'quality.transcriptionAvg',
+        misFixture({ quality: {
+          transcriptionAvgMs: { ...notMeasured('no_samples'), currentByDay: allNull, previousByDay: allNull },
+          transcriptionP95Ms: { ...notMeasured('no_samples'), currentByDay: allNull, previousByDay: allNull },
+        } }),
+        PLAN_REASONS.no_samples],
+      ['engagement', 'engagement.logsPerFarm',
+        misFixture({ engagement: { logsPerActiveFarmPerWeek: { ...num(6.7, 5.9), currentByDay: allNull, previousByDay: allNull } } }),
+        'Not measured'],
+    ];
+    for (const [s, item, d, words] of cases) {
+      const v = render(sectionOf(s, d, true));
+      const el = chartCard(v.container, item);
+      expect.soft([item, el.querySelectorAll('svg[role="img"] text').length]).toEqual([item, 0]);
+      expect.soft([item, linePaths(el).length + ghostPaths(el).length]).toEqual([item, 0]);
+      expect.soft([item, (el.textContent ?? '').includes(words)]).toEqual([item, true]);
+      v.unmount();
+    }
+  });
+
+  it('Habit_with_nobody_eligible_shows_no_bar_and_no_count', () => {
+    const d = misFixture({ acquisition: { habit: num(0, 0), habitEligible: num(0, 0) } });
+    const v = render(sectionOf('acquisition', d, true));
+    // The habit step: the funnel row that holds the habit item.
+    const li = (v.container.querySelector('ol [data-mis-item="acquisition.habit"]')?.closest('li') ?? null) as HTMLElement | null;
+    expect(li).not.toBeNull();
+    const text = li!.textContent ?? '';
+    expect(text).toContain('Nobody who signed up in this range is 7 days in yet');
+    // No count: the only digit allowed is the step number 5 (B9).
+    const marker = [...li!.querySelectorAll('*')].find((e) => e.children.length === 0 && e.textContent?.trim() === '5');
+    // The step's label and the B14 sentence carry plan wording with digits, not counts.
+    const rest = text
+      .replace(marker?.textContent ?? '', '')
+      .replace(/3 of (their )?first 7 days/g, '')
+      .replace('Nobody who signed up in this range is 7 days in yet', '');
+    expect(rest).not.toMatch(/\d/);
+    // No bar: nothing inside the step is drawn with a width.
+    const bars = [...li!.querySelectorAll<HTMLElement>('[style]')].filter((e) => {
+      const w = e.style.width;
+      return w !== '' && Number.parseFloat(w) > 0;
+    });
+    expect(bars).toEqual([]);
+    // And no "did not continue" line into it.
+    expect(text).not.toMatch(/did not continue/);
+  });
+});

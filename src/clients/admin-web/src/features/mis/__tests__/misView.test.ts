@@ -9,7 +9,7 @@ import {
 import { RetentionSection } from '@/features/mis/MisRetention';
 import { EngagementSection } from '@/features/mis/MisEngagement';
 import { reasonSentence } from '@/features/mis/misItems';
-import { BUSIEST, at, farmsBlockedFixture, misFixture, notMeasured, num } from '@/test/misFixture';
+import { BUSIEST, at, farmsBlockedFixture, misFixture, notMeasured, num, ramp } from '@/test/misFixture';
 import { PLAN_REASONS, S_OPS_HEADLINE } from '@/test/misPlan';
 
 /**
@@ -287,7 +287,9 @@ describe('misView: headlines (CR-2b Task 2)', () => {
       'An active farm saved 6.7 entries a week. The busiest hour is 7 pm on Wednesdays (when entries reached the server).',
     );
     const nm = headlineFor('engagement', misFixture({ engagement: { logsPerActiveFarmPerWeek: notMeasured('denominator_zero') } }), false);
-    expect(nm).toContain(`is not measured: ${PLAN_REASONS.denominator_zero}`);
+    // B11: nothing to divide by is said in this item's own terms.
+    expect(nm).toContain('is not measured: No farm was active in the last 7 days.');
+    expect(nm).not.toContain(PLAN_REASONS.denominator_zero);
     expect(nm).not.toContain('6.7');
   });
 
@@ -306,7 +308,9 @@ describe('misView: headlines (CR-2b Task 2)', () => {
       '86.1% of voice recordings became a saved entry. Farmers corrected 8.7% of saved entries.',
     );
     const nm = headlineFor('quality', misFixture({ quality: { voiceRecordingsSavedPct: notMeasured('denominator_zero') } }), false);
-    expect(nm).toContain(`is not measured: ${PLAN_REASONS.denominator_zero}`);
+    // B11: nothing to divide by is said in this item's own terms.
+    expect(nm).toContain('is not measured: No voice recording was made in this period.');
+    expect(nm).not.toContain(PLAN_REASONS.denominator_zero);
     expect(nm).toContain('8.7%');
   });
 
@@ -335,5 +339,101 @@ describe('misView: headlines (CR-2b Task 2)', () => {
     // Previous not measured: no change clause even with compare on.
     const noPrev = misFixture({ overview: { activeFarms: { ...num(412, 0), previous: v(null, 'farm_list_unreadable') } } });
     expect(headlineFor('overview', noPrev, true)).toBe(headlineFor('overview', noPrev, false));
+  });
+});
+
+describe('misView: plain words (CR-2b B11, B13)', () => {
+  const dz = notMeasured('denominator_zero');
+
+  it('Nothing_to_divide_by_is_said_in_plain_terms_per_item', () => {
+    const whyOf = (s: { kind: string; why?: string }) => (s.kind === 'notMeasured' ? s.why ?? '' : '');
+    const cases: [string, string, string][] = [
+      ['overview.voiceShare', 'No entry was saved in this period.',
+        whyOf(tileOf(overviewView(misFixture({ overview: { voiceSharePct: dz } })).tiles, 'overview.voiceShare').current)],
+      ['quality.corrected', 'No entry was saved in this period.',
+        whyOf(tileOf(qualityView(misFixture({ quality: { logsCorrectedPct: dz } })).tiles, 'quality.corrected').current)],
+      ['quality.voiceSaved', 'No voice recording was made in this period.',
+        whyOf(tileOf(qualityView(misFixture({ quality: { voiceRecordingsSavedPct: dz } })).tiles, 'quality.voiceSaved').current)],
+      ['overview.stickiness', 'Nobody saved an entry in the last 30 days.',
+        whyOf(tileOf(overviewView(misFixture({ overview: { stickinessPct: dz } })).tiles, 'overview.stickiness').current)],
+      ['farms.inFpo', 'No farm was active in the last 7 days.',
+        whyOf(tileOf(farmsView(misFixture({ farms: { activeFarmsInFpoPct: dz } })).tiles, 'farms.inFpo').current)],
+      ['engagement.logsPerFarm', 'No farm was active in the last 7 days.',
+        (() => { const c = engagementView(misFixture({ engagement: { logsPerActiveFarmPerWeek: dz } })).perFarm; return c.kind === 'notMeasured' ? c.why : ''; })()],
+    ];
+    for (const [item, sentence, why] of cases) {
+      expect.soft([item, why.includes(sentence)]).toEqual([item, true]);
+      expect.soft([item, why.includes(PLAN_REASONS.denominator_zero)]).toEqual([item, false]);
+    }
+    // The generic sentence stays the fall-back for every other item.
+    const d1 = tileOf(retentionView(misFixture({ retention: { d1Pct: dz } })).tiles, 'retention.d1').current;
+    expect(whyOf(d1)).toContain(PLAN_REASONS.denominator_zero);
+    // Other reasons are untouched by B11.
+    const other = tileOf(overviewView(misFixture({ overview: { voiceSharePct: notMeasured('farm_list_unreadable') } })).tiles, 'overview.voiceShare').current;
+    expect(whyOf(other)).toContain(PLAN_REASONS.farm_list_unreadable);
+  });
+
+  it('Counted_nouns_agree_with_their_number', () => {
+    const singular = /\b1 (farms|people|entries|acres)\b/;
+    const pluralLost = (n: number) => new RegExp(`\b${n} (farm|person|entry|acre)\b(?!s)`);
+    for (const n of [0, 1, 2]) {
+      const d = misFixture({
+        overview: { activeFarms: num(n, n), logsRecorded: num(n, n) },
+        acquisition: { verified: num(n, n) },
+        retention: { quietFarms7To29: num(n, n) },
+        farms: { activeFarms: num(n, n), farmsInFpo: num(n, n) },
+      });
+      const texts = [
+        headlineFor('overview', d, false), headlineFor('acquisition', d, false),
+        headlineFor('retention', d, false), headlineFor('farms', d, false),
+        tileOf(farmsView(d).tiles, 'farms.inFpo').hint,
+      ];
+      for (const t of texts) {
+        if (n === 1) {
+          expect.soft([n, t, singular.test(t)]).toEqual([n, t, false]);
+        } else {
+          expect.soft([n, t, pluralLost(n).test(t)]).toEqual([n, t, false]);
+        }
+      }
+      if (n === 1) {
+        expect.soft(headlineFor('overview', d, false)).toMatch(/^1 farm saved an entry/);
+        expect.soft(headlineFor('overview', d, false)).toMatch(/of the 1 entry in this range/);
+        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^1 person verified/);
+        expect.soft(headlineFor('farms', d, false)).toMatch(/^1 active farm\b(?!s)/);
+        expect.soft(tileOf(farmsView(d).tiles, 'farms.inFpo').hint).toMatch(/\b1 [^,.;]*\bfarm\b(?!s)/);
+      }
+      if (n === 2) {
+        expect.soft(headlineFor('overview', d, false)).toMatch(/^2 farms saved an entry/);
+        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^2 people verified/);
+        expect.soft(tileOf(farmsView(d).tiles, 'farms.inFpo').hint).toMatch(/\b2 [^,.;]*\bfarms\b/);
+      }
+    }
+  });
+
+  it('A_zero_change_reads_no_change', () => {
+    // Tile: counts and shares.
+    for (const [n, kind] of [[num(412, 412), 'count'], [num(42.5, 42.5), 'pct'], [num(0, 0), 'count']] as const) {
+      const t = tileFrom('overview.dau', n, kind, true);
+      expect([kind, t.delta && 'text' in t.delta ? t.delta.text : null]).toEqual([kind, 'no change']);
+    }
+    // Headline with compare on.
+    const flat = misFixture({ overview: { activeFarms: num(412, 412, ramp(412), ramp(412)) } });
+    const h = headlineFor('overview', flat, true);
+    expect(h).toContain('no change on the period before');
+    expect(h).not.toMatch(/[+−-]?0(\.0)?%( |\))|0 pts/);
+    const q = headlineFor('quality', misFixture({ quality: { voiceRecordingsSavedPct: num(86.1, 86.1) } }), true);
+    expect(q).toContain('no change on the period before');
+  });
+
+  it('A_change_too_small_to_show_is_not_no_change', () => {
+    // B13 reserves "no change" for a change of exactly zero; a real change must not read as none,
+    // and "0%" is never printed. (The plans give no wording for it; only these two rules are pinned.)
+    for (const [n, kind] of [[num(100001, 100000), 'count'], [num(42.52, 42.5), 'pct']] as const) {
+      const t = tileFrom('overview.dau', n, kind, true);
+      const text = t.delta && 'text' in t.delta ? t.delta.text : '';
+      expect([kind, text]).not.toEqual([kind, 'no change']);
+      expect([kind, /^[+−-]?0(\.0)?( ?%| pts)$/.test(text)]).toEqual([kind, false]);
+      expect([kind, t.delta && 'text' in t.delta ? t.delta.good : null]).toEqual([kind, true]);
+    }
   });
 });
