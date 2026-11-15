@@ -540,13 +540,15 @@ public static class CompanyMisCalculator
                 .Select(m => m.UserId)
                 .ToHashSet();
 
-            // One role per (farm, person): an Active membership first, then the higher-ranked role.
+            // Amendment A8: one role per (farm, person), read from Active memberships ONLY; a membership that
+            // is no longer Active never names a role (no Active membership there gives "Unknown"). Two Active
+            // rows for one person on one farm: the higher-ranked role.
             var roles = memberships
+                .Where(m => m.Status == ActiveMembershipStatus)
                 .GroupBy(m => (m.FarmId, m.UserId))
                 .ToDictionary(
                     g => g.Key,
-                    g => g.OrderBy(m => m.Status == ActiveMembershipStatus ? 0 : 1)
-                          .ThenBy(m => RoleRank(m.Role))
+                    g => g.OrderBy(m => RoleRank(m.Role))
                           .ThenBy(m => m.Role, StringComparer.Ordinal)
                           .First().Role);
 

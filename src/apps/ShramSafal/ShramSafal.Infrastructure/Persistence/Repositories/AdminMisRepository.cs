@@ -139,8 +139,9 @@ public sealed class AdminMisRepository(
         var query = ssf.Farms.AsNoTracking();
         if (hasSearch)
         {
-            var pattern = "%" + search!.Trim() + "%";
-            query = query.Where(f => EF.Functions.ILike(f.Name, pattern));
+            // % and _ in the search text match literally (escaped with a backslash).
+            var pattern = "%" + EscapeLike(search!.Trim()) + "%";
+            query = query.Where(f => EF.Functions.ILike(f.Name, pattern, LikeEscape));
         }
 
         if (tierFarmIds is not null)
@@ -398,8 +399,8 @@ public sealed class AdminMisRepository(
             using (var countCmd = conn.CreateCommand())
             {
                 countCmd.CommandText = "SELECT COUNT(*) FROM public.users u" +
-                    (fs ? " WHERE u.phone LIKE @s OR LOWER(u.display_name) LIKE LOWER(@s)" : "");
-                if (fs) AddParam(countCmd, "@s", $"%{search}%");
+                    (fs ? $" WHERE u.phone LIKE @s ESCAPE '{LikeEscape}' OR LOWER(u.display_name) LIKE LOWER(@s) ESCAPE '{LikeEscape}'" : "");
+                if (fs) AddParam(countCmd, "@s", $"%{EscapeLike(search!)}%");
                 var rawCount = await countCmd.ExecuteScalarAsync(ct);
                 total = Convert.ToInt32(rawCount, System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -411,14 +412,14 @@ public sealed class AdminMisRepository(
                 FROM public.users u
                 LEFT JOIN public.refresh_tokens t ON t.user_id = u."Id"
                 """ +
-                (fs ? " WHERE u.phone LIKE @s2 OR LOWER(u.display_name) LIKE LOWER(@s2)" : "") +
+                (fs ? $" WHERE u.phone LIKE @s2 ESCAPE '{LikeEscape}' OR LOWER(u.display_name) LIKE LOWER(@s2) ESCAPE '{LikeEscape}'" : "") +
                 """
 
                 GROUP BY u."Id"
-                ORDER BY u.created_at_utc DESC
+                ORDER BY u.created_at_utc DESC, u."Id"
                 LIMIT @size OFFSET @offset
                 """;
-            if (fs) AddParam(dataCmd, "@s2", $"%{search}%");
+            if (fs) AddParam(dataCmd, "@s2", $"%{EscapeLike(search!)}%");
             AddParam(dataCmd, "@size", pageSize);
             AddParam(dataCmd, "@offset", (page - 1) * pageSize);
             using var r = await dataCmd.ExecuteReaderAsync(ct);
@@ -435,6 +436,15 @@ public sealed class AdminMisRepository(
 
         return new UsersListDto(items, total, page, pageSize);
     }
+
+    /// <summary>The LIKE escape character used by both lists' search.</summary>
+    private const string LikeEscape = "\\";
+
+    /// <summary>Makes the escape character, % and _ in user search text match literally.</summary>
+    private static string EscapeLike(string text) =>
+        text.Replace(LikeEscape, LikeEscape + LikeEscape, StringComparison.Ordinal)
+            .Replace("%", LikeEscape + "%", StringComparison.Ordinal)
+            .Replace("_", LikeEscape + "_", StringComparison.Ordinal);
 
     private static void AddParam(System.Data.IDbCommand cmd, string name, object value)
     {
