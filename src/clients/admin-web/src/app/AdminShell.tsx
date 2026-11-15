@@ -102,6 +102,7 @@ import { cn } from '@/lib/utils';
  */
 const GROUP_ACCENT: Record<NavGroup, string> = {
   Overview: 'text-nav-overview',
+  'Company MIS': 'text-nav-product',
   Operations: 'text-nav-operations',
   Product: 'text-nav-product',
   Farms: 'text-nav-farms',
@@ -283,7 +284,10 @@ export function AdminShell() {
           </span>
           <OrgScope />
           <div className="ml-auto flex items-center gap-3">
-            <ScreenRefresh />
+            {/* Hidden on the Company MIS pages: Refresh invalidates every active
+                query, and each company count writes an audit row on the server.
+                Those pages fetch once per chosen range instead. */}
+            {!location.pathname.toLowerCase().startsWith('/mis') && <ScreenRefresh />}
             <span className="glass-quiet hidden items-center gap-2 rounded-chip px-2.5 py-1 text-caption text-text-2 md:inline-flex">
               <Search size={14} aria-hidden="true" />
               {/* Cmd-K and Escape are the only global bindings that exist

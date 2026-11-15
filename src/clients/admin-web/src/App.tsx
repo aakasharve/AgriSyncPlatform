@@ -32,6 +32,7 @@ const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdmi
 // DWC v2 §4.3 — Farmer Health (Mode B landing + Mode A drilldown).
 const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/FarmerHealthPage'));
 const FarmerHealthDrilldown   = lazy(() => import('@/features/farmer-health/FarmerHealthDrilldown'));
+const MisPage                 = lazy(() => import('@/features/mis/MisPage'));
 
 /**
  * THE ONLY CATCH SITE THAT SEES EVERY QUERY.
@@ -324,6 +325,31 @@ export default function App() {
                     <Route path="/users" element={
                       <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
                     } />
+                    {/* Company MIS (CR-2b): seven explicit paths, not `/MIS/:section`,
+                        because CommandPalette.test looks each nav path up as a declared
+                        route. One lazy chunk; one company count per chosen range. */}
+                    <Route path="/MIS/overview" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="overview" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/acquisition" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="acquisition" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/engagement" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="engagement" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/retention" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="retention" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/quality" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="quality" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/farms" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="farms" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS/operations" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><MisPage section="operations" /></EntitlementGuard>
+                    } />
+                    <Route path="/MIS" element={<Navigate to="/MIS/overview" replace />} />
                     {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
                         Relying on RequireScope (any resolved scope) for now; specific module
                         gates land when schedule / admin-management surfaces add their keys. */}

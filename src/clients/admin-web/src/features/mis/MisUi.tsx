@@ -13,9 +13,10 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, BarChart3, Minus, Table2 } from 'lucide-react';
 import { MeasuredZero, NotMeasured, NotMeasuredPanel } from '@/components/state';
-import { DELTA_TEXT, SERIES } from './misTheme';
+import { DELTA_TEXT, GHOST, SERIES } from './misTheme';
 import { itemByKey, type MisFieldPath } from './misItems';
-import type { MisChart, MisDelta, MisTileModel } from './misView';
+import type { MisChart, MisDelta, MisShown, MisTileModel } from './misView';
+import type { LineSeries } from './MisLineChart';
 
 /** Runs of consecutive drawable indices (a null breaks the run). */
 export function runs(values: (number | null)[]): number[][] {
@@ -366,4 +367,21 @@ export function compareLegend(color: string, label: string, showPrevious: boolea
     return showPrevious
         ? [{ label, color, shape: 'line' }, { label: PREVIOUS_LABEL, color: '#a8a29e', shape: 'line' }]
         : [{ label, color, shape: 'line' }];
+}
+
+export interface MisSectionProps<V> {
+    view: V;
+    compare: boolean;
+    /** "15 Nov 2026, 2:32 pm India time" — when the answer was counted. */
+    checkedAt: string;
+}
+
+export const Shown: React.FC<{ shown: MisShown }> = ({ shown }) =>
+    shown.kind === 'value' ? <>{shown.text}</> : <NotMeasured why={shown.why} />;
+
+/** A line with the period before drawn only from served previous values. */
+export function withPrevious(current: LineSeries, previous: (number | null)[] | null, compare: boolean): LineSeries[] {
+    return compare && previous
+        ? [{ key: 'prev', label: 'Previous period', color: GHOST, values: previous, ghost: true }, current]
+        : [current];
 }

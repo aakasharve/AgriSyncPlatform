@@ -474,17 +474,19 @@ describe('the shortcut badges are gone (D4, founder 2026-08-31)', () => {
 });
 
 describe('the sidebar (A53, A58)', () => {
-  it('renders six groups and twelve destinations', async () => {
+  it('renders seven groups and nineteen destinations', async () => {
     serve();
     signIn({ display_name: 'Test Admin' });
     renderShell();
     await screen.findByText(ORG_A_NAME);
 
     const sidebar = screen.getByRole('complementary', { name: 'Sections' });
-    for (const group of ['Overview', 'Operations', 'Product', 'Farms', 'Schedules', 'Admin']) {
-      expect(within(sidebar).getByText(group)).toBeInTheDocument();
+    // `selector: 'div'` matches the group heading only: since Company MIS, the
+    // word 'Overview' is also a link label (the MIS Overview page).
+    for (const group of ['Overview', 'Company MIS', 'Operations', 'Product', 'Farms', 'Schedules', 'Admin']) {
+      expect(within(sidebar).getByText(group, { selector: 'div' })).toBeInTheDocument();
     }
-    expect(within(sidebar).getAllByRole('link')).toHaveLength(12);
+    expect(within(sidebar).getAllByRole('link')).toHaveLength(19);
   });
 
   it('marks exactly one item current, and Home is not current on /farms (A58)', async () => {

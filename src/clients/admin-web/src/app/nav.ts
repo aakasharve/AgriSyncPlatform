@@ -1,10 +1,17 @@
 import {
+  Activity,
   AlertTriangle,
+  AudioLines,
   Calendar,
+  Download,
   Frown,
   HeartPulse,
   Home as HomeIcon,
+  LayoutDashboard,
+  LifeBuoy,
+  MapPinned,
   Mic,
+  Repeat2,
   Settings as SettingsIcon,
   Star,
   TrendingDown,
@@ -57,7 +64,8 @@ import { ModuleKeys, type ModuleKey } from '@/lib/moduleKeys';
  */
 
 /**
- * Six groups, not five. CONTRACT.md §2 confirms it and says why: WVFD is
+ * Seven groups since CR-2b added Company MIS after Overview. Before that,
+ * six groups, not five. CONTRACT.md §2 confirms it and says why: WVFD is
  * alone in Product because it is neither an Operations item nor a Farms item.
  *
  * ONE difference from the prototype, kept deliberately: v3 files Live Health
@@ -68,6 +76,7 @@ import { ModuleKeys, type ModuleKey } from '@/lib/moduleKeys';
  */
 export const GROUP_ORDER = [
   'Overview',
+  'Company MIS',
   'Operations',
   'Product',
   'Farms',
@@ -99,6 +108,16 @@ export interface NavItem {
 
 export const NAV: NavItem[] = [
   { to: '/', label: 'Home', Icon: HomeIcon, group: 'Overview', module: null },
+  // Company MIS (CR-2b): the seven pages of the approved combined look, each on the
+  // company answer of GET /shramsafal/admin/mis/company. Explicit paths, one per page,
+  // so the palette test can find each as a declared route.
+  { to: '/MIS/overview', label: 'Overview', Icon: LayoutDashboard, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/acquisition', label: 'Acquisition', Icon: Download, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/engagement', label: 'Engagement', Icon: Activity, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/retention', label: 'Retention', Icon: Repeat2, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/quality', label: 'Quality', Icon: AudioLines, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/farms', label: 'Farms & geography', Icon: MapPinned, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
+  { to: '/MIS/operations', label: 'Operations', Icon: LifeBuoy, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
   { to: '/ops/live', label: 'Live Health', Icon: Zap, group: 'Operations', module: ModuleKeys.OpsLive },
   { to: '/ops/errors', label: 'API Errors', Icon: AlertTriangle, group: 'Operations', module: ModuleKeys.OpsErrors },
   { to: '/ops/voice', label: 'Voice Pipeline', Icon: Mic, group: 'Operations', module: ModuleKeys.OpsVoice },

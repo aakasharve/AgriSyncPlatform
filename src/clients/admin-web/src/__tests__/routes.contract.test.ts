@@ -41,6 +41,15 @@ const ROUTE_GUARDS: Record<string, string | null> = {
   '/farmer-health': ModuleKeys.FarmerHealth,
   '/farmer-health/:farmId': ModuleKeys.FarmerHealth,
   '/users': ModuleKeys.AdminUsers,
+  // Company MIS (CR-2b): seven pages on the WVFD key, and the bare /MIS redirect.
+  '/MIS/overview': ModuleKeys.MetricsNsm,
+  '/MIS/acquisition': ModuleKeys.MetricsNsm,
+  '/MIS/engagement': ModuleKeys.MetricsNsm,
+  '/MIS/retention': ModuleKeys.MetricsNsm,
+  '/MIS/quality': ModuleKeys.MetricsNsm,
+  '/MIS/farms': ModuleKeys.MetricsNsm,
+  '/MIS/operations': ModuleKeys.MetricsNsm,
+  '/MIS': null,                       // a redirect to /MIS/overview, which is guarded
   '/schedules/templates': null,       // deliberate — no ModuleKey exists yet
   '/settings/admins': null,           // deliberate — no ModuleKey exists yet
 };
@@ -98,12 +107,12 @@ afterEach(() => {
 });
 
 describe('route to module-key map (A3)', () => {
-  it('declares exactly the sixteen routes the console has today', () => {
+  it('declares exactly the twenty-four routes the console has today', () => {
     const paths = declaredRoutes.map((r) => r.path);
     expect(paths.slice().sort()).toEqual(
       [...Object.keys(ROUTE_GUARDS), ...PUBLIC_ROUTES, CATCH_ALL].sort(),
     );
-    expect(paths).toHaveLength(16);
+    expect(paths).toHaveLength(24);
   });
 
   it('gives every guarded route its exact module key', () => {
@@ -115,8 +124,8 @@ describe('route to module-key map (A3)', () => {
     expect(actual).toEqual(ROUTE_GUARDS);
   });
 
-  it('guards ten routes and no more', () => {
-    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(10);
+  it('guards seventeen routes and no more', () => {
+    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(17);
   });
 
   it('uses only module keys that exist in the ModuleKeys registry', () => {
