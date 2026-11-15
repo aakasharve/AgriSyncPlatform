@@ -16,7 +16,7 @@
  * parked says its own words and opens the conflict page, and never shows as done.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Plus, Sprout } from 'lucide-react';
 import type { AudioData, CropProfile, FarmerProfile } from '../../../types';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { PlannedWorkAssigneeDto } from '../../../infrastructure/api/plannedWorkDtos';
@@ -36,6 +36,7 @@ import { useScheduleGate } from '../../scheduler/schedulePage/useScheduleGate';
 import { defaultScheduleForCrop } from '../../scheduler/planning/followableDefault';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { OwnScheduleFlow, type OwnFlow } from '../../scheduler/ownSchedule/OwnScheduleFlow';
+import { OWN_WORDS } from '../../scheduler/ownSchedule/ownScheduleWords';
 import { OwnScheduleLibrary } from '../../scheduler/ownSchedule/OwnScheduleLibrary';
 import { takeOwnScheduleMakerRequest } from '../../scheduler/ownSchedule/makerHandoff';
 
@@ -94,11 +95,14 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     // his own schedules. The शेड्यूल page's live button only asks to come here (`makerHandoff`); a seat that may not make ignores the ask (fail closed).
     const [ownFlow, setOwnFlow] = useState<OwnFlow | null>(null);
     const [ownFromSchedulePage, setOwnFromSchedulePage] = useState(false);
+    // UI-4 (D-146): the own-schedule card is the SECOND item and closed until he taps it; the hand-off from the schedule tab opens it by itself.
+    const [ownOpen, setOwnOpen] = useState(false);
     useEffect(() => {
         const request = takeOwnScheduleMakerRequest();
         if (!request || !mayMakeOwnSchedule) return;
         setOwnFlow({ page: 'start', cropId: request.cropId });
         setOwnFromSchedulePage(true);
+        setOwnOpen(true);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival
     const ownLanguage = language === 'en' ? 'en' : 'mr';
 
@@ -193,11 +197,6 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
 
             {banner && <div role="status" data-testid="plan-banner" className="rounded-2xl border-2 border-emerald-600 bg-emerald-50 p-3 text-[15px] font-extrabold text-emerald-900">{banner}</div>}
 
-            {mayMakeOwnSchedule && farmId && (
-                <OwnScheduleLibrary farmId={farmId} language={ownLanguage} crops={crops} farmerProfile={farmerProfile}
-                    onMake={() => setOwnFlow({ page: 'start', cropId: null })} onOpen={chainId => setOwnFlow({ page: 'detail', chainId })} />
-            )}
-
             {mayPlan && farmId && (
                 <>
                     {!formOpen && (
@@ -216,6 +215,26 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                             today={today} understand={understand} onSaved={saved} onPlaceChanged={onPlaceChanged} saveHeld={askAbout.length > 0} mayAdvise={mayPlan} />
                     )}
                 </>
+            )}
+
+            {mayMakeOwnSchedule && farmId && (
+                <section data-testid="own-door-section">
+                    <button type="button" onClick={() => setOwnOpen(o => !o)} aria-expanded={ownOpen} data-testid="own-door" data-open={ownOpen ? 'yes' : 'no'}
+                        className="flex min-h-[72px] w-full items-center gap-3 rounded-3xl border-2 border-amber-300 bg-amber-50 p-3.5 text-left active:scale-[0.99]">
+                        <span className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-full bg-amber-700 text-white"><Sprout size={26} aria-hidden="true" /></span>
+                        <span className="min-w-0 flex-1">
+                            <span className="block text-[19px] font-extrabold leading-tight text-stone-900">{OWN_WORDS[ownLanguage].doorTitle}</span>
+                            <span className="block text-[14px] font-bold text-stone-700">{OWN_WORDS[ownLanguage].doorSub}</span>
+                        </span>
+                        {ownOpen ? <ChevronDown size={24} className="shrink-0 text-amber-800" aria-hidden="true" /> : <ChevronRight size={24} className="shrink-0 text-amber-800" aria-hidden="true" />}
+                    </button>
+                    {ownOpen && (
+                        <div className="mt-2">
+                            <OwnScheduleLibrary farmId={farmId} language={ownLanguage} crops={crops} farmerProfile={farmerProfile}
+                                onMake={() => setOwnFlow({ page: 'start', cropId: null })} onOpen={chainId => setOwnFlow({ page: 'detail', chainId })} />
+                        </div>
+                    )}
+                </section>
             )}
 
             <section data-testid={mayPlan ? 'plan-list' : 'plan-mine'}>

@@ -72,11 +72,17 @@ async function seed(rows: unknown[] = [A1, A2, B1, C1], subs: ScheduleSubscripti
 }
 const queued = async (type?: string) => (await getDatabase().mutationQueue.toArray()).filter(r => !type || r.mutationType === type);
 
-interface Setup { mayMake?: boolean; mayPlan?: boolean; farmerProfile?: FarmerProfile; onBack?: () => void }
-const setup = ({ mayMake = true, mayPlan = true, farmerProfile = PROFILE, onBack = () => undefined }: Setup = {}) => render(
-    <PlanWorkPage farmId={FARM} userId={ME} language={language.current} crops={CROPS} farmerProfile={farmerProfile} mayPlan={mayPlan} mayAssign={false}
-        mayMakeOwnSchedule={mayMake} onBack={onBack} onOpenConflicts={() => undefined} today={TODAY} />,
-);
+interface Setup { openDoor?: boolean; mayMake?: boolean; mayPlan?: boolean; farmerProfile?: FarmerProfile; onBack?: () => void }
+const setup = ({ mayMake = true, mayPlan = true, farmerProfile = PROFILE, onBack = () => undefined, openDoor = true }: Setup = {}) => {
+    const view = render(
+        <PlanWorkPage farmId={FARM} userId={ME} language={language.current} crops={CROPS} farmerProfile={farmerProfile} mayPlan={mayPlan} mayAssign={false}
+            mayMakeOwnSchedule={mayMake} onBack={onBack} onOpenConflicts={() => undefined} today={TODAY} />,
+    );
+    // UI-4 (D-146): the own-schedule card is closed until he taps it; these older tests assert what is inside, so they open it first.
+    const door = screen.queryByTestId('own-door');
+    if (openDoor && door && door.getAttribute('data-open') === 'no') fireEvent.click(door);
+    return view;
+};
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 80)); });
 
 beforeEach(async () => {
@@ -104,6 +110,22 @@ describe('Task 1: who is shown the maker, and how planning opens on it', () => {
         setup({ mayPlan: false });
         expect(await screen.findByTestId('own-card')).toBeInTheDocument();
         expect(screen.queryByTestId('plan-form')).toBeNull();
+    });
+
+    it('UI-4: the new-work form is the first item and the own schedule is a closed card under it; one tap opens it, a second closes it', async () => {
+        await seed();
+        setup({ openDoor: false });
+        const form = await screen.findByTestId('plan-form');
+        const door = screen.getByTestId('own-door');
+        expect(door).toHaveTextContent('स्वतःचं शेड्यूल');
+        expect(form.compareDocumentPosition(door) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(door).toHaveAttribute('data-open', 'no');
+        expect(screen.queryByTestId('own-card')).toBeNull();
+        fireEvent.click(door);
+        expect(await screen.findByTestId('own-card')).toBeInTheDocument();
+        expect(screen.getByTestId('own-make')).toBeInTheDocument();
+        fireEvent.click(door);
+        expect(screen.queryByTestId('own-card')).toBeNull();
     });
 
     it('The_hand_off_from_the_schedule_page_opens_planning_on_the_maker, on that crop; its back goes back where he came from', async () => {

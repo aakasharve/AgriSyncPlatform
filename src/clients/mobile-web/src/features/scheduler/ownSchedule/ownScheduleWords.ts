@@ -15,6 +15,9 @@ export type OwnLanguage = 'mr' | 'en';
 export interface OwnWords {
     // the library under planning (v3 screen 2)
     cardTitle: string;
+    /** UI-4 (D-146): the closed card on the planning page that opens the library below. */
+    doorTitle: string;
+    doorSub: string;
     ownIntro: string;
     make: string;
     libTitle: string;
@@ -132,6 +135,8 @@ export interface OwnWords {
 export const OWN_WORDS: Readonly<Record<OwnLanguage, OwnWords>> = {
     mr: {
         cardTitle: 'तुमचं स्वतःचं शेड्यूल', // v3
+        doorTitle: 'स्वतःचं शेड्यूल', // D-146
+        doorSub: 'बनवा, बदला, पाहा', // D-146
         ownIntro: 'इथे तुम्ही तुमचं स्वतःचं शेड्यूल बनवता किंवा बदलता.', // v3
         make: 'स्वतःचं शेड्यूल बनवा', // v3
         libTitle: 'तुमची स्वतःची शेड्यूल', // v3 PROPOSED
@@ -252,6 +257,8 @@ export const OWN_WORDS: Readonly<Record<OwnLanguage, OwnWords>> = {
     },
     en: {
         cardTitle: 'Your own schedule', // PROPOSED (English)
+        doorTitle: 'Own schedule', // PROPOSED (English)
+        doorSub: 'Make, change, view', // PROPOSED (English)
         ownIntro: 'Here you make or change your own schedule.', // PROPOSED (English)
         make: 'Make your own schedule', // the app's own (SCHEDULE_GATE_WORDS)
         libTitle: 'Your own schedules', // PROPOSED (English)
