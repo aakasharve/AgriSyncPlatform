@@ -509,6 +509,18 @@ public static class DependencyInjection
         }
 
         services.AddSingleton(new ShramSafal.Application.Privacy.ErasureTiming(TimeSpan.FromDays(erasureWaitDays)));
+
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a, decision 4) — the test accounts left out of every
+        // company count, read ONCE here. Git carries an empty list; real user ids live only in the server's
+        // environment (CompanyMis__ExcludedUserIds__0=...). An entry that is not a user id stops start-up with a
+        // message naming the key and position, never the value.
+        services.AddSingleton(ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.Parse(
+            configuration
+                .GetSection(ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.ConfigurationKey)
+                .Get<string[]>()));
+        // The company MIS rows: farm keys through the admin factory, every counted row per farm under
+        // row-level security on the scoped context.
+        services.AddScoped<ICompanyMisReader, CompanyMisReader>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 
         // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.
