@@ -32,7 +32,17 @@ public sealed record MisRangeDto(DateOnly From, DateOnly To, int Days);
 /// </summary>
 public sealed record MisValueDto(decimal? Value, string? NotMeasuredReason);
 
-public sealed record MisNumberDto(MisValueDto Current, MisValueDto Previous);
+/// <summary>
+/// Amendment A9: CurrentByDay has one entry per India day of the range (day From
+/// first), PreviousByDay one per day of the previous range. An entry is null when
+/// that day's value is not measured, never 0. Both lists are null when the number
+/// has no day-by-day form, and for farm-derived numbers when farm numbers are blocked.
+/// </summary>
+public sealed record MisNumberDto(
+    MisValueDto Current,
+    MisValueDto Previous,
+    IReadOnlyList<decimal?>? CurrentByDay = null,
+    IReadOnlyList<decimal?>? PreviousByDay = null);
 
 public sealed record MisOverviewDto(
     MisNumberDto ActiveFarms,
@@ -71,7 +81,10 @@ public sealed record MisRetentionDto(
     MisNumberDto NeverLoggedFarms,
     IReadOnlyList<MisCohortRowDto> CohortByWeek,
     IReadOnlyList<MisCurvePointDto> Curve,
-    IReadOnlyList<MisDayPointDto> WinBackByDay);
+    IReadOnlyList<MisDayPointDto> WinBackByDay,
+    MisNumberDto QuietFarms7To13,
+    MisNumberDto QuietFarms14To29,
+    IReadOnlyList<MisCurvePointDto> PreviousCurve);
 
 public sealed record MisQualityDto(
     MisNumberDto VoiceRecordings,
@@ -87,7 +100,8 @@ public sealed record MisFarmsDto(
     MisNumberDto AcresCovered,
     MisNumberDto FarmsInFpo,
     IReadOnlyList<MisFpoRowDto> FarmsPerFpo,
-    IReadOnlyList<MisAcresPointDto> AcresByWeek);
+    IReadOnlyList<MisAcresPointDto> AcresByWeek,
+    MisNumberDto ActiveFarmsInFpoPct);
 
 public sealed record MisDayPointDto(DateOnly Day, int Value);
 
@@ -99,8 +113,12 @@ public sealed record MisHeatCellDto(int Weekday, int Hour, int Logs);
 /// <summary>Role is an AppRole name, or "Unknown".</summary>
 public sealed record MisRoleCountDto(string Role, int People);
 
-/// <summary>ActivePctByWeek has 4 entries (weeks 1..4); null = week not complete or no people.</summary>
-public sealed record MisCohortRowDto(DateOnly WeekStart, int People, IReadOnlyList<decimal?> ActivePctByWeek);
+/// <summary>
+/// ActivePctByWeek has 4 entries (weeks 1..4); null = week not complete or no people.
+/// ActivePctOnDays (A11) has 4 entries for days 1, 7, 14 and 30 after day 0; null = nobody eligible.
+/// </summary>
+public sealed record MisCohortRowDto(
+    DateOnly WeekStart, int People, IReadOnlyList<decimal?> ActivePctByWeek, IReadOnlyList<decimal?> ActivePctOnDays);
 
 /// <summary>Day 0..30; ActivePct null when Eligible is 0.</summary>
 public sealed record MisCurvePointDto(int Day, decimal? ActivePct, int Eligible);

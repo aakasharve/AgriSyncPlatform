@@ -36,6 +36,9 @@ public static class CompanyMisCalculator
 
     public const string UnknownRole = "Unknown";
 
+    /// <summary>Amendment A11: the cohort grid's days after day 0.</summary>
+    private static readonly int[] CohortGridDays = [1, 7, 14, 30];
+
     private static readonly HashSet<string> CountedVoiceJobStatuses =
         new(StringComparer.Ordinal) { "Succeeded", "FallbackSucceeded", "Failed" };
 
@@ -65,80 +68,103 @@ public static class CompanyMisCalculator
                 ? FarmListUnreadable
                 : null;
 
-        // Sign-ups and OTP-verified come from public.users and stay measured.
-        var signUps = Both(current, previous, p => Count(data.CohortOf(p).Count));
+        // Amendment A9: every number is built by ONE rule, a function of a period. Its day-by-day lists
+        // evaluate that same rule per India day: "as of a day" numbers with the period's end set to that day
+        // (their rules read only the end), "during a day" numbers with the period set to that one day. A day
+        // whose value is not measured is a null entry, never 0.
+        MisNumberDto Number(Func<Period, MisValueDto> rule, DayForm form) =>
+            new(rule(current), rule(previous), ByDay(rule, current, form), ByDay(rule, previous, form));
 
-        MisNumberDto Farm(Func<Period, MisValueDto> rule) =>
-            farmBlock is null ? Both(current, previous, rule) : Blocked(farmBlock);
+        // Farm-, log- and AI-derived numbers: not measured, and no lists, when farm numbers are blocked.
+        MisNumberDto Farm(Func<Period, MisValueDto> rule, DayForm form) =>
+            farmBlock is null ? Number(rule, form) : Blocked(farmBlock);
 
         IReadOnlyList<T> Series<T>(Func<IReadOnlyList<T>> build) =>
             farmBlock is null ? build() : [];
 
+        // Sign-ups and OTP-verified come from public.users and stay measured (with their lists).
+        var signUps = Number(p => Count(data.CohortOf(p).Count), DayForm.During);
+
+        var activeFarms = Farm(p => Count(data.ActiveFarmsAt(p.To).Count), DayForm.AsOf);
+
         var overview = new MisOverviewDto(
-            ActiveFarms: Farm(p => Count(data.ActiveFarmsAt(p.To).Count)),
+            ActiveFarms: activeFarms,
             SignUps: signUps,
-            Dau: Farm(p => Count(data.ActivePeople(p.To, p.To).Count)),
-            Wau: Farm(p => Count(data.ActivePeople(p.To.AddDays(-6), p.To).Count)),
-            Mau: Farm(p => Count(data.ActivePeople(p.To.AddDays(-29), p.To).Count)),
+            Dau: Farm(p => Count(data.ActivePeople(p.To, p.To).Count), DayForm.AsOf),
+            Wau: Farm(p => Count(data.ActivePeople(p.To.AddDays(-6), p.To).Count), DayForm.AsOf),
+            Mau: Farm(p => Count(data.ActivePeople(p.To.AddDays(-29), p.To).Count), DayForm.AsOf),
             StickinessPct: Farm(p => Pct(
                 data.ActivePeople(p.To, p.To).Count,
-                data.ActivePeople(p.To.AddDays(-29), p.To).Count)),
-            LogsRecorded: Farm(p => Count(data.EntriesIn(p.From, p.To).Count())),
-            VoiceLogs: Farm(p => Count(data.EntriesIn(p.From, p.To).Count(e => e.IsVoice))),
+                data.ActivePeople(p.To.AddDays(-29), p.To).Count), DayForm.AsOf),
+            LogsRecorded: Farm(p => Count(data.EntriesIn(p.From, p.To).Count()), DayForm.During),
+            VoiceLogs: Farm(p => Count(data.EntriesIn(p.From, p.To).Count(e => e.IsVoice)), DayForm.During),
             VoiceSharePct: Farm(p => Pct(
                 data.EntriesIn(p.From, p.To).Count(e => e.IsVoice),
-                data.EntriesIn(p.From, p.To).Count())),
+                data.EntriesIn(p.From, p.To).Count()), DayForm.During),
             SignUpsByDay: SignUpsByDay(data, current), // A6: from public.users, stays measured
             ActivePeopleByDay: Series(() => ActivePeopleByDay(data, current)),
             LogsByWeek: Series(() => LogsByWeek(data, current, today)));
 
         var acquisition = new MisAcquisitionDto(
             Verified: signUps,
-            HasFarm: Farm(p => Count(data.CohortOf(p).Count(u => data.HasFarm(u.UserId)))),
-            FirstLog: Farm(p => Count(data.CohortOf(p).Count(u => data.HasAnyEntry(u.UserId)))),
-            Habit: Farm(p => Count(HabitEligible(data, p, today).Count(u => FormedHabit(data, u)))),
-            HabitEligible: Farm(p => Count(HabitEligible(data, p, today).Count())));
+            HasFarm: Farm(p => Count(data.CohortOf(p).Count(u => data.HasFarm(u.UserId))), DayForm.None),
+            FirstLog: Farm(p => Count(data.CohortOf(p).Count(u => data.HasAnyEntry(u.UserId))), DayForm.None),
+            Habit: Farm(p => Count(HabitEligible(data, p, today).Count(u => FormedHabit(data, u))), DayForm.None),
+            HabitEligible: Farm(p => Count(HabitEligible(data, p, today).Count()), DayForm.None));
 
         var engagement = new MisEngagementDto(
             LogsPerActiveFarmPerWeek: Farm(p => Ratio(
                 data.EntriesIn(p.To.AddDays(-6), p.To).Count(),
-                data.ActiveFarmsAt(p.To).Count)),
+                data.ActiveFarmsAt(p.To).Count), DayForm.AsOf),
             WhenLogged: Series(() => WhenLogged(data, current)),
             WhenLoggedClock: WhenLoggedClock,
             RoleMixOfMau: Series(() => RoleMixOfMau(data, current)));
 
+        MisNumberDto Band(int minAge, int maxAge) =>
+            Farm(p => Count(data.FarmsInAgeBand(p.To, minAge, maxAge)), DayForm.AsOf);
+
         var retention = new MisRetentionDto(
-            D1Pct: Farm(p => RetentionOnDay(data, p, today, 1)),
-            D30Pct: Farm(p => RetentionOnDay(data, p, today, 30)),
-            ActiveFarms0To6: Farm(p => Count(data.FarmsInAgeBand(p.To, 0, 6))),
-            QuietFarms7To29: Farm(p => Count(data.FarmsInAgeBand(p.To, 7, 29))),
-            SilentFarms30Plus: Farm(p => Count(data.FarmsInAgeBand(p.To, 30, int.MaxValue))),
-            NeverLoggedFarms: Farm(p => Count(data.NeverLoggedFarms(p.To))),
+            D1Pct: Farm(p => RetentionOnDay(data, p, today, 1), DayForm.None),
+            D30Pct: Farm(p => RetentionOnDay(data, p, today, 30), DayForm.None),
+            ActiveFarms0To6: Band(0, 6),
+            QuietFarms7To29: Band(7, 29),
+            SilentFarms30Plus: Band(30, int.MaxValue),
+            NeverLoggedFarms: Farm(p => Count(data.NeverLoggedFarms(p.To)), DayForm.AsOf),
             CohortByWeek: Series(() => CohortByWeek(data, current, today)),
             Curve: Series(() => Curve(data, current, today)),
-            WinBackByDay: Series(() => WinBackByDay(data, current)));
+            WinBackByDay: Series(() => WinBackByDay(data, current)),
+            QuietFarms7To13: Band(7, 13),
+            QuietFarms14To29: Band(14, 29),
+            PreviousCurve: Series(() => Curve(data, previous, today)));
 
         var quality = new MisQualityDto(
-            VoiceRecordings: Farm(p => Count(data.VoiceJobsIn(p).Count)),
+            VoiceRecordings: Farm(p => Count(data.VoiceJobsIn(p).Count), DayForm.During),
             VoiceRecordingsSavedPct: Farm(p =>
             {
                 var jobs = data.VoiceJobsIn(p);
                 return Pct(jobs.Count(j => data.ReferencedJobIds.Contains(j.JobId)), jobs.Count);
-            }),
-            TranscriptionAvgMs: Farm(p => AverageLatency(data.VoiceJobsIn(p))),
-            TranscriptionP95Ms: Farm(p => P95Latency(data.VoiceJobsIn(p))),
-            LogsCorrected: Farm(p => Count(data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1))),
+            }, DayForm.During),
+            TranscriptionAvgMs: Farm(p => AverageLatency(data.VoiceJobsIn(p)), DayForm.During),
+            TranscriptionP95Ms: Farm(p => P95Latency(data.VoiceJobsIn(p)), DayForm.During),
+            LogsCorrected: Farm(p => Count(data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1)), DayForm.During),
             LogsCorrectedPct: Farm(p => Pct(
                 data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1),
-                data.EntriesIn(p.From, p.To).Count())));
+                data.EntriesIn(p.From, p.To).Count()), DayForm.During));
 
         var farms = new MisFarmsDto(
-            ActiveFarms: overview.ActiveFarms,
-            FarmsRegistered: Farm(p => Count(data.FarmsRegisteredBy(p.To).Count())),
-            AcresCovered: Farm(p => new MisValueDto(data.AcresOfActiveFarms(p.To), null)),
-            FarmsInFpo: Farm(p => Count(data.FpoScopesBy(p.To).Select(s => s.FarmId).Distinct().Count())),
+            ActiveFarms: activeFarms,
+            FarmsRegistered: Farm(p => Count(data.FarmsRegisteredBy(p.To).Count()), DayForm.AsOf),
+            AcresCovered: Farm(p => new MisValueDto(data.AcresOfActiveFarms(p.To), null), DayForm.AsOf),
+            FarmsInFpo: Farm(p => Count(data.FpoFarmIdsBy(p.To).Count), DayForm.AsOf),
             FarmsPerFpo: Series(() => FarmsPerFpo(data, current)),
-            AcresByWeek: Series(() => AcresByWeek(data, current)));
+            AcresByWeek: Series(() => AcresByWeek(data, current)),
+            // A12: of the farms active at the day, the share that count as in an FPO by rule 36.
+            ActiveFarmsInFpoPct: Farm(p =>
+            {
+                var active = data.ActiveFarmsAt(p.To);
+                var inFpo = data.FpoFarmIdsBy(p.To);
+                return Pct(active.Count(inFpo.Contains), active.Count);
+            }, DayForm.AsOf));
 
         return new CompanyMisDto(
             CountedAtUtc: countedAtUtc,
@@ -181,8 +207,26 @@ public static class CompanyMisCalculator
 
     private static MisValueDto Count(int value) => new(value, null);
 
-    private static MisNumberDto Both(Period current, Period previous, Func<Period, MisValueDto> rule) =>
-        new(rule(current), rule(previous));
+    /// <summary>How a number reads day by day (amendment A9).</summary>
+    private enum DayForm
+    {
+        /// <summary>No day-by-day form: both lists null.</summary>
+        None,
+
+        /// <summary>The rule with the period's end set to each day (the rule reads only the end).</summary>
+        AsOf,
+
+        /// <summary>The rule with the period set to each single day.</summary>
+        During,
+    }
+
+    private static IReadOnlyList<decimal?>? ByDay(Func<Period, MisValueDto> rule, Period p, DayForm form) =>
+        form switch
+        {
+            DayForm.AsOf => p.Days().Select(d => rule(new Period(p.From, d)).Value).ToList(),
+            DayForm.During => p.Days().Select(d => rule(new Period(d, d)).Value).ToList(),
+            _ => null,
+        };
 
     private static MisNumberDto Blocked(string reason) =>
         new(new MisValueDto(null, reason), new MisValueDto(null, reason));
@@ -353,7 +397,18 @@ public static class CompanyMisCalculator
                 byWeek.Add(PctValue(active, people.Count));
             }
 
-            rowsOut.Add(new MisCohortRowDto(monday, people.Count, byWeek));
+            // A11: of the row's people whose day0 + n is complete, the share active on day0 + n.
+            var byDay = CohortGridDays
+                .Select(n =>
+                {
+                    var eligible = people.Where(u => u.Day0.AddDays(n) < today).ToList();
+                    return eligible.Count == 0
+                        ? (decimal?)null
+                        : PctValue(eligible.Count(u => data.SavedOn(u.UserId, u.Day0.AddDays(n))), eligible.Count);
+                })
+                .ToList();
+
+            rowsOut.Add(new MisCohortRowDto(monday, people.Count, byWeek, byDay));
         }
 
         return rowsOut;
@@ -451,14 +506,18 @@ public static class CompanyMisCalculator
     /// <summary>The rows after test accounts and rows at or after the counting instant are left out.</summary>
     private sealed class Data
     {
-        private readonly Dictionary<Guid, List<Entry>> _entriesByFarm;
+        // Amendment A9: day-by-day values evaluate the rules up to ~360 times, so rows are indexed by India
+        // day, by farm (sorted distinct entry days) and by person.
+        private readonly Dictionary<DateOnly, List<Entry>> _entriesByDay;
+        private readonly Dictionary<Guid, DateOnly[]> _entryDaysByFarm;
         private readonly Dictionary<Guid, List<Entry>> _entriesByPerson;
+        private readonly Dictionary<Guid, HashSet<DateOnly>> _entryDaysByPerson;
+        private readonly Dictionary<DateOnly, List<MisVoiceJobRow>> _countedVoiceJobsByDay;
         private readonly HashSet<Guid> _farmOwners;
         private readonly HashSet<Guid> _activeMembers;
         private readonly Dictionary<(Guid FarmId, Guid UserId), string> _roles;
         private readonly Dictionary<Guid, decimal> _acresByFarm;
         private readonly List<MisFpoScopeRow> _fpoScopes;
-        private readonly List<MisVoiceJobRow> _voiceJobs;
 
         private Data(
             List<FarmInfo> farms,
@@ -481,9 +540,16 @@ public static class CompanyMisCalculator
             _roles = roles;
             _acresByFarm = acresByFarm;
             _fpoScopes = fpoScopes;
-            _voiceJobs = voiceJobs;
-            _entriesByFarm = entries.GroupBy(e => e.FarmId).ToDictionary(g => g.Key, g => g.ToList());
+            _entriesByDay = entries.GroupBy(e => e.Day).ToDictionary(g => g.Key, g => g.ToList());
+            _entryDaysByFarm = entries.GroupBy(e => e.FarmId)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.Day).Distinct().Order().ToArray());
             _entriesByPerson = entries.GroupBy(e => e.OperatorUserId).ToDictionary(g => g.Key, g => g.ToList());
+            _entryDaysByPerson = entries.GroupBy(e => e.OperatorUserId)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.Day).ToHashSet());
+            _countedVoiceJobsByDay = voiceJobs
+                .Where(j => CountedVoiceJobStatuses.Contains(j.Status))
+                .GroupBy(j => IstDay(j.CreatedAtUtc))
+                .ToDictionary(g => g.Key, g => g.ToList());
         }
 
         public List<FarmInfo> Farms { get; }
@@ -573,15 +639,27 @@ public static class CompanyMisCalculator
 
         private const int ActiveMembershipStatus = 3;
 
-        public IEnumerable<Entry> EntriesIn(DateOnly first, DateOnly last) =>
-            Entries.Where(e => e.Day >= first && e.Day <= last);
+        public IEnumerable<Entry> EntriesIn(DateOnly first, DateOnly last)
+        {
+            for (var d = first; d <= last; d = d.AddDays(1))
+            {
+                if (_entriesByDay.TryGetValue(d, out var list))
+                {
+                    foreach (var e in list)
+                    {
+                        yield return e;
+                    }
+                }
+            }
+        }
 
         public IReadOnlyList<Entry> EntriesOf(Guid userId) =>
             _entriesByPerson.TryGetValue(userId, out var list) ? list : [];
 
         public bool HasAnyEntry(Guid userId) => _entriesByPerson.ContainsKey(userId);
 
-        public bool SavedOn(Guid userId, DateOnly day) => EntriesOf(userId).Any(e => e.Day == day);
+        public bool SavedOn(Guid userId, DateOnly day) =>
+            _entryDaysByPerson.TryGetValue(userId, out var days) && days.Contains(day);
 
         public HashSet<Guid> ActiveFarmsAt(DateOnly d) =>
             EntriesIn(d.AddDays(-6), d).Select(e => e.FarmId).ToHashSet();
@@ -612,20 +690,14 @@ public static class CompanyMisCalculator
         /// </summary>
         public int? LastEntryAgeAt(FarmInfo farm, DateOnly d)
         {
-            if (_entriesByFarm.TryGetValue(farm.FarmId, out var list))
+            if (_entryDaysByFarm.TryGetValue(farm.FarmId, out var days))
             {
-                DateOnly? best = null;
-                foreach (var e in list)
+                // Latest loaded entry day on or before d (days are sorted ascending and distinct).
+                var at = Array.BinarySearch(days, d);
+                var index = at >= 0 ? at : ~at - 1;
+                if (index >= 0)
                 {
-                    if (e.Day <= d && (best is null || e.Day > best))
-                    {
-                        best = e.Day;
-                    }
-                }
-
-                if (best is not null)
-                {
-                    return d.DayNumber - best.Value.DayNumber;
+                    return d.DayNumber - days[index].DayNumber;
                 }
             }
 
@@ -645,14 +717,21 @@ public static class CompanyMisCalculator
         public IEnumerable<MisFpoScopeRow> FpoScopesBy(DateOnly d) =>
             _fpoScopes.Where(s => IstDay(s.GrantedAtUtc) <= d);
 
-        public List<MisVoiceJobRow> VoiceJobsIn(Period p) =>
-            _voiceJobs
-                .Where(j => CountedVoiceJobStatuses.Contains(j.Status))
-                .Where(j =>
+        /// <summary>Rule 36: farms with an active FPO scope granted by the end of <paramref name="d"/>.</summary>
+        public HashSet<Guid> FpoFarmIdsBy(DateOnly d) => FpoScopesBy(d).Select(s => s.FarmId).ToHashSet();
+
+        public List<MisVoiceJobRow> VoiceJobsIn(Period p)
+        {
+            var jobs = new List<MisVoiceJobRow>();
+            for (var d = p.From; d <= p.To; d = d.AddDays(1))
+            {
+                if (_countedVoiceJobsByDay.TryGetValue(d, out var list))
                 {
-                    var day = IstDay(j.CreatedAtUtc);
-                    return day >= p.From && day <= p.To;
-                })
-                .ToList();
+                    jobs.AddRange(list);
+                }
+            }
+
+            return jobs;
+        }
     }
 }
