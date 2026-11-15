@@ -152,12 +152,13 @@ const REGISTER: Record<string, Row> = {
       kind: 'changed',
       shipped:
         'ten of thirteen in-shell routes are guarded and ModuleKeys holds 36 keys — ' +
-        'the register prose said nine of twelve and 33',
-      decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose)',
+        'the register prose said nine of twelve and 33. CR-2b (2026-11-15) adds the seven ' +
+        'Company MIS routes, each behind EntitlementGuard on metrics.nsm: 17 guards',
+      decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose); CR-2b plan Task 4 (10 -> 17 guarded)',
       assert: () => {
         expect(Object.keys(ModuleKeys)).toHaveLength(36);
         const app = code('/src/App.tsx');
-        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(10);
+        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(17);
       },
     },
   },
