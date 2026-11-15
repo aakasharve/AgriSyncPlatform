@@ -56,7 +56,8 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
   { n: 6, section: ov, kind: 'S', fields: ['overview.mau'], why: null },
   { n: 7, section: ov, kind: 'S', fields: ['overview.stickinessPct'], why: null },
   { n: 8, section: ov, kind: 'S', fields: ['overview.logsRecorded'], why: null },
-  { n: 9, section: ov, kind: 'S', fields: ['overview.voiceSharePct', 'overview.voiceLogs'], why: null },
+  // B18 V6: the voice tile's hint names {voiceLogs} of {logsRecorded} entries.
+  { n: 9, section: ov, kind: 'S', fields: ['overview.voiceSharePct', 'overview.voiceLogs', 'overview.logsRecorded'], why: null },
   { n: 10, section: ov, kind: 'A', fields: [], why: S_UNDERSTANDING },
   { n: 11, section: ov, kind: 'O', fields: [], why: S_CRASH },
   { n: 12, section: ov, kind: 'O', fields: ['overview.signUpsByDay'], why: S_INSTALLS_SHORT },

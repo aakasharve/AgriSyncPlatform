@@ -297,3 +297,12 @@ export function farmsBlockedFixture(code = 'farm_list_unreadable'): CompanyMis {
 export function at(d: CompanyMis, path: string): unknown {
   return path.split('.').reduce<unknown>((o, k) => (o === null || o === undefined ? undefined : (o as Record<string, unknown>)[k]), d);
 }
+
+/** An answer in which NOTHING is measured: every number has a reason, every list is empty. */
+export function allNotMeasuredFixture(): CompanyMis {
+  const d = farmsBlockedFixture('denominator_zero');
+  d.overview.signUps = notMeasured('no_complete_window');
+  d.acquisition.verified = notMeasured('no_complete_window');
+  d.overview.signUpsByDay = [];
+  return d;
+}

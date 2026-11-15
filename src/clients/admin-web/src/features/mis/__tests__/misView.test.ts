@@ -35,17 +35,23 @@ function tileOf(tiles: MisTileModel[], item: string): MisTileModel {
   return t;
 }
 
+/** A not-measured value: its reason sentence, without a second "Not measured:" in front (B18 V5). */
+function expectReason(shown: { kind: string; why?: string }, sentence: string, label = '') {
+  expect([label, shown.kind]).toEqual([label, 'notMeasured']);
+  const why = shown.why ?? '';
+  expect([label, why.includes(sentence)]).toEqual([label, true]);
+  expect([label, /not measured/i.test(why)]).toEqual([label, false]);
+}
+
 describe('misView: values and absences (CR-2b Task 2)', () => {
   it('A_measured_zero_prints_0_and_a_null_prints_its_reason', () => {
     expect(shownOf(v(0), 'count')).toEqual({ kind: 'value', value: 0, text: '0' });
     expect(shownOf(v(0), 'pct')).toEqual({ kind: 'value', value: 0, text: '0%' });
+    // B18 V5: the box carries the label "Not measured"; the sentence does not repeat it.
     for (const [code, sentence] of Object.entries(PLAN_REASONS)) {
-      expect(shownOf(v(null, code), 'count')).toEqual({ kind: 'notMeasured', why: `Not measured: ${sentence}` });
+      expectReason(shownOf(v(null, code), 'count'), sentence);
     }
-    expect(shownOf(v(null, 'brand_new_code'), 'ms')).toEqual({
-      kind: 'notMeasured',
-      why: 'Not measured: The server gave a reason this page does not know yet.',
-    });
+    expectReason(shownOf(v(null, 'brand_new_code'), 'ms'), 'The server gave a reason this page does not know yet.');
 
     // Through a whole page: a measured zero tile prints 0.
     const d = misFixture({ overview: { signUps: num(0, 0, Array(30).fill(0), Array(30).fill(0)) } });
@@ -132,26 +138,26 @@ describe('misView: values and absences (CR-2b Task 2)', () => {
 
   it('Farm_list_unreadable_reaches_every_farm_tile_but_not_sign_ups', () => {
     const d = farmsBlockedFixture();
-    const why = `Not measured: ${PLAN_REASONS.farm_list_unreadable}`;
+    const why = PLAN_REASONS.farm_list_unreadable;
     const ov = overviewView(d);
-    expect(ov.hero.current).toEqual({ kind: 'notMeasured', why });
+    expectReason(ov.hero.current, why);
     expect(tileOf(ov.tiles, 'overview.signUps').current).toMatchObject({ kind: 'value', text: '268' });
     for (const key of ['overview.dau', 'overview.wau', 'overview.mau', 'overview.stickiness', 'overview.logsRecorded', 'overview.voiceShare']) {
-      expect([key, tileOf(ov.tiles, key).current]).toEqual([key, { kind: 'notMeasured', why }]);
+      expectReason(tileOf(ov.tiles, key).current, why, key);
       expect([key, tileOf(ov.tiles, key).spark]).toEqual([key, null]);
     }
     for (const t of [...farmsView(d).tiles, ...qualityView(d).tiles].filter((x) => x.fields.length > 0)) {
-      expect([t.item, t.current]).toEqual([t.item, { kind: 'notMeasured', why }]);
+      expectReason(t.current, why, t.item);
     }
     for (const t of retentionView(d).tiles.filter((x) => x.fields.length > 0)) {
-      expect([t.item, t.current]).toEqual([t.item, { kind: 'notMeasured', why }]);
+      expectReason(t.current, why, t.item);
     }
     // Acquisition: verified stays measured, the rest is not.
     const steps = acquisitionView(d).steps;
     const verified = steps.find((s) => s.fields.includes('acquisition.verified'));
     expect(verified?.current).toMatchObject({ kind: 'value', text: '271' });
     const firstLog = steps.find((s) => s.fields.includes('acquisition.firstLog'));
-    expect(firstLog?.current).toEqual({ kind: 'notMeasured', why });
+    expectReason(firstLog!.current, why, 'acquisition.firstLog');
   });
 
   it('Heatmap_is_monday_first_and_keeps_every_cell', () => {
@@ -435,5 +441,46 @@ describe('misView: plain words (CR-2b B11, B13)', () => {
       expect([kind, /^[+−-]?0(\.0)?( ?%| pts)$/.test(text)]).toEqual([kind, false]);
       expect([kind, t.delta && 'text' in t.delta ? t.delta.good : null]).toEqual([kind, true]);
     }
+    // B16 wording, and B18 V5: no leading plus on "less than 0.1 pts".
+    const pts = tileFrom('overview.dau', num(42.52, 42.5), 'pct', true).delta;
+    expect(pts && 'text' in pts ? pts.text : '').toBe('less than 0.1 pts');
+    const rel = tileFrom('overview.dau', num(100001, 100000), 'count', true).delta;
+    // B16 quotes "less than 0.1%"; V5 removes the plus only on "pts", so the sign is not pinned here.
+    expect(rel && 'text' in rel ? rel.text : '').toMatch(/^\+?less than 0\.1%$/);
+  });
+});
+
+describe('misView: review round 1 wording (CR-2b B18 V5, V6)', () => {
+  it('Points_agree_with_their_number', () => {
+    const one = deltaOf(num(43.5, 42.5), 'pct', true);
+    const two = deltaOf(num(44.5, 42.5), 'pct', true);
+    expect(one && 'text' in one ? one.text : '').toBe('+1 pt');
+    expect(two && 'text' in two ? two.text : '').toBe('+2 pts');
+  });
+
+  it('The_counted_hints_name_their_count_with_agreeing_nouns', () => {
+    // Item 9: "{voiceLogs} of {logsRecorded} entries"; item 43: "{voiceRecordings} recordings";
+    // item 46: "{logsCorrected} entries corrected".
+    const d = misFixture();
+    expect(tileOf(overviewView(d).tiles, 'overview.voiceShare').hint).toContain('388 of 913 entries');
+    expect(tileOf(qualityView(d).tiles, 'quality.voiceSaved').hint).toContain('452 recordings');
+    expect(tileOf(qualityView(d).tiles, 'quality.corrected').hint).toContain('79 entries corrected');
+
+    const ones = misFixture({
+      overview: { voiceLogs: num(1, 1), logsRecorded: num(1, 1) },
+      quality: { voiceRecordings: num(1, 1), logsCorrected: num(1, 1) },
+    });
+    expect(tileOf(overviewView(ones).tiles, 'overview.voiceShare').hint).toContain('1 of 1 entry');
+    expect(tileOf(overviewView(ones).tiles, 'overview.voiceShare').hint).not.toMatch(/\b1 entries\b/);
+    expect(tileOf(qualityView(ones).tiles, 'quality.voiceSaved').hint).toMatch(/\b1 recording\b(?!s)/);
+    expect(tileOf(qualityView(ones).tiles, 'quality.corrected').hint).toMatch(/\b1 entry corrected\b/);
+
+    const zeros = misFixture({
+      overview: { voiceLogs: num(0, 0), logsRecorded: num(50, 50) },
+      quality: { voiceRecordings: num(0, 0), logsCorrected: num(0, 0) },
+    });
+    expect(tileOf(overviewView(zeros).tiles, 'overview.voiceShare').hint).toContain('0 of 50 entries');
+    expect(tileOf(qualityView(zeros).tiles, 'quality.voiceSaved').hint).toContain('0 recordings');
+    expect(tileOf(qualityView(zeros).tiles, 'quality.corrected').hint).toContain('0 entries corrected');
   });
 });

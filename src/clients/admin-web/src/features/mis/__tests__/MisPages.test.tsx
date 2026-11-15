@@ -9,7 +9,7 @@ import { resetMisPeriod } from '@/features/mis/misPeriod';
 import { GHOST } from '@/features/mis/misTheme';
 import { COMPANY_MIS_PATH } from '@/hooks/useCompanyMis';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
-import { misEnvelope } from '@/test/misFixture';
+import { misEnvelope, misFixture } from '@/test/misFixture';
 import { PAGE_NAMES, S_OPS_HEADLINE, S_SMS, S_SUPPORT } from '@/test/misPlan';
 import {
   MIS_NOW, MIS_SECTIONS, countedShown, misCalls, pageTextWithoutRange, renderMis, serveMis,
@@ -104,6 +104,20 @@ describe('the seven pages read one answer (CR-2b Task 4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'open farms' }));
     await new Promise((r) => setTimeout(r, 30));
     expect(misCalls(stub)).toHaveLength(2);
+  });
+
+  it('Test_accounts_left_out_agree_with_their_number', async () => {
+    // B18 V5: "1 test account left out" / "2 test accounts left out".
+    for (const [n, words] of [[1, '1 test account left out'], [2, '2 test accounts left out'], [0, '0 test accounts left out']] as const) {
+      stub = serveMis(async () => ({ status: 200, data: misEnvelope(misFixture({ excludedTestAccounts: n })) }));
+      const v = renderMis('overview');
+      await countedShown();
+      expect([n, screen.getByTestId('mis-test-accounts').textContent]).toEqual([n, words]);
+      v.unmount();
+      stub.restore();
+      stub = null;
+      resetMisPeriod();
+    }
   });
 
   it('Every_page_says_when_it_was_counted', async () => {

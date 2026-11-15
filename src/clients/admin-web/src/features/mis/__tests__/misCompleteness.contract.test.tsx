@@ -5,7 +5,7 @@ import { MIS_ITEMS, MIS_SLOTS, SERVED_FIELDS, itemByKey, itemsOf, type MisSectio
 import { resetMisPeriod } from '@/features/mis/misPeriod';
 import { fmtCompact, fmtDec, fmtInt, fmtMs, fmtPctPoints } from '@/features/mis/misFormat';
 import type { StubbedAdapter } from '@/test/stubAdapter';
-import { at, misFixture } from '@/test/misFixture';
+import { allNotMeasuredFixture, at, farmsBlockedFixture, misEnvelope, misFixture } from '@/test/misFixture';
 import { PLAN_ITEMS, PRINTS_SERVED_NUMBERS, planItem } from '@/test/misPlan';
 import { MIS_NOW, MIS_SECTIONS, countedShown, renderMis, serveMis } from '@/test/misPage';
 
@@ -35,6 +35,8 @@ afterEach(() => {
 });
 
 const D: CompanyMis = misFixture();
+const BLOCKED_LIST = farmsBlockedFixture('farm_list_unreadable');
+const BLOCKED_CEILING = farmsBlockedFixture('too_many_farms_for_live_count');
 const SLOT_PARENT = new Map(MIS_SLOTS.map((s) => [s.key, s.parent]));
 const ALL_KEYS = new Set([...MIS_ITEMS.map((i) => i.key), ...MIS_SLOTS.map((s) => s.key)]);
 
@@ -43,8 +45,8 @@ function nOf(key: string): number {
   return itemByKey(parent ?? key).n;
 }
 
-async function open(section: MisSectionKey) {
-  stub = serveMis();
+async function open(section: MisSectionKey, answer: CompanyMis = D) {
+  stub = serveMis(async () => ({ status: 200, data: misEnvelope(answer) }));
   const v = renderMis(section);
   await countedShown();
   return v;
@@ -85,56 +87,67 @@ function deltaTokens(n: MisNumber): number[] {
 }
 
 const share1 = (x: number, total: number) => Math.round((x / total) * 1000) / 10;
+const val = (n: MisNumber) => n.current.value;
 
-/** Plan-stated derivations, per item number. */
-function derivations(n: number): number[] {
-  const a = D.acquisition;
-  const verified = a.verified.current.value!;
-  const hasFarm = a.hasFarm.current.value!;
-  const firstLog = a.firstLog.current.value!;
+/** Plan-stated derivations, per item number, from whichever answer is on screen. Null-safe. */
+function derivations(d: CompanyMis, n: number): number[] {
+  const a = d.acquisition;
+  const [verified, hasFarm, firstLog, habit, eligible] = [a.verified, a.hasFarm, a.firstLog, a.habit, a.habitEligible].map(val);
+  const out: number[] = [];
   switch (n) {
-    case 1: // hero: new farms = registered now - registered before the range
-      return [D.farms.farmsRegistered.current.value! - D.farms.farmsRegistered.previous.value!];
+    case 1: { // hero: new farms = registered now - registered before the range
+      const r = d.farms.farmsRegistered;
+      if (r.current.value !== null && r.previous.value !== null) out.push(r.current.value - r.previous.value);
+      return out;
+    }
     case 16: case 17: case 18: case 19: case 25: // funnel: shares of sign-ups, habit of eligible, B9 lines
-      return [
-        (hasFarm / verified) * 100, (firstLog / verified) * 100, 100,
-        (a.habit.current.value! / a.habitEligible.current.value!) * 100,
-        // The funnel card (keyed as its first measured step) holds every step and its table twin.
-        a.habit.current.value!, a.habitEligible.current.value!,
-        ...deltaTokens(a.verified), ...deltaTokens(a.hasFarm), ...deltaTokens(a.firstLog), ...deltaTokens(a.habit),
-        Math.round(((verified - hasFarm) / verified) * 100), Math.round(((hasFarm - firstLog) / hasFarm) * 100),
-        verified, hasFarm, firstLog,
-      ];
+      if (verified) {
+        if (hasFarm !== null) out.push((hasFarm / verified) * 100, Math.round(((verified - hasFarm) / verified) * 100));
+        if (firstLog !== null) out.push((firstLog / verified) * 100);
+        out.push(100);
+      }
+      if (hasFarm && firstLog !== null) out.push(Math.round(((hasFarm - firstLog) / hasFarm) * 100));
+      if (habit !== null && eligible) out.push((habit / eligible) * 100);
+      for (const x of [verified, hasFarm, firstLog, habit, eligible]) if (x !== null) out.push(x);
+      for (const x of [a.verified, a.hasFarm, a.firstLog, a.habit]) out.push(...deltaTokens(x));
+      return out;
     case 30: { // B8 role shares
-      const total = D.engagement.roleMixOfMau.reduce((s, r) => s + r.people, 0);
-      return D.engagement.roleMixOfMau.map((r) => share1(r.people, total));
+      const total = d.engagement.roleMixOfMau.reduce((s, r) => s + r.people, 0);
+      return total > 0 ? d.engagement.roleMixOfMau.map((r) => share1(r.people, total)) : [];
+    }
+    case 37: { // V4: the colour scale's top = the largest served cell rounded up to the next 10
+      const cells = d.retention.cohortByWeek.flatMap((r) => r.activePctOnDays).filter((x): x is number => x !== null);
+      return cells.length ? [Math.ceil(Math.max(...cells) / 10) * 10] : [];
     }
     case 39: { // B8 band shares
-      const r = D.retention;
-      const bands = [r.activeFarms0To6, r.quietFarms7To13, r.quietFarms14To29, r.silentFarms30Plus, r.neverLoggedFarms].map((b) => b.current.value!);
-      const total = bands.reduce((s, x) => s + x, 0);
-      return bands.map((b) => share1(b, total));
+      const r = d.retention;
+      const bands = [r.activeFarms0To6, r.quietFarms7To13, r.quietFarms14To29, r.silentFarms30Plus, r.neverLoggedFarms].map(val);
+      if (bands.some((b) => b === null)) return [];
+      const total = (bands as number[]).reduce((s, x) => s + x, 0);
+      return total > 0 ? (bands as number[]).map((b) => share1(b, total)) : [];
     }
     default:
-      return [];
+      return out;
   }
 }
 
-const tokenCache = new Map<number, string[]>();
-function tokensFor(n: number): string[] {
-  const hit = tokenCache.get(n);
+const tokenCache = new WeakMap<CompanyMis, Map<number, string[]>>();
+function tokensFor(d: CompanyMis, n: number): string[] {
+  let byN = tokenCache.get(d);
+  if (!byN) { byN = new Map(); tokenCache.set(d, byN); }
+  const hit = byN.get(n);
   if (hit) return hit;
   const nums: number[] = [];
   for (const f of planItem(n).fields) {
-    const value = at(D, f);
+    const value = at(d, f);
     numbersIn(value, nums);
     if (value && typeof value === 'object' && 'current' in (value as object)) nums.push(...deltaTokens(value as MisNumber));
   }
-  nums.push(...derivations(n));
+  nums.push(...derivations(d, n));
   const set = new Set<string>();
   for (const v of nums) for (const t of variants(v)) if (/\d/.test(t)) set.add(t);
   const list = [...set].sort((x, y) => y.length - x.length);
-  tokenCache.set(n, list);
+  byN.set(n, list);
   return list;
 }
 
@@ -163,15 +176,17 @@ function stripDates(text: string): string {
 const PLAN_PHRASES: RegExp[] = [
   /\bday 1, 7, 14 and 30\b/gi, // B4: the cohort grid's four days (before the shorter "day 1")
   /\b7[–-]29 days\b/g, /\b7[–-]13 days\b/g, /\b14[–-]29 days\b/g, /\b30 days or more\b/g, /\b30\+ days\b/g,
-  /\blast 7 days\b/gi, /\bin the 7 days\b/g, /\b3 of (their )?first 7 days\b/g, /\bslowest 5%/gi,
+  /\blast 7 days\b/gi, /\blast 30 days\b/gi, /\bin the 7 days\b/g, /\b3 of (their )?first 7 days\b/g, /\bslowest 5%/gi,
   /\bmore than 500 farms\b/g, /\bon day 30\b/gi, /\bDay (1|7|14|30)\b/g, /\bday 1\b/gi,
   /\bDay-(1|30)\b/gi, // items 33, 34: next-day and day-30 return
   /\b95th percentile\b/g, // item 45 = CR-2a rule 30, nearest-rank 95th percentile
   /\btrailing 7 days\b/g, // item 61 = CR-2a rule 38, farms active at d (the 7 days to d)
+  /\b7 days in\b/g, // B14 and the funnel subtitle: old enough to judge the habit
 ];
 
 function stripAxis(text: string): string {
   return text
+    .replace(/\b(1[0-2]|[1-9]):[0-5]\d (am|pm)\b/gi, '') // the counted-at time
     .replace(/\b(1[0-2]|[1-9]) ?(am|pm)\b/gi, '') // hour labels and the busiest hour
     .replace(/\bDay ([0-9]|[12][0-9]|30)\b/g, ''); // return-curve day axis
 }
@@ -185,17 +200,22 @@ function stripTokens(text: string, tokens: string[]): string {
   return t;
 }
 
-/** A round axis tick: at most `sig` significant digits (charts: 2; a lone scale label elsewhere: 1). */
-function isTick(text: string, sig = 2): boolean {
-  const m = /^[−-]?([\d.,]+)\s*(%|ms|s|K|L)?$/.exec(text.trim());
-  if (!m) return false;
-  const digits = m[1].replace(/[.,]/g, '').replace(/^0+/, '').replace(/0+$/, '');
-  return digits.length <= sig;
+/**
+ * A NAMED axis element: a chart's y-axis tick label, i.e. an SVG <text> drawn
+ * beside its own gridline (<g><line/><text text-anchor="end"/></g>). Exempt by
+ * what the element is, never by how short its number is (review V2).
+ */
+function isAxisTick(el: Element): boolean {
+  if (el.tagName.toLowerCase() !== 'text' || el.closest('svg') === null) return false;
+  const g = el.parentElement;
+  return g !== null && g.tagName.toLowerCase() === 'g'
+    && g.querySelector(':scope > line') !== null
+    && el.getAttribute('text-anchor') === 'end';
 }
 
 interface Stray { section: string; item: string; text: string; left: string }
 
-function strayDigits(section: string, root: HTMLElement): Stray[] {
+function strayDigits(d: CompanyMis | null, section: string, root: HTMLElement): Stray[] {
   const out: Stray[] = [];
   // Per element, its own text nodes joined ("Day " + "1" is one label).
   for (const el of [root, ...root.querySelectorAll('*')]) {
@@ -204,14 +224,11 @@ function strayDigits(section: string, root: HTMLElement): Stray[] {
     const host = (el.closest('[data-mis-item]') ?? null) as HTMLElement | null;
     if (!host) continue; // outside every tile, card and chart (filter row, range label, counted-at)
     const key = host.getAttribute('data-mis-item')!;
-    const inSvgText = el.closest('svg') !== null && el.tagName.toLowerCase() === 'text';
-    if (inSvgText && isTick(text)) continue;
-    // A lone round label outside a chart, such as the end of a colour scale ("60%").
-    if (!inSvgText && el.children.length === 0 && isTick(text, 1)) continue;
+    if (isAxisTick(el)) continue;
     let left = stripDates(text);
     for (const re of PLAN_PHRASES) left = left.replace(re, '');
     left = stripAxis(left);
-    left = stripTokens(left, tokensFor(nOf(key)));
+    if (d) left = stripTokens(left, tokensFor(d, nOf(key)));
     if (/\d/.test(left)) out.push({ section, item: key, text, left });
   }
   return out;
@@ -266,18 +283,39 @@ describe('every tile and card is a registered item (CR-2b Task 4)', () => {
   });
 
   it('Every_number_on_every_page_comes_from_the_answer', async () => {
-    const strays: Stray[] = [];
-    let checked = 0;
-    for (const s of MIS_SECTIONS) {
-      const { container } = await open(s);
-      // Charts' table twins print the same served values: open them too.
-      for (const b of screen.queryAllByRole('button', { name: 'Table' })) fireEvent.click(b);
-      checked += container.querySelectorAll('[data-mis-item]').length;
-      strays.push(...strayDigits(s, screen.getByTestId('mis-dashboard')));
-      closeAll();
+    // Review V2: the same check on the full answer, on two farm-numbers-blocked answers and on an
+    // answer where nothing is measured. In the last, no digit may appear in any tile or card apart
+    // from dates and the range (and the plan's own label wording).
+    const answers: [string, CompanyMis, CompanyMis | null][] = [
+      ['full', D, D],
+      ['farm_list_unreadable', BLOCKED_LIST, BLOCKED_LIST],
+      ['too_many_farms_for_live_count', BLOCKED_CEILING, BLOCKED_CEILING],
+      ['nothing measured', allNotMeasuredFixture(), null], // no answer value may be printed at all
+    ];
+    for (const [name, answer, tokens] of answers) {
+      const strays: Stray[] = [];
+      let checked = 0;
+      for (const s of MIS_SECTIONS) {
+        const { container } = await open(s, answer);
+        // Charts' table twins print the same served values: open them too.
+        for (const b of screen.queryAllByRole('button', { name: 'Table' })) fireEvent.click(b);
+        checked += container.querySelectorAll('[data-mis-item]').length;
+        strays.push(...strayDigits(tokens, `${name}: ${s}`, screen.getByTestId('mis-dashboard')));
+        closeAll();
+      }
+      expect([name, checked > 60]).toEqual([name, true]);
+      expect.soft(strays).toEqual([]);
     }
-    expect(checked).toBeGreaterThan(60);
-    expect(strays).toEqual([]);
+  });
+
+  it('An_invented_zero_on_a_tile_would_be_caught', () => {
+    // The check itself, on a hand-made tile: a 0 nobody served is a stray, a served one is not.
+    const box = document.createElement('div');
+    box.innerHTML = '<div data-mis-item="overview.understanding"><p>0</p></div><div data-mis-item="overview.dau"><p>143</p></div>';
+    document.body.appendChild(box);
+    const strays = strayDigits(D, 'probe', box);
+    box.remove();
+    expect(strays.map((x) => x.item)).toEqual(['overview.understanding']);
   });
 
   it('Not_served_items_show_their_sentence_and_no_digit', async () => {

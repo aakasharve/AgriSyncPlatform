@@ -11,11 +11,11 @@ import { QualitySection } from '@/features/mis/MisQuality';
 import { FarmsSection } from '@/features/mis/MisFarms';
 import { OperationsSection } from '@/features/mis/MisOperations';
 import {
-  acquisitionView, engagementView, farmsView, operationsView, overviewView, qualityView, retentionView, tileFrom,
+  DAY_LINE_NOT_COUNTED, acquisitionView, engagementView, farmsView, operationsView, overviewView, qualityView, retentionView, tileFrom,
 } from '@/features/mis/misView';
 import { MIS_ITEMS, MIS_SLOTS } from '@/features/mis/misItems';
 import { GHOST } from '@/features/mis/misTheme';
-import { misFixture, notMeasured, num } from '@/test/misFixture';
+import { farmsBlockedFixture, misFixture, notMeasured, num } from '@/test/misFixture';
 import { PLAN_REASONS } from '@/test/misPlan';
 
 /**
@@ -91,7 +91,8 @@ describe('KpiTile (CR-2b Task 3)', () => {
     const tile = tileFrom('overview.signUps', notMeasured('denominator_zero'), 'count', true);
     const { container } = render(<KpiTile tile={tile} compare />);
     const el = card(container, 'overview.signUps');
-    expect(el.textContent).toMatch(/Not measured/);
+    // B18 V5: the label once, the reason sentence, and never "Not measured" twice in the box.
+    expect((el.textContent ?? '').match(/not measured/gi) ?? []).toHaveLength(1);
     expect(el.textContent).toContain(PLAN_REASONS.denominator_zero);
     expect(el.textContent).not.toMatch(/\d/);
   });
@@ -306,13 +307,18 @@ describe('empty charts and the habit step (CR-2b B12, B14)', () => {
       // A measured number whose every day is null: the card says why, it draws no axes.
       ['quality', 'quality.voiceSaved',
         misFixture({ quality: { voiceRecordingsSavedPct: { ...notMeasured('denominator_zero'), currentByDay: allNull, previousByDay: allNull } } }),
-        'Not measured'],
+        'No voice recording was made in this period.'], // B11: the number's own reason
       ['quality', 'quality.transcriptionAvg',
         misFixture({ quality: {
           transcriptionAvgMs: { ...notMeasured('no_samples'), currentByDay: allNull, previousByDay: allNull },
           transcriptionP95Ms: { ...notMeasured('no_samples'), currentByDay: allNull, previousByDay: allNull },
         } }),
         PLAN_REASONS.no_samples],
+      // B18 V3: the reason shown is this number's own (B11 sentence), not only the panel title.
+      ['engagement', 'engagement.logsPerFarm',
+        misFixture({ engagement: { logsPerActiveFarmPerWeek: { ...notMeasured('denominator_zero'), currentByDay: allNull, previousByDay: allNull } } }),
+        'No farm was active in the last 7 days.'],
+      // A measured range figure whose every day is null still draws no empty axes.
       ['engagement', 'engagement.logsPerFarm',
         misFixture({ engagement: { logsPerActiveFarmPerWeek: { ...num(6.7, 5.9), currentByDay: allNull, previousByDay: allNull } } }),
         'Not measured'],
@@ -322,9 +328,104 @@ describe('empty charts and the habit step (CR-2b B12, B14)', () => {
       const el = chartCard(v.container, item);
       expect.soft([item, el.querySelectorAll('svg[role="img"] text').length]).toEqual([item, 0]);
       expect.soft([item, linePaths(el).length + ghostPaths(el).length]).toEqual([item, 0]);
-      expect.soft([item, (el.textContent ?? '').includes(words)]).toEqual([item, true]);
+      expect.soft([item, words, (el.textContent ?? '').includes(words)]).toEqual([item, words, true]);
+      // V3: "a day-by-day line is not counted yet" is only for a number with no day list at all.
+      expect.soft([item, (el.textContent ?? '').includes(DAY_LINE_NOT_COUNTED)]).toEqual([item, false]);
       v.unmount();
     }
+  });
+
+  it('No_day_list_keeps_its_sentence_and_an_all_null_previous_draws_no_legend', () => {
+    // V3: a number with no day list at all keeps "A day-by-day line is not counted yet. ..."
+    const none = misFixture({ quality: { voiceRecordingsSavedPct: num(86.1, 83.7) } });
+    const a = render(sectionOf('quality', none, true));
+    expect(chartCard(a.container, 'quality.voiceSaved').textContent).toContain(DAY_LINE_NOT_COUNTED);
+    a.unmount();
+    // V3: a previous list that is all null draws no previous line and no "Previous period" legend.
+    const prevNull = misFixture({ quality: { voiceRecordingsSavedPct: num(86.1, 83.7, CUR, Array(30).fill(null)) } });
+    const b = render(sectionOf('quality', prevNull, true));
+    const el = chartCard(b.container, 'quality.voiceSaved');
+    expect(ghostPaths(el)).toHaveLength(0);
+    expect(el.textContent).not.toContain('Previous period');
+    b.unmount();
+    // The return curve: every point null -> the number's own reason, no axes.
+    const flatCurve = misFixture({
+      retention: {
+        d1Pct: notMeasured('no_complete_window'),
+        curve: Array.from({ length: 31 }, (_, day) => ({ day, activePct: null, eligible: 0 })),
+        previousCurve: Array.from({ length: 31 }, (_, day) => ({ day, activePct: null, eligible: 0 })),
+      },
+    });
+    const c = render(sectionOf('retention', flatCurve, true));
+    const curve = chartCard(c.container, 'retention.curve');
+    expect(curve.querySelectorAll('svg[role="img"] text').length).toBe(0);
+    expect(curve.textContent).toContain(PLAN_REASONS.no_complete_window);
+    expect(curve.textContent).not.toContain(DAY_LINE_NOT_COUNTED);
+    expect(curve.textContent).not.toContain('Previous period');
+    c.unmount();
+  });
+
+  it('Blocked_farm_numbers_never_say_nobody', () => {
+    // V1: blocked farm numbers send curve and cohortByWeek empty while sign-ups stay measured.
+    for (const code of ['farm_list_unreadable', 'too_many_farms_for_live_count']) {
+      const v = render(sectionOf('retention', farmsBlockedFixture(code), true));
+      for (const item of ['retention.curve', 'retention.cohorts']) {
+        const el = chartCard(v.container, item);
+        expect.soft([code, item, (el.textContent ?? '').includes(PLAN_REASONS[code])]).toEqual([code, item, true]);
+        expect.soft([code, item, /No one verified a phone in this range/.test(el.textContent ?? '')]).toEqual([code, item, false]);
+        expect.soft([code, item, /No sign-up week starts inside this range/.test(el.textContent ?? '')]).toEqual([code, item, false]);
+        expect.soft([code, item, /measured zero/i.test(el.textContent ?? '')]).toEqual([code, item, false]);
+      }
+      v.unmount();
+    }
+    // Readable farm numbers and truly nobody: the "nobody" wording is right.
+    const nobody = misFixture({
+      overview: { signUps: num(0, 0, Array(30).fill(0), Array(30).fill(0)) },
+      acquisition: { verified: num(0, 0) },
+      retention: { d1Pct: notMeasured('no_complete_window'), d30Pct: notMeasured('no_complete_window'), curve: [], previousCurve: [], cohortByWeek: [] },
+    });
+    const r = render(sectionOf('retention', nobody, true));
+    expect(chartCard(r.container, 'retention.curve').textContent).toContain('No one verified a phone in this range');
+    expect(chartCard(r.container, 'retention.cohorts').textContent).toContain('No sign-up week starts inside this range');
+    r.unmount();
+  });
+
+  it('The_cohort_scale_top_is_the_largest_cell_rounded_up_to_ten', () => {
+    // V4: fixture's largest cell is 41.9 -> 50%; a largest cell of 73 -> 80%.
+    const legendTop = (d: CompanyMis) => {
+      const v = render(sectionOf('retention', d, false));
+      const text = chartCard(v.container, 'retention.cohorts').textContent ?? '';
+      v.unmount();
+      return text;
+    };
+    expect(legendTop(misFixture())).toContain('50%');
+    const big = misFixture({
+      retention: {
+        cohortByWeek: [
+          { weekStart: '2026-10-19', people: 74, activePctByWeek: [44.6, 31.1, 24.3, null], activePctOnDays: [73, 27.4, 18.6, null] },
+        ],
+      },
+    });
+    const t = legendTop(big);
+    expect(t).toContain('80%');
+    expect(t).not.toContain('60%');
+  });
+
+  it('Cohort_titles_and_the_first_band_follow_the_review', () => {
+    const v = render(sectionOf('retention', misFixture(), true));
+    // V5: a day that has not passed.
+    const notYet = [...chartCard(v.container, 'retention.cohorts').querySelectorAll('td')].filter((td) => td.textContent?.trim() === 'not yet');
+    expect(notYet.length).toBeGreaterThan(0);
+    for (const td of notYet) expect(td.getAttribute('title')).toBe('This day has not passed yet');
+    // V5: the first band (saved in the last 7 days, 404 vs 371: +8.9%) shows its change like the others.
+    const bands = chartCard(v.container, 'retention.bands');
+    const first = [...bands.querySelectorAll('li')].find((li) => (li.textContent ?? '').includes('Saved in the last 7 days'));
+    expect(first).toBeDefined();
+    expect(first!.textContent).toMatch(/\+8\.9%/);
+    // Control: the second band (silent 7–13 days, 66 -> 73: +10.6%) shows its change.
+    const second = [...bands.querySelectorAll('li')].find((li) => (li.textContent ?? '').includes('Silent 7–13 days'));
+    expect(second?.textContent).toMatch(/\+10\.6%/);
+    v.unmount();
   });
 
   it('Habit_with_nobody_eligible_shows_no_bar_and_no_count', () => {
