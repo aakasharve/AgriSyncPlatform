@@ -104,6 +104,7 @@ export const EngagementSection: React.FC<MisSectionProps<EngagementView>> = ({ v
                                     value: p.people,
                                     color: ROLE_COLORS[k] ?? OTHER,
                                     detail: `${fmtInt(p.people)} ${p.people === 1 ? "person" : "people"}`,
+                                    share: p.share,
                                 }))}
                             />
                         )}

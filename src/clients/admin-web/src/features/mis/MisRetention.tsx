@@ -84,7 +84,7 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                             <>
                                 <PartBar
                                     ariaLabel="Registered farms by days since the last entry"
-                                    parts={b.parts.map((p, k) => ({ key: p.key, label: p.label, value: p.value, color: BAND_COLORS[k], detail: p.text }))}
+                                    parts={b.parts.map((p, k) => ({ key: p.key, label: p.label, value: p.value, color: BAND_COLORS[k], detail: p.text, share: p.share }))}
                                 />
                                 {compare && (
                                     <ul className="mt-4 space-y-1.5 border-t border-stone-100 pt-3 text-[13px]">

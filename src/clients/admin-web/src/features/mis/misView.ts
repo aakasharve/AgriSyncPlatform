@@ -20,7 +20,7 @@ import type {
   MisRange,
   MisValue,
 } from '@/hooks/useCompanyMis';
-import { itemByKey, reasonSentence, type MisFieldPath, type MisSectionKey } from './misItems';
+import { itemByKey, reasonSentence, reasonSentenceFor, type MisFieldPath, type MisSectionKey } from './misItems';
 import {
   fmtDayYear,
   fmtDay,
@@ -57,13 +57,13 @@ export function formatterOf(kind: MisKind): (v: number) => string {
   }
 }
 
-/** "Not measured: " + the reason, for a value the server did not count. */
-export function notMeasuredWhy(code: string | null): string {
-  return `Not measured: ${reasonSentence(code)}`;
+/** "Not measured: " + the reason, for a value the server did not count (said for `item` when given, B11). */
+export function notMeasuredWhy(code: string | null, item?: string): string {
+  return `Not measured: ${reasonSentenceFor(code, item)}`;
 }
 
-export function shownOf(v: MisValue, kind: MisKind): MisShown {
-  if (v.value === null || !Number.isFinite(v.value)) return { kind: 'notMeasured', why: notMeasuredWhy(v.notMeasuredReason) };
+export function shownOf(v: MisValue, kind: MisKind, item?: string): MisShown {
+  if (v.value === null || !Number.isFinite(v.value)) return { kind: 'notMeasured', why: notMeasuredWhy(v.notMeasuredReason, item) };
   return { kind: 'value', value: v.value, text: formatterOf(kind)(v.value) };
 }
 
@@ -78,21 +78,22 @@ export type MisDelta =
  * shares -> point difference; counts: 0 -> 0 "no change", 0 -> n "up from 0",
  * otherwise the signed relative change.
  */
-export function deltaOf(n: MisNumber, kind: MisKind, upIsGood: boolean): MisDelta {
+export function deltaOf(n: MisNumber, kind: MisKind, upIsGood: boolean, item?: string): MisDelta {
   const cur = n.current.value;
   const prev = n.previous.value;
   if (cur === null) return null;
-  if (prev === null) return { previousNotMeasured: notMeasuredWhy(n.previous.notMeasuredReason) };
+  if (prev === null) return { previousNotMeasured: notMeasuredWhy(n.previous.notMeasuredReason, item) };
+  /* B13: a change of zero reads "no change", never "0%" or "0 pts". */
+  if (cur === prev) return { text: 'no change', good: null };
+  const sign = cur > prev ? '+' : '−';
+  const good = (cur > prev) === upIsGood;
   if (kind === 'pct') {
     const text = fmtDeltaPoints(cur, prev);
-    return { text, good: text === '0 pts' ? null : (cur > prev) === upIsGood };
+    return { text: text === '0 pts' ? `${sign}less than 0.1 pts` : text, good };
   }
-  if (prev === 0) {
-    if (cur === 0) return { text: 'no change', good: null };
-    return { text: 'up from 0', good: (cur > 0) === upIsGood };
-  }
+  if (prev === 0) return { text: 'up from 0', good };
   const text = fmtRelDelta(cur, prev) as string;
-  return { text, good: text === '0%' ? null : (cur > prev) === upIsGood };
+  return { text: text === '0%' ? `${sign}less than 0.1%` : text, good };
 }
 
 /* ── tiles ─────────────────────────────────────────────────────────────── */
@@ -116,9 +117,9 @@ export function tileFrom(item: string, n: MisNumber, kind: MisKind, upIsGood: bo
     fields: meta.fields,
     label: meta.label,
     hint: meta.hint ?? '',
-    current: shownOf(n.current, kind),
-    previous: shownOf(n.previous, kind),
-    delta: deltaOf(n, kind, upIsGood),
+    current: shownOf(n.current, kind, item),
+    previous: shownOf(n.previous, kind, item),
+    delta: deltaOf(n, kind, upIsGood, item),
     spark: Array.isArray(n.currentByDay) ? n.currentByDay : null,
   };
 }
@@ -176,10 +177,14 @@ function byPosition(values: (number | null)[] | null | undefined, length: number
   return Array.from({ length }, (_, i) => (i < values.length ? values[i] : null));
 }
 
-/** The day-by-day line of one number, or why there is none. */
-export function dayLineOf(n: MisNumber, range: MisRange): MisChart<MisLineModel> {
-  if (!Array.isArray(n.currentByDay)) {
-    if (n.current.value === null) return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason) };
+/**
+ * The day-by-day line of one number, or why there is none. B12: a line with
+ * no measured day (all null, or no list) is a reason, never empty axes.
+ */
+export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChart<MisLineModel> {
+  const anyDay = Array.isArray(n.currentByDay) && n.currentByDay.some((x) => x !== null && Number.isFinite(x));
+  if (!anyDay) {
+    if (n.current.value === null) return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason, item) };
     return { kind: 'notMeasured', why: DAY_LINE_NOT_COUNTED };
   }
   const axis = dayAxis(range);
@@ -293,7 +298,7 @@ export function overviewView(d: CompanyMis): OverviewView {
       registered: shownOf(d.farms.farmsRegistered.current, 'count'),
       newFarms: newFarmsOf(d.farms.farmsRegistered),
       acres: shownOf(d.farms.acresCovered.current, 'acres'),
-      line: dayLineOf(hero, d.range),
+      line: dayLineOf(hero, d.range, 'overview.activeFarms'),
     },
     tiles: [
       tileNotMeasured('overview.installs'),
@@ -322,6 +327,28 @@ export interface FunnelStepModel {
   /** "of sign-ups" or "of N old enough to judge"; null for the first two steps. */
   share: { text: string; of: string } | null;
   delta: MisDelta;
+  /** B9: "x% did not continue" from the step before, when both are measured on one base. */
+  dropFromPrevious: string | null;
+  /** B14: the step cannot be judged yet; this sentence replaces the count and the bar. */
+  pending: string | null;
+}
+
+export const HABIT_NOBODY_ELIGIBLE = 'Nobody who signed up in this range is 7 days in yet';
+
+/** B9: (earlier − later) ÷ earlier × 100, whole percent, half away from zero. Null when either is absent or earlier is 0. */
+export function dropOf(earlier: number | null, later: number | null): string | null {
+  if (earlier === null || later === null || earlier === 0) return null;
+  const x = ((earlier - later) / earlier) * 100;
+  const r = Math.sign(x) * Math.round(Math.abs(x));
+  return `${r === 0 ? 0 : r}% did not continue`;
+}
+
+/** B8: count ÷ the sum of served counts × 100, one decimal, half away from zero; null when the sum is 0. */
+export function shareText(count: number, total: number): string | null {
+  if (!(total > 0)) return null;
+  const x = (count / total) * 100;
+  const r = Math.sign(x) * Math.round(Math.abs(x) * 10) / 10;
+  return fmtPctPoints(r);
 }
 
 export interface AcquisitionView {
@@ -347,6 +374,8 @@ export function acquisitionView(d: CompanyMis): AcquisitionView {
       current: shownOf(n.current, 'count'),
       share: s === null || of === null ? null : { text: fmtPctPoints(s), of },
       delta: deltaOf(n, 'count', true),
+      dropFromPrevious: null,
+      pending: null,
     };
   };
   const installed = itemByKey('acquisition.installed');
@@ -360,11 +389,15 @@ export function acquisitionView(d: CompanyMis): AcquisitionView {
         current: { kind: 'notMeasured', why: installed.why ?? '' },
         share: null,
         delta: null,
+        dropFromPrevious: null,
+        pending: null,
       },
       step('acquisition.verified', a.verified, null, null),
-      step('acquisition.hasFarm', a.hasFarm, verified, 'of sign-ups'),
-      step('acquisition.firstLog', a.firstLog, verified, 'of sign-ups'),
-      step('acquisition.habit', a.habit, eligible, eligible === null ? null : `of ${fmtInt(eligible)} old enough to judge`),
+      { ...step('acquisition.hasFarm', a.hasFarm, verified, 'of sign-ups'), dropFromPrevious: dropOf(verified, a.hasFarm.current.value) },
+      { ...step('acquisition.firstLog', a.firstLog, verified, 'of sign-ups'), dropFromPrevious: dropOf(a.hasFarm.current.value, a.firstLog.current.value) },
+      eligible === 0
+        ? { ...step('acquisition.habit', a.habit, null, null), delta: null, pending: HABIT_NOBODY_ELIGIBLE }
+        : step('acquisition.habit', a.habit, eligible, eligible === null ? null : `of ${fmtInt(eligible)} old enough to judge`),
     ],
   };
 }
@@ -374,7 +407,7 @@ export function acquisitionView(d: CompanyMis): AcquisitionView {
 export interface EngagementView {
   perFarm: MisChart<MisLineModel>;
   heat: MisChart<{ grid: number[][]; max: number }>;
-  roles: MisChart<{ parts: { key: string; label: string; people: number }[] }>;
+  roles: MisChart<{ parts: { key: string; label: string; people: number; share: string | null }[] }>;
 }
 
 /** 7 Monday-first rows × 24 hours, every served cell placed; totals over the range. */
@@ -399,11 +432,16 @@ export function engagementView(d: CompanyMis): EngagementView {
         data: {
           parts: [...e.roleMixOfMau]
             .sort((x, y) => y.people - x.people)
-            .map((r) => ({ key: r.role, label: roleName(r.role), people: r.people })),
+            .map((r) => ({
+              key: r.role,
+              label: roleName(r.role),
+              people: r.people,
+              share: shareText(r.people, e.roleMixOfMau.reduce((sum, x) => sum + x.people, 0)),
+            })),
         },
       };
   return {
-    perFarm: dayLineOf(e.logsPerActiveFarmPerWeek, d.range),
+    perFarm: dayLineOf(e.logsPerActiveFarmPerWeek, d.range, 'engagement.logsPerFarm'),
     heat: e.whenLogged.length > 0
       ? { kind: 'chart', data: heatGrid(e.whenLogged) }
       : { kind: 'notMeasured', why: notMeasuredWhy(d.overview.logsRecorded.current.notMeasuredReason) },
@@ -426,6 +464,8 @@ export interface BandModel {
   label: string;
   value: number;
   text: string;
+  /** B8: this band's count ÷ the five bands' sum; null when the sum is 0. */
+  share: string | null;
   delta: MisDelta;
 }
 
@@ -464,6 +504,7 @@ export function retentionView(d: CompanyMis): RetentionView {
           label: b.label,
           value: b.n.current.value as number,
           text: fmtInt(b.n.current.value as number),
+          share: shareText(b.n.current.value as number, bandDefs.reduce((sum, x) => sum + (x.n.current.value as number), 0)),
           delta: deltaOf(b.n, 'count', b.key === 'active'),
         })),
       },
@@ -535,11 +576,21 @@ export interface QualityView {
 
 export function qualityView(d: CompanyMis): QualityView {
   const q = d.quality;
-  const avg = dayLineOf(q.transcriptionAvgMs, d.range);
-  const p95 = dayLineOf(q.transcriptionP95Ms, d.range);
-  const latency: QualityView['latency'] = avg.kind === 'chart' && p95.kind === 'chart'
-    ? { kind: 'chart', data: { labels: avg.data.labels, titles: avg.data.titles, avg: avg.data.current, p95: p95.data.current } }
-    : avg.kind !== 'chart' ? avg : (p95 as Exclude<typeof p95, { kind: 'chart' }>);
+  /* The average is the main line: with no measured day it is a reason (B12). The slowest-5% line
+     is drawn beside it from its own served days, or left out when it has none. */
+  const avg = dayLineOf(q.transcriptionAvgMs, d.range, 'quality.transcriptionAvg');
+  const p95Days = Array.isArray(q.transcriptionP95Ms.currentByDay) ? q.transcriptionP95Ms.currentByDay : null;
+  const latency: QualityView['latency'] = avg.kind === 'chart'
+    ? {
+      kind: 'chart',
+      data: {
+        labels: avg.data.labels,
+        titles: avg.data.titles,
+        avg: avg.data.current,
+        p95: byPosition(p95Days, avg.data.labels.length) ?? avg.data.labels.map(() => null),
+      },
+    }
+    : avg;
   return {
     tiles: [
       tileFrom('quality.voiceSaved', q.voiceRecordingsSavedPct, 'pct', true),
@@ -549,9 +600,9 @@ export function qualityView(d: CompanyMis): QualityView {
       tileNotMeasured('quality.syncFailTile'),
       tileNotMeasured('quality.crashFree'),
     ],
-    saved: dayLineOf(q.voiceRecordingsSavedPct, d.range),
+    saved: dayLineOf(q.voiceRecordingsSavedPct, d.range, 'quality.voiceSaved'),
     latency,
-    corrected: dayLineOf(q.logsCorrectedPct, d.range),
+    corrected: dayLineOf(q.logsCorrectedPct, d.range, 'quality.corrected'),
   };
 }
 
@@ -590,7 +641,7 @@ export function farmsView(d: CompanyMis): FarmsView {
   const inFpo = tileFrom('farms.inFpo', f.activeFarmsInFpoPct, 'pct', true);
   const count = shownOf(f.farmsInFpo.current, 'count');
   inFpo.hint = count.kind === 'value'
-    ? `Of active farms; ${count.text} registered farms are in one`
+    ? `Of active farms; ${count.text} registered ${noun(count.value, 'farm is', 'farms are')} in one`
     : 'Of active farms';
   return {
     tiles: [
@@ -632,8 +683,14 @@ function changeClause(n: MisNumber, kind: MisKind, upIsGood: boolean, compare: b
   return ` (${d.text} on the period before)`;
 }
 
+/** Headlines keep the generic reason sentences; the item-specific ones (B11) sit on the tiles and cards. */
 function notMeasuredClause(label: string, v: MisValue): string {
   return `${label} is not measured: ${reasonSentence(v.notMeasuredReason)}`;
+}
+
+/** B13: a counted noun agrees with its number — "1 farm", "2 farms". */
+export function noun(value: number, one: string, many: string): string {
+  return value === 1 ? one : many;
 }
 
 function txt(v: MisValue, kind: MisKind): string {
@@ -647,31 +704,31 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
     case 'overview': {
       const o = d.overview;
       const first = o.activeFarms.current.value !== null
-        ? `${txt(o.activeFarms.current, 'count')} farms saved an entry in the 7 days to ${asOfText(d)}${changeClause(o.activeFarms, 'count', true, compare)}.`
+        ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} saved an entry in the 7 days to ${asOfText(d)}${changeClause(o.activeFarms, 'count', true, compare)}.`
         : notMeasuredClause('Active farms', o.activeFarms.current);
       const second = o.voiceSharePct.current.value === null
         ? notMeasuredClause('The share saved by voice', o.voiceSharePct.current)
         : o.logsRecorded.current.value === null
           ? notMeasuredClause('Entries saved', o.logsRecorded.current)
-          : `Voice made ${txt(o.voiceSharePct.current, 'pct')} of the ${txt(o.logsRecorded.current, 'count')} entries in this range.`;
+          : `Voice made ${txt(o.voiceSharePct.current, 'pct')} of the ${txt(o.logsRecorded.current, 'count')} ${noun(o.logsRecorded.current.value, 'entry', 'entries')} in this range.`;
       return `${first} ${second}`;
     }
     case 'acquisition': {
       const a = d.acquisition;
       const first = a.verified.current.value !== null
-        ? `${txt(a.verified.current, 'count')} people verified their phone${changeClause(a.verified, 'count', true, compare)}.`
+        ? `${txt(a.verified.current, 'count')} ${noun(a.verified.current.value, 'person', 'people')} verified their phone${changeClause(a.verified, 'count', true, compare)}.`
         : notMeasuredClause('Phone verification', a.verified.current);
       let second: string;
       if (a.habit.current.value === null) second = notMeasuredClause('The habit', a.habit.current);
       else if (a.habitEligible.current.value === null) second = notMeasuredClause('The habit', a.habitEligible.current);
-      else if (a.habitEligible.current.value === 0) second = 'No one who verified in this range is 7 days in yet, so no habit is judged.';
+      else if (a.habitEligible.current.value === 0) second = 'Nobody who signed up in this range is 7 days in yet, so no habit is judged.';
       else second = `${txt(a.habit.current, 'count')} of ${txt(a.habitEligible.current, 'count')} old enough to judge saved entries on 3 of their first 7 days.`;
       return `${first} ${second} Installs and channels are not measured yet.`;
     }
     case 'engagement': {
       const e = d.engagement;
       const first = e.logsPerActiveFarmPerWeek.current.value !== null
-        ? `An active farm saved ${txt(e.logsPerActiveFarmPerWeek.current, 'decimal')} entries a week${changeClause(e.logsPerActiveFarmPerWeek, 'decimal', true, compare)}.`
+        ? `An active farm saved ${txt(e.logsPerActiveFarmPerWeek.current, 'decimal')} ${noun(e.logsPerActiveFarmPerWeek.current.value, 'entry', 'entries')} a week${changeClause(e.logsPerActiveFarmPerWeek, 'decimal', true, compare)}.`
         : notMeasuredClause('Entries per active farm', e.logsPerActiveFarmPerWeek.current);
       let second: string;
       if (e.whenLogged.length === 0) {
@@ -706,7 +763,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
         first = `${a} ${b}`;
       }
       const second = r.quietFarms7To29.current.value !== null
-        ? `${txt(r.quietFarms7To29.current, 'count')} farms have gone quiet for 7–29 days and can still be won back.`
+        ? `${txt(r.quietFarms7To29.current, 'count')} ${noun(r.quietFarms7To29.current.value, 'farm has', 'farms have')} gone quiet for 7–29 days and can still be won back.`
         : notMeasuredClause('Quiet farms', r.quietFarms7To29.current);
       return `${first} ${second}`;
     }
@@ -724,11 +781,11 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const f = d.farms;
       let first: string;
       if (f.activeFarms.current.value !== null && f.acresCovered.current.value !== null) {
-        first = `${txt(f.activeFarms.current, 'count')} active farms covering ${txt(f.acresCovered.current, 'acres')} acres.`;
+        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')} covering ${txt(f.acresCovered.current, 'acres')} ${noun(f.acresCovered.current.value, 'acre', 'acres')}.`;
       } else if (f.activeFarms.current.value === null) {
         first = notMeasuredClause('Active farms', f.activeFarms.current);
       } else {
-        first = `${txt(f.activeFarms.current, 'count')} active farms. ${notMeasuredClause('Acres covered', f.acresCovered.current)}`;
+        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')}. ${notMeasuredClause('Acres covered', f.acresCovered.current)}`;
       }
       return `${first} Districts are not measured yet.`;
     }

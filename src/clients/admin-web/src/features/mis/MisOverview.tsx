@@ -93,7 +93,7 @@ export const OverviewSection: React.FC<MisSectionProps<OverviewView>> = ({ view,
                     className="col-span-12 xl:col-span-5"
                     title="Entries saved, voice and typed"
                     subtitle="Per week, every saved entry"
-                    legend={[{ label: 'Voice', color: SERIES.s1 }, { label: 'Typed', color: SERIES.s2 }]}
+                    legend={view.logsByWeek.kind === 'chart' ? [{ label: 'Voice', color: SERIES.s1 }, { label: 'Typed', color: SERIES.s2 }] : undefined}
                     table={view.logsByWeek.kind === 'chart'
                         ? seriesTable('Week', view.logsByWeek.data.titles, [
                             { name: 'Voice', values: view.logsByWeek.data.voice, fmt: fmtInt },

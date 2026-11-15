@@ -18,7 +18,7 @@ export const AcquisitionSection: React.FC<MisSectionProps<AcquisitionView>> = ({
         <Row>
             <ChartCard
                 item="acquisition.verified"
-                fields={['acquisition.verified', 'acquisition.hasFarm', 'acquisition.firstLog', 'acquisition.habit', 'acquisition.habitEligible']}
+                fields={['acquisition.verified']}
                 className="col-span-12 xl:col-span-7"
                 title="From install to habit"
                 subtitle="How far people who verified their phone in this range got. Percentages are of sign-ups; the habit is of those 7 days in."
@@ -26,7 +26,7 @@ export const AcquisitionSection: React.FC<MisSectionProps<AcquisitionView>> = ({
                     columns: ['Step', 'People', 'Share'],
                     rows: view.steps.map((s) => [
                         s.label,
-                        s.current.kind === 'value' ? s.current.text : 'not measured',
+                        s.pending ?? (s.current.kind === 'value' ? s.current.text : 'not measured'),
                         s.share ? `${s.share.text} ${s.share.of}` : '',
                     ]),
                 }}

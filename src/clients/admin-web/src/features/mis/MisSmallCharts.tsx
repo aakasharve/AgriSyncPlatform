@@ -14,7 +14,7 @@ import { ArrowDown, ChevronRight } from 'lucide-react';
 import { NotMeasured } from '@/components/state';
 import { FUNNEL_RAMP, SEQ_INK, SEQ_RAMP, SERIES, seqIndex } from './misTheme';
 import { ChartTooltip, Delta, cx, itemAttrs, useMeasuredWidth } from './MisUi';
-import { fmtHour, fmtInt, fmtPct, fmtPctPoints } from './misFormat';
+import { fmtHour, fmtInt, fmtPctPoints } from './misFormat';
 import type { CohortRowModel, FunnelStepModel, MisDelta } from './misView';
 
 // ---------- Bar table ----------
@@ -115,31 +115,38 @@ export const BarTable: React.FC<{
 export const Funnel: React.FC<{ steps: FunnelStepModel[]; compare: boolean }> = ({ steps, compare }) => (
     <ol className="space-y-1" aria-label="Sign-up funnel">
         {steps.map((s, k) => {
-            const measured = s.current.kind === 'value';
+            const measured = s.current.kind === 'value' && s.pending === null;
             const width = s.share ? Number.parseFloat(s.share.text) : measured ? 100 : 0;
             return (
-                <li key={s.item} {...itemAttrs(s.item, s.fields)}>
+                <li key={s.item}>
+                    {/* The arrow line and the step number sit outside the step's own item:
+                        they describe the order of steps, not a counted value. */}
                     {k > 0 && (
                         <div className="flex items-center gap-1.5 py-1 pl-8 text-[12px] text-stone-500">
                             <ArrowDown size={13} aria-hidden />
+                            {s.dropFromPrevious && <span><span className="sr-only">Next step: </span>{s.dropFromPrevious}</span>}
                         </div>
                     )}
                     <div className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-x-3">
-                        {/* The step marker carries no digit: every digit inside an item is a counted number. */}
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-100" aria-hidden>
-                            <span className="h-2 w-2 rounded-full" style={{ background: FUNNEL_RAMP[k % FUNNEL_RAMP.length] }} />
-                        </span>
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-100 text-[12px] font-medium text-stone-600">{k + 1}</span>
+                        <div className="contents" {...itemAttrs(s.item, s.fields)}>
                         <div className="min-w-0">
                             <div className="flex items-baseline justify-between gap-3">
                                 <span className="truncate text-[13px] text-stone-800">{s.label}</span>
-                                <span className="whitespace-nowrap text-[13px] tabular-nums text-stone-900">
-                                    {s.current.kind === 'value' ? s.current.text : <NotMeasured why={s.current.why} />}
-                                </span>
+                                {s.pending === null && (
+                                    <span className="whitespace-nowrap text-[13px] tabular-nums text-stone-900">
+                                        {s.current.kind === 'value' ? s.current.text : <NotMeasured why={s.current.why} />}
+                                    </span>
+                                )}
                             </div>
-                            <div className="mt-1.5 h-3 w-full rounded-[4px] bg-stone-100/70">
-                                <div className="h-3 rounded-[4px]" style={{ width: `${Math.max(measured ? 0.5 : 0, Math.min(100, width))}%`, background: FUNNEL_RAMP[k % FUNNEL_RAMP.length] }} />
-                            </div>
-                            {s.current.kind === 'notMeasured' && <p className="mt-1 text-[12px] text-stone-500">{s.current.why}</p>}
+                            {s.pending !== null
+                                ? <p className="mt-1 text-[12px] text-stone-500">{s.pending}</p>
+                                : (
+                                    <div className="mt-1.5 h-3 w-full rounded-[4px] bg-stone-100/70">
+                                        <div className="h-3 rounded-[4px]" style={{ width: `${Math.max(measured ? 0.5 : 0, Math.min(100, width))}%`, background: FUNNEL_RAMP[k % FUNNEL_RAMP.length] }} />
+                                    </div>
+                                )}
+                            {s.pending === null && s.current.kind === 'notMeasured' && <p className="mt-1 text-[12px] text-stone-500">{s.current.why}</p>}
                         </div>
                         <div className="w-[120px] text-right">
                             {s.share && (
@@ -148,6 +155,7 @@ export const Funnel: React.FC<{ steps: FunnelStepModel[]; compare: boolean }> = 
                                 </p>
                             )}
                             {compare && measured && <Delta delta={s.delta} />}
+                        </div>
                         </div>
                     </div>
                 </li>
@@ -263,11 +271,13 @@ export interface Part {
     value: number;
     color: string;
     detail?: string;
+    /** B8: the share worked out by the adapter (count ÷ served sum); null = not printed. */
+    share: string | null;
 }
 
-/** Each part's share is its count ÷ the sum of the parts shown. */
+/** Bar widths follow the counts; the printed share is the adapter's, and absent when the sum is 0. */
 export const PartBar: React.FC<{ parts: Part[]; ariaLabel: string }> = ({ parts, ariaLabel }) => {
-    const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+    const total = parts.reduce((s, p) => s + p.value, 0);
     return (
         <div>
             <div className="flex h-3.5 w-full gap-[2px]" role="img" aria-label={ariaLabel}>
@@ -275,8 +285,8 @@ export const PartBar: React.FC<{ parts: Part[]; ariaLabel: string }> = ({ parts,
                     <span
                         key={p.key}
                         className={cx('h-full', k === 0 && 'rounded-l-[4px]', k === parts.length - 1 && 'rounded-r-[4px]')}
-                        style={{ width: `${(p.value / total) * 100}%`, background: p.color }}
-                        title={`${p.label}: ${fmtPct(p.value / total, 0)}`}
+                        style={{ width: `${total > 0 ? (p.value / total) * 100 : 0}%`, background: p.color }}
+                        title={p.share ? `${p.label}: ${p.share}` : p.label}
                     />
                 ))}
             </div>
@@ -285,8 +295,8 @@ export const PartBar: React.FC<{ parts: Part[]; ariaLabel: string }> = ({ parts,
                     <li key={p.key} className="flex items-center gap-2">
                         <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: p.color }} />
                         <span className="truncate text-stone-700">{p.label}</span>
-                        <span className="ml-auto whitespace-nowrap tabular-nums text-stone-900">{fmtPct(p.value / total, 0)}</span>
-                        {p.detail && <span className="whitespace-nowrap tabular-nums text-stone-500">{p.detail}</span>}
+                        {p.share && <span className="ml-auto whitespace-nowrap tabular-nums text-stone-900">{p.share}</span>}
+                        {p.detail && <span className={cx("whitespace-nowrap tabular-nums text-stone-500", !p.share && "ml-auto")}>{p.detail}</span>}
                     </li>
                 ))}
             </ul>

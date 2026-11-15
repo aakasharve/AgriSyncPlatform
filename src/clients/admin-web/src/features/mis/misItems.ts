@@ -159,10 +159,34 @@ const REASONS: Record<string, string> = {
 
 const UNKNOWN_REASON = 'The server gave a reason this page does not know yet.';
 
-/** The sentence shown after "Not measured:" for a server reason code. Unknown codes fail closed. */
+/**
+ * B11: "nothing to divide by" said in the page's own terms, per item. The
+ * generic `denominator_zero` sentence stays the fall-back for every other item.
+ */
+const NOTHING_TO_DIVIDE_BY: Record<string, string> = {
+  'overview.voiceShare': 'No entry was saved in this period.',
+  'quality.corrected': 'No entry was saved in this period.',
+  'quality.voiceSaved': 'No voice recording was made in this period.',
+  'overview.stickiness': 'Nobody saved an entry in the last 30 days.',
+  'engagement.logsPerFarm': 'No farm was active in the last 7 days.',
+  'farms.inFpo': 'No farm was active in the last 7 days.',
+};
+
+/**
+ * The sentence shown after "Not measured:" for a server reason code. Unknown
+ * codes fail closed.
+ */
 export function reasonSentence(code: string | null): string {
   if (code !== null && Object.prototype.hasOwnProperty.call(REASONS, code)) return REASONS[code];
   return UNKNOWN_REASON;
+}
+
+/** `reasonSentence` said for one item (B11); one argument would let `.map` pass an index here. */
+export function reasonSentenceFor(code: string | null, itemKey: string | undefined): string {
+  if (code === 'denominator_zero' && itemKey && Object.prototype.hasOwnProperty.call(NOTHING_TO_DIVIDE_BY, itemKey)) {
+    return NOTHING_TO_DIVIDE_BY[itemKey];
+  }
+  return reasonSentence(code);
 }
 
 const BY_KEY = new Map(MIS_ITEMS.map((i) => [i.key, i]));

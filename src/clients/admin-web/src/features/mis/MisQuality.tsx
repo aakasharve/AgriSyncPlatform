@@ -60,7 +60,7 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
                     className="col-span-12 xl:col-span-6"
                     title="Speech service time"
                     subtitle="The speech service's own time, not the whole wait the farmer sees."
-                    legend={[{ label: 'Average', color: SERIES.s1, shape: 'line' }, { label: 'Slowest 5%', color: SERIES.s2, shape: 'line' }]}
+                    legend={latency.kind === 'chart' ? [{ label: 'Average', color: SERIES.s1, shape: 'line' }, { label: 'Slowest 5%', color: SERIES.s2, shape: 'line' }] : undefined}
                     table={latency.kind === 'chart'
                         ? seriesTable('Day', latency.data.titles, [
                             { name: 'Average', values: latency.data.avg, fmt: fmtMs, empty: 'not measured' },
