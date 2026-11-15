@@ -96,7 +96,7 @@ public sealed class GetCompanyMisHandler(ICompanyMisReader reader, CompanyMisExc
 
         var sinceUtc = IstDayStartUtc(previousFrom).AddDays(-30);
 
-        var rows = await reader.ReadAsync(query.ActorId, sinceUtc, countedAtUtc, ct);
+        var rows = await reader.ReadAsync(query.ActorId, sinceUtc, countedAtUtc, exclusions.UserIds, ct);
 
         var data = CompanyMisCalculator.Compute(
             rows, exclusions, from, to, previousFrom, previousTo, countedAtUtc);

@@ -11,7 +11,14 @@ public interface ICompanyMisReader
     /// <param name="adminUserId">The platform admin asking; named in the cross-farm audit row.</param>
     /// <param name="sinceUtc">Earliest row time needed (start of the previous period minus 30 days).</param>
     /// <param name="countedAtUtc">Every read is bounded strictly before this instant.</param>
-    Task<CompanyMisRows> ReadAsync(Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct = default);
+    /// <param name="excludedUserIds">
+    /// Test accounts (amendment A5). Used ONLY to leave their entries out of each
+    /// farm's first- and last-entry aggregates; every other exclusion is applied
+    /// by the calculator.
+    /// </param>
+    Task<CompanyMisRows> ReadAsync(
+        Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -33,7 +40,13 @@ public sealed record CompanyMisRows(
     IReadOnlyList<MisFpoScopeRow> FpoScopes,
     bool LiveCountSkipped = false);
 
-public sealed record MisFarmRow(Guid FarmId, Guid OwnerUserId, DateTime CreatedAtUtc, DateTime? LastEntryUtc);
+/// <summary>
+/// LastEntryUtc and FirstEntryUtc are the farm's latest and earliest entry of all
+/// time (before the counting instant), leaving out entries saved by excluded
+/// accounts; null when there is none (amendment A5).
+/// </summary>
+public sealed record MisFarmRow(
+    Guid FarmId, Guid OwnerUserId, DateTime CreatedAtUtc, DateTime? LastEntryUtc, DateTime? FirstEntryUtc);
 
 /// <summary>One ssf.daily_logs row. CreatedAtUtc is server arrival time.</summary>
 public sealed record MisEntryRow(

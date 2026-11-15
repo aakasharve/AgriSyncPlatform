@@ -88,7 +88,7 @@ public static class CompanyMisCalculator
             VoiceSharePct: Farm(p => Pct(
                 data.EntriesIn(p.From, p.To).Count(e => e.IsVoice),
                 data.EntriesIn(p.From, p.To).Count())),
-            SignUpsByDay: Series(() => SignUpsByDay(data, current)),
+            SignUpsByDay: SignUpsByDay(data, current), // A6: from public.users, stays measured
             ActivePeopleByDay: Series(() => ActivePeopleByDay(data, current)),
             LogsByWeek: Series(() => LogsByWeek(data, current, today)));
 
@@ -446,12 +446,11 @@ public static class CompanyMisCalculator
 
     private sealed record CohortUser(Guid UserId, DateOnly Day0);
 
-    private sealed record FarmInfo(Guid FarmId, Guid OwnerUserId, DateOnly RegisteredDay, DateTime? LastEntryUtc);
+    private sealed record FarmInfo(Guid FarmId, Guid OwnerUserId, DateOnly RegisteredDay, DateOnly? FirstEntryDay);
 
     /// <summary>The rows after test accounts and rows at or after the counting instant are left out.</summary>
     private sealed class Data
     {
-        private readonly DateTime _sinceUtcHint;
         private readonly Dictionary<Guid, List<Entry>> _entriesByFarm;
         private readonly Dictionary<Guid, List<Entry>> _entriesByPerson;
         private readonly HashSet<Guid> _farmOwners;
@@ -471,8 +470,7 @@ public static class CompanyMisCalculator
             Dictionary<Guid, decimal> acresByFarm,
             List<MisFpoScopeRow> fpoScopes,
             List<MisVoiceJobRow> voiceJobs,
-            HashSet<Guid> referencedJobIds,
-            DateTime sinceUtcHint)
+            HashSet<Guid> referencedJobIds)
         {
             Farms = farms;
             Entries = entries;
@@ -484,7 +482,6 @@ public static class CompanyMisCalculator
             _acresByFarm = acresByFarm;
             _fpoScopes = fpoScopes;
             _voiceJobs = voiceJobs;
-            _sinceUtcHint = sinceUtcHint;
             _entriesByFarm = entries.GroupBy(e => e.FarmId).ToDictionary(g => g.Key, g => g.ToList());
             _entriesByPerson = entries.GroupBy(e => e.OperatorUserId).ToDictionary(g => g.Key, g => g.ToList());
         }
@@ -509,7 +506,9 @@ public static class CompanyMisCalculator
 
             var farms = rows.Farms
                 .Where(f => !excludedFarms.Contains(f.FarmId) && f.CreatedAtUtc < countedAtUtc)
-                .Select(f => new FarmInfo(f.FarmId, f.OwnerUserId, IstDay(f.CreatedAtUtc), f.LastEntryUtc))
+                .Select(f => new FarmInfo(
+                    f.FarmId, f.OwnerUserId, IstDay(f.CreatedAtUtc),
+                    f.FirstEntryUtc is { } first ? IstDay(first) : null))
                 .ToList();
 
             var entries = rows.Entries
@@ -566,15 +565,8 @@ public static class CompanyMisCalculator
                             && j.CreatedAtUtc < countedAtUtc)
                 .ToList();
 
-            // The reader reads entries only from 30 days before the previous period.
-            // The earliest entry time seen stands in for that start when deciding
-            // whether a farm's recorded last entry falls before the loaded window.
-            var sinceUtcHint = rows.Entries.Count == 0
-                ? DateTime.MaxValue
-                : rows.Entries.Min(e => e.CreatedAtUtc);
-
             return new Data(farms, entries, verifiedUsers, farms.Select(f => f.OwnerUserId).ToHashSet(),
-                activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds, sinceUtcHint);
+                activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds);
         }
 
         private const int ActiveMembershipStatus = 3;
@@ -606,12 +598,17 @@ public static class CompanyMisCalculator
         public IEnumerable<FarmInfo> FarmsRegisteredBy(DateOnly d) => Farms.Where(f => f.RegisteredDay <= d);
 
         /// <summary>
-        /// India day of the farm's latest entry on or before <paramref name="d"/>, or
-        /// null when it had none. Loaded entries (test accounts already left out)
-        /// decide first; the farm's recorded last entry is used only when it lies
-        /// before every loaded entry, i.e. before the window the reader read.
+        /// Amendment A5. Days since the farm's last entry as of <paramref name="d"/>, or
+        /// null when it had never logged by <paramref name="d"/>. Loaded entries (test
+        /// accounts already left out) decide first. Only entries since the reader's
+        /// start (30 days before the previous period) are loaded, so a farm with no
+        /// loaded entry on or before <paramref name="d"/> whose first entry ever (test
+        /// accounts left out by the reader) is on or before <paramref name="d"/> last
+        /// logged before the loaded window: its age is 30 or more, exact value
+        /// unknown, returned as <see cref="int.MaxValue"/> and only ever compared with
+        /// the age bands. First entry absent or after <paramref name="d"/>: never logged.
         /// </summary>
-        public DateOnly? LastEntryDayAsOf(FarmInfo farm, DateOnly d)
+        public int? LastEntryAgeAt(FarmInfo farm, DateOnly d)
         {
             if (_entriesByFarm.TryGetValue(farm.FarmId, out var list))
             {
@@ -626,30 +623,19 @@ public static class CompanyMisCalculator
 
                 if (best is not null)
                 {
-                    return best;
+                    return d.DayNumber - best.Value.DayNumber;
                 }
             }
 
-            if (farm.LastEntryUtc is { } last && last < _sinceUtcHint)
-            {
-                var lastDay = IstDay(last);
-                return lastDay <= d ? lastDay : null;
-            }
-
-            return null;
+            return farm.FirstEntryDay is { } first && first <= d ? int.MaxValue : null;
         }
 
         public int FarmsInAgeBand(DateOnly d, int minAge, int maxAge) =>
             FarmsRegisteredBy(d).Count(f =>
-            {
-                var last = LastEntryDayAsOf(f, d);
-                if (last is null) return false;
-                var age = d.DayNumber - last.Value.DayNumber;
-                return age >= minAge && age <= maxAge;
-            });
+                LastEntryAgeAt(f, d) is { } age && age >= minAge && age <= maxAge);
 
         public int NeverLoggedFarms(DateOnly d) =>
-            FarmsRegisteredBy(d).Count(f => LastEntryDayAsOf(f, d) is null);
+            FarmsRegisteredBy(d).Count(f => LastEntryAgeAt(f, d) is null);
 
         public decimal AcresOfActiveFarms(DateOnly d) =>
             ActiveFarmsAt(d).Sum(farmId => _acresByFarm.GetValueOrDefault(farmId));
