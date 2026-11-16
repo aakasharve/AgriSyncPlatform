@@ -14,6 +14,7 @@
  *     nothing it could follow - and then the page says the honest line instead (no default from an unchecked row);
  *   - Marathi mode shows Marathi only, English mode English only; every target is at least 44px.
  */
+import { autoOpenFolds } from './foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -86,6 +87,7 @@ function mount(initial: CropProfile[] = twoPlots()) {
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 }
 
 const queuedOf = async (type: string) => (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === type).map(r => r.payload as Record<string, unknown>);

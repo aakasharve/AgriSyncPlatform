@@ -58,38 +58,31 @@ export const TodayPill: React.FC<{ day: number; totalDays: number | null; ended:
     );
 };
 
-export const TodayTab: React.FC<{
-    owed: readonly OwedEntry[];
-    today: ScheduleDay | undefined;
-    tomorrow: ScheduleDay | undefined;
-    totalDays: number | null;
-    ended: boolean;
-    onOpenDay: (key: string) => void;
-    onSeeAhead: () => void;
-}> = ({ owed, today, tomorrow, totalDays, ended, onOpenDay, onSeeAhead }) => (
-    <>
-        <OwedCard owed={owed} onOpenDay={onOpenDay} />
-        {today && (
-            <section className="rounded-3xl border-2 border-[#1448E6] bg-[#1448E6]/5 p-4 backdrop-blur-sm" data-testid="today-card">
-                <TodayPill day={today.day} totalDays={totalDays} ended={ended} />
-                {today.items.length === 0
-                    ? <p className="m-0 mt-2 text-[16px] font-bold text-stone-700" data-testid="today-nothing">{SC.nothingToday}</p>
-                    : (
-                        <>
-                            <p className="m-0 mb-3 mt-2 text-[16px] font-bold text-stone-800">{SC.expectsToday}</p>
-                            <PartGroup items={today.items} statusOf={p => today.cells[p].status} testId="today-parts" />
-                        </>
-                    )}
-            </section>
-        )}
-        {tomorrow && (
-            <section className={`rounded-3xl p-4 ${GLASS}`} data-testid="tomorrow-peek">
-                <p className="m-0 mb-2 text-[18px] font-black text-stone-900">→ {SC.tomorrow} · {SC.dayN(tomorrow.day)}</p>
-                {tomorrow.items.length === 0
-                    ? <p className="m-0 text-[16px] font-bold text-stone-700">{SC.noExpectation}</p>
-                    : <PartGroup items={tomorrow.items} statusOf={p => tomorrow.cells[p].status} testId="tomorrow-parts" />}
-                <button type="button" onClick={onSeeAhead} data-testid="see-ahead" className="mt-3 min-h-[52px] w-full rounded-full border-2 border-stone-500 bg-white/80 text-[16px] font-extrabold text-stone-900">{SC.seeAhead} →</button>
-            </section>
-        )}
-    </>
+/** UI-4: the one "today" card (what this schedule expects today). The rest of the old आज list is folded into rows on the page. */
+export const TodayCard: React.FC<{ today: ScheduleDay | undefined; totalDays: number | null; ended: boolean }> = ({ today, totalDays, ended }) => (
+    today ? (
+        <section className="rounded-3xl border-2 border-[#1448E6] bg-[#1448E6]/5 p-4 backdrop-blur-sm" data-testid="today-card">
+            <TodayPill day={today.day} totalDays={totalDays} ended={ended} />
+            {today.items.length === 0
+                ? <p className="m-0 mt-2 text-[16px] font-bold text-stone-700" data-testid="today-nothing">{SC.nothingToday}</p>
+                : (
+                    <>
+                        <p className="m-0 mb-3 mt-2 text-[16px] font-bold text-stone-800">{SC.expectsToday}</p>
+                        <PartGroup items={today.items} statusOf={p => today.cells[p].status} testId="today-parts" />
+                    </>
+                )}
+        </section>
+    ) : null
+);
+
+/** Tomorrow's peek, shown inside the "पुढचे दिवस" row above the longer list. */
+export const TomorrowPeek: React.FC<{ tomorrow: ScheduleDay | undefined }> = ({ tomorrow }) => (
+    tomorrow ? (
+        <section className={`rounded-3xl p-4 ${GLASS}`} data-testid="tomorrow-peek">
+            <p className="m-0 mb-2 text-[18px] font-black text-stone-900">→ {SC.tomorrow} · {SC.dayN(tomorrow.day)}</p>
+            {tomorrow.items.length === 0
+                ? <p className="m-0 text-[16px] font-bold text-stone-700">{SC.noExpectation}</p>
+                : <PartGroup items={tomorrow.items} statusOf={p => tomorrow.cells[p].status} testId="tomorrow-parts" />}
+        </section>
+    ) : null
 );

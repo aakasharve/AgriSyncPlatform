@@ -33,16 +33,16 @@ export const PlanDoor: React.FC<PlanDoorProps> = ({ kind, farmId, userId, onOpen
         ? open.length
         : open.filter(t => userId !== null && t.assigneeUserId === userId && !isReminderTask(t, userId)).length;
     return (
-        <Tap onClick={onOpen} data-testid="home-plan" data-kind={kind} rippleColor="rgba(20,72,230,0.18)"
+        <Tap onClick={onOpen} data-testid="home-plan" data-kind={kind} rippleColor="rgba(255,255,255,0.35)"
             style={{ fontFamily: language === 'en' ? fontFor(language) : SANS }}
-            className="flex min-h-[96px] w-full items-center gap-4 rounded-[28px] border-2 border-[#1448E6]/40 bg-white p-4 text-left shadow-sm">
-            <span className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full bg-[#1448E6]/10 text-[#1448E6]"><ClipboardList size={32} strokeWidth={2.4} aria-hidden="true" /></span>
+            className="flex min-h-[96px] w-full items-center gap-4 rounded-[28px] bg-[#1448E6] p-4 text-left shadow-sm">
+            <span className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full bg-white/20 text-white"><ClipboardList size={32} strokeWidth={2.4} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[20px] font-extrabold leading-tight text-stone-900" data-testid="home-plan-title">{kind === 'plan' ? words.plan : words.mine}</span>
-                <span className="mt-0.5 block text-[14px] font-semibold leading-snug text-stone-700">{kind === 'plan' ? words.planSub : words.mineSub}</span>
-                {loaded && <span className="mt-1 inline-block rounded-full bg-[#1448E6]/10 px-2.5 py-0.5 text-[13px] font-extrabold text-[#1448E6]" data-testid="home-plan-count" data-count={count}>{words.openCount(count)}</span>}
+                <span className="block text-[20px] font-extrabold leading-tight text-white" data-testid="home-plan-title">{kind === 'plan' ? words.plan : words.mine}</span>
+                <span className="mt-0.5 block text-[14px] font-semibold leading-snug text-white/90">{kind === 'plan' ? words.planSub : words.mineSub}</span>
+                {loaded && <span className="mt-1 inline-block rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold text-[#1448E6]" data-testid="home-plan-count" data-count={count}>{words.openCount(count)}</span>}
             </span>
-            <ChevronRight size={26} className="shrink-0 text-[#1448E6]" aria-hidden="true" />
+            <ChevronRight size={26} className="shrink-0 text-white" aria-hidden="true" />
         </Tap>
     );
 };

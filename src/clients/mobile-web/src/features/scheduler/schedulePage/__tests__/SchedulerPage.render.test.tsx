@@ -11,6 +11,7 @@
  * Mocked: only what needs a phone database, the server or the money store (this phone's clip list, the voice
  * player, the voice-keeping answer, MoneyLens, the spend total).
  */
+import { autoOpenFolds } from './foldTestKit';
 import React from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -65,6 +66,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 function mount(crops: CropProfile[] = [crop()]) {
     const props = { onUpdateCrops: vi.fn(), onCloseDay: vi.fn(), onBack: vi.fn() };
     render(<SchedulerPage crops={crops} logs={LOGS} tasks={[]} {...props} />);
+    autoOpenFolds();
     return props;
 }
 const text = (id: string) => screen.getByTestId(id).textContent ?? '';
@@ -94,16 +96,15 @@ describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', ()
 });
 
 describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
-    it('opens on आज; counts are computed; only the chosen list is on screen', () => {
+    it('UI-4: the page opens on the today card; each closed row carries its computed count', () => {
         mount();
-        expect(screen.getByTestId('tab-today')).toHaveAttribute('aria-selected', 'true');
-        expect(text('count-today')).toBe('4'); // today's irrigation + 3 owed
-        expect(text('tab-today')).toContain('राहिलेलं 3');
-        expect(text('count-done')).toBe('2');
-        expect(text('tab-done')).toContain('राहिलं 4');
-        expect(text('count-ahead')).toBe('4');
-        expect(screen.queryByTestId('compare-card')).toBeNull();
-        expect(screen.queryByTestId('ahead')).toBeNull();
+        expect(screen.getByTestId('today-card')).toBeInTheDocument();
+        expect(screen.getByTestId('fold-owed-toggle')).toHaveAttribute('data-count', '3');
+        expect(text('fold-owed-toggle')).toContain('राहिलेलं 3');
+        expect(screen.getByTestId('fold-done-toggle')).toHaveAttribute('data-count', '2');
+        expect(text('fold-done-toggle')).toContain('राहिलं 4');
+        expect(screen.getByTestId('fold-ahead-toggle')).toHaveAttribute('data-count', '4');
+        expect(screen.queryByTestId('tab-today')).toBeNull(); // the three big buttons are gone: rows replaced them
     });
 
     it('आधी राहिलेलं काम lists the computed misses with the schedule\'s own task name; today and tomorrow follow', () => {
@@ -120,13 +121,11 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
         expect(text('today-card')).toContain('दिवस 9 / 40');
         expect(text('today-parts-irrigation')).toContain('ठिबक सिंचन');
         expect(text('tomorrow-peek')).toContain('या दिवशी शेड्यूलमध्ये काही नव्हतं');
-        fireEvent.click(screen.getByTestId('see-ahead'));
-        expect(screen.getByTestId('tab-ahead')).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByTestId('ahead')).toBeInTheDocument(); // the "पुढचे दिवस" row holds tomorrow and the 8-day list
     });
 
     it('पुढे: 8 days by default, 3 on the toggle, tasks grouped in the four parts', () => {
         mount();
-        fireEvent.click(screen.getByTestId('tab-ahead'));
         expect(screen.getByTestId(`ahead-${k(12)}`)).toBeInTheDocument();
         expect(screen.getByTestId(`ahead-${k(15)}-parts-nutrition`)).toHaveTextContent('खत');
         expect(screen.getByTestId(`ahead-${k(14)}-parts-work`)).toHaveTextContent('खुरपणी');
@@ -139,7 +138,6 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
 describe('झालं: expected vs done (S7), past days (S8) and the day sheet (S10, S11)', () => {
     it('one bar per part made ONLY of done and missed, a summary line, "—" for a part never expected, a strip of 8 days', () => {
         mount();
-        fireEvent.click(screen.getByTestId('tab-done'));
         expect(text('compare-summary')).toBe('अपेक्षित 6 · झालं 2 · राहिलं 4 · जास्तीचं 1');
         expect(text('cmp-irrigation-text')).toBe('1/3 झालं · +1 जास्तीचं');
         expect(text('cmp-nutrition-text')).toBe('—');
@@ -159,7 +157,6 @@ describe('झालं: expected vs done (S7), past days (S8) and the day sheet 
 
     it('past days show their parts; older on request (land-preparation days tagged तयारी); this phone\'s mic count; tap opens the day sheet', () => {
         mount();
-        fireEvent.click(screen.getByTestId('tab-done'));
         expect(screen.getByTestId(`past-${k(8)}-spray`)).toHaveAttribute('data-status', 'missed');
         expect(screen.queryByTestId(`past-${k(0)}`)).toBeNull();
         fireEvent.click(screen.getByTestId('show-older'));
@@ -182,7 +179,6 @@ describe('झालं: expected vs done (S7), past days (S8) and the day sheet 
 
     it('the day sheet labels each recording the way the voice diary does: only the server\'s acknowledgement is "saved"', async () => {
         mount();
-        fireEvent.click(screen.getByTestId('tab-done'));
         fireEvent.click(screen.getByTestId('show-older'));
         fireEvent.click(screen.getByTestId(`open-day-${k(0)}`));
         await waitFor(() => expect(screen.getByTestId('player-clip-1')).toHaveAttribute('data-cloud', 'queued'));
@@ -191,7 +187,6 @@ describe('झालं: expected vs done (S7), past days (S8) and the day sheet 
 
     it('the day sheet shows जास्तीचं for work nobody asked for, and no recording when the phone has none', () => {
         mount();
-        fireEvent.click(screen.getByTestId('tab-done'));
         fireEvent.click(screen.getByTestId('show-older'));
         fireEvent.click(screen.getByTestId(`open-day-${k(4)}`));
         expect(screen.getByTestId('day-extra-irrigation')).toHaveTextContent('जास्तीचं');

@@ -10,6 +10,7 @@
  * switch = `migrate_schedule` with reason `Other` and no text, a plot with no crop season = nothing queued and the page says
  * why. Nothing on the screen moves: the same page, the same words, and the chosen schedule shows at once.
  */
+import { autoOpenFolds } from '../../features/scheduler/schedulePage/__tests__/foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,6 +65,7 @@ function mount(initial: CropProfile[]) {
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 }
 
 beforeAll(() => setScheduleTemplatesFromReferenceData([SERVER_TEMPLATE, SPRAY_TEMPLATE]));
@@ -167,7 +169,7 @@ describe('a schedule chosen on the page is saved on the server (L8b-2 Task 2)', 
         await waitFor(async () => expect(await queued()).toHaveLength(2));
         seen.push(document.body.textContent ?? '');
         fireEvent.click(screen.getByTestId('page-back'));
-        fireEvent.click(screen.getByTestId('open-editor'));
+        fireEvent.click(await screen.findByTestId('open-editor'));
         seen.push(document.body.textContent ?? '');
         fireEvent.click(screen.getByTestId(`editor-schedule-${TEMPLATE_ID}`));
         seen.push(document.body.textContent ?? '');

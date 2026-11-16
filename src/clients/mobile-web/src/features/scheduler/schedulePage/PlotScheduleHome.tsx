@@ -22,8 +22,11 @@ import type { DefaultKind } from '../planning/followableDefault';
 import { ThreePlusOneSection } from './ThreePlusOneSection';
 import { addDays } from './scheduleDates';
 import { LOOK_AHEAD_DAYS, PARTS, aheadItemCount, owedWork, pastDays, stageTally, todayOf, type Part, type ScheduleModel, type Tally } from './scheduleModel';
-import { ScheduleTabs, type ScheduleTab } from './ScheduleTabs';
-import { TodayTab } from './TodayTab';
+import { OwedCard, TodayCard, TomorrowPeek } from './TodayTab';
+import { ScheduleFold } from './ScheduleFold';
+import { SC } from './scheduleCopy';
+import { THREE_PLUS_ONE_WORDS } from './threePlusOneCopy';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { ClipsByDay } from './usePlotClips';
 import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
 import { TrialStages, trialStageOf } from './TrialStages';
@@ -38,8 +41,6 @@ export const PlotScheduleHome: React.FC<{
     source: ScheduleSource;
     model: ScheduleModel;
     clips: ClipsByDay;
-    tab: ScheduleTab;
-    onTab: (t: ScheduleTab) => void;
     onOpenDay: (key: string) => void;
     onLibrary: () => void;
     /** spec: plr-d10 lane L8b-1F - set when the followed schedule is not checked (a sample) or its check was withdrawn. */
@@ -68,7 +69,9 @@ export const PlotScheduleHome: React.FC<{
     /** spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा": drawn only for a seat that may make; it only goes to planning. */
     mayMakeOwn?: boolean;
     onMakeOwn?: () => void;
-}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn }) => {
+    /** UI-4: the last closed row (the tools), drawn by the page. */
+    children?: React.ReactNode;
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -81,29 +84,38 @@ export const PlotScheduleHome: React.FC<{
         return { total, byPart, owed, today, tomorrow, past: pastDays(model), ahead: aheadItemCount(model, LOOK_AHEAD_DAYS, trialStageId) };
     }, [model, trialStageId]);
     const clipCount = (key: string) => clips.get(key)?.length ?? 0;
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const followWords = THREE_PLUS_ONE_WORDS[language];
 
+    // UI-4 (D-146): header, then ONE list "today", then closed rows. Same content as before; only layout, order and open/closed state changed.
     return (
-        <div className="space-y-4" data-testid="plot-schedule">
+        <div className="space-y-3" data-testid="plot-schedule">
             {ask}
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
-            {followed && onAddSchedule && onLeaveSchedule && (
-                <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
-            )}
-            {/* spec: plr-d10 lane SCH-GATE-b (D-99, R10) - the stage panel: after the "3 + 1" section, before the three buttons. */}
-            {plotId && <StagePlanCard plotId={plotId} followedKey={(followed ?? []).map(f => f.subscriptionId || f.templateId).join(',')} />}
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
-            {trial ? <TrialStages model={model} template={template} named={trial.named} /> : <StageProgress model={model} />}
-            <ScheduleTabs tab={tab} onTab={onTab} counts={{
-                done: facts.total.done,
-                missed: facts.total.missed,
-                today: facts.today?.items.length ?? 0,
-                owed: facts.owed.length,
-                ahead: facts.ahead,
-            }} />
-            {tab === 'done' && <DoneTab total={facts.total} byPart={facts.byPart} past={facts.past} clipCount={clipCount} onOpenDay={onOpenDay} />}
-            {tab === 'today' && <TodayTab owed={facts.owed} today={facts.today} tomorrow={facts.tomorrow} totalDays={model.totalDays} ended={model.ended} onOpenDay={onOpenDay} onSeeAhead={() => onTab('ahead')} />}
-            {tab === 'ahead' && <AheadTab model={model} onlyStageId={trialStageId} />}
+            <TodayCard today={facts.today} totalDays={model.totalDays} ended={model.ended} />
+            <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
+                <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
+            </ScheduleFold>
+            <ScheduleFold id="ahead" title={SC.ahead} count={facts.ahead} summary={SC.aheadLine(facts.ahead)}>
+                <TomorrowPeek tomorrow={facts.tomorrow} />
+                <AheadTab model={model} onlyStageId={trialStageId} />
+            </ScheduleFold>
+            <ScheduleFold id="done" title={SC.doneTitle} count={facts.total.done} summary={`${SC.tabDone} ${facts.total.done} · ${SC.leftCount(facts.total.missed)}`}>
+                <DoneTab total={facts.total} byPart={facts.byPart} past={facts.past} clipCount={clipCount} onOpenDay={onOpenDay} />
+            </ScheduleFold>
+            {/* spec: plr-d10 lane SCH-GATE-b (D-99, R10) - the stage panel sits with the stage path. */}
+            <ScheduleFold id="stages" title={SC.stage} count={model.stages.length} summary={SC.stagesLine(model.stages.length)}>
+                {trial ? <TrialStages model={model} template={template} named={trial.named} /> : <StageProgress model={model} />}
+                {plotId && <StagePlanCard plotId={plotId} followedKey={(followed ?? []).map(f => f.subscriptionId || f.templateId).join(',')} />}
+            </ScheduleFold>
+            {followed && onAddSchedule && onLeaveSchedule && (
+                <ScheduleFold id="followed" title={followWords.heading} count={followed.length} summary={SC.followedLine(followed.length)}>
+                    <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
+                </ScheduleFold>
+            )}
+            {children}
         </div>
     );
 };

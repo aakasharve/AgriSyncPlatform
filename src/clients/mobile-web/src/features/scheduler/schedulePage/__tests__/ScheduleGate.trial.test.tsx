@@ -14,11 +14,12 @@
  *   - outside the trial nothing of this changes: the ribbon with every stage's bar, the whole पुढे list;
  *   - nothing here says a record is held back; Marathi mode Marathi only, English mode English only.
  */
+import { autoOpenFolds } from './foldTestKit';
 import 'fake-indexeddb/auto';
 import React, { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 
 const language = vi.hoisted(() => ({ current: 'mr' as 'mr' | 'en' }));
 vi.mock('../../../../i18n/LanguageContext', () => ({ useOptionalLanguage: () => ({ language: language.current }) }));
@@ -66,6 +67,7 @@ function mount() {
         return <SchedulerPage crops={crops} logs={[]} tasks={[]} onUpdateCrops={setCrops} onBack={() => undefined} onCloseDay={() => undefined} />;
     };
     render(<Harness />);
+    autoOpenFolds();
 }
 const dayKeyOf = (scheduleDay: number): string => {
     const d = new Date(`${REF}T00:00:00Z`);
@@ -124,7 +126,7 @@ describe('the trial view (R10)', () => {
         await saveStates(inTrial());
         mount();
         await screen.findByTestId('trial-stages');
-        fireEvent.click(screen.getByTestId('tab-ahead'));
+        // UI-4: the "पुढचे दिवस" row is opened by autoOpenFolds.
         const ahead = await screen.findByTestId('ahead');
         expect(within(ahead).queryByTestId(`ahead-${dayKeyOf(12)}`)).not.toBeNull(); // day 12 is in Post Pruning
         expect(within(ahead).queryByTestId(`ahead-${dayKeyOf(15)}`)).toBeNull(); // day 15 is Canopy Build: not shown in the trial
@@ -137,7 +139,7 @@ describe('the trial view (R10)', () => {
         mount();
         await screen.findByTestId('stage-ribbon');
         expect(screen.queryByTestId('trial-stages')).toBeNull();
-        fireEvent.click(screen.getByTestId('tab-ahead'));
+        // UI-4: the "पुढचे दिवस" row is opened by autoOpenFolds.
         const ahead = await screen.findByTestId('ahead');
         expect(within(ahead).queryByTestId(`ahead-${dayKeyOf(15)}`)).not.toBeNull();
     });

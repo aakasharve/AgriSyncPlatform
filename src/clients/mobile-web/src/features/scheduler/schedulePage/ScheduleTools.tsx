@@ -23,7 +23,7 @@
  */
 import React from 'react';
 import { CalendarRange, Layers, Settings, TableProperties } from 'lucide-react';
-import { GlassCard, RowLink, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
+import { GlassCard, RowLink, Tap } from '../../../shared/components/ui/placeUi';
 import { IRRIGATION_RISK_DAYS, SPRAY_RISK_DAYS, type DayState } from '../../../shared/utils/dayState';
 import { rupees } from '../../finance/moneyLabels';
 import { SC } from './scheduleCopy';
@@ -64,7 +64,6 @@ export const ScheduleTools: React.FC<{
     const risks = riskLines(facts);
     return (
         <section className="space-y-2.5" data-testid="sched-tools">
-            <SectionHead title={SC.toolsTitle} />
             {risks.length > 0 && (
                 <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900" data-testid="risk-card">
                     <p className="m-0 text-[16px] font-black">{SC.riskTitle}</p>
