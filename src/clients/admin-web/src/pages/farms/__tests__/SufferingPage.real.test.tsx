@@ -88,6 +88,28 @@ describe('Suffering is real (U1, U2)', () => {
     expect(first.querySelector('td')!.textContent).toContain(F1.slice(0, 8));
   });
 
+  it('a missing count or time shows Not measured, never a blank cell or 0', async () => {
+    const gappy = [
+      { farmId: F1, problemCount: 9, syncProblems: null, entryProblems: undefined, voiceProblems: 1, otherProblems: 1, lastProblemAt: null },
+    ];
+    stub = installContactsStub(
+      (r) => (r.path.endsWith('/admin/farms/suffering') ? { data: gappy, meta: META } : { data: null, meta: META }),
+      { [F1]: 'Bhosale Mala' },
+    );
+    render();
+    await screen.findByRole('table', { name: 'Farms with repeated problems' }, SETTLE);
+    await waitFor(() => expect(document.body.textContent).toContain('Bhosale Mala'), SETTLE);
+    const cells = [...rowsOf()[0].querySelectorAll('td')].map((c) => (c.textContent ?? '').trim());
+    // Farm, Problems, Syncing, Entries, Voice, Other, Last problem.
+    expect(cells[1]).toBe('9');
+    expect(cells[4]).toBe('1');
+    for (const i of [2, 3, 6]) {
+      expect(cells[i], `cell ${i}`).toMatch(/not measured/i);
+      expect(cells[i]).not.toBe('');
+      expect(cells[i]).not.toBe('0');
+    }
+  });
+
   it('An_empty_answer_says_no_farm_has_repeated_problems_this_week', async () => {
     stub = installContactsStub(() => ({ data: [], meta: META }));
     render();

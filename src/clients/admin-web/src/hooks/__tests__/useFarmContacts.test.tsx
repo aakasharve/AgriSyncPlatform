@@ -68,20 +68,37 @@ describe('useFarmContacts (C9)', () => {
     expect(stub.contactCalls()).toHaveLength(0);
   });
 
-  it('never polls: time passing makes no further request', async () => {
+  it('never polls: a minute of fake time makes no further request and schedules no repeating timer', async () => {
     stub = installContactsStub(() => ({}), { [id(1)]: 'One' });
-    const { result } = renderHook(() => useFarmContacts([id(1)]), { wrapper });
-    await waitFor(() => expect(result.current.size).toBe(1));
-    const spy = vi.spyOn(globalThis, 'setInterval');
+    // Fake timers and the spies are in place BEFORE mount, so a timer made while mounting is seen too.
+    vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout'] });
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     try {
+      const { result } = renderHook(() => useFarmContacts([id(1)]), { wrapper });
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 300));
+        await vi.advanceTimersByTimeAsync(0);
       });
-      expect(spy).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current.size).toBe(1);
+      expect(stub.contactCalls()).toHaveLength(1);
+
+      // Well past a 30-second refetch, twice over.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+      expect(stub.contactCalls(), 'time passing made another contacts request: the hook polls').toHaveLength(1);
+
+      expect(intervalSpy, 'the hook set an interval').not.toHaveBeenCalled();
+      const longTimeouts = timeoutSpy.mock.calls.filter((c) => Number(c[1]) >= 1000);
+      expect(longTimeouts, 'the hook scheduled a timer of a second or more').toHaveLength(0);
     } finally {
-      spy.mockRestore();
+      intervalSpy.mockRestore();
+      timeoutSpy.mockRestore();
+      vi.useRealTimers();
     }
-    expect(stub.contactCalls()).toHaveLength(1);
   });
 
   it('sends at most 200 ids in one request', async () => {

@@ -143,7 +143,7 @@ describe('Silent Churn, Suffering and the Farmer Health landing are ideas only (
     for (const u of urls()) expect(u).not.toContain('silent-churn');
   });
 
-  // CR-2e C7 (founder, 2026-11-17): U1 became real. Retired: B24_Suffering_shows_U1_and_U2_as_ideas_and_never_draws_the_feed (U2 became real too); covered by SufferingPage.real.test.tsx.
+  // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): U1 became real. Retired: B24_Suffering_shows_U1_and_U2_as_ideas_and_never_draws_the_feed (U2 became real too); covered by SufferingPage.real.test.tsx.
 
   it('B24_Farmer_Health_landing_shows_FH1_FH2_FH4_FH5_as_ideas_without_FH3_FH6_and_no_cohort_call', async () => {
     serveBusyFeeds();
@@ -165,7 +165,7 @@ describe('Live Health keeps L6 and L8, parks L1, drops L2 to L5 (B24)', () => {
     renderWithProviders(<OpsLivePage />, { route: `/ops/live?org=${ORG}` });
     await waitFor(() => panelFor('L1'), WAIT);
     expectIdea('L1');
-    // CR-2e C7 (founder, 2026-11-17): L7 became real; its idea assertion is retired (OpsLivePage.repeated.test.tsx).
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L7 became real; its idea assertion is retired (OpsLivePage.repeated.test.tsx).
     expectNoDoubleLabelsOf('Live Health');
     expect(document.body.textContent).not.toMatch(/\bAI\b/);
   });
@@ -197,7 +197,7 @@ describe('column ideas keep their header, print no value, and carry their lines 
     renderWithProviders(<FarmsListPage />, { route: `/farms?org=${ORG}` });
     const table = await screen.findByRole('table', { name: 'All farms' }, WAIT);
     await screen.findByText('Zzfarm', undefined, WAIT);
-    // CR-2e C7 (founder, 2026-11-17): F6 became real; it is asserted in FarmsListPage.errors.test.tsx.
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): F6 became real; it is asserted in FarmsListPage.errors.test.tsx.
     for (const id of ['F4', 'F5']) {
       const e = byId(id);
       const th = within(table).getAllByRole('columnheader').find((h) => (h.textContent ?? '').includes(e.label));
@@ -231,7 +231,7 @@ describe('column ideas keep their header, print no value, and carry their lines 
     renderWithProviders(<OpsErrorsPage />, { route: `/ops/errors?org=${ORG}` });
     const table = await screen.findByRole('table', { name: 'API errors' }, WAIT);
     await within(table).findAllByRole('columnheader', undefined, WAIT);
-    // CR-2e C7 (founder, 2026-11-17): E3 became real. Retired: the Not built yet header and the withheld farm id; covered by OpsErrorsPage.farm.test.tsx.
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): E3 became real. Retired: the Not built yet header and the withheld farm id; covered by OpsErrorsPage.farm.test.tsx.
     // B25: the farm test also proves an error row was rendered (the farm id above is withheld from a real row,
     // not from an empty table), and the standing note no longer claims an error "can name a farm".
     const rows = [...table.querySelectorAll('tbody tr')].filter((r) => r.querySelector('td'));

@@ -808,7 +808,7 @@ const REGISTER: Record<string, Row> = {
     what: 'the SECOND Farmer Suffering Watchlist panel on Ops Live',
     verdict: kept(() => {
       const live = code('/src/pages/ops/OpsLivePage.tsx');
-      // CR-2e C7 (founder, 2026-11-17): L7 (the suffering watchlist on Live Health) became real: its panel is back, drawing the served list with its two lines.
+      // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L7 (the suffering watchlist on Live Health) became real: its panel is back, drawing the served list with its two lines.
       expect(live).toContain('topSufferingFarms');
       expect(live).toContain('live-suffering-24h');
       expect(live).not.toMatch(/<NotBuiltYet\s+metric="live-suffering-24h"/);

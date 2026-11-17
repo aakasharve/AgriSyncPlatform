@@ -19,7 +19,7 @@ import type { SilentChurnItem, SufferingItem } from '../useFarms';
  * stated the flaw; Home must not quietly undo that by sorting on it.
  */
 
-// CR-2e C7 (founder, 2026-11-17): the suffering row changed shape (U1 became real): it carries no farm name (names
+// CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): the suffering row changed shape (U1 became real): it carries no farm name (names
 // come from the contacts route) and counts `problemCount`. The `_name` argument is kept so the cases below read the same.
 function suffering(farmId: string, _name: string, problemCount: number): SufferingItem {
   return {

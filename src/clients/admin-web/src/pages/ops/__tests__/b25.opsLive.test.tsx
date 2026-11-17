@@ -50,7 +50,7 @@ describe('Live Health real behaviours (B25)', () => {
     expect(chip.textContent).not.toContain('now');
   });
 
-  // CR-2e C3|C20 (founder, 2026-11-17): the recent-events read no longer swallows failures. Retired: B25_an_empty_recent_events_list_shows_the_unproven_panel_never_a_measured_zero; replaced by OpsLivePage.repeated.test.tsx (empty answer is a plain none with its window; failed request is could not load).
+  // CR-2e C3|C20 (main-session amendment, citing B23 (founder, 2026-11-17)): the recent-events read no longer swallows failures. Retired: B25_an_empty_recent_events_list_shows_the_unproven_panel_never_a_measured_zero; replaced by OpsLivePage.repeated.test.tsx (empty answer is a plain none with its window; failed request is could not load).
 
   it('B25_the_R1_to_R8_row_is_present_on_the_service_list_and_carries_no_value', async () => {
     await shown(health());
@@ -73,7 +73,7 @@ describe('Live Health real behaviours (B25)', () => {
 describe('Live Health ideas stay ideas when the server serves a value (B25)', () => {
   it('B25_an_alert_verdict_is_served_and_not_drawn', async () => {
     await shown(health({ apiErrorSpike: true, voiceDegraded: true }));
-    // CR-2e C7 (founder, 2026-11-17): L7 (the 24-hour farm list) became real; only the alert idea (L1) stays an idea.
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L7 (the 24-hour farm list) became real; only the alert idea (L1) stays an idea.
     const el = document.querySelector<HTMLElement>('[data-metric="live-alert-rules"]')!;
     expect(el).not.toBeNull();
     expect(el.textContent).toContain('Not built yet');

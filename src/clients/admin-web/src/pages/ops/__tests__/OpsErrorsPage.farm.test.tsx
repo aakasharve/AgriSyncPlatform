@@ -136,6 +136,35 @@ describe('an empty answer is a real none; a failed request is not (C3, C20)', ()
     expect(screen.queryByRole('table', { name: 'API errors' })).toBeNull();
   });
 
+  it('an empty answer takes its time from the server lastRefreshedUtc and is never called healthy', async () => {
+    stub = installContactsStub(() => ({
+      data: { items: [], totalCount: 0, page: 1, pageSize: 50 },
+      meta: { source: 'live', window: 'last 24h', lastRefreshedUtc: '2026-09-03T12:30:00.000Z', ttlSeconds: 30 },
+    }));
+    render();
+    await screen.findByText('No errors in this window', undefined, SETTLE);
+    expect(
+      screen.queryByText(/The system is healthy/),
+      'an empty answer was reported as a healthy system',
+    ).toBeNull();
+    expect(
+      screen.queryByText(/a time the server did not report/),
+      'the screen reported having no timestamp while the server had sent lastRefreshedUtc',
+    ).toBeNull();
+    expect(screen.getByText(/checked at 2026-09-03 /)).toBeInTheDocument();
+  });
+
+  it('an empty answer with no server time says so, and never invents the time now', async () => {
+    stub = installContactsStub(() => ({
+      data: { items: [], totalCount: 0, page: 1, pageSize: 50 },
+      meta: { source: 'live', window: 'last 24h', ttlSeconds: 30 },
+    }));
+    render();
+    await screen.findByText('No errors in this window', undefined, SETTLE);
+    expect(screen.queryByText(/The system is healthy/)).toBeNull();
+    expect(screen.getByText(/checked at a time the server did not report/)).toBeInTheDocument();
+  });
+
   it('a failed request says it could not load, and never says none', async () => {
     stub = installContactsStub(() => ({ status: 500, data: {} }));
     render();

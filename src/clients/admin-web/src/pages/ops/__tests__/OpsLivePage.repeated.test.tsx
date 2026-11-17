@@ -132,6 +132,26 @@ describe('the recent-events Farm cell (C3, C20)', () => {
     expect(stub!.idsOf(stub!.contactCalls()[1])).toEqual([F2]);
   });
 
+  it('a farm in both lists is asked from the contacts route once, in one request', async () => {
+    serve(
+      () =>
+        health({
+          topSufferingFarms: [
+            { farmId: F1, errorCount: 5, syncErrors: 2, logErrors: 1, voiceErrors: 1, otherErrors: 1, lastErrorAt: '2026-09-01T11:38:00Z' },
+          ],
+          recentErrors: [event({ farmId: F1, farmSource: 'address' }), event({ farmId: F2, farmSource: 'address' })],
+        }),
+      { [F1]: 'Bhosale Mala', [F2]: 'Pawar Shet' },
+    );
+    render();
+    await settled();
+    await waitFor(() => expect(document.body.textContent).toContain('Pawar Shet'), SETTLE);
+    await new Promise((r) => setTimeout(r, 200));
+    const calls = stub!.contactCalls();
+    expect(calls, 'the two lists asked the contacts route separately').toHaveLength(1);
+    expect(stub!.idsOf(calls[0])).toEqual([F1, F2]);
+  });
+
   it('an empty recent-events answer says plainly there were no errors in the last 2 hours', async () => {
     serve(() => health({ recentErrors: [] }));
     render();
@@ -150,5 +170,34 @@ describe('the recent-events Farm cell (C3, C20)', () => {
     expect(document.body.textContent).not.toMatch(/No errors in the last 2 hours/);
     expect(document.body.textContent).not.toMatch(/No farm has repeated problems/);
     expect(within(document.body).getByRole('button', { name: 'Retry' })).toBeVisible();
+  });
+});
+
+describe('a missing count or time shows Not measured (C22 item 4)', () => {
+  it('a 24-hour row with a missing count and time shows Not measured, never blank or 0', async () => {
+    serve(
+      () =>
+        health({
+          topSufferingFarms: [
+            { farmId: F1, errorCount: 5, syncErrors: undefined, logErrors: null, voiceErrors: 1, otherErrors: 1, lastErrorAt: null } as never,
+          ],
+        }),
+      { [F1]: 'Bhosale Mala' },
+    );
+    render();
+    await settled();
+    await waitFor(() => expect(document.body.textContent).toContain('Bhosale Mala'), SETTLE);
+    const [row] = bodyRows(sufferingTable());
+    const cells = cellsOf(row);
+    // Farm, Problems, Syncing, Entries, Voice, Other, Last problem.
+    expect(cells[1]).toBe('5');
+    expect(cells[2]).toMatch(/not measured/i);
+    expect(cells[3]).toMatch(/not measured/i);
+    expect(cells[4]).toBe('1');
+    expect(cells[6]).toMatch(/not measured/i);
+    for (const i of [2, 3, 6]) {
+      expect(cells[i]).not.toBe('');
+      expect(cells[i]).not.toBe('0');
+    }
   });
 });

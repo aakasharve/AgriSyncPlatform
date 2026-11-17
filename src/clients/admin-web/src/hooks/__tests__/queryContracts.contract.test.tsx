@@ -91,7 +91,7 @@ describe('per-surface polling cadences (A23)', () => {
   it.each([
     ['ops/health', () => useOpsHealth(), 25_000, 30_000],
     ['ops/errors', () => useOpsErrors({ page: 1, pageSize: 50 }), 25_000, 30_000],
-    // CR-2e C9 (founder, 2026-11-17): farms/suffering no longer polls; it moved to the no-poll list below.
+    // CR-2e C9 (main-session amendment, citing B23 (founder, 2026-11-17)): farms/suffering no longer polls; it moved to the no-poll list below.
     ['ops/voice', () => useOpsVoice(), 300_000, 300_000],
     ['metrics/wvfd', () => useWvfd(), 300_000, 300_000],
     ['farmer-health/cohort', () => useCohortPatterns(), 60_000, 300_000],

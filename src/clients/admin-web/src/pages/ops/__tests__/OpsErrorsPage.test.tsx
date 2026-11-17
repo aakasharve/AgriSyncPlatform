@@ -354,7 +354,7 @@ describe('server pagination survived the loss of the table library', () => {
 /* ═══════════ 4. AN EMPTY ANSWER IS NOT A MEASUREMENT (D9, Step 4) */
 
 describe('an absence names its cause, and an empty list is never called a measured zero', () => {
-  // CR-2e C3|C20 (founder, 2026-11-17): the swallowing catch is gone, so an empty answer is a real none. Retired: 'does not claim a measured zero over an answer this endpoint cannot prove'; replaced by OpsErrorsPage.farm.test.tsx (empty answer says no errors in the window; failed request says could not load).
+  // CR-2e C3|C20 (main-session amendment, citing B23 (founder, 2026-11-17)): the swallowing catch is gone, so an empty answer is a real none. Retired: 'does not claim a measured zero over an answer this endpoint cannot prove'; replaced by OpsErrorsPage.farm.test.tsx (empty answer says no errors in the window; failed request says could not load).
 
   it('renders a 500 as a failure with a retry, not as a quiet platform', async () => {
     stub = installAdapter(async () => ({ status: 500, data: {} }));

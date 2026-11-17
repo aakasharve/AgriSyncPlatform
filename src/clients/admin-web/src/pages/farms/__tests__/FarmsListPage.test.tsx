@@ -415,7 +415,7 @@ describe('a background refetch says so instead of changing the table silently', 
 
 describe('the cells', () => {
   // B24 (founder, 2026-11-17): F4 Tier and F5 WVFD 7d are ideas shown as Not built yet; their cells print no value,
-  // so the measured-zero and "not measured" assertions on them are retired. CR-2e C7 (founder, 2026-11-17): F6 Errors 24h became real (FarmsListPage.errors.test.tsx). F3 Last Log ("never") is a real part and stays.
+  // so the measured-zero and "not measured" assertions on them are retired. CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): F6 Errors 24h became real (FarmsListPage.errors.test.tsx). F3 Last Log ("never") is a real part and stays.
   it('says "never" for a farm that never logged (F3)', async () => {
     serve([
       farm({ farmId: 'a', errors24h: 0, engagementTier: null, wvfd7d: null, lastLogAt: null }),

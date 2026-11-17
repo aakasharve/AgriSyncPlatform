@@ -25,7 +25,7 @@ describe('the reviewed lines file itself (B24 fixture)', () => {
   it('B24_fixture_has_137_entries_in_the_stated_split', () => {
     expect(ENTRIES).toHaveLength(137);
     const count = (s: string) => ENTRIES.filter((e) => e.status === s).length;
-    expect(count('real')).toBe(56); // CR-2e C7 (founder, 2026-11-17): E3 F6 U1 U2 L7 became real
+    expect(count('real')).toBe(56); // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): E3 F6 U1 U2 L7 became real
     expect(count('not-measured')).toBe(35);
     expect(count('idea')).toBe(28);
     expect(count('double')).toBe(18);
