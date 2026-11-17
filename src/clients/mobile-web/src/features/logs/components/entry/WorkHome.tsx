@@ -31,20 +31,23 @@
  * when a head count was said; the money as a full-width dark card.
  */
 import React from 'react';
-import { ChevronRight, Mic } from 'lucide-react';
+import { ChevronRight, Mic, Users } from 'lucide-react';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { SANS, Tap } from '../../../../shared/components/ui/placeUi';
 import { AppUpdateCard } from '../../../appUpdate/AppUpdateCard';
 import { HOME_WORDS } from './entryWords';
 import { RunningCostCard, type RunningCost } from './RunningCostCard';
 import { TodayAttendanceCard } from './TodayAttendanceCard';
+import { attendanceCardWords } from './attendanceCardWords';
+import { homeAttendanceShape } from './homeAttendanceShape';
 import { PlanDoor, type PlanDoorProps } from '../../../plannedWork/components/PlanDoor';
 import type { TodayAttendance } from './todayAttendance';
 
 export interface WorkHomeProps {
     onTell: () => void;
-    /** Present only when this person may manage labour; absent = no हजेरी card at all. Opens the हजेरी place (its वही). */
+    /** Present only when this person may manage labour; absent = no हजेरी part at all. Opens the हजेरी place (its वही). */
     onAttendance?: () => void;
-    /** Today's work and headcount as told (the हजेरी card's state). The card is drawn only with it. */
+    /** Today's work and headcount as told (the हजेरी card's state). The big card is drawn only once a head count was said (lane UI-6). */
     attendance?: TodayAttendance;
     /** Both told: open the हजेरी screen's names. */
     onAttendanceNames?: () => void;
@@ -54,31 +57,49 @@ export interface WorkHomeProps {
     planDoor?: PlanDoorProps;
 }
 
-export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor }) => (
-    <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
-        <AppUpdateCard />
-        <h2 className="m-0 px-1 text-[15px] font-bold leading-snug text-stone-600" data-testid="home-title">{HOME_WORDS.title}</h2>
+/** Lane UI-6: the one small quiet line that stands where the हजेरी card is not drawn (44 px high to tap, words as the card has them). */
+const AttendanceLine: React.FC<{ shape: 'ask' | 'rest'; onTap: () => void }> = ({ shape, onTap }) => {
+    const W = attendanceCardWords(useOptionalLanguage()?.language);
+    return (
+        <button type="button" onClick={onTap} data-testid={`home-attendance-${shape}`}
+            className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-1 text-left text-[13.5px] font-bold leading-snug text-stone-600">
+            <Users size={16} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">{shape === 'ask' ? W.tellCount : W.restDay}</span>
+            <ChevronRight size={16} className="shrink-0 text-stone-400" aria-hidden="true" />
+        </button>
+    );
+};
 
-        <Tap onClick={onTell} data-testid="home-tell" rippleColor="rgba(255,255,255,0.35)"
-            className="flex min-h-[132px] w-full items-center gap-3 rounded-[20px] bg-emerald-700 px-4 py-5 text-left text-white shadow-[0_8px_20px_rgba(4,120,87,0.28)]">
-            <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full bg-white/20 text-white"><Mic size={28} strokeWidth={2.4} aria-hidden="true" /></span>
-            <span className="min-w-0 flex-1">
-                <span className="block text-[26px] font-extrabold leading-[1.15]" data-testid="home-tell-title">{HOME_WORDS.tell}</span>
-                <span className="mt-1 block text-[13px] font-semibold leading-snug text-emerald-50" data-testid="home-tell-sub">{HOME_WORDS.tellSub}</span>
-            </span>
-            <ChevronRight size={24} className="shrink-0" aria-hidden="true" />
-        </Tap>
+export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor }) => {
+    const shape = onAttendance && attendance ? homeAttendanceShape(attendance) : 'none';
+    return (
+        <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
+            <AppUpdateCard />
+            <h2 className="m-0 px-1 text-[15px] font-bold leading-snug text-stone-600" data-testid="home-title">{HOME_WORDS.title}</h2>
 
-        {planDoor && <PlanDoor {...planDoor} />}
+            <Tap onClick={onTell} data-testid="home-tell" rippleColor="rgba(255,255,255,0.35)"
+                className="flex min-h-[132px] w-full items-center gap-3 rounded-[20px] bg-emerald-700 px-4 py-5 text-left text-white shadow-[0_8px_20px_rgba(4,120,87,0.28)]">
+                <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full bg-white/20 text-white"><Mic size={28} strokeWidth={2.4} aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1">
+                    <span className="block text-[26px] font-extrabold leading-[1.15]" data-testid="home-tell-title">{HOME_WORDS.tell}</span>
+                    <span className="mt-1 block text-[13px] font-semibold leading-snug text-emerald-50" data-testid="home-tell-sub">{HOME_WORDS.tellSub}</span>
+                </span>
+                <ChevronRight size={24} className="shrink-0" aria-hidden="true" />
+            </Tap>
 
-        {onAttendance && attendance && (
-            <div data-testid="home-attendance">
-                <TodayAttendanceCard state={attendance} onTell={onTell} onOpenNames={onAttendanceNames} onOpenRegister={onAttendance} />
-            </div>
-        )}
+            {planDoor && <PlanDoor {...planDoor} />}
 
-        {cost && <RunningCostCard cost={cost} />}
-    </div>
-);
+            {onAttendance && attendance && shape !== 'none' && (
+                <div data-testid="home-attendance" data-shape={shape}>
+                    {shape === 'card' && <TodayAttendanceCard state={attendance} onTell={onTell} onOpenNames={onAttendanceNames} onOpenRegister={onAttendance} />}
+                    {shape === 'ask' && <AttendanceLine shape="ask" onTap={onTell} />}
+                    {shape === 'rest' && <AttendanceLine shape="rest" onTap={onAttendance} />}
+                </div>
+            )}
+
+            {cost && <RunningCostCard cost={cost} />}
+        </div>
+    );
+};
 
 export default WorkHome;

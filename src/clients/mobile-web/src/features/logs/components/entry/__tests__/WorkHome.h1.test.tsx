@@ -27,10 +27,15 @@ vi.mock('../../../../plannedWork/data/usePlannedWork', () => ({
 }));
 
 import { WorkHome, type WorkHomeProps } from '../WorkHome';
-import type { TodayAttendance } from '../todayAttendance';
+import { homeAttendanceShape } from '../homeAttendanceShape';
+import type { DayWork, TodayAttendance } from '../todayAttendance';
 
-const WORK = { names: ['खुरपणी'], parts: [], place: { cropId: 'grape', cropName: 'द्राक्ष', plotNames: ['G1'] } } as const;
-const WORK_AND_COUNT: TodayAttendance = { work: { ...WORK, names: [...WORK.names], parts: [] }, headcount: 8, provisional: false };
+const WORK: DayWork = { names: ['खुरपणी'], parts: [], place: { cropId: 'grape', cropName: 'द्राक्ष', plotNames: ['G1'] } };
+const NOTHING: TodayAttendance = { work: null, headcount: null, provisional: false };
+const WORK_NO_COUNT: TodayAttendance = { work: WORK, headcount: null, provisional: false };
+const COUNT_NO_WORK: TodayAttendance = { work: null, headcount: 5, provisional: true };
+const REST_DAY: TodayAttendance = { work: null, headcount: null, provisional: false, restDay: true };
+const WORK_AND_COUNT: TodayAttendance = { work: WORK, headcount: 8, provisional: false };
 
 const full = (over: Partial<WorkHomeProps> = {}): WorkHomeProps => ({
     onTell: vi.fn(),
@@ -141,5 +146,91 @@ describe('the blue plan door', () => {
     it('no farm yet: no blue door', () => {
         render(<WorkHome {...full({ planDoor: undefined })} />);
         expect(screen.queryByTestId('home-plan')).toBeNull();
+    });
+});
+
+describe('the हजेरी card only when a head count was said (founder D-150, note 2.4)', () => {
+    it('a head count was said, with the work: the big card, its words and its "हजेरी वही बघा" link unchanged', () => {
+        const onAttendance = vi.fn();
+        const onAttendanceNames = vi.fn();
+        render(<WorkHome {...full({ attendance: WORK_AND_COUNT, onAttendance, onAttendanceNames })} />);
+        expect(screen.getByTestId('home-attendance')).toHaveAttribute('data-shape', 'card');
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'ready');
+        expect(screen.getByTestId('attendance-card-ready')).toHaveTextContent('इथे हजेरी घ्या — आज 8 जण');
+        expect(screen.getByTestId('attendance-card-register')).toHaveTextContent('हजेरी वही बघा');
+        fireEvent.click(screen.getByTestId('attendance-card-register'));
+        expect(onAttendance).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByTestId('attendance-card'));
+        expect(onAttendanceNames).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('home-attendance-ask')).toBeNull();
+    });
+
+    it('a head count was said but no work: the card is still drawn (it asks for the work, as before)', () => {
+        render(<WorkHome {...full({ attendance: COUNT_NO_WORK })} />);
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'count-told');
+        expect(screen.getByTestId('attendance-card-tell')).toHaveTextContent('आधी आजचं काम सांगा');
+    });
+
+    it('work was logged but NO head count: no big card; ONE small line with the existing card words, and the same tap as the green door', () => {
+        const onTell = vi.fn();
+        const onAttendance = vi.fn();
+        render(<WorkHome {...full({ attendance: WORK_NO_COUNT, onTell, onAttendance })} />);
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.queryByTestId('attendance-card-register')).toBeNull();
+        const wrap = screen.getByTestId('home-attendance');
+        expect(wrap).toHaveAttribute('data-shape', 'ask');
+        expect(within(wrap).getAllByRole('button')).toHaveLength(1);
+        const line = screen.getByTestId('home-attendance-ask');
+        expect(line).toHaveTextContent('किती जण होते ते सांगा');
+        expect(line.className).toMatch(/text-\[1[0-4](\.5)?px\]/);
+        expect(Number(/min-h-\[(\d+)px\]/.exec(line.className)?.[1])).toBeGreaterThanOrEqual(44);
+        fireEvent.click(line);
+        expect(onTell).toHaveBeenCalledTimes(1); // the crop -> plot -> mic step, exactly the card's old button
+        expect(onAttendance).not.toHaveBeenCalled();
+    });
+
+    it('nothing told yet: no हजेरी part at all (the green door already asks for the work)', () => {
+        render(<WorkHome {...full({ attendance: NOTHING })} />);
+        expect(screen.queryByTestId('home-attendance')).toBeNull();
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.queryByTestId('home-attendance-ask')).toBeNull();
+    });
+
+    it('a declared rest day and nothing else: one small line with the existing card sentence, opening the हजेरी place', () => {
+        const onTell = vi.fn();
+        const onAttendance = vi.fn();
+        render(<WorkHome {...full({ attendance: REST_DAY, onTell, onAttendance })} />);
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        const line = screen.getByTestId('home-attendance-rest');
+        expect(line).toHaveTextContent('आज कामाला सुट्टी नोंदली आहे');
+        fireEvent.click(line);
+        expect(onAttendance).toHaveBeenCalledTimes(1);
+        expect(onTell).not.toHaveBeenCalled();
+    });
+
+    it('someone who may not take हजेरी (no door) gets no हजेरी part, whatever was told', () => {
+        render(<WorkHome {...full({ onAttendance: undefined, attendance: undefined })} />);
+        expect(screen.queryByTestId('home-attendance')).toBeNull();
+        cleanup();
+        render(<WorkHome {...full({ onAttendance: undefined, attendance: WORK_AND_COUNT })} />);
+        expect(screen.queryByTestId('home-attendance')).toBeNull();
+    });
+
+    it('English mode: the small line is English only', () => {
+        h.language = 'en';
+        render(<WorkHome {...full({ attendance: WORK_NO_COUNT })} />);
+        const line = screen.getByTestId('home-attendance-ask');
+        expect(line).toHaveTextContent('Tell how many people worked');
+        expect(line.textContent).not.toMatch(/[ऀ-ॿ]/);
+    });
+
+    it('the decision itself: head count -> card; work only -> ask; rest day only -> rest; nothing -> none', () => {
+        expect(homeAttendanceShape(WORK_AND_COUNT)).toBe('card');
+        expect(homeAttendanceShape(COUNT_NO_WORK)).toBe('card');
+        expect(homeAttendanceShape(WORK_NO_COUNT)).toBe('ask');
+        expect(homeAttendanceShape(REST_DAY)).toBe('rest');
+        expect(homeAttendanceShape(NOTHING)).toBe('none');
+        // a head count wins over a rest-day mark (the card's own rest branch then speaks, as before)
+        expect(homeAttendanceShape({ ...REST_DAY, headcount: 3 })).toBe('card');
     });
 });
