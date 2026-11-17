@@ -207,6 +207,12 @@ public sealed class ExportWorker(
                     .ToListAsync(ct).ConfigureAwait(false),
                 ct).ConfigureAwait(false);
 
+            // pictures (SCH-ID-S, founder D-146): HIS picture (his own face or chosen image) and the schedule pictures HE set - the files and a
+            // line of metadata each (kind, date, size, type, hash). Never another person's picture, never an institution logo (not his data).
+            // Admin context: the table's read policy is open, the filter is the person. Idempotent and read-only.
+            await WritePicturesAsync(zip, admin, sp.GetService<ShramSafal.Application.Ports.External.IAttachmentStorageService>(), userId, ct)
+                .ConfigureAwait(false);
+
             // cross_border_transfers — Phase 08 has no direct subject-user
             // pointer on the row (the table is keyed on AI job, not
             // user). For the export bundle we emit the full set scoped
@@ -403,6 +409,68 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         }
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane SCH-ID-S (founder D-146; DPDP export). Writes <c>pictures/metadata.json</c> (one line per picture he owns: kind, date, size,
+    /// type, hash, and whether the file was found) and each file under <c>pictures/</c>. Only his: kind PERSON with his id as subject, and kind
+    /// SCHEDULE rows he set. A file the storage cannot return is listed in the metadata with <c>fileIncluded: false</c>, never skipped silently.
+    /// </summary>
+    internal static async Task WritePicturesAsync(
+        ZipArchive zip,
+        ShramSafalDbContext db,
+        ShramSafal.Application.Ports.External.IAttachmentStorageService? storage,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var rows = await db.Pictures
+            .AsNoTracking()
+            .Where(ShramSafal.Domain.Pictures.PicturePolicy.OwnedBy(userId))
+            .OrderBy(p => p.SetAtUtc)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var lines = new List<object>(rows.Count);
+        var number = 0;
+        foreach (var row in rows)
+        {
+            number++;
+            var kind = ShramSafal.Domain.Pictures.PictureKinds.ToWire(row.Kind);
+            var entryName = $"pictures/{kind.ToLowerInvariant()}-{number}{ExtensionOf(row.ContentType)}";
+            var included = false;
+            if (storage is not null)
+            {
+                await using var stream = await storage.OpenReadAsync(row.StorageKey, ct).ConfigureAwait(false);
+                if (stream is not null)
+                {
+                    var entry = zip.CreateEntry(entryName, CompressionLevel.NoCompression);
+                    await using var target = entry.Open();
+                    await stream.CopyToAsync(target, ct).ConfigureAwait(false);
+                    included = true;
+                }
+            }
+
+            lines.Add(new
+            {
+                kind,
+                setAtUtc = row.SetAtUtc,
+                bytes = row.Bytes,
+                contentType = row.ContentType,
+                sha256 = row.Sha256,
+                file = included ? entryName : null,
+                fileIncluded = included,
+            });
+        }
+
+        await WriteJsonEntryAsync(zip, "pictures/metadata.json", lines, ct).ConfigureAwait(false);
+    }
+
+    private static string ExtensionOf(string contentType) => contentType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        _ => ".bin",
+    };
+
     // ── ZIP helpers ──────────────────────────────────────────────────
 
     private static async Task WriteJsonEntryAsync(
@@ -444,6 +512,7 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         - `/audit_events.json` — every recorded action attributed to you
         - `/cross_border_transfers.json` — outbound calls to non-India processors made on your data
         - `/dpa_registry.json` — the data-processing agreements covering AgriSync's vendors
+        - `/pictures/` — the picture you set for yourself and any picture you chose for one of your schedules, with a metadata file
         - `/transcripts/` — speech-to-text outputs (Phase 08 placeholder)
         - `/parsed/` — structured parses derived from your voice (Phase 08 placeholder)
         - `/voice/` — raw voice clips (deferred until Phase 07)

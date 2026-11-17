@@ -513,6 +513,15 @@
 //     variety / soil_type / region_code / climate hold list codes (what the schedule was made for), no person. No action, no ScrubbedColumnsFor entry.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
+//     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
+//     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with
+//     their FILES in storage; the schedules fall back to the letter badge. INSTITUTION rows STAY: an institution logo is not a person's data
+//     (set_by_user_id there is the staff member's opaque id, KEEP like schedule_checks.checker_user_id). Runs on the migration-role context under
+//     SET LOCAL row_security = off (the table is FORCE-RLS, as ssf.log_practice_reasons), and proves none of his rows is left. A file that cannot be
+//     deleted (storage refused it) is COUNTED in the completion audit (pictureFilesLeftInPlace) and logged at Error: the row is gone, so nothing
+//     names the file, but the file is a face and is reported, never hidden. Idempotent (a second run deletes 0 rows and 0 files).
+//
 //   - ssf.schedule_checks (plr-d10 lane SCH-A, founder D-74) — KEEP. One row is one decision (Approved / Returned /
 //     Withdrawn) by a ShramSafal platform reviewer on one version of one library schedule: the schedule row and version, the
 //     activity ids he ticked, a note (required for Returned / Withdrawn; staff words about a schedule, never a farmer's), who
@@ -811,6 +820,12 @@ public sealed class ErasureWorker(
         // which is not scrubbed anywhere, so the order against AnonymizeDailyLogsAsync does not matter.)
         perTableCounts["log_practice_reasons"] = await ScrubLogPracticeReasonWordsAsync(admin, targetUserId, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["log_practice_reasons"];
+
+        // spec: plr-d10 lane SCH-ID-S (founder D-146; P6) - HIS picture and the schedule pictures he set: the rows AND their files. Institution logos stay.
+        var pictureStorage = sp.GetService<ShramSafal.Application.Ports.External.IAttachmentStorageService>();
+        var picturesErased = await DeletePicturesOfUserAsync(admin, pictureStorage, targetUserId, logger, ct).ConfigureAwait(false);
+        perTableCounts["pictures"] = picturesErased.Rows;
+        totalAnonymized += picturesErased.Rows;
 
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
@@ -1138,6 +1153,8 @@ public sealed class ErasureWorker(
             targetUserId,
             rowsAnonymizedCount = totalAnonymized,
             perTableCounts,
+            // lane SCH-ID-S - picture FILES the storage refused to delete (the rows are gone). 0 = every file deleted.
+            pictureFilesLeftInPlace = picturesErased.FilesLeft,
             voiceClipsRetainedDeferred = voiceClipsDeferred,
 
             // What actually happened to the retained voice tier, stated either
@@ -1259,6 +1276,88 @@ public sealed class ErasureWorker(
             "UPDATE ssf.schedule_checks SET checker_display_name = {0} WHERE checker_user_id = {1} AND checker_display_name <> {0}",
             new object[] { "श्रमसफल कृषी तज्ज्ञ", userId },
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-ID-S (founder D-146; doctrine P6). DELETES the erased person's PERSON picture and every SCHEDULE picture he set,
+    /// then their files. INSTITUTION rows stay (not a person's data). The table is FORCE-RLS, so the transaction runs under
+    /// <c>SET LOCAL row_security = off</c> (as <see cref="ScrubLogPracticeReasonWordsAsync"/>): a connection row-level security WOULD filter raises
+    /// instead of reading none of his rows and reporting success; it then proves none of his rows is left. The rows are deleted and committed
+    /// FIRST, the files after: a failed file delete never resurrects a row, and is returned (<c>FilesLeft</c>) so the caller records it.
+    /// Idempotent: a second run finds no row and deletes nothing.
+    /// </summary>
+    internal static async Task<(int Rows, int FilesLeft)> DeletePicturesOfUserAsync(
+        ShramSafalDbContext db,
+        ShramSafal.Application.Ports.External.IAttachmentStorageService? storage,
+        Guid userId,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        List<string> keys;
+        int rows;
+        await using (var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct).ConfigureAwait(false);
+            try
+            {
+                keys = await db.Database
+                    .SqlQueryRaw<string>(
+                        @"SELECT storage_key AS ""Value"" FROM ssf.pictures WHERE (kind = 'PERSON' AND subject_id = {0}) OR (kind = 'SCHEDULE' AND set_by_user_id = {0})",
+                        userId)
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+                rows = await db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM ssf.pictures WHERE (kind = 'PERSON' AND subject_id = {0}) OR (kind = 'SCHEDULE' AND set_by_user_id = {0})",
+                    new object[] { userId },
+                    ct).ConfigureAwait(false);
+            }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege)
+            {
+                throw new InvalidOperationException(
+                    "Erasure cannot reach every picture on this connection: row-level security would filter "
+                    + $"ssf.pictures ({ex.MessageText}). It must run on the migration connection (ShramSafalDb_Migration), "
+                    + "as an identity row-level security does not filter.",
+                    ex);
+            }
+
+            var left = await db.Database
+                .SqlQueryRaw<int>(
+                    @"SELECT count(*)::int AS ""Value"" FROM ssf.pictures WHERE (kind = 'PERSON' AND subject_id = {0}) OR (kind = 'SCHEDULE' AND set_by_user_id = {0})",
+                    userId)
+                .SingleAsync(ct)
+                .ConfigureAwait(false);
+            if (left != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Erasure left {left} picture row(s) of the erased person in ssf.pictures; refusing to report success.");
+            }
+
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+
+        var filesLeft = 0;
+        foreach (var key in keys.Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                if (storage is null)
+                {
+                    throw new InvalidOperationException("No picture storage is registered.");
+                }
+
+                await storage.DeleteAsync(key, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                filesLeft++;
+                logger.LogError(
+                    ex,
+                    "ErasureWorker: a picture file could not be deleted for an erased person (key {StorageKey}). The row is gone; the file is left in storage and is counted in the erasure record.",
+                    key);
+            }
+        }
+
+        return (rows, filesLeft);
     }
 
     /// <summary>
@@ -1804,6 +1903,8 @@ UPDATE ssf.labour_corrections
         // DELETEd outright, so it takes the same "deleted" sentinel. The audit
         // payload deliberately carries no sha256 list; see the manifest comment.
         "raw_blob_subjects" => new[] { "deleted" },
+        // plr-d10 lane SCH-ID-S - the person's picture rows (and files) are DELETEd, as the voice-spine rows above.
+        "pictures" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
 
