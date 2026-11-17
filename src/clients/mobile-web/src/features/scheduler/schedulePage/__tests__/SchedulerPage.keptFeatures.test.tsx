@@ -332,7 +332,11 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         mount([crop([plot(), plot({ id: 'plot-2', name: 'B' })])]);
         fireEvent.click(screen.getByTestId('open-editor'));
         expect(screen.queryByTestId('editor-this-plot-only')).toBeNull();
+        // lane UI-7: the editor's plot choice is the shared chip too — the crop's colour dot, a tick on the chosen plot
+        expect(screen.getByTestId('editor-plot-plot-1').querySelector('[data-part="dot"]')).toBeTruthy();
+        expect(screen.getByTestId('editor-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(screen.getByTestId('editor-plot-plot-2'));
+        expect(screen.getByTestId('editor-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
         expect(text('editor-plot-name')).toBe('द्राक्ष · B');
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
         expect(text('editor-this-plot-only')).toBe('हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.');

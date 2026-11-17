@@ -29,6 +29,10 @@
  * offered. The money section reads the SERVER's cost ledger (`overview/useMoneyLedger.ts`), never a log's own total;
  * money this person may not see is "—" (founder D-22), and a total made from an incomplete set says so.
  *
+ * Lane UI-7 (founder D-150, 2026-11-17): शेताची स्थिती is the ONE crop -> plot picker every page uses (`context/components/CropPlotPicker.tsx`; the page still
+ * starts on every crop and every plot: `sel === null`), and the closed "उत्पन्न आणि खर्च" header is a dark money strip with the spent-so-far figure
+ * (`overview/CostSection.tsx` `MoneyStripFace`), absent for a seat that may not see money. Folds, order and reorder are untouched (D-4).
+ *
  * Lane RF2 (the founder's screen 1, 2026-10-30): the plot cards show only what happened, as chips in the result
  * screen's colours (no numbered squares, no colour key), plus a "संपूर्ण शेत" card for whole-farm work; a card opens
  * the plot's day (`day/DaySheets.PlotDayView`: buckets, then the time chips, each opening its recording inline). The
