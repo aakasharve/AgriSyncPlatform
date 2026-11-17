@@ -1,4 +1,5 @@
 using System.Data.Common;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.Shared;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
@@ -6,8 +7,9 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Tasks 1 and 2, amendments C1, C2, C6).
 /// The one rule that ties a row of <c>analytics.events</c> to a farm, and the one rule for what counts as a
-/// problem. Every read that counts problems per farm uses <see cref="ProblemSql"/> and <see cref="FarmSql"/>
-/// together, so one farm shows the same count on All Farms, Suffering, Live Health and its own page.
+/// problem. Every read that counts problems per farm uses <see cref="CountedProblemSql"/> (the problem rule with
+/// test accounts left out, C16) and <see cref="FarmSql"/> together, so one farm shows the same count on All Farms,
+/// Suffering, Live Health and its own page.
 ///
 /// <para>
 /// <b>The farm (C2).</b> The <c>farm_id</c> column when the row has one; otherwise the farm the request NAMED in
@@ -28,8 +30,10 @@ internal static class AdminErrorFarm
     /// <summary>The rows the request middleware writes; only these carry a trustworthy <c>routeFarmId</c>.</summary>
     private const string ServerWrittenTypes = "event_type IN ('api.error','api.slow','api.refused')";
 
-    private const string RouteFarmIsUuid =
-        "props->>'routeFarmId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'";
+    private const string UuidPattern =
+        "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'";
+
+    private const string RouteFarmIsUuid = "props->>'routeFarmId' ~* " + UuidPattern;
 
     /// <summary>The farm a row belongs to (uuid), or NULL when no farm was named.</summary>
     public const string FarmSql =
@@ -50,20 +54,45 @@ internal static class AdminErrorFarm
     public const string ProblemSql =
         "(event_type IN ('api.error','client.error') OR (event_type = 'ai.invocation' AND props->>'outcome' = 'failure'))";
 
+    /// <summary>
+    /// C16: the person who met the problem. The <c>actor_user_id</c> column when the row has one; otherwise
+    /// <c>props.personId</c>, read only when it is a uuid (an unguarded cast is forbidden, C4). NULL when neither.
+    /// </summary>
+    public const string PersonSql =
+        "COALESCE(actor_user_id, CASE WHEN props->>'personId' ~* " + UuidPattern
+        + " THEN (props->>'personId')::uuid END)";
+
+    /// <summary>The uuid[] parameter <see cref="CountedProblemSql"/> needs: the test accounts' user ids.</summary>
+    public const string ExcludedUserIdsParameter = "@excludedUserIds";
+
+    /// <summary>
+    /// C1 + C16: a problem that is counted. <see cref="ProblemSql"/>, and its person (<see cref="PersonSql"/>) is not
+    /// a test account (<c>CompanyMis:ExcludedUserIds</c>). A row with no person is counted; an empty list leaves
+    /// nothing out. Every per-farm problem count uses this, so the counts stay equal across pages. The command
+    /// must carry <see cref="ExcludedUserIdsParameter"/> (<see cref="AddExcludedUserIds"/>).
+    /// </summary>
+    public const string CountedProblemSql =
+        "(" + ProblemSql + " AND NOT COALESCE(" + PersonSql + " = ANY(" + ExcludedUserIdsParameter + "), false))";
+
     /// <summary>All Farms' "Errors 24h" and Live Health's repeated problems.</summary>
     public static readonly TimeSpan LastDay = TimeSpan.FromHours(24);
 
     /// <summary>The Suffering page.</summary>
     public static readonly TimeSpan LastWeek = TimeSpan.FromDays(7);
 
+    /// <summary>Adds <see cref="ExcludedUserIdsParameter"/> (uuid[]) for <see cref="CountedProblemSql"/>.</summary>
+    public static void AddExcludedUserIds(DbCommand cmd, CompanyMisExclusions exclusions) =>
+        AddParam(cmd, ExcludedUserIdsParameter, exclusions.UserIds.ToArray());
+
     /// <summary>
-    /// Farms with at least <paramref name="minProblems"/> problems in the <paramref name="window"/> before now,
-    /// each problem counted once in one <see cref="ProblemArea"/>. Ordered by count, then the latest problem, at
-    /// most <paramref name="maxFarms"/>. Rows with no farm are not counted. Nothing is caught: a failed read
-    /// escapes, never an empty list.
+    /// Farms with at least <paramref name="minProblems"/> counted problems (<see cref="CountedProblemSql"/>) in
+    /// the <paramref name="window"/> before now, each problem counted once in one <see cref="ProblemArea"/>.
+    /// Ordered by count, then the latest problem, at most <paramref name="maxFarms"/>. Rows with no farm are not
+    /// counted. Nothing is caught: a failed read escapes, never an empty list.
     /// </summary>
     public static async Task<IReadOnlyList<RepeatedProblemFarm>> ReadRepeatedProblemsAsync(
-        DbConnection conn, TimeSpan window, int minProblems, int maxFarms, CancellationToken ct)
+        DbConnection conn, TimeSpan window, int minProblems, int maxFarms, CompanyMisExclusions exclusions,
+        CancellationToken ct)
     {
         using var cmd = conn.CreateCommand();
         // One row per farm, kind of row, route and outcome; the area of each is decided by ProblemArea.For, so
@@ -78,7 +107,7 @@ internal static class AdminErrorFarm
                     props->>'outcome' AS outcome,
                     occurred_at_utc
                 FROM analytics.events
-                WHERE {ProblemSql}
+                WHERE {CountedProblemSql}
                   AND occurred_at_utc >= NOW() - @window
             )
             SELECT farm, event_type, route, outcome, COUNT(*), MAX(occurred_at_utc)
@@ -92,6 +121,7 @@ internal static class AdminErrorFarm
             """;
         AddParam(cmd, "@window", window);
         AddParam(cmd, "@min", minProblems);
+        AddExcludedUserIds(cmd, exclusions);
 
         var tallies = new Dictionary<Guid, Tally>();
         using (var r = await cmd.ExecuteReaderAsync(ct))

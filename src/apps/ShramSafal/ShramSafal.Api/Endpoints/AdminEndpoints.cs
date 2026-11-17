@@ -252,9 +252,11 @@ public static class AdminEndpoints
 
             return r.Error.Kind switch
             {
+                // C17: the refusal key is "code", as every other admin refusal.
                 AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
                 {
-                    error = "contacts_ids_invalid"
+                    code = "contacts_ids_invalid",
+                    message = r.Error.Description
                 }),
                 AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
                 {

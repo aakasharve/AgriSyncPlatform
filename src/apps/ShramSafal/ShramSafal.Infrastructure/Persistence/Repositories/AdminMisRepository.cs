@@ -4,6 +4,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
@@ -25,9 +26,18 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// container always supplies it (<c>AddShramSafalInfrastructure</c> registers
 /// the factory).
 /// </para>
+///
+/// <para>
+/// <paramref name="exclusions"/> (plan CR-2e, C16) is the test-account list
+/// (<c>CompanyMis:ExcludedUserIds</c>) the problem counts leave out. It is
+/// required, so a repository built by hand cannot count test accounts by
+/// forgetting it: pass <see cref="CompanyMisExclusions.None"/> to leave
+/// nothing out.
+/// </para>
 /// </summary>
 public sealed class AdminMisRepository(
     AnalyticsDbContext analyticsContext,
+    CompanyMisExclusions exclusions,
     IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminMisRepository
 {
     public async Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default)
@@ -256,7 +266,8 @@ public sealed class AdminMisRepository(
 
     /// <summary>
     /// Problems per farm in the last 24 hours (plan CR-2e, Task 1, F6), by the one farm rule and the one problem
-    /// rule (<see cref="AdminErrorFarm"/>, C1), so a farm shows the same count here as on Live Health.
+    /// rule with test accounts left out (<see cref="AdminErrorFarm"/>, C1, C16), so a farm shows the same count here
+    /// as on Live Health.
     /// </summary>
     private async Task<Dictionary<Guid, int>> ReadErrors24hAsync(Guid[] farmIds, CancellationToken ct)
     {
@@ -269,7 +280,7 @@ public sealed class AdminMisRepository(
                 FROM (
                     SELECT {AdminErrorFarm.FarmSql} AS farm
                     FROM analytics.events
-                    WHERE {AdminErrorFarm.ProblemSql}
+                    WHERE {AdminErrorFarm.CountedProblemSql}
                       AND occurred_at_utc >= NOW() - @window
                 ) p
                 WHERE p.farm = ANY(@ids)
@@ -277,6 +288,7 @@ public sealed class AdminMisRepository(
                 """;
             AddParam(cmd, "@window", AdminErrorFarm.LastDay);
             AddParam(cmd, "@ids", farmIds);
+            AdminErrorFarm.AddExcludedUserIds(cmd, exclusions);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) errors[r.GetGuid(0)] = (int)r.GetInt64(1);
         }, ct);
@@ -367,16 +379,16 @@ public sealed class AdminMisRepository(
     }
 
     // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2, U1/U2). Read from analytics.events on request
-    // by the one farm rule and the one problem rule (AdminErrorFarm): 7 days, 3 or more, at most 50. No farm name
-    // and no ssf.farms join: names come from the contacts route, so this read opens no cross-farm factory. Nothing
-    // is caught: a failed read answers 500, never an empty list.
+    // by the one farm rule and the one problem rule with test accounts left out (AdminErrorFarm, C16): 7 days, 3 or
+    // more, at most 50. No farm name and no ssf.farms join: names come from the contacts route, so this read opens
+    // no cross-farm factory. Nothing is caught: a failed read answers 500, never an empty list.
     public async Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
     {
         IReadOnlyList<RepeatedProblemFarm> farms = [];
         await WithAnalyticsConnectionAsync(async conn =>
         {
             farms = await AdminErrorFarm.ReadRepeatedProblemsAsync(
-                conn, AdminErrorFarm.LastWeek, minProblems: 3, maxFarms: 50, ct);
+                conn, AdminErrorFarm.LastWeek, minProblems: 3, maxFarms: 50, exclusions, ct);
         }, ct);
 
         return farms

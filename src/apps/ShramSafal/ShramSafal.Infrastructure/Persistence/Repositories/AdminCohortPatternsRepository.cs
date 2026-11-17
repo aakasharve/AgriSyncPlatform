@@ -299,7 +299,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
         DbConnection conn, AdminScope scope, CancellationToken ct)
     {
         // Reuses the existing mis.farmer_suffering_watchlist matview
-        // (same source AdminMisRepository.GetSufferingAsync uses).
+        // (AdminMisRepository.GetSufferingAsync no longer reads it: it counts live from analytics.events, plan CR-2e).
         var rows = new List<CohortFarmerSufferingDto>(10);
         try
         {

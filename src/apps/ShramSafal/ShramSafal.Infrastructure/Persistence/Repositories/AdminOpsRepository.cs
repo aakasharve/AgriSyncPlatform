@@ -5,6 +5,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.Farms;
 using System.Text.Json;
 
@@ -31,9 +32,18 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// queries keeps working; the container always supplies it
 /// (<c>AddShramSafalInfrastructure</c> registers the factory).
 /// </para>
+///
+/// <para>
+/// <paramref name="exclusions"/> (plan CR-2e, C16) is the test-account list
+/// (<c>CompanyMis:ExcludedUserIds</c>) the repeated-problems count leaves out.
+/// It is required, so a repository built by hand cannot count test accounts
+/// by forgetting it: pass <see cref="CompanyMisExclusions.None"/> to leave
+/// nothing out.
+/// </para>
 /// </summary>
 public sealed class AdminOpsRepository(
     AnalyticsDbContext analyticsContext,
+    CompanyMisExclusions exclusions,
     IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminOpsRepository
 {
     /// <summary>
@@ -99,7 +109,7 @@ public sealed class AdminOpsRepository(
         {
             var voice = await GetVoiceHealthAsync(conn, ct);
             var errors = await GetRecentErrorsAsync(conn, ct);
-            var suffering = await GetRepeatedProblemFarmsAsync(conn, ct);
+            var suffering = await GetRepeatedProblemFarmsAsync(conn, exclusions, ct);
             var (r9, r10) = await GetAlertBreachesAsync(conn, ct);
 
             return new AdminOpsHealthDto(
@@ -181,13 +191,14 @@ public sealed class AdminOpsRepository(
     }
 
     // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2, L7). Farms with two or more problems in the
-    // last 24 hours, by the one farm rule and the one problem rule (AdminErrorFarm, C1), the areas by ProblemArea.
-    // At most 10. Reads analytics.events only (no cross-farm factory on this polled route). Nothing is caught.
+    // last 24 hours, by the one farm rule and the one problem rule with test accounts left out (AdminErrorFarm, C1,
+    // C16), the areas by ProblemArea. At most 10. Reads analytics.events only (no cross-farm factory on this polled
+    // route). Nothing is caught.
     private static async Task<IReadOnlyList<OpsFarmErrorDto>> GetRepeatedProblemFarmsAsync(
-        System.Data.Common.DbConnection conn, CancellationToken ct)
+        System.Data.Common.DbConnection conn, CompanyMisExclusions exclusions, CancellationToken ct)
     {
         var farms = await AdminErrorFarm.ReadRepeatedProblemsAsync(
-            conn, AdminErrorFarm.LastDay, minProblems: 2, maxFarms: 10, ct);
+            conn, AdminErrorFarm.LastDay, minProblems: 2, maxFarms: 10, exclusions, ct);
 
         return farms
             .Select(f => new OpsFarmErrorDto(
