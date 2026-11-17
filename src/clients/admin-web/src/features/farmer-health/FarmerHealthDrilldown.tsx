@@ -151,12 +151,24 @@ export default function FarmerHealthDrilldown() {
           <div className="grid gap-4 md:grid-cols-2">
             {farmer.verifications ? (
               <VerificationCounts counts={farmer.verifications} />
-            ) : null}
+            ) : (
+              <NotMeasuredPanel
+                title="Checks on entries"
+                why="The server did not send the check counts for this farm, so none are shown rather than a made-up zero."
+              />
+            )}
             <FarmWorkers workers={farmer.workerSummary ?? []} />
             <NotBuiltYet metric="fh-failed-uploads" />
           </div>
 
-          {farmer.aiHealth ? <ReadingBlock reading={farmer.aiHealth} /> : null}
+          {farmer.aiHealth ? (
+            <ReadingBlock reading={farmer.aiHealth} />
+          ) : (
+            <NotMeasuredPanel
+              title="Voice and photo reading"
+              why="The server did not send the reading figures for this farm, so none are shown rather than a made-up zero."
+            />
+          )}
         </>
       )}
     </div>

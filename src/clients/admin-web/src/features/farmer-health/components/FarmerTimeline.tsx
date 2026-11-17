@@ -50,6 +50,8 @@ interface RowMeta {
   /** The analytics event this row counts — worth naming, because two of the
    *  six are not what their label suggests. */
   source: string;
+  /** What is counted, in words, for the row tooltip. Falls back to `source`. */
+  tip?: string;
   /** A failure, or an activity. The only two meanings this grid encodes. */
   failure?: boolean;
 }
@@ -59,11 +61,17 @@ const ROWS: RowMeta[] = [
   { key: 'closuresSubmitted', label: 'Submitted', source: 'closure.submitted' },
   { key: 'proofAttached', label: 'Proof', source: 'proof.attached' },
   { key: 'summariesViewed', label: 'Summary', source: 'closure_summary.viewed' },
-  { key: 'verifications', label: 'Checked', source: 'verification.recorded' },
+  {
+    key: 'verifications',
+    label: 'Checked',
+    source: 'verification.recorded',
+    tip: "Counts a person's deliberate check of an entry, once per entry each day. Checks by the person who saved the entry are left out.",
+  },
   {
     key: 'errors',
     label: 'Errors',
     source: 'api.error and client.error',
+    tip: 'Counts problems on requests that named this farm, failed voice calls included.',
     failure: true,
   },
 ];
@@ -143,19 +151,20 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
     );
   }
 
-  /* Every cell zero. See the header: this is what a swallowed database
-     failure looks like as well as what a quiet farm looks like, and the
-     response carries nothing that separates them. */
+  /* Every cell zero. This says only what the six rows counted. They do not
+     count saved entries, and "Checked" leaves out self-checks, so a farm can
+     have recorded work while every cell here is zero. */
   if (total === 0) {
     return (
       <section data-band="timeline" aria-label="14-day activity">
         <NotMeasuredPanel
-          title="Nothing was recorded on this farm in fourteen days"
+          title="Nothing was counted in these six rows in fourteen days"
           why={
             <>
               <p>
-                All six counted rows are zero on all {fmt.num(days.length)} days. These are true
-                zeros from the server, so this farm recorded nothing in this window.
+                What these six rows count was zero on all {fmt.num(days.length)} India days. The
+                rows do not count saved entries, and "Checked" leaves out checks made by the person
+                who saved the entry, so this does not mean the farm recorded nothing.
               </p>
             </>
           }
@@ -216,7 +225,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                 <th
                   scope="row"
                   className="pr-2 text-left text-caption font-semibold text-text-1"
-                  title={`Counts ${row.source}`}
+                  title={row.tip ?? `Counts ${row.source}`}
                 >
                   {row.label}
                 </th>
