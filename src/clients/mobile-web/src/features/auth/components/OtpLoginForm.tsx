@@ -7,7 +7,7 @@
  * (I16 — LANG-2): words in ONE language (`authCopy`), never Marathi and English side by side.
  */
 import React, { useRef, useState } from 'react';
-import { Phone } from 'lucide-react';
+import PhoneDigitBoxes from '../../../shared/components/PhoneDigitBoxes';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { authCopy } from '../authCopy';
@@ -92,29 +92,18 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
                 <label htmlFor="otp-phone" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
                     {c.phone}
                 </label>
-                <div className="flex items-stretch overflow-hidden rounded-xl border border-stone-200 bg-white transition-colors focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-200/60">
-                    <span className="flex select-none items-center gap-1.5 border-r border-stone-200 bg-stone-50/80 px-3 text-stone-700">
-                        <Phone size={15} className="text-emerald-600" />
-                        <span className="text-sm font-bold">+91</span>
-                    </span>
-                    <input
-                        id="otp-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={e => {
-                            const next = e.target.value.replace(/[^0-9]/g, '');
-                            setPhone(next);
-                            setError(null);
-                            onPhoneChange?.(next);
-                        }}
-                        placeholder={c.phonePlaceholder}
-                        autoComplete="tel"
-                        className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium outline-none placeholder:text-stone-400"
-                        disabled={isLoading}
-                        inputMode="numeric"
-                        maxLength={10}
-                    />
-                </div>
+                <PhoneDigitBoxes
+                    id="otp-phone"
+                    language={language}
+                    placeholder={c.phonePlaceholder}
+                    value={phone}
+                    disabled={isLoading}
+                    onChange={next => {
+                        setPhone(next);
+                        setError(null);
+                        onPhoneChange?.(next);
+                    }}
+                />
             </div>
 
             {consentSlot}
@@ -127,7 +116,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
 
             <button
                 type="submit"
-                disabled={isLoading || !phone.trim() || sendBlocked}
+                disabled={isLoading || phone.length !== 10 || sendBlocked}
                 className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
                 {isLoading ? c.sending : c.send}
