@@ -264,7 +264,13 @@ public sealed class AdminOpsRepository(
             AddParam(countCmd, "@since", sinceFilter);
             if (endpoint is not null) AddParam(countCmd, "@ep", $"%{endpoint}%");
             var rawCount = await countCmd.ExecuteScalarAsync(ct);
-            total = rawCount is long l ? (int)l : rawCount is int i ? i : 0;
+            total = rawCount switch
+            {
+                long l => (int)l,
+                int i => i,
+                _ => throw new InvalidOperationException(
+                    $"Unexpected COUNT(*) result type '{rawCount?.GetType().FullName ?? "null"}' in GetErrorsPagedAsync."),
+            };
 
             using var dataCmd = conn.CreateCommand();
             dataCmd.CommandText = $"""

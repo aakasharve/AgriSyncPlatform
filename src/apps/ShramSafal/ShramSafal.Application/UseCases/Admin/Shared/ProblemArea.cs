@@ -53,28 +53,6 @@ public static class ProblemArea
     ];
 
     /// <summary>
-    /// The routes the server records today for sync, entries and voice, as recorded (<c>"VERB /pattern"</c>),
-    /// each with its area.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> KnownRoutes { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["POST /sync/push"] = Sync,
-        ["GET /sync/pull"] = Sync,
-        ["POST /shramsafal/logs"] = Entries,
-        ["POST /shramsafal/logs/{id:guid}/tasks"] = Entries,
-        ["POST /shramsafal/logs/{id:guid}/verify"] = Entries,
-        ["GET /shramsafal/logs/{id:guid}/transitions"] = Entries,
-        ["GET /shramsafal/logs/{id:guid}/original-voice"] = Entries,
-        ["POST /shramsafal/ai/voice-parse"] = Voice,
-        ["POST /shramsafal/ai/parse-voice"] = Voice,
-        ["POST /shramsafal/ai/parse-voice-stream"] = Voice,
-        ["POST /shramsafal/ai/transcribe-stream"] = Voice,
-        ["POST /shramsafal/voice-diary/persist"] = Voice,
-        ["GET /shramsafal/voice-diary/by-range"] = Voice,
-        ["GET /shramsafal/voice-diary/by-id/{clipId:guid}"] = Voice,
-    };
-
-    /// <summary>
     /// The area of one problem. <paramref name="routePattern"/> is the recorded <c>props->>'route'</c>
     /// (<c>"VERB /pattern"</c>); <paramref name="outcome"/> is <c>props->>'outcome'</c>. Always one of
     /// <see cref="Sync"/>, <see cref="Entries"/>, <see cref="Voice"/>, <see cref="Other"/>.
