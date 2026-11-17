@@ -334,6 +334,44 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         page.Timeline.Where(t => t.Date != day).Sum(t => t.Verifications).Should().Be(0);
     }
 
+    /// <summary>C25 (2): a check by a test account is not a check, in P6 or in P4's per-day count.</summary>
+    [SkippableFact]
+    public async Task A_check_by_a_test_account_is_not_a_check_in_either_count()
+    {
+        await GuardAsync();
+
+        var day = Today.AddDays(-2);
+        await using (var db = await OpenSuperuserAsync())
+        {
+            // Only checked by a test account: waiting, not confirmed or verified, not a check on any day.
+            var onlyTest = await EntryAsync(db, Farm1, Worker1, At(day, 8));
+            await CheckAsync(db, onlyTest, VerificationStatus.Confirmed, null, TestAccount, At(day, 9));
+            await CheckAsync(db, onlyTest, VerificationStatus.Verified, null, TestAccount, At(day, 9, 1));
+
+            // Self-attested, then "checked" only by a test account: self-checked, never verified.
+            var selfThenTest = await EntryAsync(db, Farm1, Owner1, At(day, 8, 10));
+            await CheckAsync(db, selfThenTest, VerificationStatus.Confirmed, DailyLog.SelfAttestationReason, Owner1, At(day, 8, 10));
+            await CheckAsync(db, selfThenTest, VerificationStatus.Verified, DailyLog.SelfAttestationReason, Owner1, At(day, 8, 11));
+            await CheckAsync(db, selfThenTest, VerificationStatus.Verified, null, TestAccount, At(day, 10));
+
+            // The same shape checked by a real person: counts in both.
+            var byPerson = await EntryAsync(db, Farm1, Worker1, At(day, 8, 20));
+            await CheckAsync(db, byPerson, VerificationStatus.Verified, null, Owner1, At(day, 11));
+        }
+
+        await using var scope = AdminScope(BuildProvider(new[] { TestAccount }));
+        var page = await Repository(scope.ServiceProvider).GetAsync(Farm1, PlatformOwner, Admin);
+
+        var v = page!.Verifications;
+        var onDay = page.Timeline.Single(t => t.Date == day);
+        Output.WriteLine($"[EVIDENCE] confirmed={v.Confirmed} verified={v.Verified} disputed={v.Disputed} pending={v.Pending} selfChecked={v.SelfChecked}; checked on {day}: {onDay.Verifications}");
+        v.Should().Be(new FarmerHealthVerificationCountsDto(
+                Confirmed: 0, Verified: 1, Disputed: 0, Pending: 1, SelfChecked: 1),
+            "a test account's check is not a check: its entry waits (or is self-checked when a self marker applies); "
+            + "only the entry checked by a real person is verified");
+        onDay.Verifications.Should().Be(1, "only the real person's check is counted in the per-day count");
+    }
+
     /// <summary>
     /// C24: a mark made by someone with no authority to confirm claims nothing (waiting); the speaker's own mark is
     /// self-checked; neither is a check. An auto-saved voice Draft claims nothing either.
