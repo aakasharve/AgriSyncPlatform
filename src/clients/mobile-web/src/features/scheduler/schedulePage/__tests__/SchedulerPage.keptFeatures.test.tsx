@@ -6,8 +6,8 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I15; inventory S2 "keep every real feature")
  *
  * Every feature of the old English शेड्यूल page is still reachable from the new one, in Marathi, and does
- * what it says: crop / plot pick (and switching recomputes the page), the 'N days behind' banner, last spray /
- * last water, the risk card, today's spend → MoneyLens, Close Day, the library (+ adopt, + the shortest-first
+ * what it says: crop / plot pick (and switching recomputes the page; lane UI-8: on the picture map), the 'N days behind' banner, last spray /
+ * last water, the risk card, today's spend → MoneyLens, Close Day, the library (+ its three steps, + the shortest-first
  * order), the schedule editor (REAL, not mocked: its choice takes effect on the page) and the day grid.
  * Plus the honest states: a schedule nobody chose, a schedule that has ended.
  */
@@ -66,49 +66,39 @@ describe('crop and plot pick', () => {
         plot({ id: 'plot-2', name: 'B', startDate: k(3), schedule: { ...plot().schedule, id: 'sch-2', plotId: 'plot-2', referenceDate: k(3) } }),
     ]);
 
-    it('chips for each crop and plot; switching plot recomputes the page; a crop with no plot says so', () => {
+    it('lane UI-8: the picture map has a row for each plot; switching plot recomputes the page; a crop with no plot says so', () => {
         mount([twoPlots(), crop([], { id: 'crop-2', name: 'Onion' })]);
-        expect(screen.getByTestId('crop-pick')).toHaveTextContent('पीक');
-        expect(screen.getByTestId('pick-crop-crop-1')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('pick-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-plot-plot-2')).toHaveAttribute('aria-pressed', 'false');
         expect(text('sched-crop-plot')).toBe('द्राक्ष · A'); // spec I18: the server's "Grapes" in Marathi
         expect(text('day-now')).toBe('9');
 
-        fireEvent.click(screen.getByTestId('pick-plot-plot-2'));
+        fireEvent.click(screen.getByTestId('map-plot-plot-2'));
         expect(text('sched-crop-plot')).toBe('द्राक्ष · B');
         expect(text('day-now')).toBe('6');
-        expect(screen.getByTestId('pick-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'false');
 
-        fireEvent.click(screen.getByTestId('pick-crop-crop-2'));
-        expect(text('sched-no-plot')).toBe('या पिकात अजून प्लॉट नाही');
-        expect(screen.queryByTestId('plot-pick')).toBeNull();
+        // A crop with no plot has nothing to tap on the map: it says so in one line (it was a tile that opened "या पिकात अजून प्लॉट नाही").
+        expect(text('map-empty-crop-crop-2')).toContain('या पिकात अजून प्लॉट नाही');
         expect(screen.queryByTestId('sched-tabs')).toBeNull();
     });
 
-    it('lane UI-7: the choice is the shared crop -> plot picker — crop tiles and plot chips in the crop\'s own colour; only the chosen crop\'s plots show', () => {
+    it('lane UI-8: every plot of every crop is on the one map; tapping a plot of the other crop chooses that crop and that plot', () => {
         mount([crop([plot(), plot({ id: 'plot-2', name: 'B' })], { color: 'bg-purple-500' }), crop([plot({ id: 'plot-9', name: 'Z' })], { id: 'crop-2', name: 'Onion', color: 'bg-pink-500' })]);
-        const part = (el: HTMLElement, name: string) => el.querySelector(`[data-part="${name}"]`);
-        // tiles: the crop's colour strip; the chosen crop's tile is ticked and counts "1 पैकी 2 प्लॉट" (the plot chosen of the crop's plots)
-        expect(part(screen.getByTestId('pick-crop-crop-1'), 'accent')?.className).toContain('bg-purple-500');
-        expect(part(screen.getByTestId('pick-crop-crop-2'), 'accent')?.className).toContain('bg-pink-500');
-        expect(part(screen.getByTestId('pick-crop-crop-1'), 'tick')).toBeTruthy();
-        expect(part(screen.getByTestId('pick-crop-crop-2'), 'tick')).toBeNull();
-        expect(screen.getByTestId('pick-crop-crop-1')).toHaveTextContent('1 पैकी 2 प्लॉट');
-        // chips: the crop's colour dot; tapping one chooses that plot (one at a time, as before)
-        expect(part(screen.getByTestId('pick-plot-plot-1'), 'dot')?.className).toContain('bg-purple-500');
-        expect(screen.queryByTestId('pick-plot-plot-9')).toBeNull();
-        fireEvent.click(screen.getByTestId('pick-plot-plot-2'));
-        expect(screen.getByTestId('pick-plot-plot-1')).toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByTestId('pick-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
-        // the other crop: its first plot is chosen, as before, and the chips are now that crop's — it has one plot, so no chip row
-        fireEvent.click(screen.getByTestId('pick-crop-crop-2'));
-        expect(screen.getByTestId('pick-crop-crop-2')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.queryByTestId('plot-pick')).toBeNull();
-        expect(screen.getByTestId('pick-crop-crop-1')).toHaveAttribute('aria-pressed', 'false');
+        for (const id of ['plot-1', 'plot-2', 'plot-9']) expect(screen.getByTestId(`map-plot-${id}`)).toBeInTheDocument();
+        expect(text('sched-crop-plot')).toContain('· A');
+        fireEvent.click(screen.getByTestId('map-plot-plot-9'));
+        expect(text('sched-crop-plot')).toContain('· Z');
+        expect(screen.getByTestId('map-plot-plot-9')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.click(screen.getByTestId('map-plot-plot-2'));
+        expect(text('sched-crop-plot')).toContain('· B');
     });
 
-    it('one crop with one plot: no chips to choose from', () => {
+    it('one crop with one plot: the map shows that one plot; the old crop and plot chips are gone', () => {
         mount();
+        expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByTestId('crop-pick')).toBeNull();
         expect(screen.queryByTestId('plot-pick')).toBeNull();
     });
@@ -149,7 +139,7 @@ describe('honest states', () => {
         mount([crop(undefined, { activeScheduleId: null })]);
         expect(text('default-schedule-note')).toContain('हे ॲपमधलं मूळ शेड्यूल आहे. तुम्ही अजून शेड्यूल निवडलेलं नाही.');
         fireEvent.click(screen.getByTestId('default-schedule-library'));
-        expect(text('page-title')).toBe('शेड्यूल लायब्ररी');
+        expect(text('page-title')).toBe('शेड्यूल निवडा'); // lane UI-8: the library's one title (picture L2)
     });
 
     it('the schedule has ended: said plainly, and no stage says "तुम्ही इथे आहात"', () => {
@@ -253,7 +243,7 @@ describe('library + adopt', () => {
     it('its own page bar, Marathi names, the adopted schedule marked, stages with the schedule\'s own task names, ← मागे back', () => {
         mount();
         fireEvent.click(screen.getByTestId('open-library'));
-        expect(text('page-title')).toBe('शेड्यूल लायब्ररी');
+        expect(text('page-title')).toBe('शेड्यूल निवडा'); // lane UI-8: it said "शेड्यूल लायब्ररी"; the three-step screen is titled by the picture's own words
         expect(text(`library-name-${TEMPLATE_ID}`)).toBe('द्राक्ष — हंगामी शेड्यूल');
         expect(text(`library-name-${SPRAY_TEMPLATE_ID}`)).toBe('द्राक्ष — फवारणी शेड्यूल');
         expect(text(`library-${TEMPLATE_ID}`)).toContain('वापरात आहे');
@@ -276,16 +266,19 @@ describe('library + adopt', () => {
         expect(order()).toEqual([`library-name-${SPRAY_TEMPLATE_ID}`, `library-name-${TEMPLATE_ID}`]); // 30 days before 40
     });
 
-    it('adopting asks in Marathi, saves, and the page then follows the adopted schedule', () => {
+    it('lane UI-8: choosing = pick the radio row, then the big button that names the plot; it saves for THAT plot, asks nothing more, and the page follows it', () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const p = mount();
         fireEvent.click(screen.getByTestId('open-library'));
-        fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
-        expect(confirm).toHaveBeenCalledWith('द्राक्ष साठी हे शेड्यूल वापरायचं?');
+        expect(screen.getByTestId('library-confirm')).toBeDisabled(); // nothing picked yet: the button cannot be pressed
+        fireEvent.click(screen.getByTestId(`library-pick-${SPRAY_TEMPLATE_ID}`));
+        expect(text('library-confirm')).toBe('द्राक्ष · A साठी हे शेड्यूल लावा');
+        fireEvent.click(screen.getByTestId('library-confirm'));
+        expect(confirm).not.toHaveBeenCalled(); // the three steps ARE the confirmation (it asked "वापरायचं?" before)
         const saved = p.onUpdateCrops.mock.calls[0][0] as CropProfile[];
-        expect(saved[0].activeScheduleId).toBe(SPRAY_TEMPLATE_ID);
+        expect(saved[0].activeScheduleId).toBe(TEMPLATE_ID); // that plot's choice, not the crop's (it was crop-wide before)
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: REF, stageOverrides: [], expectationOverrides: [] });
-        fireEvent.click(screen.getByTestId('page-back'));
+        expect(text('page-title')).toBe('शेड्यूल'); // and the page is back on the शेड्यूल tab
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
     });
 });

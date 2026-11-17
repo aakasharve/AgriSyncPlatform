@@ -204,3 +204,20 @@ export function applyEditorChoice(crops: readonly CropProfile[], choice: EditorC
         }),
     });
 }
+
+/**
+ * spec: plr-d10 lane UI-8 (founder D-150, picture L2) - the library's three steps end on ONE named plot ("<plot> साठी हे शेड्यूल लावा"), so the
+ * choice is that PLOT's alone, exactly as the editor's save is (the plot's own mark, the crop's schedule and its other plots untouched) - but it
+ * names no day 0: the plot keeps the one it has (the server keeps its own, the same as the library's old adopt sent none). Returns the crop list
+ * unchanged when the choice names nothing real.
+ */
+export function adoptForPlot(crops: readonly CropProfile[], cropId: string, plotId: string, templateId: string, todayKey: string): CropProfile[] {
+    const crop = crops.find(c => c.id === cropId);
+    const plot = crop?.plots.find(p => p.id === plotId);
+    const template = getScheduleById(templateId);
+    if (!crop || !plot || !template) return [...crops];
+    return crops.map(c => c.id !== crop.id ? c : {
+        ...c,
+        plots: c.plots.map(p => (p.id !== plot.id ? p : { ...p, schedule: writeBack(p, switchTo(c, p, template, todayKey), true) })),
+    });
+}

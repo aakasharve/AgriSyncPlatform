@@ -7,7 +7,8 @@
  *
  * The library offers a plot only what it may follow: for a crop with NO checked schedule the sample is listed, choosable, and marked
  * with its line; for a crop WITH one the sample is not listed at all (no disabled card) and the checked one can be chosen; the
- * farm's own schedules (Team / Private) stay hidden until SCH-OWN opens that branch; another crop's samples stay.
+ * farm's own schedules (Team / Private) stay hidden until SCH-OWN opens that branch; another crop's samples stay (in what the library OFFERS;
+ * lane UI-8: the screen's step 2 lists the chosen plot's crop only, so another crop's sample is listed when THAT crop is the chosen one).
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -64,7 +65,8 @@ describe('the library offers a plot only what it may follow (L8b-1F, F114)', () 
         expect(screen.getByTestId(`library-check-${GRAPE_SAMPLE}`)).toHaveAttribute('data-check-state', 'NotChecked');
         expect(screen.getByTestId(`library-sample-line-${GRAPE_SAMPLE}`)).toHaveTextContent(SC.sampleWillHide('द्राक्ष'));
         expect(SC.sampleWillHide('द्राक्ष')).toBe('द्राक्षसाठी पहिलं तपासलेलं शेड्यूल आलं की नवीन निवडीसाठी हे दिसणार नाही. आधीपासून पाळत असाल तर तसंच राहील.');
-        fireEvent.click(screen.getByTestId(`library-adopt-${GRAPE_SAMPLE}`));
+        fireEvent.click(screen.getByTestId(`library-pick-${GRAPE_SAMPLE}`)); // lane UI-8: pick the row, then the one big button
+        fireEvent.click(screen.getByTestId('library-confirm'));
         expect(onAdopt).toHaveBeenCalledWith(GRAPE_SAMPLE);
     });
 
@@ -76,10 +78,15 @@ describe('the library offers a plot only what it may follow (L8b-1F, F114)', () 
         expect(screen.queryByTestId(`library-${GRAPE_SAMPLE}`)).toBeNull();
         expect(screen.getByTestId(`library-check-${CHECKED}`)).toHaveAttribute('data-check-state', 'Checked');
         expect(screen.queryByTestId(`library-sample-line-${CHECKED}`)).toBeNull();
-        fireEvent.click(screen.getByTestId(`library-adopt-${CHECKED}`));
+        fireEvent.click(screen.getByTestId(`library-pick-${CHECKED}`));
+        fireEvent.click(screen.getByTestId('library-confirm'));
         expect(onAdopt).toHaveBeenCalledWith(CHECKED);
-        // Another crop's sample stays.
+        // Another crop's sample stays in what the library offers; step 2 lists the chosen crop's schedules only, and the other crop's when it is chosen.
+        expect(screen.queryByTestId(`library-${POMEGRANATE_SAMPLE}`)).toBeNull();
+        cleanup();
+        render(<ScheduleLibraryView crop={pomegranate} allCrops={[grapes, pomegranate]} onAdopt={onAdopt} />);
         expect(screen.getByTestId(`library-${POMEGRANATE_SAMPLE}`)).toBeInTheDocument();
+        expect(screen.queryByTestId(`library-${CHECKED}`)).toBeNull();
     });
 
     it('the farm\'s own schedules stay hidden until SCH-OWN, whatever they are named', () => {

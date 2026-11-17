@@ -7,13 +7,16 @@
  * One page bar with one big "← मागे" (goBackOr).
  *
  * Every feature of the old English page is kept and reachable from here:
- *   crop / plot pick ............ the chips under the page bar (shown when there is a choice)
+ *   crop / plot pick ............ the PICTURE MAP under the page bar (lane UI-8, founder D-150 picture S3): every plot with its crop's photo on the
+ *                                 left, the schedules they follow on the right, a coloured line from each plot to its schedule; plots that follow
+ *                                 none sit in a dashed "शेड्यूल नाही" group with "शेड्यूल निवडा"
  *   where you are ............... PlotScheduleHome (day N of total, stage line, filled bar, every stage)
- *   owner badge + lineage ....... on the dark card ("कोणी बनवलं")
- *   'N days behind' banner ...... under the card
+ *   owner badge + lineage ....... the white OWNER BAR under the map (lane UI-8, D-148 layout C: the maker's picture place, real name, schedule name)
+ *   'N days behind' banner ...... under the numbers
  *   today's tasks ............... the आज list (plus आधी राहिलेलं काम and tomorrow)
  *   last spray / irrigation, the risk card, today's spend → MoneyLens, Close Day ... "आजचं आणि बाकीचं"
- *   library + adopt ............. "शेड्यूल लायब्ररी" (its own page bar, ← मागे returns here)
+ *   library + choose ............ "शेड्यूल निवडा": three numbered steps (plot, schedule, one big button that names the plot) and "नवीन शेड्यूल बनवा"
+ *                                 (its own page bar, ← मागे returns here)
  *   schedule editor ............. "शेड्यूल बदला" (ScheduleMaker: plot, schedule, day-0 date — what takes effect)
  *   the day grid ................ "दिवसवार तक्ता" (SchedulerTimeline)
  * Tapping a day anywhere (strip, past day, owed line, grid) opens that day's sheet (it used to console.log).
@@ -26,10 +29,11 @@ import { computeDayState, getTaskCompletion } from '../shared/utils/dayState';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { GlassCard, PageBar, SANS, Tap } from '../shared/components/ui/placeUi';
-import CropPlotPicker from '../features/context/components/CropPlotPicker';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import ScheduleMaker from '../features/scheduler/components/ScheduleMaker';
-import ScheduleLibraryView, { libraryTemplates } from '../features/scheduler/components/ScheduleLibraryView';
+import ScheduleLibraryView, { libraryTemplates, type LibraryPlotOption } from '../features/scheduler/components/ScheduleLibraryView';
+import { SchedulePictureMap } from '../features/scheduler/schedulePage/SchedulePictureMap';
+import { buildScheduleMap } from '../features/scheduler/schedulePage/scheduleMapModel';
 import { followedCheckNote } from '../features/scheduler/schedulePage/followedCheck';
 import { scheduleCropCode } from '../infrastructure/reference/TemplateCatalog';
 import { PlotScheduleHome } from '../features/scheduler/schedulePage/PlotScheduleHome';
@@ -38,7 +42,7 @@ import { ScheduleTools } from '../features/scheduler/schedulePage/ScheduleTools'
 import { ScheduleFold } from '../features/scheduler/schedulePage/ScheduleFold';
 import { SC } from '../features/scheduler/schedulePage/scheduleCopy';
 import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedulePage/scheduleModel';
-import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
+import { adoptForPlot, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
 import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
 import { usePlotScheduleChoices } from '../features/scheduler/schedulePage/usePlotScheduleChoices';
 import { saveScheduleAbandon, saveScheduleChoice, type ScheduleChoiceTarget } from '../features/scheduler/schedulePage/saveScheduleChoice';
@@ -111,8 +115,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     };
 
     useEffect(() => {
-        // First crop and its first plot, as before — and again if the chosen crop is no longer there.
-        if (crops.length > 0 && !crops.some(c => c.id === cropId)) pick(crops[0].id);
+        // First crop and its first plot, as before — and again if the chosen crop is no longer there. UI-8: the first crop that HAS a plot
+        // (the picture map only draws plots, so a crop without one cannot be tapped); with none anywhere the page says so.
+        if (crops.length > 0 && !crops.some(c => c.id === cropId)) pick((crops.find(c => c.plots.length > 0) ?? crops[0]).id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cropId, crops]);
 
@@ -178,13 +183,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const makeOwn = mayMakeOwnSchedule === true && !!onMakeOwnSchedule;
     const openMaker = () => { if (onMakeOwnSchedule && cropId) onMakeOwnSchedule(cropId); };
 
-    const handleAdopt = (templateId: string) => {
-        if (!crop) return;
-        const ok = typeof window !== 'undefined' ? window.confirm(SC.adoptConfirm(cropNameIn(crop.name, 'mr', crop.masterId))) : true;
-        if (!ok) return;
-        saveCrops(adoptForCrop(crops, crop.id, templateId, todayKey));
-        // The library's adopt = every plot of the crop (founder C2); saved on the server, nothing on the screen moves (D-32).
-        sendChoice(crop.plots.map(p => ({ plotId: p.id, templateId })));
+    // Lane UI-8 (founder D-150, picture L2): the library's three steps end on the big button that NAMES one plot ("<plot> साठी हे शेड्यूल लावा"), so
+    // the choice is that plot's alone (the same save as the editor's, `adoptForPlot`; the step IS the confirmation, no extra question) and the
+    // page comes back on that plot. It was crop-wide (founder C2) behind a "वापरायचं?" question; a button that names one plot must not change the others.
+    const handleChoose = (templateId: string) => {
+        if (!crop || !plot) return;
+        saveCrops(adoptForPlot(crops, crop.id, plot.id, templateId, todayKey));
+        sendChoice([{ plotId: plot.id, templateId }]);
+        setLibraryMode('crop');
+        setView('HOME');
     };
 
     // spec: plr-d10 lane L8b-2 - the choice is queued for the server and kept here at once. A plot the server cannot be told
@@ -232,17 +239,18 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         setView('HOME');
     };
 
-    // Lane UI-7 (founder D-150) — the crop and plot choice is THE shared picker: crop photo tiles, then the chosen crop's plot chips, each in the
-    // crop's own colour. The page keeps its own model (one crop, one plot; `pick` sets the crop's first plot) and its rule that a row is drawn
-    // only when there is something to choose; the library asks for the crop only.
-    const pickerIds = { cropRow: 'crop-pick', plotRow: 'plot-pick', crop: (key: string) => `pick-crop-${key}`, plot: (id: string) => `pick-plot-${id}` };
-    const cropChips = crops.length > 1 && (
-        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pick} onTogglePlot={() => undefined}
-            hidePlots choiceOnly cropQuestion={SC.cropPick} testIds={pickerIds} />
-    );
-    const placePicker = (crops.length > 1 || (crop?.plots.length ?? 0) > 1) && (
-        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pick} onTogglePlot={(_cropId, id) => setPlotId(id)}
-            choiceOnly cropQuestion={SC.cropPick} plotQuestion={SC.plotPick} testIds={pickerIds} />
+    // Lane UI-8 (founder D-150, picture S3) — the crop and plot choice of the HOME view is the picture map (every plot of every crop, with its crop's
+    // photo and the schedule it follows, joined by a coloured line); tapping a plot chooses it. The page keeps its own model (one crop, one plot).
+    // The library's step 1 asks for the plot with the same pieces (the shared plot chip).
+    const mapModel = useMemo(() => buildScheduleMap({ crops, choices, todayKey, cropName: c => cropNameIn(c.name, language, c.masterId) }), [crops, choices, todayKey, language]);
+    const mapLanguage = language === 'en' ? 'en' : 'mr';
+    const libraryPlots = useMemo<LibraryPlotOption[]>(() => crops.flatMap(c => c.plots.map(p => ({
+        id: p.id, name: p.name, cropId: c.id, cropName: cropNameIn(c.name, language, c.masterId), cropRawName: c.name, iconName: c.iconName, masterId: c.masterId, color: c.color,
+    }))), [crops, language]);
+    const choosePlot = (nextCropId: string, nextPlotId: string) => { setCropId(nextCropId); setPlotId(nextPlotId); };
+    const chooseForPlot = (nextCropId: string, nextPlotId: string) => { choosePlot(nextCropId, nextPlotId); setLibraryMode('crop'); setView('LIBRARY'); };
+    const placeMap = crops.length > 0 && (mapModel.plots.length > 0 || mapModel.unscheduled.length > 0 || mapModel.emptyCrops.length > 0) && (
+        <SchedulePictureMap model={mapModel} selectedPlotId={plotId} onPickPlot={choosePlot} onChooseSchedule={chooseForPlot} language={mapLanguage} />
     );
 
     const shell = (title: string, back: (() => void) | undefined, body: React.ReactNode) => (
@@ -272,13 +280,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
 
     if (view === 'LIBRARY') {
         const adding = libraryMode === 'add' && !!plot;
-        return shell(adding ? words.libraryTitle : SC.library, () => { setView('HOME'); setLibraryMode('crop'); }, (
+        // UI-8 (picture L2): one title for the three steps ("शेड्यूल निवडा"); the plot is step 1, so the old crop chips are gone from here.
+        return shell(words.libraryTitle, () => { setView('HOME'); setLibraryMode('crop'); }, (
             <>
-                {!adding && cropChips}
                 {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
-                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={(plot && choices.get(plot.id)?.templateId) || crop?.activeScheduleId || null}
-                    onAdopt={adding ? followToo : handleAdopt}
-                    plotAdd={adding ? { followedTemplateIds: followedIds, full: outsideFull, words: { follow: (resolved?.followed.length ?? 0) === 0 ? words.firstChoice : words.follow, fullWhy: words.fullButtonWhy, alreadyFollowed: words.alreadyFollowed, title: words.libraryTitle } } : undefined} />
+                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={resolved && resolved.source !== 'default' ? resolved.template.id : null}
+                    onAdopt={adding ? followToo : handleChoose}
+                    plots={libraryPlots} plotId={plotId} onPickPlot={choosePlot} onMakeOwn={makeOwn ? openMaker : undefined} language={mapLanguage}
+                    plotAdd={adding ? { followedTemplateIds: followedIds, full: outsideFull, followsNone: (resolved?.followed.length ?? 0) === 0, words: { follow: (resolved?.followed.length ?? 0) === 0 ? words.firstChoice : words.follow, fullWhy: words.fullButtonWhy, alreadyFollowed: words.alreadyFollowed, title: words.libraryTitle } } : undefined} />
             </>
         ));
     }
@@ -321,7 +330,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     return shell(SC.title, onBack, (
         <>
             {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
-            {placePicker}
+            {placeMap}
             {crop && !plot && <GlassCard testId="sched-no-plot"><p className="m-0 text-[17px] font-black text-stone-900">{SC.noPlots}</p></GlassCard>}
             {crop && plot && !resolved && (
                 <GlassCard testId="sched-no-schedule">
