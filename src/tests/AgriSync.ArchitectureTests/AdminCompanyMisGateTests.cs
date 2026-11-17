@@ -341,5 +341,9 @@ public sealed class AdminCompanyMisGateTests
 
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 }

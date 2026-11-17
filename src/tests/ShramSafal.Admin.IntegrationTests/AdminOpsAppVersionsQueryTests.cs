@@ -1,10 +1,10 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Analytics;   // AnalyticsDbContext lives here
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 
 namespace ShramSafal.Admin.IntegrationTests;
@@ -401,7 +401,7 @@ public sealed class AdminOpsAppVersionsQueryTests(AdminTestFixture fixture) : IA
 
         IAdminOpsRepository repository = new AdminOpsRepository(
             scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>(),
-            scope.ServiceProvider.GetRequiredService<ILogger<AdminOpsRepository>>());
+            CompanyMisExclusions.None);
 
         return await question(repository);
     }

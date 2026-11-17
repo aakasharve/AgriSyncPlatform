@@ -9,6 +9,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 using Xunit;
@@ -274,7 +275,8 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static AdminMisRepository Repository(IServiceProvider sp) =>
-        new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
+        new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<CompanyMisExclusions>(),
+            sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     private static async Task<FarmsListDto> FarmsAsync(ServiceProvider provider, int page, int pageSize, string? search)
     {
