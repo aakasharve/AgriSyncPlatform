@@ -3,6 +3,7 @@ import { QrCode, ShieldCheck, UserCheck, Sprout } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
+import PhoneDigitBoxes from '../shared/components/PhoneDigitBoxes';
 import PasswordField from '../features/auth/components/PasswordField';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { APP_VERSION } from '../buildInfo';
@@ -245,20 +246,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                         <label htmlFor="auth-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
                             {c.password.phone}
                         </label>
-                        <input
+                        <PhoneDigitBoxes
                             id="auth-phone"
-                            type="tel"
-                            autoComplete="username"
+                            language={language}
+                            placeholder="9876543210"
                             value={phone}
-                            onChange={(e) => {
-                                setPhone(e.target.value);
+                            disabled={isLoading}
+                            onChange={(next) => {
+                                setPhone(next);
                                 if (authError) {
                                     clearAuthError();
                                 }
                             }}
-                            placeholder="9876543210"
-                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:border-emerald-400 focus:ring-emerald-200/60"
-                            disabled={isLoading}
                         />
                     </div>
 

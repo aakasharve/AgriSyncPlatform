@@ -34,6 +34,7 @@ import { joinByCodeCopy } from '../features/onboarding/components/joinByCodeCopy
 import { joinLandingCopy, otpVerifyProblem, type JoinProblem } from '../features/onboarding/qr/joinLandingCopy';
 import { waitingSeatKind } from '../features/onboarding/components/PendingJoinRequests';
 import { useLanguage } from '../i18n/LanguageContext';
+import PhoneDigitBoxes from '../shared/components/PhoneDigitBoxes';
 // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
 // skip consent entirely: this page sent the number (startOtp) and verified it with no
 // consent anywhere. The tick now sits on the phone step and is recorded before the send.
@@ -525,23 +526,18 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             </div>
                         </label>
 
-                        <div className="mt-5 flex items-stretch rounded-2xl border-2 border-stone-200 bg-stone-50 focus-within:border-emerald-400 focus-within:bg-white">
-                            <div className="flex items-center px-3 text-base font-bold text-stone-500">
-                                +91
-                            </div>
-                            <input
+                        <div className="mt-5">
+                            <PhoneDigitBoxes
                                 id="join-phone"
-                                type="tel"
-                                inputMode="numeric"
-                                autoComplete="tel"
+                                large
                                 autoFocus
-                                value={phone}
-                                onChange={e => {
-                                    setError(null);
-                                    setPhone(normalizePhone(e.target.value));
-                                }}
+                                language={language}
                                 placeholder="9876543210"
-                                className="w-full bg-transparent py-3 pr-4 text-center font-mono text-2xl font-black tracking-[0.25em] text-stone-900 outline-none placeholder:text-stone-300"
+                                value={phone}
+                                onChange={next => {
+                                    setError(null);
+                                    setPhone(normalizePhone(next));
+                                }}
                             />
                         </div>
 
