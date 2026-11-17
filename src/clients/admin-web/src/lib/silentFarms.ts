@@ -1,3 +1,4 @@
+import { AdminModuleForbiddenError } from '@/lib/adminErrors';
 import type { SilentBand, SilentFarm, SilentNotMeasuredReason } from '@/hooks/useFarms';
 
 /** The bands in the order the server sorts them, with their plain names. */
@@ -12,26 +13,42 @@ export const NO_PLAN_LABEL = 'No plan recorded';
 
 const PLAN_STATUS_WORDS: Record<number, string> = {
   1: 'Trial',
-  2: 'Active',
-  3: 'Past due',
+  2: 'Paid, active',
+  3: 'Paid, payment overdue',
   4: 'Expired',
   5: 'Cancelled',
   6: 'Suspended',
 };
 
-/** The plan in plain words. Both plan fields null is "No plan recorded", never "Trial". */
+export const FREE_PLAN_LABEL = 'Free plan';
+
+/**
+ * The plan in plain words, never the raw code. Plan code `free` is "Free plan";
+ * otherwise the status word. Nothing recorded (or a status this console does not
+ * know) is "No plan recorded", never "Trial".
+ */
 export function planWords(f: Pick<SilentFarm, 'planCode' | 'planStatus'>): string {
-  const status = f.planStatus === null ? null : (PLAN_STATUS_WORDS[f.planStatus] ?? null);
-  if (status && f.planCode) return `${f.planCode}, ${status}`;
-  if (status) return status;
-  if (f.planCode) return f.planCode;
+  if (f.planCode !== null && f.planCode.trim().toLowerCase() === 'free') return FREE_PLAN_LABEL;
+  if (f.planStatus !== null) {
+    const status = PLAN_STATUS_WORDS[f.planStatus];
+    if (status) return status;
+  }
   return NO_PLAN_LABEL;
 }
 
-/** The group a farm falls in when grouped by plan: its status word, or no plan. */
+/** The group a farm falls in when grouped by plan: the same plain words. */
 export function planGroup(f: Pick<SilentFarm, 'planCode' | 'planStatus'>): string {
-  if (f.planStatus === null && !f.planCode) return NO_PLAN_LABEL;
   return planWords(f);
+}
+
+/** True for a 403 from the server, typed (`AdminModuleForbiddenError`) or raw. */
+export function isForbiddenError(error: unknown): boolean {
+  if (error instanceof AdminModuleForbiddenError) return true;
+  if (typeof error === 'object' && error !== null) {
+    const status = (error as { response?: { status?: unknown } }).response?.status;
+    return status === 403;
+  }
+  return false;
 }
 
 export function notMeasuredWords(reason: SilentNotMeasuredReason | string): string {
@@ -45,6 +62,7 @@ export function notMeasuredWords(reason: SilentNotMeasuredReason | string): stri
   }
 }
 
-export function daysSilentWords(f: Pick<SilentFarm, 'daysSilent'>): string {
-  return f.daysSilent === null ? 'Never saved an entry' : `${f.daysSilent} ${f.daysSilent === 1 ? 'day' : 'days'}`;
+export function daysSilentWords(f: Pick<SilentFarm, 'daysSilent' | 'band'>): string {
+  if (f.daysSilent === null) return f.band === 'never' ? 'Never saved an entry' : 'not measured';
+  return `${f.daysSilent} ${f.daysSilent === 1 ? 'day' : 'days'}`;
 }

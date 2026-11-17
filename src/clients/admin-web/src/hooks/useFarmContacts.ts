@@ -36,8 +36,20 @@ const MAX_IDS_PER_CALL = 200;
  * The Map is keyed by the lower-case farm id.
  */
 export function useFarmContacts(ids: string[]): Map<string, FarmContact> {
+  return useFarmContactsState(ids).contacts;
+}
+
+export interface FarmContactsState {
+  contacts: Map<string, FarmContact>;
+  /** True when a request for these ids failed and has not since been answered. */
+  failed: boolean;
+}
+
+/** Same as `useFarmContacts`, plus whether a request failed (so "not fetched" is honest). */
+export function useFarmContactsState(ids: string[]): FarmContactsState {
   const org = useOrgKey();
   const [contacts, setContacts] = useState<Map<string, FarmContact>>(() => new Map());
+  const [failed, setFailed] = useState(false);
   const asked = useRef<Set<string>>(new Set());
   const orgRef = useRef(org);
   const mounted = useRef(true);
@@ -60,6 +72,7 @@ export function useFarmContacts(ids: string[]): Map<string, FarmContact> {
       orgRef.current = org;
       asked.current = new Set();
       setContacts(new Map());
+      setFailed(false);
     }
     if (!wantedKey) return;
     const fresh = wantedKey.split(',').filter((id) => !asked.current.has(id));
@@ -73,6 +86,7 @@ export function useFarmContacts(ids: string[]): Map<string, FarmContact> {
         .get<FarmContactItem[]>('/shramsafal/admin/farms/contacts', { params: { ids: batch.join(',') } })
         .then(({ data }) => {
           if (!mounted.current || orgRef.current !== sessionOrg || !Array.isArray(data)) return;
+          setFailed(false);
           setContacts((prev) => {
             const next = new Map(prev);
             for (const c of data) {
@@ -85,9 +99,10 @@ export function useFarmContacts(ids: string[]): Map<string, FarmContact> {
           /* Not an empty answer: these ids stay unnamed and are asked about again
              if the id list changes. The page keeps showing the short id. */
           for (const id of batch) asked.current.delete(id);
+          if (mounted.current && orgRef.current === sessionOrg) setFailed(true);
         });
     }
   }, [wantedKey, org]);
 
-  return contacts;
+  return { contacts, failed };
 }

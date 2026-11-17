@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { LoadingState, MetricLines, NotBuiltYet, NotMeasuredPanel } from '@/components/state';
+import { LoadingState, MetricLines, NotBuiltYet } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { PersonName } from '@/components/ui/PersonName';
 import { notMeasuredWords } from '@/lib/silentFarms';
-import { useShouldCallToday } from '@/hooks/useShouldCallToday';
+import { useShouldCallToday, type HalfState } from '@/hooks/useShouldCallToday';
 
 /**
  * HOME (`/home`): the farms a person should call today (H9) and one idea (H8).
@@ -20,49 +20,50 @@ import { useShouldCallToday } from '@/hooks/useShouldCallToday';
  * The lockup at the top is unchanged (brand contract: the halo sits under the
  * mark and behind no text).
  */
+const CALL_RULE_LINE = 'Quiet for 7 to 29 days, or 3 or more problems in the last 7 days.';
+
+function halfNote(
+  half: 'silent' | 'problems',
+  state: HalfState,
+  notMeasuredReason: string | null,
+): string | null {
+  const quiet = half === 'silent';
+  const what = quiet ? 'quiet farms' : 'farms with repeated problems';
+  switch (state) {
+    case 'ready':
+      return null;
+    case 'loading':
+      return `Still loading the ${what}.`;
+    case 'restricted':
+      return `Your role cannot read the ${what} list, so ${what} are not shown.`;
+    case 'forbidden':
+      return `The ${what} list is not available for this account, so ${what} are not shown.`;
+    case 'failed':
+      return `Could not load the ${what} list, so ${what} are not shown. This is not an empty list.`;
+    case 'not-measured':
+      return `Quiet farms could not be counted. ${notMeasuredWords(notMeasuredReason ?? '')}`;
+  }
+}
+
 function CallList() {
-  const { rows, state, notMeasuredReason, churn, suffering } = useShouldCallToday();
+  const { rows, silentState, problemsState, notMeasuredReason, churn, suffering } =
+    useShouldCallToday();
+
+  const notes = [
+    { half: 'silent' as const, state: silentState },
+    { half: 'problems' as const, state: problemsState },
+  ]
+    .map((n) => ({ ...n, text: halfNote(n.half, n.state, notMeasuredReason) }))
+    .filter((n): n is typeof n & { text: string } => n.text !== null);
+
+  const canRetry = silentState === 'failed' || problemsState === 'failed';
+  const bothReady = silentState === 'ready' && problemsState === 'ready';
+  const anyLoading = silentState === 'loading' || problemsState === 'loading';
 
   let body: ReactNode;
-  if (state === 'restricted') {
-    body = (
-      <NotMeasuredPanel
-        title="Call list not available"
-        why="Your role cannot read both the silent farms and the repeated-problems lists, so no call list is shown."
-      />
-    );
-  } else if (state === 'failed') {
-    body = (
-      <div role="alert" data-state="load-failed" className="rounded-panel bg-tint-red px-5 py-4">
-        <p className="text-h3 font-semibold text-text-1">Could not load the call list.</p>
-        <p className="mt-1 text-body text-text-2">
-          One of the two lists did not answer. Nothing is shown because nothing was received. This
-          is not an empty list.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          onClick={() => {
-            if (churn.isError) void churn.refetch();
-            if (suffering.isError) void suffering.refetch();
-          }}
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  } else if (state === 'loading') {
+  if (rows.length === 0 && anyLoading) {
     body = <LoadingState label="Loading the call list…" height={120} />;
-  } else if (state === 'not-measured') {
-    body = (
-      <NotMeasuredPanel
-        title="Silent farms not counted"
-        why={notMeasuredWords(notMeasuredReason ?? '')}
-      />
-    );
-  } else if (rows.length === 0) {
+  } else if (rows.length === 0 && bothReady) {
     body = (
       <p data-state="no-call-today" className="text-body text-text-1">
         No farm to call today.
@@ -70,19 +71,52 @@ function CallList() {
     );
   } else {
     body = (
-      <ul className="flex flex-col divide-y divide-border">
-        {rows.map((r) => (
-          <li key={r.farmId} data-farm-id={r.farmId} className="flex flex-col gap-0.5 py-2">
-            <span className="text-body font-semibold text-text-1">
-              <PersonName name={r.name ?? ''} fallback={`${r.farmId.slice(0, 8)}…`} />
-            </span>
-            <span className="text-body text-text-2">{r.ownerPhone ?? 'Phone not recorded'}</span>
-            <span className="text-caption text-text-3">
-              {r.reasons.map((x) => x.label).join('; ')}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <>
+        {notes.length > 0 && (
+          <div
+            role={canRetry ? 'alert' : 'status'}
+            data-state={canRetry ? 'load-failed' : 'half-not-shown'}
+            className="mb-3 rounded-panel bg-tint-red px-4 py-3"
+          >
+            {notes.map((n) => (
+              <p key={n.half} data-half={n.half} className="text-body text-text-2">
+                {n.text}
+              </p>
+            ))}
+            {canRetry && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  if (silentState === 'failed') void churn.refetch();
+                  if (problemsState === 'failed') void suffering.refetch();
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </div>
+        )}
+        {rows.length > 0 && (
+          <ul className="flex flex-col divide-y divide-border">
+            {rows.map((r) => (
+              <li key={r.farmId} data-farm-id={r.farmId} className="flex flex-col gap-0.5 py-2">
+                <span className="text-body font-semibold text-text-1">
+                  <PersonName name={r.name ?? ''} fallback={`${r.farmId.slice(0, 8)}…`} />
+                </span>
+                <span className="text-body text-text-2">
+                  {r.ownerPhone ?? (r.phoneKnown ? 'Phone not recorded' : 'Phone not fetched')}
+                </span>
+                <span className="text-caption text-text-3">
+                  {r.reasons.map((x) => x.label).join('; ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
     );
   }
 
@@ -93,7 +127,10 @@ function CallList() {
       className="rounded-panel bg-tint-grey px-5 py-4 text-left"
     >
       <h3 className="text-h3 font-semibold text-text-1">Farms a person should call today</h3>
-      <MetricLines metric="home-call-list" className="mt-1 mb-3" />
+      <MetricLines metric="home-call-list" className="mt-1" />
+      <p data-testid="home-call-rule" className="mt-1 mb-3 text-caption text-text-3">
+        {CALL_RULE_LINE}
+      </p>
       {body}
     </section>
   );

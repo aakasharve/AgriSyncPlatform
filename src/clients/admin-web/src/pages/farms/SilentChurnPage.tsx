@@ -11,6 +11,7 @@ import {
   NO_PLAN_LABEL,
   SILENT_BANDS,
   daysSilentWords,
+  isForbiddenError,
   notMeasuredWords,
   planGroup,
   planWords,
@@ -110,13 +111,17 @@ export default function SilentChurnPage() {
       ) : isError ? (
         <div role="alert" data-state="load-failed" className="rounded-panel bg-tint-red px-5 py-4">
           <p className="text-h3 font-semibold text-text-1">Could not load the silent farms.</p>
-          <p className="mt-1 text-body text-text-2">{formatError(error)}</p>
+          <p className="mt-1 text-body text-text-2">
+            {isForbiddenError(error) ? 'Not available for this account.' : formatError(error)}
+          </p>
           <p className="mt-1 text-body text-text-2">
             Nothing is shown because nothing was received. This is not an empty list.
           </p>
-          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
-            Retry
-          </Button>
+          {!isForbiddenError(error) && (
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          )}
         </div>
       ) : reason ? (
         <NotMeasuredPanel title="Silent farms not counted" why={notMeasuredWords(reason)} />

@@ -1,24 +1,23 @@
 import { useMemo } from 'react';
 import { ModuleKeys } from '@/lib/moduleKeys';
+import { isForbiddenError } from '@/lib/silentFarms';
 import { useAdminScope } from './useAdminScope';
-import { useFarmContacts } from './useFarmContacts';
+import { useFarmContactsState } from './useFarmContacts';
 import { useSilentChurn, useSuffering, type SilentFarm, type SufferingItem } from './useFarms';
 
 /**
- * FARMS A PERSON SHOULD CALL TODAY (Home, H9; CR-2e C26/C27).
+ * FARMS A PERSON SHOULD CALL TODAY (Home, H9; CR-2e C26/C27/C28).
  *
- * Two real answers, merged by farm id:
- *   - silent farms in the bands 7-13 and 14-29 days (names and phones from the
- *     silent-churn answer), and
- *   - farms with repeated problems in the last 7 days (the Suffering list; its
- *     names and phones come from `useFarmContacts`, asked only for farms that
- *     are not already named by the silent answer).
+ * Two real answers (halves), merged by farm id:
+ *   - silent farms in the bands 7-13 and 14-29 days, and
+ *   - farms with repeated problems in the last 7 days (the Suffering list).
  *
- * Each row says why it is listed. A farm on both lists is one row with both
- * reasons. Farms silent 30+ days or never are not on this list.
+ * Every row takes its name and phone from the silent answer when that answer
+ * names the farm (any band). Only a farm the silent answer does not name is
+ * looked up in `useFarmContacts`; until that answers, its phone is "not fetched".
  *
- * The list is "empty" only when BOTH answers are real and empty. A failed,
- * loading, not-measured or not-permitted answer is its own state, never "nobody".
+ * Each half has its own state. A half that is not counted never hides the other
+ * half's real rows. The list is "empty" only when BOTH halves are real and empty.
  */
 
 export interface CallReason {
@@ -29,23 +28,37 @@ export interface CallReason {
 
 export interface CallRow {
   farmId: string;
-  /** Null while a Suffering-only farm's name has not been fetched (or is unknown). */
+  /** Null while a farm's name has not been fetched (or is unknown). */
   name: string | null;
   ownerPhone: string | null;
+  /** False while the phone is still being fetched or its fetch failed. A real null is true. */
+  phoneKnown: boolean;
   daysSilent: number | null;
   reasons: CallReason[];
 }
 
-export type CallListState = 'loading' | 'failed' | 'not-measured' | 'restricted' | 'ready';
+export type HalfState =
+  | 'loading'
+  | 'failed'
+  | 'not-measured'
+  | 'restricted'
+  | 'forbidden'
+  | 'ready';
 
 const CALL_BANDS = new Set(['7-13', '14-29']);
+
+export interface ContactLookup {
+  get(key: string): { name: string; ownerPhone: string | null } | undefined;
+}
 
 export function mergeCallList(
   silent: SilentFarm[],
   suffering: SufferingItem[],
-  contacts: Map<string, { name: string; ownerPhone: string | null }>,
+  contacts: ContactLookup,
 ): CallRow[] {
   const byFarm = new Map<string, CallRow>();
+  const silentById = new Map<string, SilentFarm>();
+  for (const f of silent) silentById.set(f.farmId.toLowerCase(), f);
 
   for (const f of silent) {
     if (!CALL_BANDS.has(f.band)) continue;
@@ -53,11 +66,15 @@ export function mergeCallList(
       farmId: f.farmId,
       name: f.name,
       ownerPhone: f.ownerPhone,
+      phoneKnown: true,
       daysSilent: f.daysSilent,
       reasons: [
         {
           kind: 'silent',
-          label: `Gone quiet ${f.daysSilent ?? 0} ${f.daysSilent === 1 ? 'day' : 'days'}`,
+          label:
+            f.daysSilent === null
+              ? 'Gone quiet, days not measured'
+              : `Gone quiet ${f.daysSilent} ${f.daysSilent === 1 ? 'day' : 'days'}`,
         },
       ],
     });
@@ -71,11 +88,24 @@ export function mergeCallList(
       existing.reasons.push(reason);
       continue;
     }
+    const named = silentById.get(key);
+    if (named) {
+      byFarm.set(key, {
+        farmId: s.farmId,
+        name: named.name,
+        ownerPhone: named.ownerPhone,
+        phoneKnown: true,
+        daysSilent: named.daysSilent,
+        reasons: [reason],
+      });
+      continue;
+    }
     const contact = contacts.get(key);
     byFarm.set(key, {
       farmId: s.farmId,
       name: contact?.name ?? null,
       ownerPhone: contact?.ownerPhone ?? null,
+      phoneKnown: contact !== undefined,
       daysSilent: null,
       reasons: [reason],
     });
@@ -99,6 +129,8 @@ export function useShouldCallToday() {
   const suffering = useSuffering({ enabled: mayReadSuffering });
   const churn = useSilentChurn({ enabled: mayReadChurn });
 
+  const notMeasuredReason = churn.data?.data.notMeasuredReason ?? null;
+
   const silentFarms = useMemo(() => churn.data?.data.farms ?? [], [churn.data]);
   const sufferingItems = useMemo(() => suffering.data?.data ?? [], [suffering.data]);
 
@@ -106,21 +138,46 @@ export function useShouldCallToday() {
     const named = new Set(silentFarms.map((f) => f.farmId.toLowerCase()));
     return sufferingItems.map((s) => s.farmId).filter((id) => !named.has(id.toLowerCase()));
   }, [silentFarms, sufferingItems]);
-  const contacts = useFarmContacts(unnamedIds);
+  const { contacts, failed: contactsFailed } = useFarmContactsState(unnamedIds);
 
-  const notMeasuredReason = churn.data?.data.notMeasuredReason ?? null;
+  const silentState: HalfState = !mayReadChurn
+    ? 'restricted'
+    : churn.isError
+      ? isForbiddenError(churn.error)
+        ? 'forbidden'
+        : 'failed'
+      : churn.isLoading
+        ? 'loading'
+        : notMeasuredReason
+          ? 'not-measured'
+          : 'ready';
+  const problemsState: HalfState = !mayReadSuffering
+    ? 'restricted'
+    : suffering.isError
+      ? isForbiddenError(suffering.error)
+        ? 'forbidden'
+        : 'failed'
+      : suffering.isLoading
+        ? 'loading'
+        : 'ready';
 
   const rows = useMemo(
-    () => mergeCallList(notMeasuredReason ? [] : silentFarms, sufferingItems, contacts),
-    [silentFarms, sufferingItems, contacts, notMeasuredReason],
+    () =>
+      mergeCallList(
+        silentState === 'ready' ? silentFarms : [],
+        problemsState === 'ready' ? sufferingItems : [],
+        contacts,
+      ),
+    [silentFarms, sufferingItems, contacts, silentState, problemsState],
   );
 
-  let state: CallListState;
-  if (!mayReadSuffering || !mayReadChurn) state = 'restricted';
-  else if (churn.isError || suffering.isError) state = 'failed';
-  else if (churn.isLoading || suffering.isLoading) state = 'loading';
-  else if (notMeasuredReason) state = 'not-measured';
-  else state = 'ready';
-
-  return { rows, state, notMeasuredReason, churn, suffering, mayReadSuffering, mayReadChurn };
+  return {
+    rows,
+    silentState,
+    problemsState,
+    notMeasuredReason,
+    contactsFailed,
+    churn,
+    suffering,
+  };
 }

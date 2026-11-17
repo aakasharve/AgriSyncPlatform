@@ -122,6 +122,8 @@ export function useSilentChurn(options?: FeedOptions) {
     queryKey: ['farms', 'silent-churn', org],
     queryFn: async () => { const { data } = await adminApi.get<AdminResponse<SilentChurnAnswer>>('/shramsafal/admin/farms/silent-churn'); return data; },
     enabled: options?.enabled !== false,
+    /* Audited: each load writes audit rows, so a failure must write one, not two. */
+    retry: false,
     staleTime: 30_000, refetchInterval: false, refetchOnWindowFocus: false,
   });
 }
@@ -131,6 +133,7 @@ export function useSuffering(options?: FeedOptions) {
     queryKey: ['farms', 'suffering', org],
     queryFn: async () => { const { data } = await adminApi.get<AdminResponse<SufferingItem[]>>('/shramsafal/admin/farms/suffering'); return data; },
     enabled: options?.enabled !== false,
+    retry: false,
     staleTime: 60_000, refetchInterval: false,
   });
 }
