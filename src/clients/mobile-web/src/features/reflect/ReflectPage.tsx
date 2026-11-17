@@ -73,7 +73,7 @@ import { useReflectCopy } from './day/RecordingParts';
 import { useDayListen } from './day/useDayListen';
 import { ActivityCalendar, type CalendarMode } from './overview/ActivityCalendar';
 import { buildCalendarDay } from './overview/calendarModel';
-import { CostSection, InHandCard } from './overview/CostSection';
+import { CostSection, InHandCard, MoneyStripFace } from './overview/CostSection';
 import { DayBar } from './overview/DayBar';
 import { PastDayTell } from './overview/PastDayTell';
 import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
@@ -376,13 +376,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         {tellPastDay && <div className="mt-3"><PastDayTell dateKey={dateKey} onTell={tellPastDay} testId="past-day-tell-cal" /></div>}
                     </SectionBlock>
                 );
-            case 'cost':
+            case 'cost': {
+                const costHint = plotsOnly ? `${plotScopeCopy(language).totalsLabel} · ${plotScopeCopy(language).costHint}` : plotScopeCopy(language).costHint;
                 return (
-                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose"
-                        hint={plotsOnly ? `${plotScopeCopy(language).totalsLabel} · ${plotScopeCopy(language).costHint}` : plotScopeCopy(language).costHint} {...fold}>
+                    // Lane UI-7 (founder D-150) — the header is a dark money strip with the spent-so-far figure (the section's first card), for a seat that may
+                    // see money; for one that may not (`totals.cost.hidden`) it stays the plain header, exactly as before. Fold, order and reorder are the section's own.
+                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint={costHint}
+                        strip={money.totals.cost.hidden ? undefined : <MoneyStripFace figure={money.totals.cost} hint={costHint} />} {...fold}>
                         <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
                     </SectionBlock>
                 );
+            }
         }
     };
 

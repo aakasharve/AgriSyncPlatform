@@ -75,6 +75,9 @@ export interface ReflectCopy {
     photos: (n: number) => string;
     /** Money the person holding this phone may not see. */
     moneyHidden: string;
+    /** Lane UI-7 — the dark money strip's two lines: what it is, and what its figure is. */
+    moneyStripTitle: string;
+    moneyStripSpent: string;
     /** Money totals made from an incomplete set. */
     partialTag: string;
     partialNotOnServer: string;
@@ -145,6 +148,9 @@ const mr: ReflectCopy = {
     // Founder W2 (MU-3 fix 1, item 16) — founder D-22 "work access ≠ money access"; the server's see-money answer
     // decides (mayShowFarmMoney), and the line reads as ShramSafal's rule, never as the owner's distrust.
     moneyHidden: ruleWithheldCopy('mr').moneyAccounts,
+    // PROPOSED (Marathi) — lane UI-7: the section's own title, and the words beside the figure (the O2 picture's "आजपर्यंत ₹ …").
+    moneyStripTitle: 'उत्पन्न आणि खर्च',
+    moneyStripSpent: 'खर्च आतापर्यंत',
     // PROPOSED (Marathi)
     partialTag: 'अपूर्ण',
     partialNotOnServer: 'अपूर्ण — काही पैसे अजून सर्व्हरच्या हिशोबात पोचलेले नाहीत',
@@ -195,6 +201,8 @@ const en: ReflectCopy = {
     noteSource: 'See where it came from', // PROPOSED (English)
     photos: (n: number) => `Photos attached ${n}`, // PROPOSED (English)
     moneyHidden: ruleWithheldCopy('en').moneyAccounts, // Founder W2 (MU-3 fix 1, item 16)
+    moneyStripTitle: 'Income and spending', // PROPOSED (English)
+    moneyStripSpent: 'spent so far', // PROPOSED (English)
     partialTag: 'partial', // PROPOSED (English)
     partialNotOnServer: 'Partial — some money has not reached the farm account on the server yet', // PROPOSED (English)
     partialUnknownDirection: 'Partial — some older amounts do not say whether money came in or went out; they are not counted here', // PROPOSED (English)
