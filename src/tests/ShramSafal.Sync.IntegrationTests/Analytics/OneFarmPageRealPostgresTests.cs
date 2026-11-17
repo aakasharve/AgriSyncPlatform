@@ -298,6 +298,87 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         v.Pending.Should().Be(0);
     }
 
+    /// <summary>C24: a bulk backfill of self-attestations is the same weak claim as a live one, never a check.</summary>
+    [SkippableFact]
+    public async Task A_backfilled_self_attestation_is_self_checked_not_a_check()
+    {
+        await GuardAsync();
+
+        var day = Today.AddDays(-3);
+        await using (var db = await OpenSuperuserAsync())
+        {
+            // Backfilled self-attestation only: self-checked, and not a check on any day.
+            var backfilled = await EntryAsync(db, Farm1, Owner1, At(day, 8));
+            await CheckAsync(db, backfilled, VerificationStatus.Confirmed, DailyLog.BackfilledAttestationReason, Owner1, At(day, 9));
+            await CheckAsync(db, backfilled, VerificationStatus.Verified, DailyLog.BackfilledAttestationReason, Owner1, At(day, 9, 1));
+
+            // Backfilled, then a person's deliberate Verified: a real check, counted once.
+            var rechecked = await EntryAsync(db, Farm1, Owner1, At(day, 8, 10));
+            await CheckAsync(db, rechecked, VerificationStatus.Confirmed, DailyLog.BackfilledAttestationReason, Owner1, At(day, 10));
+            await CheckAsync(db, rechecked, VerificationStatus.Verified, DailyLog.BackfilledAttestationReason, Owner1, At(day, 10, 1));
+            await CheckAsync(db, rechecked, VerificationStatus.Verified, null, Owner2, At(day, 14));
+        }
+
+        await using var scope = AdminScope(BuildProvider());
+        var page = await Repository(scope.ServiceProvider).GetAsync(Farm1, PlatformOwner, Admin);
+
+        var v = page!.Verifications;
+        var onDay = page.Timeline.Single(t => t.Date == day);
+        Output.WriteLine($"[EVIDENCE] confirmed={v.Confirmed} verified={v.Verified} disputed={v.Disputed} pending={v.Pending} selfChecked={v.SelfChecked}; checked on {day}: {onDay.Verifications}");
+        v.SelfChecked.Should().Be(1, "an entry whose only Confirmed/Verified events carry the backfilled marker is checked only by the person who saved it");
+        v.Verified.Should().Be(1, "only the entry with a deliberate Verified is verified");
+        v.Confirmed.Should().Be(0);
+        v.Disputed.Should().Be(0);
+        v.Pending.Should().Be(0);
+        onDay.Verifications.Should().Be(1, "the backfilled events are not a person's check; the one deliberate Verified is");
+        page.Timeline.Where(t => t.Date != day).Sum(t => t.Verifications).Should().Be(0);
+    }
+
+    /// <summary>
+    /// C24: a mark made by someone with no authority to confirm claims nothing (waiting); the speaker's own mark is
+    /// self-checked; neither is a check. An auto-saved voice Draft claims nothing either.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_mark_without_confirm_authority_is_not_a_check()
+    {
+        await GuardAsync();
+
+        var day = Today.AddDays(-3);
+        await using (var db = await OpenSuperuserAsync())
+        {
+            // Someone else's record marked without confirm authority: waiting, not a check.
+            var noAuthority = await EntryAsync(db, Farm1, Worker1, At(day, 8));
+            await CheckAsync(db, noAuthority, VerificationStatus.Confirmed, DailyLog.NoConfirmAuthorityMarkReason, Owner2, At(day, 9));
+
+            // The speaker's own mark on his own record: self-checked, not a check.
+            var own = await EntryAsync(db, Farm1, Worker1, At(day, 8, 10));
+            await CheckAsync(db, own, VerificationStatus.Confirmed, DailyLog.SpeakerOwnMarkReason, Worker1, At(day, 10));
+
+            // An auto-saved voice Draft: waiting.
+            var auto = await EntryAsync(db, Farm1, Worker1, At(day, 8, 20));
+            await CheckAsync(db, auto, VerificationStatus.Draft, DailyLog.AutoSavedFromVoiceReason, Worker1, At(day, 11));
+
+            // A no-authority mark, then the owner's deliberate Verified: a real check, counted once.
+            var later = await EntryAsync(db, Farm1, Worker1, At(day, 8, 30));
+            await CheckAsync(db, later, VerificationStatus.Confirmed, DailyLog.NoConfirmAuthorityMarkReason, Owner2, At(day, 12));
+            await CheckAsync(db, later, VerificationStatus.Verified, null, Owner1, At(day, 13));
+        }
+
+        await using var scope = AdminScope(BuildProvider());
+        var page = await Repository(scope.ServiceProvider).GetAsync(Farm1, PlatformOwner, Admin);
+
+        var v = page!.Verifications;
+        var onDay = page.Timeline.Single(t => t.Date == day);
+        Output.WriteLine($"[EVIDENCE] confirmed={v.Confirmed} verified={v.Verified} disputed={v.Disputed} pending={v.Pending} selfChecked={v.SelfChecked}; checked on {day}: {onDay.Verifications}");
+        v.Pending.Should().Be(2, "a Confirmed marked without confirm authority, and an auto-saved Draft, both wait");
+        v.SelfChecked.Should().Be(1, "the speaker's own mark is checked only by the person who spoke");
+        v.Verified.Should().Be(1, "only the entry with a deliberate Verified");
+        v.Confirmed.Should().Be(0, "no marker is ever counted as confirmed");
+        v.Disputed.Should().Be(0);
+        onDay.Verifications.Should().Be(1, "marks without confirm authority and the speaker's own mark are not checks; the deliberate Verified is");
+        page.Timeline.Where(t => t.Date != day).Sum(t => t.Verifications).Should().Be(0);
+    }
+
     // ── workers (P7) and the per-farm read path ──────────────────────────────
 
     /// <summary>
