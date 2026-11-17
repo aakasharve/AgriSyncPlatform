@@ -69,9 +69,11 @@ export const PlotScheduleHome: React.FC<{
     /** spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा": drawn only for a seat that may make; it only goes to planning. */
     mayMakeOwn?: boolean;
     onMakeOwn?: () => void;
+    /** UI-8: the maker's picture for the owner bar, when the app has one (none yet; the bar shows the letter or the leaf otherwise). */
+    ownerImageUrl?: string | null;
     /** UI-4: the last closed row (the tools), drawn by the page. */
     children?: React.ReactNode;
-}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, children }) => {
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, ownerImageUrl, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -91,7 +93,7 @@ export const PlotScheduleHome: React.FC<{
     return (
         <div className="space-y-3" data-testid="plot-schedule">
             {ask}
-            <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
+            <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} ownerImageUrl={ownerImageUrl} />
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
             <TodayCard today={facts.today} totalDays={model.totalDays} ended={model.ended} />

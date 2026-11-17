@@ -79,7 +79,10 @@ describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', ()
         expect(p.onBack).toHaveBeenCalledTimes(1);
         expect(text('sched-crop-plot')).toBe('द्राक्ष · A'); // spec I18: never "Grapes" in Marathi mode
         expect(text('sched-name')).toBe('द्राक्ष — हंगामी शेड्यूल');
-        expect(text('sched-owner')).toContain('कोणी बनवलं: ॲपमधलं मूळ शेड्यूल');
+        // lane UI-8 (D-148 layout C): the owner bar says "शेड्यूल बनवणारे" and the maker; no real name is held for the app's own schedule, so it says who made it
+        // in the app's own words (the old black pill said "कोणी बनवलं: ...").
+        expect(text('sched-owner')).toContain('शेड्यूल बनवणारे');
+        expect(text('sched-owner-name')).toBe('ॲपमधलं मूळ शेड्यूल');
         expect(text('day-now')).toBe('9');
         expect(text('day-total')).toBe('40');
         expect(text('stage-count')).toBe('2');
