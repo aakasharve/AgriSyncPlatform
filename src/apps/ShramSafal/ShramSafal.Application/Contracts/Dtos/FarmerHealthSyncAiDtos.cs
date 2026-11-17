@@ -61,4 +61,5 @@ public sealed record FarmerHealthVerificationCountsDto(
     int Confirmed,
     int Verified,
     int Disputed,
-    int Pending);
+    int Pending,
+    int SelfChecked);

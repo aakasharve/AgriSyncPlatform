@@ -110,14 +110,15 @@ public sealed class AdminFarmerHealthRepository(
 
         return new FarmerHealthDto(
             FarmId: farmId,
-            FarmerName: identity.Name,
+            FarmerName: events.OwnerName,
             Phone: events.OwnerPhone,
             Score: null,
             Timeline: timeline,
             SyncState: readSyncState ? new FarmerHealthSyncStateDto(events.LastActivityUtc) : null,
             AiHealth: farmRows.AiHealth,
             Verifications: farmRows.Verifications,
-            WorkerSummary: farmRows.Workers);
+            WorkerSummary: farmRows.Workers,
+            FarmName: identity.FarmName);
     }
 
     /// <summary>
@@ -139,7 +140,7 @@ public sealed class AdminFarmerHealthRepository(
         return raw is not null and not DBNull;
     }
 
-    private sealed record FarmIdentity(string Name, Guid OwnerUserId, Guid OwnerAccountId);
+    private sealed record FarmIdentity(string FarmName, Guid OwnerUserId, Guid OwnerAccountId);
 
     /// <summary>
     /// The farm's name, owner and owner account through the audited cross-farm factory (one audit row). Null when
@@ -229,7 +230,7 @@ public sealed class AdminFarmerHealthRepository(
             : await db.VerificationEvents
                 .AsNoTracking()
                 .Where(v => entryIds.Contains(v.DailyLogId) && v.OccurredAtUtc < window.CountedAtUtc)
-                .Select(v => new { v.Id, v.DailyLogId, v.Status, v.OccurredAtUtc })
+                .Select(v => new { v.Id, v.DailyLogId, v.Status, v.OccurredAtUtc, v.Reason })
                 .ToListAsync(ct);
 
         var latestStatus = entryEvents
@@ -238,11 +239,21 @@ public sealed class AdminFarmerHealthRepository(
                 g => g.Key,
                 g => g.OrderBy(v => v.OccurredAtUtc).ThenBy(v => v.Id).Last().Status);
 
-        int confirmed = 0, verified = 0, disputed = 0, waiting = 0;
+        // An entry whose only Confirmed/Verified events carry the self-attestation reason was checked by its own
+        // saver at creation: counted as selfChecked, never as confirmed or verified.
+        var hasOtherCheck = entryEvents
+            .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
+                        && v.Reason != DailyLog.SelfAttestationReason)
+            .Select(v => v.DailyLogId)
+            .ToHashSet();
+
+        int confirmed = 0, verified = 0, disputed = 0, waiting = 0, selfChecked = 0;
         foreach (var entryId in entryIds)
         {
             switch (latestStatus.TryGetValue(entryId, out var status) ? status : (VerificationStatus?)null)
             {
+                case VerificationStatus.Confirmed when !hasOtherCheck.Contains(entryId): selfChecked++; break;
+                case VerificationStatus.Verified when !hasOtherCheck.Contains(entryId): selfChecked++; break;
                 case VerificationStatus.Confirmed: confirmed++; break;
                 case VerificationStatus.Verified: verified++; break;
                 case VerificationStatus.Disputed: disputed++; break;
@@ -257,8 +268,9 @@ public sealed class AdminFarmerHealthRepository(
             }
         }
 
-        // P4: checks (Confirmed or Verified) on this farm's entries, per India day.
-        var checkTimes = await db.VerificationEvents
+        // P4: distinct entries per India day with a Confirmed or Verified event whose reason is neither the
+        // self-attestation nor the en-route marker (null reason counts).
+        var checkEvents = await db.VerificationEvents
             .AsNoTracking()
             .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
                         && v.OccurredAtUtc >= window.StartUtc
@@ -268,12 +280,13 @@ public sealed class AdminFarmerHealthRepository(
                 db.DailyLogs.AsNoTracking().Where(l => l.FarmId == farmId),
                 v => v.DailyLogId,
                 l => l.Id,
-                (v, l) => v.OccurredAtUtc)
+                (v, l) => new { v.DailyLogId, v.OccurredAtUtc, v.Reason })
             .ToListAsync(ct);
 
-        var checksByDay = checkTimes
-            .GroupBy(t => GetCompanyMisHandler.IstDay(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
-            .ToDictionary(g => g.Key, g => g.Count());
+        var checksByDay = checkEvents
+            .Where(e => e.Reason != DailyLog.SelfAttestationReason && e.Reason != DailyLog.EnRouteConfirmReason)
+            .GroupBy(e => GetCompanyMisHandler.IstDay(DateTime.SpecifyKind(e.OccurredAtUtc, DateTimeKind.Utc)))
+            .ToDictionary(g => g.Key, g => g.Select(e => e.DailyLogId).Distinct().Count());
 
         // P7: the five workers named most often on this farm.
         var workers = await db.Workers
@@ -290,7 +303,7 @@ public sealed class AdminFarmerHealthRepository(
             : null;
 
         return new FarmRows(
-            new FarmerHealthVerificationCountsDto(confirmed, verified, disputed, waiting),
+            new FarmerHealthVerificationCountsDto(confirmed, verified, disputed, waiting, selfChecked),
             checksByDay,
             workers,
             aiHealth);
@@ -357,6 +370,7 @@ public sealed class AdminFarmerHealthRepository(
 
     private sealed record EventRows(
         string? OwnerPhone,
+        string? OwnerName,
         Dictionary<DateOnly, ClosureDay> Closures,
         Dictionary<DateOnly, int> ProblemsByDay,
         DateTime? LastActivityUtc);
@@ -364,25 +378,24 @@ public sealed class AdminFarmerHealthRepository(
     private async Task<EventRows> ReadEventsAsync(
         DbConnection conn, Guid farmId, Guid ownerUserId, Window window, bool readLastActivity, CancellationToken ct)
     {
-        // The owner's phone (C15). public.users: key column "Id" (EF default, quoted); the phone is "phone".
+        // The owner's phone (C15) and display name (C23). public.users: key column "Id" (EF default, quoted); the
+        // phone is "phone".
         string? phone = null;
+        string? ownerName = null;
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT u.phone
+                SELECT u.phone, u.display_name
                 FROM public.users u
                 WHERE u."Id" = @owner
                 """;
             AddParam(cmd, "@owner", ownerUserId);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            phone = raw switch
+            using var ur = await cmd.ExecuteReaderAsync(ct);
+            if (await ur.ReadAsync(ct))
             {
-                null or DBNull => null,
-                string s when !string.IsNullOrWhiteSpace(s) => s,
-                string => null,
-                _ => throw new InvalidOperationException(
-                    $"public.users.phone came back as {raw.GetType().Name}, not text."),
-            };
+                phone = ReadText(ur, 0, "phone");
+                ownerName = ReadText(ur, 1, "display_name");
+            }
         }
 
         // P3: the four closure columns, by India day. occurred_at_utc is timestamptz: AT TIME ZONE 'UTC' gives the
@@ -459,7 +472,20 @@ public sealed class AdminFarmerHealthRepository(
             };
         }
 
-        return new EventRows(phone, closures, problems, lastActivity);
+        return new EventRows(phone, ownerName, closures, problems, lastActivity);
+    }
+
+    private static string? ReadText(DbDataReader r, int i, string column)
+    {
+        if (r.IsDBNull(i)) return null;
+        var raw = r.GetValue(i);
+        return raw switch
+        {
+            string s when !string.IsNullOrWhiteSpace(s) => s,
+            string => null,
+            _ => throw new InvalidOperationException(
+                $"public.users.{column} came back as {raw.GetType().Name}, not text."),
+        };
     }
 
     private sealed record Window(DateOnly FirstDay, DateOnly LastDay, DateTime StartUtc, DateTime CountedAtUtc);

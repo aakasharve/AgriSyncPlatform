@@ -9,7 +9,7 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// Every block is real or absent with a reason (doctrine P4); nothing here is a placeholder.
 /// </para>
 /// <list type="bullet">
-/// <item><see cref="FarmerName"/>: the farm's name, read through the audited cross-farm factory (P1).</item>
+/// <item><see cref="FarmerName"/>: the owner display name from <c>public.users</c> (C23); null when none. <see cref="FarmName"/>: the farm name.</item>
 /// <item><see cref="Phone"/>: the farm owner's phone from <c>public.users</c>; null when the owner has none
 ///   recorded, never a dash.</item>
 /// <item><see cref="Score"/>: always null. The farm score is not computed here (P2 stays "Not built yet", plan
@@ -23,11 +23,12 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// </remarks>
 public sealed record FarmerHealthDto(
     Guid FarmId,
-    string FarmerName,
+    string? FarmerName,
     string? Phone,
     FarmerHealthScoreBreakdownDto? Score,
     IReadOnlyList<FarmerHealthTimelineDto> Timeline,
     FarmerHealthSyncStateDto? SyncState,
     FarmerHealthAiHealthDto? AiHealth,
     FarmerHealthVerificationCountsDto Verifications,
-    IReadOnlyList<FarmerHealthWorkerSummaryDto> WorkerSummary);
+    IReadOnlyList<FarmerHealthWorkerSummaryDto> WorkerSummary,
+    string FarmName);
