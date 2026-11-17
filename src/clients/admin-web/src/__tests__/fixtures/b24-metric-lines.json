@@ -877,7 +877,7 @@
     "label": "By silence and by plan",
     "status": "real",
     "buildId": "S3",
-    "what": "Counts of silent farms grouped by weeks silent and by plan.",
+    "what": "Counts of silent farms grouped by days silent and by plan.",
     "why": "Shows at a glance whether quiet farms are new trials or paying farms."
   },
   {

@@ -895,7 +895,9 @@ const REGISTER: Record<string, Row> = {
       expect(code('/src/pages/farms/SilentChurnPage.tsx')).toContain('no entry for 7 days or more');
       expect(code('/src/pages/farms/SufferingPage.tsx')).toContain('three or more');
       expect(code('/src/pages/farms/SufferingPage.tsx')).toContain('WINDOW_WORDS');
-    }, '/src/pages/farms/__tests__/SilentChurnPage.real.test.tsx', '/src/pages/farms/__tests__/SufferingPage.real.test.tsx'),
+      // CR-2e C28 (5): Home states its own rule as visible text, the third place a list says its rule.
+      expect(code('/src/pages/HomePage.tsx')).toContain('Quiet for 7 to 29 days, or 3 or more problems in the last 7 days.');
+    }, '/src/pages/farms/__tests__/SilentChurnPage.real.test.tsx', '/src/pages/farms/__tests__/SufferingPage.real.test.tsx', '/src/pages/__tests__/HomePage.c28.test.tsx'),
   },
 
   A58: {

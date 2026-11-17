@@ -93,13 +93,13 @@ describe('Silent Churn is real (S1, S2, S3)', () => {
     // Counts per plan: two on a trial, one active, two with no plan recorded.
     const planCount = (re: RegExp) =>
       [...document.querySelectorAll<HTMLElement>('[data-plan-count]')].find((e) => re.test(e.textContent ?? ''));
-    expect(planCount(/trial/i)!.textContent).toMatch(/\b2 farms\b/);
-    expect(planCount(/active/i)!.textContent).toMatch(/\b1 farm\b/);
+    expect(planCount(/Trial/)!.textContent).toMatch(/\b2 farms\b/);
+    expect(planCount(/Paid, active/)!.textContent).toMatch(/\b1 farm\b/);
     expect(planCount(/no plan recorded/i)!.textContent).toMatch(/\b2 farms\b/);
 
     // The plan in words, on the row.
-    expect(rowOf('Bhosale Mala').textContent).toMatch(/trial/i);
-    expect(rowOf('Jadhav Baug').textContent).toMatch(/active/i);
+    expect(rowOf('Bhosale Mala').textContent).toContain('Trial');
+    expect(rowOf('Jadhav Baug').textContent).toContain('Paid, active');
 
     // The phone is shown, and the three reviewed lines are on the page as real (no "Not built yet").
     expect(rowOf('Bhosale Mala').textContent).toContain('9000000001');
@@ -118,7 +118,7 @@ describe('Silent Churn is real (S1, S2, S3)', () => {
     render();
     const row = (await screen.findByText('Kale Wadi', undefined, SETTLE)).closest('tr')!;
     expect(row.textContent).toContain('No plan recorded');
-    expect(row.textContent).not.toMatch(/trial/i);
+    expect(row.textContent).not.toContain('Trial');
   });
 
   it('an owner phone of null says "Phone not recorded", never a blank', async () => {

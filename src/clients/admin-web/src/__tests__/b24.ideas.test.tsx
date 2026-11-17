@@ -102,6 +102,8 @@ describe('Home at /home holds its one idea and none of its doubles (B24)', () =>
     for (const u of urls()) {
       expect(u).not.toContain('/admin/ops/health');
       expect(u).not.toContain('/admin/metrics/wvfd');
+      // CR-2e C28: Home asks only silent-churn, suffering, contacts and the scope; never the all-farms list.
+      expect(u, `Home asked for ${u}`).toMatch(/\/admin\/farms\/(silent-churn|suffering|contacts)|\/me\/scope/);
     }
   });
 });
