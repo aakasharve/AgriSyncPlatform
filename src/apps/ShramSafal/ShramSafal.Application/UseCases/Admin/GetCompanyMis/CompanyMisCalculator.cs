@@ -42,6 +42,13 @@ public static class CompanyMisCalculator
     private static readonly HashSet<string> CountedVoiceJobStatuses =
         new(StringComparer.Ordinal) { "Succeeded", "FallbackSucceeded", "Failed" };
 
+    /// <summary>
+    /// The status rule of the voice saved share (Quality #42, #43): a job is counted once it has finished, read or
+    /// failed (<c>Succeeded</c>, <c>FallbackSucceeded</c>, <c>Failed</c>); a queued or running job is not. Exposed so
+    /// the one-farm page (plan CR-2e, Task 3, C21) uses this rule rather than a copy of it.
+    /// </summary>
+    public static bool IsFinishedJobStatus(string status) => CountedVoiceJobStatuses.Contains(status);
+
     public static CompanyMisDto Compute(
         CompanyMisRows rows,
         CompanyMisExclusions exclusions,

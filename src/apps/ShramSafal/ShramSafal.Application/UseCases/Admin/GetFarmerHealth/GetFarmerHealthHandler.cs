@@ -8,8 +8,9 @@ using ShramSafal.Domain.Organizations;
 namespace ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 
 /// <summary>
-/// Mode A drilldown handler — returns the per-farmer DWC v2 health
-/// payload, scope-checked, audit-logged, and redacted.
+/// One-farm page handler — returns the farm's page, scope-checked,
+/// audit-logged, and redacted. A repository failure is not caught: it
+/// escapes to the server's error path (500), never an empty page.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,9 +27,10 @@ namespace ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 /// Pipeline:
 /// </para>
 /// <list type="number">
-/// <item>Repository <c>GetAsync</c> — implementation joins
-///   <c>mis.effective_org_farm_scope</c>, returning <c>null</c> when the
-///   farm is outside <see cref="AdminScope"/>.</item>
+/// <item>Repository <c>GetAsync</c> — returns <c>null</c> when the farm is
+///   outside <see cref="AdminScope"/> (checked against
+///   <c>mis.effective_org_farm_scope</c> for a non-platform caller) or does
+///   not exist.</item>
 /// <item>If <c>null</c> → <see cref="Result.Failure(Error)"/> with
 ///   <see cref="ErrorKind.NotFound"/>.</item>
 /// <item>Emit <c>admin.farmer_lookup</c> audit event (best-effort —
@@ -44,7 +46,7 @@ public sealed class GetFarmerHealthHandler(
 {
     public async Task<Result<FarmerHealthDto>> HandleAsync(GetFarmerHealthQuery q, CancellationToken ct = default)
     {
-        var dto = await repo.GetAsync(q.FarmId, q.Scope, ct);
+        var dto = await repo.GetAsync(q.FarmId, q.Scope, q.ActorUserId, ct);
         if (dto is null)
         {
             return Result.Failure<FarmerHealthDto>(

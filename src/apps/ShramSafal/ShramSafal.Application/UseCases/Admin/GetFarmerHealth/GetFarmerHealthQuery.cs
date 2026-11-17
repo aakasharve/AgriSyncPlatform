@@ -3,7 +3,7 @@ using ShramSafal.Application.Admin;
 namespace ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 
 /// <summary>
-/// Query for the Mode A drilldown (<c>GET /admin/farmer-health/{farmId}</c>).
+/// Query for the one-farm page (<c>GET /admin/farmer-health/{farmId}</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -12,5 +12,9 @@ namespace ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 /// query record must take an <see cref="AdminScope"/> first so the gate
 /// can verify it via syntactic inspection.
 /// </para>
+/// <para>
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3, C21). <see cref="ActorUserId"/> is the signed-in
+/// admin; the audited cross-farm factory records it on the one audit row the page writes.
+/// </para>
 /// </remarks>
-public sealed record GetFarmerHealthQuery(AdminScope Scope, Guid FarmId);
+public sealed record GetFarmerHealthQuery(AdminScope Scope, Guid FarmId, Guid ActorUserId);

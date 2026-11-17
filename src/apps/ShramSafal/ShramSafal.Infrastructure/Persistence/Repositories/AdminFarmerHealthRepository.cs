@@ -1,99 +1,477 @@
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Persistence;
+using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Admin;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
+using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
 using System.Data.Common;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Mode A drilldown reader. Returns the per-farmer DWC v2 health
-/// payload assembled from six matview / event-table reads, scope-checked
-/// against <c>mis.effective_org_farm_scope</c> per CEI W0.
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3 as rewritten by C21; C1, C5, C13-C16). Reads the
+/// one-farm page on request. Catches nothing: a failed read escapes and the route answers 500, never an empty or
+/// zero page (C14).
+/// <list type="number">
+/// <item><b>Scope.</b> A caller who is not a platform admin is checked against
+///   <c>mis.effective_org_farm_scope</c> first; outside it, <c>null</c> and nothing else is read or opened. (The
+///   route admits platform owners only, C13.)</item>
+/// <item><b>Identity (P1).</b> The farm's name, owner and owner account through the audited cross-farm factory,
+///   opened ONCE (reason <c>AdminFarmerHealthRepository.one-farm</c>, one audit row naming the admin). A factory
+///   that can see no farm at all throws (C5), so a connection held back by row-level security answers 500, never
+///   404. A farm id that does not exist returns <c>null</c> (404). The owner's phone comes from
+///   <c>public.users</c> through the analytics connection (C15).</item>
+/// <item><b>The farm's own rows</b>, inside ONE <see cref="RlsIdentityScope.RunAsFarmAsync{T}"/> on the scoped
+///   context, as the app login: checks on entries (P6), checks per India day (P4), the top five workers (P7) and
+///   the reading jobs (P10, P11). If the farm row itself does not come back under its own scope, the read throws
+///   rather than answering zeros.</item>
+/// <item><b>Events</b> through the analytics connection: the four closure columns (P3), problems per India day by
+///   <see cref="AdminErrorFarm.FarmSql"/> and <see cref="AdminErrorFarm.CountedProblemSql"/> (P5, C1, C16) and the
+///   last activity (P8).</item>
+/// </list>
+/// <para>
+/// <b>Window.</b> The 14 India days ending today (fixed +05:30, <see cref="GetCompanyMisHandler.IstDay"/>), from
+/// 00:00 India time of the first day up to the counting instant, for every windowed figure on the page.
+/// </para>
+/// <para>
+/// <b>Test accounts</b> (<c>CompanyMis:ExcludedUserIds</c>) are left out by the person who did the counted thing:
+/// entries by their saver, checks by their checker, reading jobs by the person who started them, problems by
+/// <see cref="AdminErrorFarm.PersonSql"/>. The closure columns (P3) and the last activity (P8) are unchanged.
+/// </para>
+/// <para>
+/// The farm score is not computed here (P2, plan H-SCORE): <see cref="FarmerHealthDto.Score"/> is null.
+/// </para>
 /// </summary>
-/// <remarks>
-/// <para>
-/// DWC v2 §3.5 Step 1. Same shape as
-/// <see cref="AdminMisRepository"/> /
-/// <see cref="AdminOpsRepository"/>: read-only against
-/// <see cref="AnalyticsDbContext"/>, raw SQL via
-/// <c>ExecuteReaderAsync</c>, graceful empty-row fallbacks per try
-/// block (so a missing matview returns zero-counts rather than throwing).
-/// </para>
-/// <para>
-/// <b>Scope check.</b> Platform admins
-/// (<see cref="AdminScope.IsPlatformAdmin"/>) bypass the JOIN; every
-/// non-Platform caller's first read is a presence check against
-/// <c>mis.effective_org_farm_scope WHERE org_id = @org AND farm_id =
-/// @farm</c>. A miss returns <c>null</c> immediately so the handler
-/// emits <c>NotFound</c> without leaking any farm data.
-/// </para>
-/// <para>
-/// <b>ssf.farms PK.</b> The schema's primary key is the quoted
-/// <c>"Id"</c> column (per
-/// <c>20260222080909_AddAuditEvents.cs</c>). All joins here use
-/// <c>f."Id"</c> rather than the legacy <c>f.farm_id</c> shape that
-/// <see cref="AdminMisRepository"/> uses (which gracefully returns
-/// empty because the column doesn't exist). Same identifier-quoting
-/// discipline as the <c>20260505000000_DwcV2Matviews</c> migration.
-/// </para>
-/// </remarks>
-public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsContext) : IAdminFarmerHealthRepository
+public sealed class AdminFarmerHealthRepository(
+    AnalyticsDbContext analyticsContext,
+    ShramSafalDbContext db,
+    CompanyMisExclusions exclusions,
+    TimeProvider clock,
+    IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminFarmerHealthRepository
 {
-    public async Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, CancellationToken ct = default)
+    /// <summary>Days on the page: today and the 13 India days before it.</summary>
+    public const int WindowDays = 14;
+
+    /// <summary>Workers listed (P7).</summary>
+    public const int TopWorkers = 5;
+
+    public async Task<FarmerHealthDto?> GetAsync(
+        Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default)
+    {
+        var countedAtUtc = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Utc);
+        var today = GetCompanyMisHandler.IstDay(countedAtUtc);
+        var firstDay = today.AddDays(-(WindowDays - 1));
+        var window = new Window(firstDay, today, GetCompanyMisHandler.IstDayStartUtc(firstDay), countedAtUtc);
+
+        // 1. Scope: a non-platform caller outside the farm's scope gets nothing, and nothing is opened for them.
+        if (!scope.IsPlatformAdmin && !await WithAnalyticsConnectionAsync(
+                conn => IsFarmInScopeAsync(conn, scope.OrganizationId, farmId, ct), ct))
+        {
+            return null;
+        }
+
+        // 2. Identity, through the audited factory, once.
+        var identity = await ReadIdentityAsync(farmId, adminUserId, ct);
+        if (identity is null)
+        {
+            return null;
+        }
+
+        // 3. The farm's own rows, as the app login, through row-level security, in one scope.
+        var readAiJobs = scope.CanRead(ModuleKey.OpsVoice);
+        var farmRows = await RlsIdentityScope.RunAsFarmAsync(
+            db, farmId, identity.OwnerAccountId, actorUserId: null,
+            token => ReadFarmRowsAsync(farmId, window, readAiJobs, token),
+            ct);
+
+        // 4. Events and the owner's phone, through the analytics connection.
+        var readSyncState = scope.CanRead(ModuleKey.OpsErrors);
+        var events = await WithAnalyticsConnectionAsync(
+            conn => ReadEventsAsync(conn, farmId, identity.OwnerUserId, window, readSyncState, ct), ct);
+
+        var timeline = new List<FarmerHealthTimelineDto>(WindowDays);
+        for (var d = window.FirstDay; d <= window.LastDay; d = d.AddDays(1))
+        {
+            events.Closures.TryGetValue(d, out var closures);
+            timeline.Add(new FarmerHealthTimelineDto(
+                Date: d,
+                ClosuresStarted: closures.Started,
+                ClosuresSubmitted: closures.Submitted,
+                ProofAttached: closures.Proof,
+                SummariesViewed: closures.SummariesViewed,
+                Verifications: farmRows.ChecksByDay.GetValueOrDefault(d),
+                Errors: events.ProblemsByDay.GetValueOrDefault(d)));
+        }
+
+        return new FarmerHealthDto(
+            FarmId: farmId,
+            FarmerName: identity.Name,
+            Phone: events.OwnerPhone,
+            Score: null,
+            Timeline: timeline,
+            SyncState: readSyncState ? new FarmerHealthSyncStateDto(events.LastActivityUtc) : null,
+            AiHealth: farmRows.AiHealth,
+            Verifications: farmRows.Verifications,
+            WorkerSummary: farmRows.Workers);
+    }
+
+    /// <summary>
+    /// The existing scope check for a non-platform caller, kept. A failed read escapes (500) rather than reading as
+    /// "not in scope", which the route would answer as 404, a farm that does not exist.
+    /// </summary>
+    private static async Task<bool> IsFarmInScopeAsync(
+        DbConnection conn, Guid orgId, Guid farmId, CancellationToken ct)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT 1 FROM mis.effective_org_farm_scope
+            WHERE org_id = @org AND farm_id = @farm
+            LIMIT 1
+            """;
+        AddParam(cmd, "@org", orgId);
+        AddParam(cmd, "@farm", farmId);
+        var raw = await cmd.ExecuteScalarAsync(ct);
+        return raw is not null and not DBNull;
+    }
+
+    private sealed record FarmIdentity(string Name, Guid OwnerUserId, Guid OwnerAccountId);
+
+    /// <summary>
+    /// The farm's name, owner and owner account through the audited cross-farm factory (one audit row). Null when
+    /// the farm does not exist. Throws when the factory can see no farm at all (C5).
+    /// </summary>
+    private async Task<FarmIdentity?> ReadIdentityAsync(Guid farmId, Guid adminUserId, CancellationToken ct)
+    {
+        if (adminDbFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AdminFarmerHealthRepository)} was built without an admin DbContext factory, so it cannot "
+                + "read the farm's name and owner. Resolve it from the container.");
+        }
+
+        await using var admin = await adminDbFactory.CreateAsync(
+            reason: $"{nameof(AdminFarmerHealthRepository)}.one-farm",
+            actorUserId: adminUserId,
+            ct: ct);
+
+        // Forced row-level security hides every row WITHOUT an error when the connection is not privileged.
+        // "This context can see no farm at all" is therefore treated as that failure, not as "no such farm".
+        if (!await admin.Farms.AsNoTracking().AnyAsync(ct))
+        {
+            throw new InvalidOperationException(
+                "The admin context can see no farm at all. ssf.farms is under forced row-level security, "
+                + "which returns zero rows without an error to a connection that is not privileged; "
+                + "refusing to answer that this farm does not exist.");
+        }
+
+        var key = new FarmId(farmId);
+        var farm = await admin.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == key)
+            .Select(f => new { f.Name, OwnerUserId = (Guid)f.OwnerUserId, OwnerAccountId = (Guid)f.OwnerAccountId })
+            .FirstOrDefaultAsync(ct);
+
+        if (farm is null)
+        {
+            return null;
+        }
+
+        if (farm.OwnerAccountId == Guid.Empty)
+        {
+            // Row-level security keys on the owner account; with none, every per-farm read would see nothing.
+            throw new InvalidOperationException(
+                $"Farm {farmId} has no owner account, so its rows cannot be read through row-level security; "
+                + "refusing to answer zeros for its checks, workers and reading.");
+        }
+
+        return new FarmIdentity(farm.Name, farm.OwnerUserId, farm.OwnerAccountId);
+    }
+
+    private sealed record FarmRows(
+        FarmerHealthVerificationCountsDto Verifications,
+        Dictionary<DateOnly, int> ChecksByDay,
+        IReadOnlyList<FarmerHealthWorkerSummaryDto> Workers,
+        FarmerHealthAiHealthDto? AiHealth);
+
+    /// <summary>Runs inside the farm's own row-level security scope, as the app login.</summary>
+    private async Task<FarmRows> ReadFarmRowsAsync(Guid farmGuid, Window window, bool readAiJobs, CancellationToken ct)
+    {
+        var farmId = new FarmId(farmGuid);
+
+        // The farm row must come back under its own scope; otherwise every count below would be a silent zero.
+        if (!await db.Farms.AsNoTracking().AnyAsync(f => f.Id == farmId, ct))
+        {
+            throw new InvalidOperationException(
+                $"Farm {farmGuid} did not come back under its own row-level security scope; "
+                + "refusing to answer zeros for its checks, workers and reading.");
+        }
+
+        var excludedUsers = exclusions.UserIds.Select(id => new UserId(id)).ToList();
+        var excludedGuids = exclusions.UserIds.ToList();
+
+        // P6: each entry saved in the window, by its latest verification status.
+        var entryIds = await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => l.FarmId == farmId
+                        && l.CreatedAtUtc >= window.StartUtc
+                        && l.CreatedAtUtc < window.CountedAtUtc
+                        && !excludedUsers.Contains(l.OperatorUserId))
+            .Select(l => l.Id)
+            .ToListAsync(ct);
+
+        var entryEvents = entryIds.Count == 0
+            ? []
+            : await db.VerificationEvents
+                .AsNoTracking()
+                .Where(v => entryIds.Contains(v.DailyLogId) && v.OccurredAtUtc < window.CountedAtUtc)
+                .Select(v => new { v.Id, v.DailyLogId, v.Status, v.OccurredAtUtc })
+                .ToListAsync(ct);
+
+        var latestStatus = entryEvents
+            .GroupBy(v => v.DailyLogId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(v => v.OccurredAtUtc).ThenBy(v => v.Id).Last().Status);
+
+        int confirmed = 0, verified = 0, disputed = 0, waiting = 0;
+        foreach (var entryId in entryIds)
+        {
+            switch (latestStatus.TryGetValue(entryId, out var status) ? status : (VerificationStatus?)null)
+            {
+                case VerificationStatus.Confirmed: confirmed++; break;
+                case VerificationStatus.Verified: verified++; break;
+                case VerificationStatus.Disputed: disputed++; break;
+                case VerificationStatus.Draft:
+                case VerificationStatus.CorrectionPending:
+                case null:
+                    waiting++;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Entry {entryId} has a verification status this page does not know: {status}.");
+            }
+        }
+
+        // P4: checks (Confirmed or Verified) on this farm's entries, per India day.
+        var checkTimes = await db.VerificationEvents
+            .AsNoTracking()
+            .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
+                        && v.OccurredAtUtc >= window.StartUtc
+                        && v.OccurredAtUtc < window.CountedAtUtc
+                        && !excludedUsers.Contains(v.VerifiedByUserId))
+            .Join(
+                db.DailyLogs.AsNoTracking().Where(l => l.FarmId == farmId),
+                v => v.DailyLogId,
+                l => l.Id,
+                (v, l) => v.OccurredAtUtc)
+            .ToListAsync(ct);
+
+        var checksByDay = checkTimes
+            .GroupBy(t => GetCompanyMisHandler.IstDay(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // P7: the five workers named most often on this farm.
+        var workers = await db.Workers
+            .AsNoTracking()
+            .Where(w => w.FarmId == farmId)
+            .OrderByDescending(w => w.AssignmentCount)
+            .ThenByDescending(w => w.FirstSeenUtc)
+            .Take(TopWorkers)
+            .Select(w => new FarmerHealthWorkerSummaryDto(w.Id, w.Name.Raw, w.AssignmentCount, w.FirstSeenUtc))
+            .ToListAsync(ct);
+
+        var aiHealth = readAiJobs
+            ? await ReadReadingAsync(farmGuid, farmId, window, excludedUsers, excludedGuids, ct)
+            : null;
+
+        return new FarmRows(
+            new FarmerHealthVerificationCountsDto(confirmed, verified, disputed, waiting),
+            checksByDay,
+            workers,
+            aiHealth);
+    }
+
+    /// <summary>
+    /// P10, P11: this farm's reading jobs started in the window, by kind. Finished = the status rule of the company
+    /// voice saved share; saved = an entry of this farm (not saved by a test account) was saved from the job, as the
+    /// company voice saved share counts it. Receipt and patti jobs carry no such link (see
+    /// <see cref="FarmerHealthReadingDto.SavedNotRecorded"/>), so their saved share is not measured.
+    /// </summary>
+    private async Task<FarmerHealthAiHealthDto> ReadReadingAsync(
+        Guid farmGuid, FarmId farmId, Window window, List<UserId> excludedUsers, List<Guid> excludedGuids,
+        CancellationToken ct)
+    {
+        var jobs = await db.AiJobs
+            .AsNoTracking()
+            .Where(j => j.FarmId == farmGuid
+                        && (j.OperationType == AiOperationType.VoiceToStructuredLog
+                            || j.OperationType == AiOperationType.ReceiptToExpenseItems
+                            || j.OperationType == AiOperationType.PattiImageToSaleData)
+                        && j.CreatedAtUtc >= window.StartUtc
+                        && j.CreatedAtUtc < window.CountedAtUtc
+                        && !excludedGuids.Contains(j.UserId))
+            .Select(j => new { j.Id, j.OperationType, j.Status })
+            .ToListAsync(ct);
+
+        var finished = jobs
+            .Where(j => CompanyMisCalculator.IsFinishedJobStatus(j.Status.ToString()))
+            .ToList();
+
+        var finishedVoiceIds = finished
+            .Where(j => j.OperationType == AiOperationType.VoiceToStructuredLog)
+            .Select(j => (Guid?)j.Id)
+            .ToList();
+
+        var savedVoice = finishedVoiceIds.Count == 0
+            ? 0
+            : await db.DailyLogs
+                .AsNoTracking()
+                .Where(l => l.FarmId == farmId
+                            && finishedVoiceIds.Contains(l.SourceAiJobId)
+                            && l.CreatedAtUtc < window.CountedAtUtc
+                            && !excludedUsers.Contains(l.OperatorUserId))
+                .Select(l => l.SourceAiJobId)
+                .Distinct()
+                .CountAsync(ct);
+
+        var voice = CompanyMisCalculator.Pct(savedVoice, finishedVoiceIds.Count);
+
+        FarmerHealthReadingDto NotRecorded(AiOperationType kind) => new(
+            FinishedJobs14d: finished.Count(j => j.OperationType == kind),
+            SavedJobs14d: null,
+            SavedPct14d: null,
+            NotMeasuredReason: FarmerHealthReadingDto.SavedNotRecorded);
+
+        return new FarmerHealthAiHealthDto(
+            Voice: new FarmerHealthReadingDto(finishedVoiceIds.Count, savedVoice, voice.Value, voice.NotMeasuredReason),
+            Receipt: NotRecorded(AiOperationType.ReceiptToExpenseItems),
+            Patti: NotRecorded(AiOperationType.PattiImageToSaleData));
+    }
+
+    private record struct ClosureDay(int Started, int Submitted, int Proof, int SummariesViewed);
+
+    private sealed record EventRows(
+        string? OwnerPhone,
+        Dictionary<DateOnly, ClosureDay> Closures,
+        Dictionary<DateOnly, int> ProblemsByDay,
+        DateTime? LastActivityUtc);
+
+    private async Task<EventRows> ReadEventsAsync(
+        DbConnection conn, Guid farmId, Guid ownerUserId, Window window, bool readLastActivity, CancellationToken ct)
+    {
+        // The owner's phone (C15). public.users: key column "Id" (EF default, quoted); the phone is "phone".
+        string? phone = null;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT u.phone
+                FROM public.users u
+                WHERE u."Id" = @owner
+                """;
+            AddParam(cmd, "@owner", ownerUserId);
+            var raw = await cmd.ExecuteScalarAsync(ct);
+            phone = raw switch
+            {
+                null or DBNull => null,
+                string s when !string.IsNullOrWhiteSpace(s) => s,
+                string => null,
+                _ => throw new InvalidOperationException(
+                    $"public.users.phone came back as {raw.GetType().Name}, not text."),
+            };
+        }
+
+        // P3: the four closure columns, by India day. occurred_at_utc is timestamptz: AT TIME ZONE 'UTC' gives the
+        // UTC wall clock, plus the fixed India offset gives the India day, whatever the session's time zone.
+        var closures = new Dictionary<DateOnly, ClosureDay>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + @ist)::date AS day, event_type, COUNT(*)
+                FROM analytics.events
+                WHERE farm_id = @farm
+                  AND event_type IN ('closure.started', 'closure.submitted', 'proof.attached', 'closure_summary.viewed')
+                  AND occurred_at_utc >= @start
+                  AND occurred_at_utc < @counted
+                GROUP BY 1, 2
+                """;
+            AddWindowParams(cmd, farmId, window);
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var day = DateOnly.FromDateTime(r.GetDateTime(0));
+                var n = checked((int)r.GetInt64(2));
+                closures.TryGetValue(day, out var c);
+                closures[day] = r.GetString(1) switch
+                {
+                    "closure.started" => c with { Started = c.Started + n },
+                    "closure.submitted" => c with { Submitted = c.Submitted + n },
+                    "proof.attached" => c with { Proof = c.Proof + n },
+                    "closure_summary.viewed" => c with { SummariesViewed = c.SummariesViewed + n },
+                    var other => throw new InvalidOperationException($"Unexpected event type {other}."),
+                };
+            }
+        }
+
+        // P5: problems tied to this farm by the shared rule (C1, C16), by India day.
+        var problems = new Dictionary<DateOnly, int>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + @ist)::date AS day, COUNT(*)
+                FROM analytics.events
+                WHERE {AdminErrorFarm.FarmSql} = @farm
+                  AND {AdminErrorFarm.CountedProblemSql}
+                  AND occurred_at_utc >= @start
+                  AND occurred_at_utc < @counted
+                GROUP BY 1
+                """;
+            AddWindowParams(cmd, farmId, window);
+            AdminErrorFarm.AddExcludedUserIds(cmd, exclusions);
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                problems[DateOnly.FromDateTime(r.GetDateTime(0))] = checked((int)r.GetInt64(1));
+            }
+        }
+
+        // P8: the last activity, unchanged.
+        DateTime? lastActivity = null;
+        if (readLastActivity)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT MAX(occurred_at_utc) FROM analytics.events
+                WHERE farm_id = @farm AND event_type IN ('sync.completed', 'log.created')
+                """;
+            AddParam(cmd, "@farm", farmId);
+            var raw = await cmd.ExecuteScalarAsync(ct);
+            lastActivity = raw switch
+            {
+                null or DBNull => null,
+                DateTime dt => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+                _ => throw new InvalidOperationException(
+                    $"The last activity came back as {raw.GetType().Name}, not a time."),
+            };
+        }
+
+        return new EventRows(phone, closures, problems, lastActivity);
+    }
+
+    private sealed record Window(DateOnly FirstDay, DateOnly LastDay, DateTime StartUtc, DateTime CountedAtUtc);
+
+    private async Task<T> WithAnalyticsConnectionAsync<T>(Func<DbConnection, Task<T>> work, CancellationToken ct)
     {
         var conn = analyticsContext.Database.GetDbConnection();
         var wasOpen = conn.State == System.Data.ConnectionState.Open;
         if (!wasOpen) await conn.OpenAsync(ct);
-
         try
         {
-            // 1. Scope check — Platform admins bypass; everyone else must
-            // have an effective_org_farm_scope row for (orgId, farmId).
-            if (!scope.IsPlatformAdmin && !await IsFarmInScopeAsync(conn, scope.OrganizationId, farmId, ct))
-                return null;
-
-            // 2. Farm presence + identity (farmer name + phone via owner
-            // membership). Returns null if the farm doesn't exist at all.
-            var identity = await GetFarmIdentityAsync(conn, farmId, ct);
-            if (identity is null) return null;
-
-            // 3. Score row (current ISO week from mis.dwc_score_per_farm_week).
-            var score = await GetScoreAsync(conn, farmId, ct);
-
-            // 4. 14-day timeline from analytics.events.
-            var timeline = await GetTimelineAsync(conn, farmId, ct);
-
-            // 5. Verifications (counts, last 14 days).
-            var verifications = await GetVerificationCountsAsync(conn, farmId, ct);
-
-            // 6. WTL v0 worker summary — top 5 by assignment_count.
-            var workers = await GetTopWorkersAsync(conn, farmId, limit: 5, ct);
-
-            // 7. Sync state + AI health — gated by ops:read claim. The
-            // claim model in the codebase today uses CanRead(ModuleKey.OpsErrors)
-            // for sync errors and CanRead(ModuleKey.OpsVoice) for AI health
-            // (mirrors AdminEndpoints.cs gating pattern). Non-ops callers
-            // get null sub-blocks so the redactor doesn't leak ops data.
-            var syncState = scope.CanRead(ModuleKey.OpsErrors)
-                ? await GetSyncStateAsync(conn, farmId, ct)
-                : null;
-            var aiHealth = scope.CanRead(ModuleKey.OpsVoice)
-                ? await GetAiHealthAsync(conn, farmId, ct)
-                : null;
-
-            return new FarmerHealthDto(
-                FarmId: farmId,
-                FarmerName: identity.FarmerName,
-                Phone: identity.Phone,
-                Score: score,
-                Timeline: timeline,
-                SyncState: syncState,
-                AiHealth: aiHealth,
-                Verifications: verifications,
-                WorkerSummary: workers);
+            return await work(conn);
         }
         finally
         {
@@ -101,334 +479,12 @@ public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsCont
         }
     }
 
-    private static async Task<bool> IsFarmInScopeAsync(
-        DbConnection conn, Guid orgId, Guid farmId, CancellationToken ct)
+    private static void AddWindowParams(DbCommand cmd, Guid farmId, Window window)
     {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT 1 FROM mis.effective_org_farm_scope
-                WHERE org_id = @org AND farm_id = @farm
-                LIMIT 1
-                """;
-            AddParam(cmd, "@org", orgId);
-            AddParam(cmd, "@farm", farmId);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            return raw is not null;
-        }
-        catch { return false; }
-    }
-
-    private sealed record FarmIdentity(string FarmerName, string Phone);
-
-    private static async Task<FarmIdentity?> GetFarmIdentityAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            // ssf.farms PK is "Id" (quoted) per 20260222080909_AddAuditEvents.
-            // The owner membership join may be missing for newly-seeded
-            // farms — the LEFT JOIN keeps the row alive with empty phone.
-            cmd.CommandText = """
-                SELECT
-                    f.name,
-                    COALESCE(u.display_name, f.name) AS farmer_name,
-                    COALESCE(u.phone, '—')           AS phone
-                FROM ssf.farms f
-                LEFT JOIN ssf.farm_memberships fm
-                    ON fm.farm_id = f."Id" AND fm.role = 'owner' AND fm.is_revoked = FALSE
-                LEFT JOIN public.users u ON u."Id" = fm.user_id
-                WHERE f."Id" = @farm
-                LIMIT 1
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            if (!await r.ReadAsync(ct)) return null;
-            return new FarmIdentity(
-                FarmerName: r.IsDBNull(1) ? r.GetString(0) : r.GetString(1),
-                Phone: r.IsDBNull(2) ? "—" : r.GetString(2));
-        }
-        catch
-        {
-            // Schema may not yet have the join columns in legacy environments.
-            // Return a placeholder identity so the rest of the payload still
-            // assembles.
-            return new FarmIdentity(FarmerName: "—", Phone: "—");
-        }
-    }
-
-    private static async Task<FarmerHealthScoreBreakdownDto> GetScoreAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    week_start, score, COALESCE(flag, 'insufficient_data'),
-                    COALESCE(bucket, 'intervention'),
-                    pillar_trigger_fit, pillar_action_simplicity,
-                    pillar_proof, pillar_reward,
-                    pillar_investment, pillar_repeat
-                FROM mis.dwc_score_per_farm_week
-                WHERE farm_id = @farm
-                ORDER BY week_start DESC
-                LIMIT 1
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                return new FarmerHealthScoreBreakdownDto(
-                    Total: r.GetInt32(1),
-                    Bucket: r.GetString(3),
-                    Flag: r.GetString(2),
-                    Pillars: new FarmerHealthPillarsDto(
-                        TriggerFit: r.IsDBNull(4) ? 0m : r.GetDecimal(4),
-                        ActionSimplicity: r.IsDBNull(5) ? 0m : r.GetDecimal(5),
-                        Proof: r.IsDBNull(6) ? 0m : r.GetDecimal(6),
-                        Reward: r.IsDBNull(7) ? 0m : r.GetDecimal(7),
-                        Investment: r.IsDBNull(8) ? 0m : r.GetDecimal(8),
-                        Repeat: r.IsDBNull(9) ? 0m : r.GetDecimal(9)),
-                    WeekStart: DateOnly.FromDateTime(r.GetDateTime(0)));
-            }
-        }
-        catch { /* matview missing → fall through to insufficient_data */ }
-        return EmptyScore();
-    }
-
-    private static FarmerHealthScoreBreakdownDto EmptyScore() => new(
-        Total: 0,
-        Bucket: "intervention",
-        Flag: "insufficient_data",
-        Pillars: new FarmerHealthPillarsDto(0m, 0m, 0m, 0m, 0m, 0m),
-        WeekStart: DateOnly.FromDateTime(DateTime.UtcNow.Date));
-
-    private static async Task<IReadOnlyList<FarmerHealthTimelineDto>> GetTimelineAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        var dict = new Dictionary<DateOnly, FarmerHealthTimelineDto>();
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    DATE(occurred_at_utc AT TIME ZONE 'UTC') AS day,
-                    event_type,
-                    COUNT(*) AS n
-                FROM analytics.events
-                WHERE farm_id = @farm
-                  AND occurred_at_utc >= NOW() - INTERVAL '14 days'
-                GROUP BY day, event_type
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                var d = DateOnly.FromDateTime(r.GetDateTime(0));
-                var et = r.GetString(1);
-                var n = (int)r.GetInt64(2);
-                var current = dict.TryGetValue(d, out var existing)
-                    ? existing
-                    : new FarmerHealthTimelineDto(d, 0, 0, 0, 0, 0, 0);
-                dict[d] = et switch
-                {
-                    "closure.started" => current with { ClosuresStarted = current.ClosuresStarted + n },
-                    "closure.submitted" => current with { ClosuresSubmitted = current.ClosuresSubmitted + n },
-                    "proof.attached" => current with { ProofAttached = current.ProofAttached + n },
-                    "closure_summary.viewed" => current with { SummariesViewed = current.SummariesViewed + n },
-                    "verification.recorded" => current with { Verifications = current.Verifications + n },
-                    "api.error" or "client.error" => current with { Errors = current.Errors + n },
-                    _ => current
-                };
-            }
-        }
-        catch { /* graceful empty timeline */ }
-
-        // Backfill the 14-day window so the UI always has a stable shape.
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        var window = new List<FarmerHealthTimelineDto>(14);
-        for (int i = 13; i >= 0; i--)
-        {
-            var d = today.AddDays(-i);
-            window.Add(dict.TryGetValue(d, out var row)
-                ? row
-                : new FarmerHealthTimelineDto(d, 0, 0, 0, 0, 0, 0));
-        }
-        return window;
-    }
-
-    private static async Task<FarmerHealthVerificationCountsDto> GetVerificationCountsAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    COUNT(*) FILTER (WHERE ve.status = 'Confirmed') AS confirmed,
-                    COUNT(*) FILTER (WHERE ve.status = 'Verified')  AS verified,
-                    COUNT(*) FILTER (WHERE ve.status = 'Disputed')  AS disputed,
-                    COUNT(*) FILTER (WHERE ve.status = 'Pending')   AS pending
-                FROM ssf.verification_events ve
-                JOIN ssf.daily_logs l ON l."Id" = ve.daily_log_id
-                WHERE l.farm_id = @farm
-                  AND ve.occurred_at_utc >= NOW() - INTERVAL '14 days'
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                return new FarmerHealthVerificationCountsDto(
-                    Confirmed: (int)r.GetInt64(0),
-                    Verified: (int)r.GetInt64(1),
-                    Disputed: (int)r.GetInt64(2),
-                    Pending: (int)r.GetInt64(3));
-            }
-        }
-        catch { /* graceful zero-counts */ }
-        return new FarmerHealthVerificationCountsDto(0, 0, 0, 0);
-    }
-
-    private static async Task<IReadOnlyList<FarmerHealthWorkerSummaryDto>> GetTopWorkersAsync(
-        DbConnection conn, Guid farmId, int limit, CancellationToken ct)
-    {
-        var rows = new List<FarmerHealthWorkerSummaryDto>(limit);
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT "Id", name_raw, assignment_count, first_seen_utc
-                FROM ssf.workers
-                WHERE farm_id = @farm
-                ORDER BY assignment_count DESC, first_seen_utc DESC
-                LIMIT @lim
-                """;
-            AddParam(cmd, "@farm", farmId);
-            AddParam(cmd, "@lim", limit);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                rows.Add(new FarmerHealthWorkerSummaryDto(
-                    WorkerId: r.GetGuid(0),
-                    Name: r.GetString(1),
-                    AssignmentCount: r.GetInt32(2),
-                    FirstSeenUtc: new DateTimeOffset(r.GetDateTime(3), TimeSpan.Zero)));
-            }
-        }
-        catch { /* graceful empty */ }
-        return rows;
-    }
-
-    private static async Task<FarmerHealthSyncStateDto> GetSyncStateAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        DateTime? lastSyncAt = null;
-        int failed7d = 0;
-        var lastErrors = new List<FarmerHealthSyncErrorDto>(10);
-
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT MAX(occurred_at_utc) FROM analytics.events
-                WHERE farm_id = @farm AND event_type IN ('sync.completed','log.created')
-                """;
-            AddParam(cmd, "@farm", farmId);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            if (raw is DateTime dt) lastSyncAt = dt;
-        }
-        catch { /* graceful */ }
-
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT COUNT(*) FROM analytics.events
-                WHERE farm_id = @farm
-                  AND event_type IN ('api.error', 'client.error')
-                  AND occurred_at_utc >= NOW() - INTERVAL '7 days'
-                """;
-            AddParam(cmd, "@farm", farmId);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            failed7d = raw is long l ? (int)l : raw is int i ? i : 0;
-        }
-        catch { /* graceful */ }
-
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    occurred_at_utc,
-                    COALESCE(props->>'endpoint', 'unknown'),
-                    COALESCE((props->>'statusCode')::int, 0),
-                    COALESCE(props->>'message', '')
-                FROM analytics.events
-                WHERE farm_id = @farm
-                  AND event_type IN ('api.error','client.error')
-                  AND occurred_at_utc >= NOW() - INTERVAL '7 days'
-                ORDER BY occurred_at_utc DESC
-                LIMIT 10
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                lastErrors.Add(new FarmerHealthSyncErrorDto(
-                    Ts: r.GetDateTime(0),
-                    Endpoint: r.GetString(1),
-                    Status: r.GetInt32(2),
-                    Message: r.GetString(3)));
-            }
-        }
-        catch { /* graceful */ }
-
-        return new FarmerHealthSyncStateDto(
-            LastSyncAt: lastSyncAt,
-            PendingPushes: 0, // server-side cannot observe device-side queue depth
-            FailedPushesLast7d: failed7d,
-            LastErrors: lastErrors);
-    }
-
-    private static async Task<FarmerHealthAiHealthDto> GetAiHealthAsync(
-        DbConnection conn, Guid farmId, CancellationToken ct)
-    {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    COUNT(*)                                                             AS total,
-                    COALESCE(
-                        (COUNT(*) FILTER (WHERE props->>'provider' = 'voice'
-                                             AND props->>'outcome'  = 'success'))::numeric
-                      / NULLIF(COUNT(*) FILTER (WHERE props->>'provider' = 'voice'), 0)::numeric,
-                        1.0)                                                             AS voice_success,
-                    COALESCE(
-                        (COUNT(*) FILTER (WHERE props->>'provider' = 'receipt'
-                                             AND props->>'outcome'  = 'success'))::numeric
-                      / NULLIF(COUNT(*) FILTER (WHERE props->>'provider' = 'receipt'), 0)::numeric,
-                        1.0)                                                             AS receipt_success
-                FROM analytics.events
-                WHERE event_type = 'ai.invocation'
-                  AND farm_id = @farm
-                  AND occurred_at_utc >= NOW() - INTERVAL '14 days'
-                """;
-            AddParam(cmd, "@farm", farmId);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                return new FarmerHealthAiHealthDto(
-                    VoiceParseSuccessRate14d: r.IsDBNull(1) ? 1m : r.GetDecimal(1),
-                    ReceiptParseSuccessRate14d: r.IsDBNull(2) ? 1m : r.GetDecimal(2),
-                    InvocationCount14d: r.IsDBNull(0) ? 0 : (int)r.GetInt64(0));
-            }
-        }
-        catch { /* graceful */ }
-        return new FarmerHealthAiHealthDto(1m, 1m, 0);
+        AddParam(cmd, "@farm", farmId);
+        AddParam(cmd, "@ist", GetCompanyMisHandler.IstOffset);
+        AddParam(cmd, "@start", window.StartUtc);
+        AddParam(cmd, "@counted", window.CountedAtUtc);
     }
 
     private static void AddParam(System.Data.IDbCommand cmd, string name, object value)

@@ -13,11 +13,11 @@ namespace AgriSync.Bootstrapper;
 /// <c>/admin/farmer-health</c>:
 /// </summary>
 /// <list type="bullet">
-/// <item><c>GET /admin/farmer-health/{farmId:guid}</c> — Mode A
-///   per-farmer drilldown (score breakdown, 14-day timeline, sync
-///   state, AI invocation health, verification counts, worker
-///   summary). Scope-checked, audit-logged, redacted per
-///   <see cref="ModuleKey.FarmerHealth"/>.</item>
+/// <item><c>GET /admin/farmer-health/{farmId:guid}</c> — the one-farm
+///   page (name and phone, 14-day timeline, last activity, reading,
+///   checks on entries, workers; plan CR-2e Task 3). Platform owners
+///   only, uncached; an unknown farm answers 404; a read failure 500.
+///   Audit-logged, redacted per <see cref="ModuleKey.FarmerHealth"/>.</item>
 /// <item><c>GET /admin/farmer-health/cohort</c> — Mode B cohort
 ///   patterns (intervention queue, watchlist, distributions, heatmap,
 ///   trends, top-10 suffering). Same gates.</item>
@@ -62,9 +62,18 @@ public static class AdminFarmerHealthEndpoints
             if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
                     .RequireReadAsync(http, scope, ModuleKey.FarmerHealth))
                 return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C13, C21) — the page names the farm and its
+            // owner's phone, and platform analysts hold every read module, so the module check alone would reach
+            // beyond owners: platform owners only, refused before anything is read or opened. Deliberately has no
+            // CacheOutput: each load opens the audited cross-farm factory once (one audit row).
+            if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
+                    .RequirePlatformAdminAsync(http, scope))
+                return Results.Empty;
 
             var result = await handler.HandleAsync(
-                new GetFarmerHealthQuery(scope, farmId), ct);
+                new GetFarmerHealthQuery(
+                    scope, farmId, AgriSync.Bootstrapper.Middleware.ClaimsUserId.TryGet(http.User) ?? Guid.Empty),
+                ct);
 
             if (result.IsSuccess) return Results.Ok(result.Value);
             return result.Error.Kind == AgriSync.BuildingBlocks.Results.ErrorKind.NotFound

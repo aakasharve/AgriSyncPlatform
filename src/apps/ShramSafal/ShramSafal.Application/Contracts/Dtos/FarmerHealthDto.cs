@@ -1,30 +1,31 @@
 namespace ShramSafal.Application.Contracts.Dtos;
 
 /// <summary>
-/// Mode A response root for <c>GET /admin/farmer-health/{farmId}</c>.
-/// Combines DWC v2 score row + 14-day activity timeline + sync state +
-/// AI invocation health + verification counts + WTL v0 worker summary.
-/// Field shapes mirror <c>UI_DESIGN_BRIEF_GEMINI.md</c> §2 (TypeScript).
+/// Response root for <c>GET /admin/farmer-health/{farmId}</c>, the one-farm page.
 /// </summary>
 /// <remarks>
 /// <para>
-/// PII / ops fields are gated by the redactor (per
-/// <c>ADMIN_REDACTION_MATRIX.md</c> module <c>FarmerHealth</c>):
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3 as rewritten by C21). Platform owners only (C13).
+/// Every block is real or absent with a reason (doctrine P4); nothing here is a placeholder.
 /// </para>
 /// <list type="bullet">
-/// <item><see cref="FarmerName"/>, <see cref="Phone"/> — require
-///   <c>pii:read</c> claim; redacted to <c>**redacted**</c> /
-///   <c>"98******12"</c> mask otherwise.</item>
-/// <item><see cref="SyncState"/>, <see cref="AiHealth"/> — require
-///   <c>ops:read</c> claim; null otherwise.</item>
-/// <item><see cref="WorkerSummary"/> — first names only, capped at 5.</item>
+/// <item><see cref="FarmerName"/>: the farm's name, read through the audited cross-farm factory (P1).</item>
+/// <item><see cref="Phone"/>: the farm owner's phone from <c>public.users</c>; null when the owner has none
+///   recorded, never a dash.</item>
+/// <item><see cref="Score"/>: always null. The farm score is not computed here (P2 stays "Not built yet", plan
+///   H-SCORE).</item>
+/// <item><see cref="Timeline"/>: the 14 India days ending today, oldest first.</item>
+/// <item><see cref="SyncState"/>, <see cref="AiHealth"/>: null for a caller without <c>ops.errors</c> /
+///   <c>ops.voice</c> read (a platform owner holds both).</item>
+/// <item><see cref="Verifications"/>, <see cref="WorkerSummary"/>: read as the app login through row-level
+///   security for this farm only.</item>
 /// </list>
 /// </remarks>
 public sealed record FarmerHealthDto(
     Guid FarmId,
     string FarmerName,
-    string Phone,
-    FarmerHealthScoreBreakdownDto Score,
+    string? Phone,
+    FarmerHealthScoreBreakdownDto? Score,
     IReadOnlyList<FarmerHealthTimelineDto> Timeline,
     FarmerHealthSyncStateDto? SyncState,
     FarmerHealthAiHealthDto? AiHealth,
