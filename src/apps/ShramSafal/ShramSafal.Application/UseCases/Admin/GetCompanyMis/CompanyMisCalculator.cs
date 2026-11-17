@@ -49,6 +49,37 @@ public static class CompanyMisCalculator
     /// </summary>
     public static bool IsFinishedJobStatus(string status) => CountedVoiceJobStatuses.Contains(status);
 
+    /// <summary>
+    /// Amendment A5, the one age rule. Lifted out of the nested data class (plan CR-2e, Task 4, C10) so the
+    /// silent-farms list uses this rule rather than a copy of it; the company numbers call it unchanged.
+    /// Days since the farm's last entry as of <paramref name="d"/>, or null when it had never logged by
+    /// <paramref name="d"/>. Loaded entries (test accounts already left out) decide first. Only entries since the
+    /// reader's start are loaded, so a farm with no loaded entry on or before <paramref name="d"/> whose first entry
+    /// ever (test accounts left out by the reader) is on or before <paramref name="d"/> last logged before the
+    /// loaded window: its age is 30 or more (the reader loads at least the 30 days before <paramref name="d"/>),
+    /// exact value unknown, returned as <see cref="int.MaxValue"/> and only ever compared with the age bands. First
+    /// entry absent or after <paramref name="d"/>: never logged.
+    /// </summary>
+    /// <param name="loadedEntryDays">The India days of the farm's loaded entries, test accounts and rows at or
+    /// after the counting instant left out, sorted ascending and distinct.</param>
+    /// <param name="firstEntryDay">The India day of the farm's first entry ever
+    /// (<see cref="MisFarmRow.FirstEntryUtc"/>), or null when it has none.</param>
+    /// <param name="d">The India day the age is taken at.</param>
+    internal static int? LastEntryAgeAt(DateOnly[] loadedEntryDays, DateOnly? firstEntryDay, DateOnly d)
+    {
+        ArgumentNullException.ThrowIfNull(loadedEntryDays);
+
+        // Latest loaded entry day on or before d (days are sorted ascending and distinct).
+        var at = Array.BinarySearch(loadedEntryDays, d);
+        var index = at >= 0 ? at : ~at - 1;
+        if (index >= 0)
+        {
+            return d.DayNumber - loadedEntryDays[index].DayNumber;
+        }
+
+        return firstEntryDay is { } first && first <= d ? int.MaxValue : null;
+    }
+
     public static CompanyMisDto Compute(
         CompanyMisRows rows,
         CompanyMisExclusions exclusions,
@@ -685,31 +716,12 @@ public static class CompanyMisCalculator
         public IEnumerable<FarmInfo> FarmsRegisteredBy(DateOnly d) => Farms.Where(f => f.RegisteredDay <= d);
 
         /// <summary>
-        /// Amendment A5. Days since the farm's last entry as of <paramref name="d"/>, or
-        /// null when it had never logged by <paramref name="d"/>. Loaded entries (test
-        /// accounts already left out) decide first. Only entries since the reader's
-        /// start (30 days before the previous period) are loaded, so a farm with no
-        /// loaded entry on or before <paramref name="d"/> whose first entry ever (test
-        /// accounts left out by the reader) is on or before <paramref name="d"/> last
-        /// logged before the loaded window: its age is 30 or more, exact value
-        /// unknown, returned as <see cref="int.MaxValue"/> and only ever compared with
-        /// the age bands. First entry absent or after <paramref name="d"/>: never logged.
+        /// Amendment A5: the farm's last-entry age as of <paramref name="d"/>, by the one
+        /// rule <see cref="CompanyMisCalculator.LastEntryAgeAt(DateOnly[], DateOnly?, DateOnly)"/>.
         /// </summary>
-        public int? LastEntryAgeAt(FarmInfo farm, DateOnly d)
-        {
-            if (_entryDaysByFarm.TryGetValue(farm.FarmId, out var days))
-            {
-                // Latest loaded entry day on or before d (days are sorted ascending and distinct).
-                var at = Array.BinarySearch(days, d);
-                var index = at >= 0 ? at : ~at - 1;
-                if (index >= 0)
-                {
-                    return d.DayNumber - days[index].DayNumber;
-                }
-            }
-
-            return farm.FirstEntryDay is { } first && first <= d ? int.MaxValue : null;
-        }
+        public int? LastEntryAgeAt(FarmInfo farm, DateOnly d) =>
+            CompanyMisCalculator.LastEntryAgeAt(
+                _entryDaysByFarm.TryGetValue(farm.FarmId, out var days) ? days : [], farm.FirstEntryDay, d);
 
         public int FarmsInAgeBand(DateOnly d, int minAge, int maxAge) =>
             FarmsRegisteredBy(d).Count(f =>

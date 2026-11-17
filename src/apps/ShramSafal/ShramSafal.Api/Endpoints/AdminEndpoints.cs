@@ -268,6 +268,10 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminFarmContacts");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4, C26) — the silent farms, named, with phone,
+        // band and plan, counted live. Platform owners only (names and phones of every farm). Deliberately has no
+        // CacheOutput: each load opens the audited cross-farm factory. Failures are not caught: a read failure
+        // answers 500, never an empty list.
         group.MapGet("/admin/farms/silent-churn", async (
             HttpContext http,
             IEntitlementResolver resolver,
@@ -277,12 +281,24 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsSilentChurn)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
-            var r = await h.HandleAsync(new GetSilentChurnQuery(http.User.GetUserIdOrEmpty()), ct);
-            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+            var r = await h.HandleAsync(new GetSilentChurnQuery(
+                http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
         })
-        .WithName("GetAdminSilentChurn")
-        .CacheOutput("AdminMaterialized");
+        .WithName("GetAdminSilentChurn");
 
         group.MapGet("/admin/farms/suffering", async (
             HttpContext http,

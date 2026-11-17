@@ -13,7 +13,8 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// metrics endpoints. All queries are read-only.
 ///
 /// <para>
-/// The WVFD and silent-churn reads keep their older graceful empty-return.
+/// The WVFD read and the silent-churn read (no longer on any read path, plan CR-2e, Task 4) keep their older
+/// graceful empty-return.
 /// The farms and users lists, the suffering list and the farm contacts do NOT
 /// (spec company-mis-real-numbers-2026-11-15): a failed read escapes and
 /// answers 500.
@@ -306,6 +307,11 @@ public sealed class AdminMisRepository(
 
     /// <summary>
     /// Returns the silent-churn watchlist for admins.
+    ///
+    /// <para>
+    /// <b>Not on any read path</b> since plan CR-2e, Task 4 (C26): <c>/admin/farms/silent-churn</c> counts live
+    /// through <c>GetSilentChurnHandler</c>. Kept, with its old swallowing catch, only until the CR-2d clean-up.
+    /// </para>
     ///
     /// <para>
     /// Reads <c>mis.silent_churn_watchlist</c>, the matview that joins

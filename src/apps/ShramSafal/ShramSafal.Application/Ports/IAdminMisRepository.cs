@@ -9,6 +9,11 @@ public interface IAdminMisRepository
     // Phase 4 — Farms. adminUserId is named in the cross-farm audit row (spec company-mis-real-numbers-2026-11-15).
     Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default);
+
+    /// <summary>
+    /// The nightly view's watchlist. Not on any read path since plan CR-2e, Task 4 (C26): the silent-farms route
+    /// counts live through <c>GetSilentChurnHandler</c>. Kept only until the CR-2d clean-up.
+    /// </summary>
     Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default);
 
     /// <summary>

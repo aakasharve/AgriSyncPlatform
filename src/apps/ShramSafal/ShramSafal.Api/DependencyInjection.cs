@@ -803,6 +803,9 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones by id.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmContacts.GetFarmContactsHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4) — silent farms counted live. Needs
+        // ICompanyMisReader, CompanyMisExclusions, ISubscriptionReader and the scoped DbContext (Infrastructure),
+        // IAdminMisRepository (below) and TimeProvider.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSilentChurn.GetSilentChurnHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSuffering.GetSufferingHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetUsersList.GetUsersListHandler>();
