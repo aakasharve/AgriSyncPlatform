@@ -11,6 +11,8 @@ interface LineageRibbonProps {
     version?: number;
     author?: string | null;
     publishedAtUtc?: string | null;
+    /** spec: plr-d10 lane UI-8 - `light` = on a white card (the schedule tab's owner bar); `dark` (default) = the old dark card. */
+    tone?: 'dark' | 'light';
 }
 
 /** "आज" / "काल" / "N दिवसांपूर्वी". */
@@ -27,17 +29,19 @@ const LineageRibbon: React.FC<LineageRibbonProps> = ({
     version,
     author,
     publishedAtUtc,
+    tone = 'dark',
 }) => {
     if (!derivedFromTemplateId && !publishedAtUtc) return null;
+    const light = tone === 'light';
 
     return (
         <div
-            className="mt-1 flex flex-wrap items-center gap-2 text-[13px] font-bold text-stone-300"
+            className={`mt-1 flex flex-wrap items-center gap-2 text-[13px] font-bold ${light ? 'text-stone-600' : 'text-stone-300'}`}
             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
             data-testid="lineage-ribbon"
         >
             {derivedFromTemplateId && derivedFromName && (
-                <span className="rounded-full bg-white/10 px-2 py-0.5">
+                <span className={`rounded-full px-2 py-0.5 ${light ? 'bg-stone-100' : 'bg-white/10'}`}>
                     {/* PROPOSED (Marathi) */}
                     यावरून बनवलं: <span className="font-extrabold">{derivedFromName}</span>
                     {version != null && ` · आवृत्ती ${version}`}

@@ -151,11 +151,14 @@ describe('the section: four places', () => {
         const words = THREE_PLUS_ONE_WORDS.mr;
         render(<ScheduleLibraryView crop={crop()} allCrops={[crop()]} adoptedScheduleId={null} onAdopt={vi.fn()}
             plotAdd={{ followedTemplateIds: new Set([T.university]), full: true, words: { follow: words.follow, fullWhy: words.fullButtonWhy, alreadyFollowed: words.alreadyFollowed, title: words.libraryTitle } }} />);
-        const open = screen.getByTestId(`library-adopt-${T.expert}`);
+        // lane UI-8 (picture L2): one big button, disabled while the three outside places are taken, with the words that say why under it
+        const open = screen.getByTestId('library-confirm');
+        fireEvent.click(screen.getByTestId(`library-pick-${T.expert}`));
         expect(open).toBeDisabled();
         expect(open).toHaveTextContent('हे शेड्यूल पण पाळा');
-        expect(screen.getByTestId(`library-full-${T.expert}`)).toHaveTextContent('बाहेरची 3 शेड्यूल आधीच पाळताय');
-        expect(screen.queryByTestId(`library-adopt-${T.university}`)).toBeNull(); // the one he follows says so instead
+        expect(screen.getByTestId('library-full')).toHaveTextContent('बाहेरची 3 शेड्यूल आधीच पाळताय');
+        expect(screen.getByTestId(`library-pick-${T.university}`)).toBeDisabled(); // the one he follows says so instead
+        expect(screen.getByTestId(`library-${T.university}`)).toHaveTextContent(words.alreadyFollowed);
     });
 
     it('Own_place_plain_for_a_seat_that_may_not_make: empty = the plain sentence, no tap target, nothing greyed (SCH-OWN-b; the live button: OwnScheduleEntry.test.tsx)', async () => {
@@ -224,7 +227,9 @@ describe('add and drop enqueue adopt / abandon with subscriptionId', () => {
         await seed([server(S.a, T.university, 1, { isMain: true })]);
         mount();
         fireEvent.click(await screen.findByTestId('three-plus-one-add'));
-        fireEvent.click(await screen.findByTestId(`library-adopt-${T.expert}`));
+        fireEvent.click(await screen.findByTestId(`library-pick-${T.expert}`));
+        expect(screen.getByTestId('library-confirm')).toHaveTextContent('द्राक्ष · A साठी हे शेड्यूल पण पाळा'); // lane UI-8: the button names the plot
+        fireEvent.click(screen.getByTestId('library-confirm'));
 
         await waitFor(async () => expect(await queuedOf(SyncMutationName.AdoptSchedule)).toHaveLength(1));
         const [adopt] = await queuedOf(SyncMutationName.AdoptSchedule);
@@ -404,6 +409,7 @@ describe('words: one language at a time', () => {
         mount();
         const section = await screen.findByTestId('three-plus-one');
         expect(section).toHaveAttribute('data-language', 'mr');
+        await screen.findByTestId(`followed-${S.a}`); // lane UI-8: wait for the server's rows like the English twin does (the section is drawn empty first)
         const own = screen.getByTestId('three-plus-one-own-empty');
         for (const element of [screen.getByTestId('three-plus-one-heading'), screen.getByTestId('three-plus-one-add'), own, screen.getByTestId(`followed-leave-${S.a}`), screen.getByTestId(`followed-main-${S.a}`)]) {
             expect(element.textContent).not.toMatch(/[A-Za-z]{4,}/);

@@ -6,9 +6,9 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8b-2 Task 2; founder D-32, register F09, C2, P8)
  *
  * The real SchedulerPage over a real (fake-indexeddb) phone database: a schedule chosen on the page is saved on the SERVER -
- * the library's adopt = one `adopt_schedule` per plot of the crop, the editor's save = one for that plot with its day 0, a
- * switch = `migrate_schedule` with reason `Other` and no text, a plot with no crop season = nothing queued and the page says
- * why. Nothing on the screen moves: the same page, the same words, and the chosen schedule shows at once.
+ * the library's three steps end on ONE named plot = one `adopt_schedule` for that plot (lane UI-8, founder D-150 picture L2; it was one per plot of
+ * the crop), the editor's save = one for that plot with its day 0, a switch = `migrate_schedule` with reason `Other` and no text, a plot with no
+ * crop season = nothing queued and the page says why. Nothing on the screen moves: the same page, the same words, and the chosen schedule shows at once.
  */
 import { autoOpenFolds } from '../../features/scheduler/schedulePage/__tests__/foldTestKit';
 import 'fake-indexeddb/auto';
@@ -53,6 +53,12 @@ async function seedSeasons(plots: Array<[string, string]>) {
     }
 }
 
+/** Lane UI-8: the library's steps 2 and 3 - pick the schedule's radio row, then the one big button. */
+function chooseInLibrary(templateId: string) {
+    fireEvent.click(screen.getByTestId(`library-pick-${templateId}`));
+    fireEvent.click(screen.getByTestId('library-confirm'));
+}
+
 async function queued() {
     return (await getDatabase().mutationQueue.toArray())
         .filter(r => r.mutationType === SyncMutationName.AdoptSchedule || r.mutationType === SyncMutationName.MigrateSchedule)
@@ -80,28 +86,43 @@ beforeEach(async () => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('a schedule chosen on the page is saved on the server (L8b-2 Task 2)', () => {
-    it('library adopt enqueues one adopt_schedule per plot of the crop', async () => {
+    it("the library's big button enqueues one adopt_schedule for the ONE plot it names - not the crop's other plots (lane UI-8, D-150)", async () => {
         await seedSeasons([[PLOT_1, CYCLE_1], [PLOT_2, CYCLE_2]]);
         mount(twoPlots());
         fireEvent.click(screen.getByTestId('open-library'));
-        fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
+        chooseInLibrary(SPRAY_TEMPLATE_ID);
 
-        await waitFor(async () => expect(await queued()).toHaveLength(2));
+        await waitFor(async () => expect(await queued()).toHaveLength(1));
         const rows = await queued();
-        expect(rows.map(r => r.type)).toEqual([SyncMutationName.AdoptSchedule, SyncMutationName.AdoptSchedule]);
-        expect(rows.map(r => r.payload.plotId).sort()).toEqual([PLOT_1, PLOT_2]);
-        expect(rows.map(r => r.payload.cropCycleId).sort()).toEqual([CYCLE_1, CYCLE_2]);
+        expect(rows.map(r => r.type)).toEqual([SyncMutationName.AdoptSchedule]);
+        expect(rows.map(r => r.payload.plotId)).toEqual([PLOT_1]);
+        expect(rows.map(r => r.payload.cropCycleId)).toEqual([CYCLE_1]);
         for (const r of rows) {
             expect(r.payload).toMatchObject({ farmId: FARM, scheduleTemplateId: SPRAY_TEMPLATE_ID });
             expect(r.payload).not.toHaveProperty('referenceDate'); // the library names no day 0
             expect(typeof r.payload.subscriptionId).toBe('string');
         }
-        // The choice is kept on this phone at once (pending, until the server answers) and the page already follows it.
+        // The choice is kept on this phone at once (pending, until the server answers) and the page already follows it - for that plot only.
         const kept = await getDatabase().scheduleSubscriptions.toArray();
-        expect(kept.map(k => [k.plotId, k.templateId, k.pending]).sort()).toEqual([[PLOT_1, SPRAY_TEMPLATE_ID, true], [PLOT_2, SPRAY_TEMPLATE_ID, true]]);
-        fireEvent.click(screen.getByTestId('page-back'));
+        expect(kept.map(k => [k.plotId, k.templateId, k.pending])).toEqual([[PLOT_1, SPRAY_TEMPLATE_ID, true]]);
+        // The step is the confirmation: the page is back on the शेड्यूल tab, on the plot it named.
+        expect(screen.getByTestId('schedule-page')).toHaveAttribute('data-view', 'HOME');
         expect(screen.getByTestId('sched-name')).toHaveTextContent('द्राक्ष — फवारणी शेड्यूल');
         expect(screen.queryByTestId('sched-choice-note')).toBeNull(); // nothing new is said when it could be sent
+    });
+
+    it('step 1 picks the plot: choosing B enqueues one adopt for B only', async () => {
+        await seedSeasons([[PLOT_1, CYCLE_1], [PLOT_2, CYCLE_2]]);
+        mount(twoPlots());
+        fireEvent.click(screen.getByTestId('open-library'));
+        fireEvent.click(screen.getByTestId(`library-plot-${PLOT_2}`));
+        expect(screen.getByTestId('library-confirm')).toHaveTextContent('द्राक्ष · B साठी हे शेड्यूल लावा');
+        chooseInLibrary(SPRAY_TEMPLATE_ID);
+        await waitFor(async () => expect(await queued()).toHaveLength(1));
+        expect((await queued())[0].payload).toMatchObject({ plotId: PLOT_2, cropCycleId: CYCLE_2, scheduleTemplateId: SPRAY_TEMPLATE_ID });
+        expect((await getDatabase().scheduleSubscriptions.toArray()).map(k => k.plotId)).toEqual([PLOT_2]);
+        expect(screen.getByTestId('sched-crop-plot')).toHaveTextContent('द्राक्ष · B'); // the page came back on the plot it named
+        expect(screen.getByTestId('sched-name')).toHaveTextContent('द्राक्ष — फवारणी शेड्यूल');
     });
 
     it('editor save enqueues one adopt for THAT plot with its day 0; the other plot is not touched (founder C2)', async () => {
@@ -127,7 +148,7 @@ describe('a schedule chosen on the page is saved on the server (L8b-2 Task 2)', 
         });
         mount([crop([plot({ id: PLOT_1, schedule: { ...plot().schedule, plotId: PLOT_1 } })])]);
         fireEvent.click(screen.getByTestId('open-library'));
-        fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
+        chooseInLibrary(SPRAY_TEMPLATE_ID);
 
         await waitFor(async () => expect(await queued()).toHaveLength(1));
         const [row] = await queued();
@@ -146,14 +167,14 @@ describe('a schedule chosen on the page is saved on the server (L8b-2 Task 2)', 
         await seedSeasons([[PLOT_1, CYCLE_1]]); // plot 2 has no season
         mount(twoPlots());
         fireEvent.click(screen.getByTestId('open-library'));
-        fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
+        fireEvent.click(screen.getByTestId(`library-plot-${PLOT_2}`));
+        chooseInLibrary(SPRAY_TEMPLATE_ID);
 
         expect(await screen.findByTestId('sched-choice-note')).toHaveTextContent(SC.choiceNotSent);
         // B009: the line says what is true - the choice is on this phone only until chosen again; it promises no later send.
         expect(SC.choiceNotSent).toBe('या प्लॉटचा हंगाम अजून सर्व्हरवर नाही, म्हणून ही निवड फक्त या फोनवर आहे. हंगाम सर्व्हरवर पोचल्यावर पुन्हा निवडा.');
         const rows = await queued();
-        expect(rows.map(r => r.payload.plotId)).toEqual([PLOT_1]); // only the plot the server can be told about
-        fireEvent.click(screen.getByTestId('page-back'));
+        expect(rows).toHaveLength(0); // the plot the server cannot be told about: nothing is sent
         expect(screen.getByTestId('sched-name')).toHaveTextContent('द्राक्ष — फवारणी शेड्यूल');
     });
 
@@ -165,10 +186,9 @@ describe('a schedule chosen on the page is saved on the server (L8b-2 Task 2)', 
         const seen: string[] = [document.body.textContent ?? ''];
         fireEvent.click(screen.getByTestId('open-library'));
         seen.push(document.body.textContent ?? '');
-        fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
-        await waitFor(async () => expect(await queued()).toHaveLength(2));
+        chooseInLibrary(SPRAY_TEMPLATE_ID);
+        await waitFor(async () => expect(await queued()).toHaveLength(1));
         seen.push(document.body.textContent ?? '');
-        fireEvent.click(screen.getByTestId('page-back'));
         fireEvent.click(await screen.findByTestId('open-editor'));
         seen.push(document.body.textContent ?? '');
         fireEvent.click(screen.getByTestId(`editor-schedule-${TEMPLATE_ID}`));
