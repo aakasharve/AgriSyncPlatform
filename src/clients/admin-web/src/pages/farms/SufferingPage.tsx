@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Frown } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { MetricLines } from '@/components/state';
+import { MetricLines, NotMeasured } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { metaRefreshedAt } from '@/lib/api';
@@ -53,7 +53,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
       key: 'problems',
       label: 'Problems',
       align: 'right',
-      render: (f) => fmt.num(f.problemCount),
+      render: (f) => fmt.num(f.problemCount) ?? <NotMeasured />,
       sortType: 'num',
       sortValue: (f) => f.problemCount,
       defaultDir: 'desc',
@@ -62,7 +62,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
       key: 'sync',
       label: 'Syncing',
       align: 'right',
-      render: (f) => fmt.num(f.syncProblems),
+      render: (f) => fmt.num(f.syncProblems) ?? <NotMeasured />,
       sortType: 'num',
       sortValue: (f) => f.syncProblems,
       defaultDir: 'desc',
@@ -71,7 +71,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
       key: 'entries',
       label: 'Entries',
       align: 'right',
-      render: (f) => fmt.num(f.entryProblems),
+      render: (f) => fmt.num(f.entryProblems) ?? <NotMeasured />,
       sortType: 'num',
       sortValue: (f) => f.entryProblems,
       defaultDir: 'desc',
@@ -80,7 +80,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
       key: 'voice',
       label: 'Voice',
       align: 'right',
-      render: (f) => fmt.num(f.voiceProblems),
+      render: (f) => fmt.num(f.voiceProblems) ?? <NotMeasured />,
       sortType: 'num',
       sortValue: (f) => f.voiceProblems,
       defaultDir: 'desc',
@@ -89,7 +89,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
       key: 'other',
       label: 'Other',
       align: 'right',
-      render: (f) => fmt.num(f.otherProblems),
+      render: (f) => fmt.num(f.otherProblems) ?? <NotMeasured />,
       sortType: 'num',
       sortValue: (f) => f.otherProblems,
       defaultDir: 'desc',
@@ -97,7 +97,7 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
     {
       key: 'last',
       label: 'Last problem',
-      render: (f) => fmt.dateTime(f.lastProblemAt, DATE_FORMATS.usersLastLogin),
+      render: (f) => fmt.dateTime(f.lastProblemAt, DATE_FORMATS.usersLastLogin) ?? <NotMeasured />,
       sortType: 'date',
       sortValue: (f) => f.lastProblemAt,
       defaultDir: 'desc',

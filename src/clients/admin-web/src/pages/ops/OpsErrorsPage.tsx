@@ -122,18 +122,12 @@ import { useOpsErrors, type OpsErrorEvent } from '@/hooks/useOpsErrors';
  * its own "could not load" state. So an empty answer is a real "none", and the
  * empty state says so with its window.
  *
- * 🔴 NO SERVER-SIDE ROW CAN EVER NAME A FARM. `farmId` is nullable in the
- * DTO, which is why Step 7's "not attributable" half is buildable. What the
- * plan did not know is how OFTEN: the middleware reads the farm off a
- * `farm_id` claim (`RequestObservabilityMiddleware.cs:161-162`) and NO TOKEN
- * THIS PLATFORM ISSUES CARRIES ONE. `JwtTokenIssuer` is the only issuer
- * (`DependencyInjection.cs:86`) and neither of its two paths stamps it
- * (`:26-40`, `:75-79`); `Claim("farm…` appears nowhere in the repository. So
- * every `api.error` and every `api.slow` row lands unattributed, and so does
- * every `client.error` posted to `/telemetry/client-error`, which reads the
- * same absent claim (`Program.cs:684`). Only the mobile client's own outbox
- * can attribute a row, because `/analytics/ingest` lifts `props.farmId` out
- * of the body instead (`IngestEventsHandler.cs:114-123`).
+ * THE FARM ON A ROW (CR-2e, C20). The server names the farm from the error
+ * record when it carries one (`farmSource: "event"`) and otherwise from the
+ * farm the request's address named (`"address"`). A row neither names (a sync
+ * upload, an anonymous phone report) has `farmId: null` and its Farm cell says
+ * "Not named in the request". Names come from `useFarmContacts`, once per new
+ * farm id; the short id shows while a name loads.
  *
  * ── NO FACETS, AND NO SUMMARY-FIRST GATE ─────────────────────────────────
  * v3 offers two filter groups, by endpoint and by status. A `DataList` facet
@@ -585,11 +579,10 @@ export default function OpsErrorsPage() {
               but not what the person at the other end lost.
             </p>
             <p>
-              <b>Some rows cannot be traced back to a farm.</b> The Farm column names the farm only
-              when the request itself named one in its address. A sync upload names no farm, so its
-              row says &ldquo;Not named in the request&rdquo; &mdash; that means the request did not
-              say, not that no farm was hit. A phone-reported error counts as named only when the
-              phone sent a farm with it.
+              <b>Some rows cannot be traced back to a farm.</b> The Farm column names the farm
+              when the error record carries one or the request itself named one in its address. A
+              sync upload names no farm, so its row says &ldquo;Not named in the request&rdquo;
+              &mdash; that means the request did not say, not that no farm was hit.
             </p>
             <p>
               <b>There is no error rate, and there cannot be one.</b> Nothing counts how many

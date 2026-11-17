@@ -281,7 +281,7 @@ function buildSufferingColumns(contacts: Map<string, FarmContact>): DataListColu
     key,
     label,
     align: 'right',
-    render: (f) => fmt.num(get(f)),
+    render: (f) => fmt.num(get(f)) ?? <NotMeasured />,
     sortType: 'num',
     sortValue: get,
     defaultDir: 'desc',
@@ -311,7 +311,7 @@ function buildSufferingColumns(contacts: Map<string, FarmContact>): DataListColu
     {
       key: 'last',
       label: 'Last problem',
-      render: (f) => fmt.dateTime(f.lastErrorAt, DATE_FORMATS.usersLastLogin),
+      render: (f) => fmt.dateTime(f.lastErrorAt, DATE_FORMATS.usersLastLogin) ?? <NotMeasured />,
       sortType: 'date',
       sortValue: (f) => f.lastErrorAt,
       defaultDir: 'desc',
@@ -508,11 +508,17 @@ export default function OpsLivePage() {
 
   const events = useMemo(() => data?.recentErrors ?? [], [data]);
   const sufferingFarms = Array.isArray(data?.topSufferingFarms) ? data.topSufferingFarms : null;
-  const contacts = useFarmContacts(useMemo(() => (sufferingFarms ?? []).map((f) => f.farmId), [sufferingFarms]));
-  const eventContacts = useFarmContacts(
-    useMemo(() => events.map((e) => e.farmId).filter((id): id is string => !!id), [events]),
+  /* ONE contacts instance for both lists: a farm in both is asked once per page load. */
+  const contacts = useFarmContacts(
+    useMemo(
+      () => [
+        ...(sufferingFarms ?? []).map((f) => f.farmId),
+        ...events.map((e) => e.farmId).filter((id): id is string => !!id),
+      ],
+      [sufferingFarms, events],
+    ),
   );
-  const eventColumns = useMemo(() => buildEventColumns(eventContacts), [eventContacts]);
+  const eventColumns = useMemo(() => buildEventColumns(contacts), [contacts]);
   const sufferingColumns = useMemo(() => buildSufferingColumns(contacts), [contacts]);
   /* Property (9). 50 is the server's LIMIT, so a full page is the one case
      where this table is a sample rather than the answer. */
