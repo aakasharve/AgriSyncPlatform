@@ -9,7 +9,7 @@
 import React from 'react';
 import { LineChart } from './MisLineChart';
 import { Heatmap, PartBar, ScaleLegend } from './MisSmallCharts';
-import { ChartBody, ChartCard, NotMeasuredYet, Row, compareLegend, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
+import { ChartBody, ChartCard, ItemLines, NotMeasuredYet, Row, compareLegend, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
 import { OTHER, SERIES } from './misTheme';
 import { itemByKey } from './misItems';
 import { fmtDec, fmtHour, fmtInt } from './misFormat';
@@ -111,6 +111,7 @@ export const EngagementSection: React.FC<MisSectionProps<EngagementView>> = ({ v
                     </ChartBody>
                     <div className="mt-5" data-mis-item="engagement.featureByRole" data-mis-fields="">
                         <p className="text-[13px] font-medium text-stone-800">Feature use by role</p>
+                        <ItemLines item="engagement.featureByRole" className="mt-1" />
                         <div className="mt-2"><NotMeasuredYet why={why('engagement.featureByRole')} /></div>
                     </div>
                 </ChartCard>

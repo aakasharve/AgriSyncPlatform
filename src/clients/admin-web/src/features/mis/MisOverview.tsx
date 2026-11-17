@@ -9,7 +9,7 @@
 import React from 'react';
 import { LineChart } from './MisLineChart';
 import { ColumnChart } from './MisColumnChart';
-import { CARD, ChartBody, ChartCard, Delta, KpiStrip, Legend, Row, Shown, compareLegend, cx, itemAttrs, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
+import { CARD, ChartBody, ChartCard, Delta, ItemLines, KpiStrip, Legend, Row, Shown, compareLegend, cx, itemAttrs, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
 import { SERIES } from './misTheme';
 import { itemByKey } from './misItems';
 import { fmtCompact, fmtInt } from './misFormat';
@@ -24,7 +24,8 @@ export const OverviewSection: React.FC<MisSectionProps<OverviewView>> = ({ view,
                 <div className="grid gap-8 lg:grid-cols-[250px_minmax(0,1fr)]">
                     <div className="flex flex-col">
                         <h3 id="mis-hero-label" className="text-[15px] font-medium text-stone-900">Active farms</h3>
-                        <p className="mt-0.5 text-[13px] text-stone-500">Farms that saved at least one entry in the 7 days to {hero.asOf}</p>
+                        <p className="mt-0.5 text-[13px] text-stone-500">As of {hero.asOf}</p>
+                        <ItemLines item={hero.item} className="mt-1.5" />
                         <div className="mt-5 text-[56px] font-medium leading-none tracking-[-0.025em] text-stone-900" data-testid="kpi-activeFarms-value">
                             <Shown shown={hero.current} />
                         </div>

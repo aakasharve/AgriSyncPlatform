@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { ArrowDown, ChevronRight } from 'lucide-react';
 import { NotMeasured } from '@/components/state';
 import { FUNNEL_RAMP, SEQ_INK, SEQ_RAMP, SERIES, seqIndex } from './misTheme';
-import { ChartTooltip, Delta, cx, itemAttrs, useMeasuredWidth } from './MisUi';
+import { ChartTooltip, Delta, ItemLines, cx, itemAttrs, useMeasuredWidth } from './MisUi';
 import { fmtHour, fmtInt, fmtPctPoints } from './misFormat';
 import type { CohortRowModel, FunnelStepModel, MisDelta } from './misView';
 
@@ -146,6 +146,7 @@ export const Funnel: React.FC<{ steps: FunnelStepModel[]; compare: boolean }> = 
                                         <div className="h-3 rounded-[4px]" style={{ width: `${Math.max(measured ? 0.5 : 0, Math.min(100, width))}%`, background: FUNNEL_RAMP[k % FUNNEL_RAMP.length] }} />
                                     </div>
                                 )}
+                            <ItemLines item={s.item} className="mt-1" />
                             {s.pending === null && s.current.kind === 'notMeasured' && <p className="mt-1 text-[12px] text-stone-500">{s.current.why}</p>}
                         </div>
                         <div className="w-[120px] text-right">

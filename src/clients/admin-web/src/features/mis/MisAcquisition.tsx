@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { Funnel } from './MisSmallCharts';
-import { ChartCard, NotMeasuredYet, Row, type MisSectionProps } from './MisUi';
+import { ChartCard, ItemLines, NotMeasuredYet, Row, type MisSectionProps } from './MisUi';
 import { itemByKey } from './misItems';
 import type { AcquisitionView } from './misView';
 
@@ -58,9 +58,10 @@ export const AcquisitionSection: React.FC<MisSectionProps<AcquisitionView>> = ({
                 subtitle="Habit = saved entries on 3 of their first 7 days"
             >
                 <NotMeasuredYet why={why('acquisition.channelVerify')} />
-                <p className="mt-3 text-[12px] text-stone-500" data-mis-item="acquisition.channelHabit" data-mis-fields="">
+                <div className="mt-3 text-[12px] text-stone-500" data-mis-item="acquisition.channelHabit" data-mis-fields="">
                     Habit by channel is not measured yet either. {why('acquisition.channelHabit')}
-                </p>
+                    <ItemLines item="acquisition.channelHabit" className="mt-1.5" />
+                </div>
             </ChartCard>
         </Row>
         <ChartCard

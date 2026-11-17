@@ -97,6 +97,20 @@ export function itemAttrs(item: string, fields?: readonly MisFieldPath[]): { 'da
     return { 'data-mis-item': item, 'data-mis-fields': (fields ?? itemByKey(item).fields).join(' ') };
 }
 
+/**
+ * B21/B24: the two plain lines every tile and card shows as visible text (never a tooltip):
+ * what the number is, and why it is on the page. Copied verbatim from `misItems`.
+ */
+export const ItemLines: React.FC<{ item: string; className?: string }> = ({ item, className }) => {
+    const it = itemByKey(item);
+    return (
+        <div className={cx('space-y-0.5', className)} data-mis-lines={item}>
+            <p className="text-[12px] leading-snug text-stone-600" data-mis-line="what">{it.what}</p>
+            <p className="text-[12px] leading-snug text-stone-500" data-mis-line="why">{it.whyHere}</p>
+        </div>
+    );
+};
+
 export interface TableView {
     columns: string[];
     rows: (string | number)[][];
@@ -141,6 +155,7 @@ export const ChartCard: React.FC<{
                 <div className="min-w-0">
                     <h3 className="text-[15px] font-medium leading-snug text-stone-900">{title}</h3>
                     {subtitle && <p className="mt-0.5 text-[13px] leading-snug text-stone-500">{subtitle}</p>}
+                    <ItemLines item={item} className="mt-1.5" />
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                     {action}
@@ -235,7 +250,9 @@ export const Delta: React.FC<{ delta: MisDelta; className?: string }> = ({ delta
 export const KpiTile: React.FC<{ tile: MisTileModel; compare: boolean }> = ({ tile, compare }) => (
     <div className="flex min-w-0 flex-col bg-white px-5 pb-4 pt-4" data-testid={`kpi-${tile.item}`} {...itemAttrs(tile.item, tile.fields)}>
         <p className="truncate text-[13px] font-medium text-stone-700" title={tile.hint}>{tile.label}</p>
-        {tile.hint && <p className="text-[12px] leading-snug text-stone-500">{tile.hint}</p>}
+        {/* B24: the item's `what` line takes the place of its static hint; a hint that carries a count ("12 of 50 entries") stays. */}
+        {tile.hint && tile.hint !== itemByKey(tile.item).hint && <p className="text-[12px] leading-snug text-stone-500">{tile.hint}</p>}
+        <ItemLines item={tile.item} className="mt-0.5" />
         {tile.note && <p className="text-[12px] leading-snug text-stone-500">{tile.note}</p>}
         {tile.current.kind === 'value'
             ? (

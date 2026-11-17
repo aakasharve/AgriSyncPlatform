@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { LineChart } from './MisLineChart';
-import { ChartBody, ChartCard, KpiStrip, NotMeasuredYet, Row, compareLegend, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
+import { ChartBody, ChartCard, ItemLines, KpiStrip, NotMeasuredYet, Row, compareLegend, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
 import { SERIES } from './misTheme';
 import { itemByKey } from './misItems';
 import { fmtDec, fmtMs, fmtPctPoints } from './misFormat';
@@ -69,6 +69,7 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
                         : undefined}
                 >
                     <div data-mis-item="quality.transcriptionP95" data-mis-fields="quality.transcriptionP95Ms">
+                        <ItemLines item="quality.transcriptionP95" className="mb-3" />
                         <ChartBody chart={latency} checkedAt={checkedAt}>
                             {(l) => (
                                 <LineChart
