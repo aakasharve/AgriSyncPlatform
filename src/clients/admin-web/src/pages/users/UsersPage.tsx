@@ -513,7 +513,7 @@ export default function UsersPage() {
               belongs to a permission, not to a person.
             </p>
             <p>
-              🛑 <b>The phone numbers are shown in full, and that is the server&rsquo;s doing.</b>{' '}
+              <b>The phone numbers are shown in full, and that is the server&rsquo;s doing.</b>{' '}
               Every admin who can open this screen sees complete numbers. This screen shows whatever
               it is sent, and will show a partly-hidden number the moment the server starts sending
               one &mdash; but the hiding has to happen on the server, and today it does not.

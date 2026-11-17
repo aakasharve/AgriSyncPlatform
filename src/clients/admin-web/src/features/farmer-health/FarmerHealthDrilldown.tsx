@@ -126,7 +126,7 @@ export default function FarmerHealthDrilldown() {
       {failed && (
         <LoadFailed
           error={error}
-          what="this farm’s health record"
+          what="this farmer's health record"
           onRetry={() => {
             void refetch();
           }}

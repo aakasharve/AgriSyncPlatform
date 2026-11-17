@@ -590,9 +590,8 @@ export default function OpsErrorsPage() {
               <b>Almost nothing here can be traced back to a farm.</b> To name the farm, the error
               record would have to carry the farm&rsquo;s identifier, and the sign-in credentials
               this platform issues do not include one &mdash; so nearly every error the server
-              records is anonymous. Only errors reported by the farmer&rsquo;s own app can name a
-              farm, and even then it is an id rather than a name: no farm name comes back here at
-              all.
+              records is anonymous. The Farm column is not built yet, so it shows no farm for any
+              row, and no farm name comes back here at all.
             </p>
             <p>
               <b>There is no error rate, and there cannot be one.</b> Nothing counts how many

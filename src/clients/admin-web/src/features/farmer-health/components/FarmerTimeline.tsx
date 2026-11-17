@@ -61,7 +61,7 @@ const ROWS: RowMeta[] = [
   { key: 'closuresSubmitted', label: 'Submitted', source: 'closure.submitted' },
   { key: 'proofAttached', label: 'Proof', source: 'proof.attached' },
   { key: 'summariesViewed', label: 'Summary', source: 'closure_summary.viewed' },
-  { key: 'verifications', label: 'Verifies', source: 'verification.recorded', idea: true },
+  { key: 'verifications', label: 'Checked', source: 'verification.recorded', idea: true },
   {
     key: 'errors',
     label: 'Errors',
@@ -191,7 +191,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
       {/* The scale, stated. Comparing two ROWS by shade is the one reading
           this grid cannot support, and the old caption invited it. */}
       <p data-scale-note="" className="mb-3 text-caption text-text-3">
-        Each row is shaded against its own busiest day, not against the other rows — a dark cell in
+        Each counted row is shaded against its own busiest day, not against the other rows — a dark cell in
         Started and a dark cell in Submitted are not the same number. The figure is in the cell.
       </p>
       <MetricLines metric="fh-timeline" className="mb-3" />
@@ -203,8 +203,9 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
           aria-label="Activity by event type and day"
         >
           <caption className="sr-only">
-            Counts of six event types on this farm for each of the last {fmt.num(days.length)} days.
-            Each row is shaded against its own maximum.
+            Counts of four event types on this farm (started, submitted, proof, summary viewed) for
+            each of the last {fmt.num(days.length)} days. Two more rows, Checked and Errors, are not
+            built yet and show no counts. Each counted row is shaded against its own maximum.
           </caption>
           <thead>
             <tr>
@@ -227,19 +228,22 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                 <th
                   scope="row"
                   className="pr-2 text-left text-caption font-semibold text-text-1"
-                  title={`Counts ${row.source}`}
+                  title={row.idea ? undefined : `Counts ${row.source}`}
                 >
                   {row.label}
                   {row.idea && <NotBuiltYetMark />}
                 </th>
-                {days.map((d) => {
-                  if (row.idea) {
-                    return (
-                      <td key={`${row.key}-${d.date}`} className="p-0">
-                        <div aria-hidden="true" className="h-7 w-7 rounded-chip bg-wash" />
-                      </td>
-                    );
-                  }
+                {row.idea && (
+                  <td colSpan={days.length} className="p-0">
+                    <div
+                      data-idea-cell={row.key}
+                      className="grid h-7 place-items-center rounded-chip bg-wash text-caption font-semibold text-text-3"
+                    >
+                      Not built yet
+                    </div>
+                  </td>
+                )}
+                {!row.idea && days.map((d) => {
                   const count = d[row.key];
                   const pct = intensityPct(count, maxByRow[row.key]);
                   return (

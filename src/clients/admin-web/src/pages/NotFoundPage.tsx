@@ -69,7 +69,7 @@ export default function NotFoundPage() {
 
         <div className="flex justify-center gap-2">
           <Link to="/">
-            <Button variant="outline">Go to Home</Button>
+            <Button variant="outline">Go to Overview</Button>
           </Link>
         </div>
       </div>

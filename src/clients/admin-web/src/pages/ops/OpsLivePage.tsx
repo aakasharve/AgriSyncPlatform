@@ -497,6 +497,23 @@ export default function OpsLivePage() {
           ],
         },
         {
+          id: 'alert-r1-r8',
+          name: 'mis.alert_r1 … r8 (eight views)',
+          feeds: 'The daily alert job only — nothing in this console',
+          stateText: 'Not read here',
+          tone: 'grey',
+          lastHeard: null,
+          lastHeardWhy: 'This console never reads these views, so it has never heard from them.',
+          detail:
+            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This endpoint reads two. That is why this screen says NOT CHECKED rather than CLEAR for them: it has no state for them, and a rule this screen never ran cannot be reported as passing.',
+          facts: [
+            ['Views', 'r1 smooth decay … r8 referral quality'],
+            ['Read by', 'AlertDispatcherJob, daily at 03:30 UTC'],
+            ['Read here', 'no'],
+            ['Delivery on breach', 'one line in the API host log'],
+          ],
+        },
+        {
           id: 'nightly',
           name: 'Nightly metrics rebuild',
           feeds:
