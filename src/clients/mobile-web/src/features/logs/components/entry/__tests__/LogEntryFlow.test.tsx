@@ -25,6 +25,10 @@ const CROPS = [crop('cane', 'ऊस', 'Sugarcane', ['ऊस १', 'ऊस २'])
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 /** Lane FX-1 — nothing told today yet: the हजेरी card is the empty one. */
 const NOTHING_TOLD: TodayAttendance = { work: null, headcount: null, provisional: false };
+/** Lane UI-6 (founder D-150): the big हजेरी card is drawn only once a head count was said. */
+const COUNT_TOLD: TodayAttendance = { work: null, headcount: 5, provisional: false };
+const WORK_AND_COUNT: TodayAttendance = { work: { names: ['खुरपणी'], parts: [], place: null }, headcount: 8, provisional: false };
+const WORK_NO_COUNT: TodayAttendance = { work: { names: ['खुरपणी'], parts: [], place: null }, headcount: null, provisional: false };
 
 /** Stands in for the real recorder: it reports recording on/off, like the real one. */
 const FakeRecorder: React.FC<{ hooks: RecorderHooks }> = ({ hooks }) => (
@@ -58,16 +62,16 @@ const scopeNow = (): LogScope => JSON.parse(screen.getByTestId('scope').textCont
 afterEach(() => { cleanup(); __resetBackStackForTests(); });
 
 describe('work home — the tab opens on the doors (H08, H10)', () => {
-    it('owner: the big "झालेले काम सांगा" door and the "आजची हजेरी" card, and no plan door the server cannot back', () => {
+    it('owner: the big "झालेले काम सांगा" door, and the "आजची हजेरी" card once a head count was said, and no plan door the server cannot back', () => {
         const onOpenAttendance = vi.fn();
-        render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} />);
+        render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} attendance={WORK_AND_COUNT} />);
         expect(screen.getByTestId('home-title')).toHaveTextContent('काय करायचं आहे?');
         expect(screen.getByTestId('home-tell')).toHaveTextContent('झालेले काम सांगा');
-        // lane FX-1 (ATT-LOG): the हजेरी door is now the हजेरी card — empty until the work and the headcount are told
-        expect(screen.getByTestId('home-attendance')).toHaveTextContent('आजची हजेरी');
-        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'empty');
-        // the door, the card's one button and its quiet link to the हजेरी place: the plan door waits on a server model (P5)
-        expect(screen.getAllByRole('button')).toHaveLength(3);
+        // lane FX-1 (ATT-LOG) made the हजेरी door a card; lane UI-6 (D-150) draws it only when a head count was said
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'ready');
+        expect(screen.getByTestId('home-attendance')).toHaveTextContent('इथे हजेरी घ्या — आज 8 जण');
+        // the door and the card's quiet link to the हजेरी place: the plan door waits on a server model (P5)
+        expect(screen.getAllByRole('button')).toHaveLength(2);
         expect(document.body.textContent).not.toContain('कामांची जबाबदारी सोपवा');
         expect(document.body.textContent).not.toContain('कामांचे नियोजन करा');
         // the old door's way to the हजेरी place (वही, आढावा, people) is kept as the card's link
@@ -75,9 +79,23 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
         expect(onOpenAttendance).toHaveBeenCalledTimes(1);
     });
 
+    it('lane UI-6 (D-150): nothing told today = no हजेरी card, only the door; work told without a head count = one small line that opens the same step', () => {
+        render(<Harness role="PrimaryOwner" />);
+        expect(screen.queryByTestId('home-attendance')).toBeNull();
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.getAllByRole('button')).toHaveLength(1);
+        cleanup();
+        render(<Harness role="PrimaryOwner" attendance={WORK_NO_COUNT} />);
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-attendance-ask'));
+        expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
+        expect(screen.getByTestId('flow-sathi-question')).toHaveTextContent('कोणत्या पिकावर काम झालं ?');
+    });
+
     it('lane FX-1 (CTX-1): the हजेरी card button opens the crop question first — the same step as "झालेले काम सांगा", never the mic', () => {
         const onOpenAttendance = vi.fn();
-        render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} />);
+        // a head count was said and no work: the card is drawn and asks for the work (lane UI-6: it used to be drawn with nothing told)
+        render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} attendance={COUNT_TOLD} />);
         expect(screen.getByTestId('attendance-card-tell')).toHaveTextContent('आधी आजचं काम सांगा');
         fireEvent.click(screen.getByTestId('attendance-card-tell'));
         expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
@@ -100,10 +118,10 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
     });
 
     it('मुकादम: the हजेरी door only with the owner\'s labour grant (the server\'s cached answer)', () => {
-        render(<Harness role="Mukadam" />);
+        render(<Harness role="Mukadam" attendance={WORK_AND_COUNT} />);
         expect(screen.queryByTestId('home-attendance')).toBeNull();
         cleanup();
-        render(<Harness role="Mukadam" cachedGrant />);
+        render(<Harness role="Mukadam" cachedGrant attendance={WORK_AND_COUNT} />);
         expect(screen.getByTestId('home-attendance')).toBeInTheDocument();
         // lane 2b (D-22 / D-26): only the PRIMARY owner's label opens it; a सहमालक waits for the server.
         expect(mayOpenAttendanceFromHome('PrimaryOwner', undefined)).toBe(true);
@@ -115,7 +133,8 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
 
     it('the running-cost card is re-homed here, names what it covers, and shows "—" (never ₹ 0) for nothing recorded', () => {
         render(<Harness />);
-        expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च: संपूर्ण शेत');
+        // lane UI-6 (D-150, picture H1): the card is the full-width dark one; its label reads "खर्च — <scope> · आजपर्यंत"
+        expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च — संपूर्ण शेत · आजपर्यंत');
         expect(screen.getByTestId('running-cost-today')).toHaveTextContent('₹ 1,200');
         expect(screen.getByTestId('running-cost-yesterday')).toHaveTextContent('—');
         expect(screen.getByTestId('running-cost-so-far')).toHaveTextContent('₹ 45,000');

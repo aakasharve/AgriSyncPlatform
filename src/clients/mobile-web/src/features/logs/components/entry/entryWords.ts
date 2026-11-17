@@ -85,10 +85,12 @@ export const HOME_WORDS = {
  */
 export const PLAN_DOOR_WORDS = {
     mr: {
-        // PROPOSED (Marathi) - the preview's
-        plan: 'कामांची जबाबदारी सोपवा / कामांचे नियोजन करा',
-        // PROPOSED (Marathi) - the preview's
-        planSub: 'शेतात नसलात तरी पुढचं काम ठरवा आणि मुकादमाला सोपवा',
+        // Lane UI-6 (founder D-150, notes 1.2 and 2.4): the door says only "नियोजन करा", bigger; the old long title
+        // "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा" is gone, its second half kept as the line under it.
+        // FOUNDER (D-150) - his own words for the door's name
+        plan: 'नियोजन करा',
+        // PROPOSED (Marathi) - the line of the approved picture H1 (replaces the preview's "शेतात नसलात तरी ...")
+        planSub: 'पुढची कामे ठरवा आणि मुकादमाला सोपवा',
         // PROPOSED (Marathi) - the preview's
         mine: 'तुमच्यावर सोपवलेली कामे',
         // PROPOSED (Marathi) - the preview's
@@ -97,10 +99,10 @@ export const PLAN_DOOR_WORDS = {
         openCount: (n: number): string => `${n} कामे चालू`,
     },
     en: {
-        // PROPOSED (English)
-        plan: 'Hand over work / Plan the work',
-        // PROPOSED (English)
-        planSub: 'Even when you are not on the farm, decide the next work and hand it to the mukadam',
+        // PROPOSED (English) - twin of "नियोजन करा"
+        plan: 'Plan the work',
+        // PROPOSED (English) - twin of the picture H1 line
+        planSub: 'Decide the next work and hand it to the mukadam',
         // PROPOSED (English)
         mine: 'Work handed to you',
         // PROPOSED (English)
@@ -143,6 +145,11 @@ export const COST_WORDS = {
     soFar: 'आतापर्यंत',
     /** Doctrine P4: nothing recorded shows a dash, never "₹ 0". */
     none: '—',
+    // Lane UI-6 (picture H1, founder D-150): the dark card's one small label "खर्च — <what it covers> · आजपर्यंत".
+    // PROPOSED (Marathi) - the picture's own words
+    title: 'खर्च',
+    // PROPOSED (Marathi) - the picture's own word ("आजपर्यंत"; the three-box card said "आतापर्यंत")
+    untilToday: 'आजपर्यंत',
 } as const;
 
 // PROPOSED (Marathi) — what the farmer is asked to say again when one part of a log is re-recorded.

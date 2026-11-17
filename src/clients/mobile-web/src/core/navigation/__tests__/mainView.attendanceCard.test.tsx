@@ -5,8 +5,10 @@
  *
  * Lane FX-1 — founder ATT-LOG (2026-10-31, register F81) and rule CTX-1, on the real log view (`renderLogView`):
  *
- *   - the work home's हजेरी card reads the day's STORED logs by the हजेरी rule: empty until the work and the headcount
- *     are both told; its button is the "झालेले काम सांगा" step — the crop question first, never the mic;
+ *   - the work home's हजेरी card reads the day's STORED logs by the हजेरी rule; since lane UI-6 (founder D-150, note 2.4)
+ *     the big card is drawn only once a head count was said - with work told and no head count there is ONE small line
+ *     ("किती जण होते ते सांगा") instead, and with nothing told nothing; the card's button is the "झालेले काम सांगा" step -
+ *     the crop question first, never the mic;
  *   - both told: "इथे हजेरी घ्या — आज N जण" opens the हजेरी place straight on the names;
  *   - only someone who may take हजेरी sees it (the same door rule as before);
  *   - the result screen shows the same empty card when that recording states work but no headcount; its button opens
@@ -88,11 +90,19 @@ function ctx(over: Partial<AppRouterContext> = {}): AppRouterContext {
 afterEach(() => { cleanup(); vi.resetModules(); seen.props = null; });
 
 describe('ATT-LOG on the work home', { timeout: 60_000 }, () => {
-    it('nothing stored today: the empty card; its button opens the crop question (the "झालेले काम सांगा" step), not the mic', async () => {
+    it('nothing stored today: no हजेरी card and no line (lane UI-6: the card comes only when a head count was said)', async () => {
         const { renderLogView } = await load();
-        const c = ctx();
+        render(<>{renderLogView(ctx())}</>);
+        expect(screen.getByTestId('home-tell')).toBeInTheDocument();
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.queryByTestId('home-attendance')).toBeNull();
+    });
+
+    it('a head count stored, no work: the card; its button opens the crop question (the "झालेले काम सांगा" step), not the mic', async () => {
+        const { renderLogView } = await load();
+        const c = ctx({ history: [COUNT] });
         render(<>{renderLogView(c)}</>);
-        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'empty');
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'count-told');
         fireEvent.click(screen.getByTestId('attendance-card-tell'));
         expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
         expect(screen.getByTestId('flow-sathi-question')).toHaveTextContent('कोणत्या पिकावर काम झालं ?');
@@ -100,11 +110,12 @@ describe('ATT-LOG on the work home', { timeout: 60_000 }, () => {
         expect(c.openPlace).not.toHaveBeenCalled();
     });
 
-    it('today\'s stored work, no headcount: "किती जण होते ते सांगा", which also starts on the crop question', async () => {
+    it('today\'s stored work, no headcount: no big card, one small "किती जण होते ते सांगा" line, which also starts on the crop question', async () => {
         const { renderLogView } = await load();
         render(<>{renderLogView(ctx({ history: [WORK] }))}</>);
-        expect(screen.getByTestId('attendance-card-work')).toHaveTextContent('काम सांगितलं — खुरपणी');
-        fireEvent.click(screen.getByTestId('attendance-card-tell'));
+        expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.getByTestId('home-attendance-ask')).toHaveTextContent('किती जण होते ते सांगा');
+        fireEvent.click(screen.getByTestId('home-attendance-ask'));
         expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
     });
 
@@ -166,5 +177,30 @@ describe('ATT-LOG on the result screen after he speaks', { timeout: 60_000 }, ()
         render(<>{renderLogView(ctx({ history: [WORK], canOpenAttendanceFromHome: false, ...result('LOG-W') } as Partial<AppRouterContext>))}</>);
         await screen.findByTestId('voice-result-stub');
         expect(screen.queryByTestId('attendance-card')).toBeNull();
+    });
+});
+
+describe('the money card on the work home (lane UI-6, founder D-150: the full-width dark card; who sees it is unchanged)', { timeout: 60_000 }, () => {
+    const COST = { costSnapshot: { today: 1200, cropSoFar: 45000, unverifiedToday: 0, scopeLabel: 'संपूर्ण शेत' }, yesterdayCost: 300 };
+
+    it('the owner sees it, dark, with the real figures', async () => {
+        const { renderLogView } = await load();
+        render(<>{renderLogView(ctx({ ...COST } as Partial<AppRouterContext>))}</>);
+        const card = screen.getByTestId('running-cost-card');
+        expect(card.className).toContain('bg-stone-900');
+        expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च — संपूर्ण शेत · आजपर्यंत');
+        expect(screen.getByTestId('running-cost-so-far')).toHaveTextContent('₹ 45,000');
+        expect(screen.getByTestId('running-cost-recent')).toHaveTextContent('आज ₹ 1,200 · काल ₹ 300');
+    });
+
+    it('a worker, and a seat the server says may not see money, see no card at all', async () => {
+        const { renderLogView } = await load();
+        render(<>{renderLogView(ctx({ ...COST, farmRole: 'Worker', canOpenAttendanceFromHome: false } as Partial<AppRouterContext>))}</>);
+        expect(screen.getByTestId('home-tell')).toBeInTheDocument();
+        expect(screen.queryByTestId('running-cost-card')).toBeNull();
+        cleanup();
+        render(<>{renderLogView(ctx({ ...COST, maySeeMoney: false } as Partial<AppRouterContext>))}</>);
+        expect(screen.getByTestId('home-tell')).toBeInTheDocument();
+        expect(screen.queryByTestId('running-cost-card')).toBeNull();
     });
 });
