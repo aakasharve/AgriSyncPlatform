@@ -100,4 +100,21 @@ describe('PhoneDigitBoxes', () => {
         expect(out()).toBe('9876543210');
         expect(box(1).value).toBe('9');
     });
+
+    it('fill() on the hidden input keeps focus there, so the whole number lands (found in the running app)', () => {
+        render(<Harness />);
+        const real = document.getElementById('t-phone') as HTMLInputElement;
+        real.focus(); // Playwright's fill() focuses the element first
+        expect(document.activeElement).toBe(real);
+        fireEvent.change(real, { target: { value: '8888888888' } });
+        expect(out()).toBe('8888888888');
+        expect(box(10).value).toBe('8');
+    });
+
+    it('a label click (a click on the hidden input) hands the caret to the first free box', () => {
+        render(<Harness initial="98" />);
+        const real = document.getElementById('t-phone') as HTMLInputElement;
+        fireEvent.click(real);
+        expect(document.activeElement).toBe(box(3));
+    });
 });

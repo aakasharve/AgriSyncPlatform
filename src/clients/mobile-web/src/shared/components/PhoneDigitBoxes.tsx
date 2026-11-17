@@ -166,7 +166,10 @@ const PhoneDigitBoxes: React.FC<PhoneDigitBoxesProps> = ({
                 disabled={disabled}
                 tabIndex={-1}
                 onChange={e => onChange(phoneFromPaste(e.target.value))}
-                onFocus={() => focusBox(Math.min(digits.length, PHONE_LENGTH - 1))}
+                // A label click reaches this input as a CLICK, so the click hands the caret to the first free box.
+                // It must NOT be onFocus: Playwright's fill() (the e2e helper) and some autofills focus this input
+                // first, and moving focus away at that moment sends the whole number into one box (cut to 2 digits).
+                onClick={() => focusBox(Math.min(digits.length, PHONE_LENGTH - 1))}
                 className="sr-only"
             />
 
