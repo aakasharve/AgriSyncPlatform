@@ -60,6 +60,24 @@ public sealed class AdminFarmerHealthRepository(
     /// <summary>Workers listed (P7).</summary>
     public const int TopWorkers = 5;
 
+    // Reasons that mark an event as NOT a person's deliberate check (C24). Constants only, never copied strings.
+    private static readonly string?[] NotADeliberateCheckReasons =
+    [
+        DailyLog.SelfAttestationReason,
+        DailyLog.BackfilledAttestationReason,
+        DailyLog.EnRouteConfirmReason,
+        DailyLog.SpeakerOwnMarkReason,
+        DailyLog.NoConfirmAuthorityMarkReason,
+    ];
+
+    // Of those, the markers meaning "checked only by the person who saved it" (C24, P6).
+    private static readonly string?[] SelfCheckReasons =
+    [
+        DailyLog.SelfAttestationReason,
+        DailyLog.BackfilledAttestationReason,
+        DailyLog.SpeakerOwnMarkReason,
+    ];
+
     public async Task<FarmerHealthDto?> GetAsync(
         Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default)
     {
@@ -243,7 +261,13 @@ public sealed class AdminFarmerHealthRepository(
         // saver at creation: counted as selfChecked, never as confirmed or verified.
         var hasOtherCheck = entryEvents
             .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
-                        && v.Reason != DailyLog.SelfAttestationReason)
+                        && !NotADeliberateCheckReasons.Contains(v.Reason))
+            .Select(v => v.DailyLogId)
+            .ToHashSet();
+
+        // Entries with no deliberate check that carry a self marker on any event: checked only by the saver.
+        var hasSelfMarker = entryEvents
+            .Where(v => SelfCheckReasons.Contains(v.Reason))
             .Select(v => v.DailyLogId)
             .ToHashSet();
 
@@ -252,8 +276,10 @@ public sealed class AdminFarmerHealthRepository(
         {
             switch (latestStatus.TryGetValue(entryId, out var status) ? status : (VerificationStatus?)null)
             {
-                case VerificationStatus.Confirmed when !hasOtherCheck.Contains(entryId): selfChecked++; break;
-                case VerificationStatus.Verified when !hasOtherCheck.Contains(entryId): selfChecked++; break;
+                case VerificationStatus.Confirmed or VerificationStatus.Verified
+                    when !hasOtherCheck.Contains(entryId):
+                    if (hasSelfMarker.Contains(entryId)) selfChecked++; else waiting++;
+                    break;
                 case VerificationStatus.Confirmed: confirmed++; break;
                 case VerificationStatus.Verified: verified++; break;
                 case VerificationStatus.Disputed: disputed++; break;
@@ -284,7 +310,7 @@ public sealed class AdminFarmerHealthRepository(
             .ToListAsync(ct);
 
         var checksByDay = checkEvents
-            .Where(e => e.Reason != DailyLog.SelfAttestationReason && e.Reason != DailyLog.EnRouteConfirmReason)
+            .Where(e => !NotADeliberateCheckReasons.Contains(e.Reason))
             .GroupBy(e => GetCompanyMisHandler.IstDay(DateTime.SpecifyKind(e.OccurredAtUtc, DateTimeKind.Utc)))
             .ToDictionary(g => g.Key, g => g.Select(e => e.DailyLogId).Distinct().Count());
 
