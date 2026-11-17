@@ -9,6 +9,8 @@ export interface OpsErrorEvent {
   statusCode: number | null;
   latencyMs: number | null;
   farmId: string | null;
+  /** 'event' (the record named the farm), 'address' (the request's address did) or null (not named). */
+  farmSource?: 'event' | 'address' | null;
   occurredAtUtc: string;
 }
 export interface OpsFarmError {
@@ -17,6 +19,7 @@ export interface OpsFarmError {
   syncErrors: number;
   logErrors: number;
   voiceErrors: number;
+  otherErrors: number;
   lastErrorAt: string;
 }
 export interface OpsHealthData {

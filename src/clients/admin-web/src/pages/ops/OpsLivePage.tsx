@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { QueryCache } from '@tanstack/react-query';
@@ -16,8 +16,10 @@ import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt, type AdminResponse } from '@/lib/api';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { PersonName } from '@/components/ui/PersonName';
+import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
 import { useOpsHealth } from '@/hooks/useOpsHealth';
-import type { OpsErrorEvent } from '@/hooks/useOpsHealth';
+import type { OpsErrorEvent, OpsFarmError } from '@/hooks/useOpsHealth';
 
 /**
  * LIVE HEALTH — the screen where the console stops contradicting itself.
@@ -268,6 +270,55 @@ const EVENT_COLUMNS: DataListColumn<OpsErrorEvent>[] = [
 
 /* ──────────────────────────────────────────────── THE SUFFERING TABLE */
 
+/* L7: farms with two or more problems in the last 24 hours, on requests that named the farm.
+   The server counts them on request; names come from `useFarmContacts`. */
+function shortFarmId(id: string): string {
+  return `${id.slice(0, 8)}…`;
+}
+
+function buildSufferingColumns(contacts: Map<string, FarmContact>): DataListColumn<OpsFarmError>[] {
+  const num = (key: string, label: string, get: (f: OpsFarmError) => number): DataListColumn<OpsFarmError> => ({
+    key,
+    label,
+    align: 'right',
+    render: (f) => fmt.num(get(f)),
+    sortType: 'num',
+    sortValue: get,
+    defaultDir: 'desc',
+  });
+  return [
+    {
+      key: 'farm',
+      label: 'Farm',
+      render: (f) => {
+        const contact = contacts.get(f.farmId.toLowerCase());
+        return contact ? (
+          <PersonName name={contact.name} fallback={shortFarmId(f.farmId)} />
+        ) : (
+          <span title={f.farmId} className="break-all">
+            {shortFarmId(f.farmId)}
+          </span>
+        );
+      },
+      sortType: 'text',
+      sortValue: (f) => contacts.get(f.farmId.toLowerCase())?.name ?? f.farmId,
+    },
+    num('problems', 'Problems', (f) => f.errorCount),
+    num('sync', 'Syncing', (f) => f.syncErrors),
+    num('entries', 'Entries', (f) => f.logErrors),
+    num('voice', 'Voice', (f) => f.voiceErrors),
+    num('other', 'Other', (f) => f.otherErrors),
+    {
+      key: 'last',
+      label: 'Last problem',
+      render: (f) => fmt.dateTime(f.lastErrorAt, DATE_FORMATS.usersLastLogin),
+      sortType: 'date',
+      sortValue: (f) => f.lastErrorAt,
+      defaultDir: 'desc',
+    },
+  ];
+}
+
 
 /* ────────────────────────────────────── THE NIGHTLY FEEDS, DERIVED */
 
@@ -456,6 +507,9 @@ export default function OpsLivePage() {
 
 
   const events = data?.recentErrors ?? [];
+  const sufferingFarms = Array.isArray(data?.topSufferingFarms) ? data.topSufferingFarms : null;
+  const contacts = useFarmContacts(useMemo(() => (sufferingFarms ?? []).map((f) => f.farmId), [sufferingFarms]));
+  const sufferingColumns = useMemo(() => buildSufferingColumns(contacts), [contacts]);
   /* Property (9). 50 is the server's LIMIT, so a full page is the one case
      where this table is a sample rather than the answer. */
   const eventsCapped = events.length >= 50;
@@ -657,8 +711,39 @@ export default function OpsLivePage() {
             )}
           </section>
 
-          {/* L7: an idea (B24). Not built yet, no number, no list. */}
-          <NotBuiltYet metric="live-suffering-24h" />
+          {/* L7: farms with repeated problems in the last 24 hours. */}
+          <section className="flex flex-col gap-3" aria-labelledby="ops-live-suffering">
+            <h2 id="ops-live-suffering" className="text-h2 font-bold text-text-1">
+              Farms with repeated problems &mdash; last 24 hours
+            </h2>
+            <MetricLines metric="live-suffering-24h" />
+            {sufferingFarms ? (
+              <DataList<OpsFarmError>
+                id="ops-live-suffering"
+                urlNamespace="suffering"
+                label="Farms with repeated problems, last 24 hours"
+                caption="Each farm with two or more problems in the last 24 hours, the four areas they fall in, and the last problem."
+                noun={{ one: 'farm', many: 'farms' }}
+                rows={sufferingFarms}
+                rowKey={(f) => f.farmId}
+                columns={sufferingColumns}
+                defaultSort={{ key: 'problems', dir: 'desc' }}
+                states={{
+                  isLoading,
+                  isFetching,
+                  error: null,
+                  onRetry: () => void refetch(),
+                  measuredZero: {
+                    what: 'No farm has repeated problems in the last 24 hours',
+                    checkedAt,
+                  },
+                }}
+                skeleton={{ rows: 4, cells: 7 }}
+              />
+            ) : (
+              <NotMeasured why="The server did not send this list, so nothing can be said about repeated problems." />
+            )}
+          </section>
 
           {/* ── plan Step 8: additive, and it goes below ────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-services">

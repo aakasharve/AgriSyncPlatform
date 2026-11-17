@@ -183,16 +183,14 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     render: () => null,
   },
   {
-    /* F6 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
+    /* F6: a real count of problems in the last 24 hours on requests that named this farm; its two lines sit under the table. */
     key: 'errors24h',
-    label: (
-      <>
-        Errors 24h
-        <NotBuiltYetMark />
-      </>
-    ),
+    label: 'Errors 24h',
     align: 'right',
-    render: () => null,
+    render: (f) => fmt.num(f.errors24h) ?? <NotMeasured />,
+    sortType: 'num',
+    sortValue: (f) => f.errors24h,
+    defaultDir: 'desc',
   },
   {
     key: 'lastLog',
@@ -397,7 +395,7 @@ export default function FarmsListPage() {
       <div className="flex flex-col gap-2">
         <NotBuiltYetLines metric="farms-tier" />
         <NotBuiltYetLines metric="farms-wvfd7d" />
-        <NotBuiltYetLines metric="farms-errors24h" />
+        <MetricLines metric="farms-errors24h" />
       </div>
 
       <StandingNote

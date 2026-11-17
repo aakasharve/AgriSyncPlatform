@@ -2,13 +2,15 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasured, StandingNote } from '@/components/state';
+import { MetricLines, NotMeasured, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt } from '@/lib/api';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useListUrlState } from '@/lib/useListUrlState';
+import { PersonName } from '@/components/ui/PersonName';
+import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
 import { useOpsErrors, type OpsErrorEvent } from '@/hooks/useOpsErrors';
 
 /**
@@ -239,7 +241,14 @@ interface OpsErrorRow extends OpsErrorEvent {
   key: string;
 }
 
-const COLUMNS: DataListColumn<OpsErrorRow>[] = [
+const NOT_NAMED = 'Not named in the request';
+
+function shortFarmId(id: string): string {
+  return `${id.slice(0, 8)}…`;
+}
+
+function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<OpsErrorRow>[] {
+  return [
   {
     key: 'time',
     label: 'Time',
@@ -337,17 +346,23 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
     defaultDir: 'desc',
   },
   {
-    /* E3 (B24): an idea. The column keeps its place and its header says so; no cell draws a value from the answer, so no id, no dash and no word that stands for a value. Its two lines sit under the table. */
+    /* E3: the farm the request named. A named farm shows its contact name (the short id while the name loads, and when the server knows no name); a row whose request named no farm says so in words, never a blank. */
     key: 'farm',
-    label: (
-      <>
-        Farm
-        <NotBuiltYetMark />
-      </>
-    ),
-    render: () => null,
+    label: 'Farm',
+    render: (e) => {
+      if (!e.farmId) return <span className="text-text-2">{NOT_NAMED}</span>;
+      const contact = contacts.get(e.farmId.toLowerCase());
+      return (
+        <span title={e.farmId} className="break-all">
+          {contact ? <PersonName name={contact.name} fallback={shortFarmId(e.farmId)} /> : shortFarmId(e.farmId)}
+        </span>
+      );
+    },
+    sortType: 'text',
+    sortValue: (e) => (e.farmId ? (contacts.get(e.farmId.toLowerCase())?.name ?? e.farmId) : null),
   },
-];
+  ];
+}
 
 export default function OpsErrorsPage() {
   /* `?page` and `?since`. `DataList` runs its own instance of this hook for
@@ -375,6 +390,14 @@ export default function OpsErrorsPage() {
     () => (data?.data?.items ?? []).map((e, i) => ({ ...e, key: `${i}|${e.occurredAtUtc}` })),
     [data],
   );
+
+  /* Names for the farms on this page, asked once per new farm id (never on the 30-second poll). */
+  const farmIds = useMemo(
+    () => rows.map((r) => r.farmId).filter((id): id is string => !!id),
+    [rows],
+  );
+  const contacts = useFarmContacts(farmIds);
+  const columns = useMemo(() => buildColumns(contacts), [contacts]);
 
   /* THE ENVELOPE SENDS `lastRefreshedUtc`. Read it through the one accessor
      that knows both spellings — `lib/api.ts:177`. Reading either field
@@ -497,7 +520,7 @@ export default function OpsErrorsPage() {
         noun={{ one: 'call', many: 'calls' }}
         rows={rows}
         rowKey={(e) => e.key}
-        columns={COLUMNS}
+        columns={columns}
         /* A17 / A50 / B4 — the page count is derived from the SERVER's
            totalCount. The client holds fifty rows and never slices a set. */
         pagination={{
@@ -572,7 +595,7 @@ export default function OpsErrorsPage() {
         skeleton={{ rows: 8, cells: 6 }}
       />
 
-      <NotBuiltYetLines metric="errors-farm" />
+      <MetricLines metric="errors-farm" />
 
       <StandingNote
         title="What this screen does not carry"
@@ -587,11 +610,11 @@ export default function OpsErrorsPage() {
               but not what the person at the other end lost.
             </p>
             <p>
-              <b>Almost nothing here can be traced back to a farm.</b> To name the farm, the error
-              record would have to carry the farm&rsquo;s identifier, and the sign-in credentials
-              this platform issues do not include one &mdash; so nearly every error the server
-              records is anonymous. The Farm column is not built yet, so it shows no farm for any
-              row, and no farm name comes back here at all.
+              <b>Some rows cannot be traced back to a farm.</b> The Farm column names the farm only
+              when the request itself named one in its address. A sync upload names no farm, so its
+              row says &ldquo;Not named in the request&rdquo; &mdash; that means the request did not
+              say, not that no farm was hit. A phone-reported error counts as named only when the
+              phone sent a farm with it.
             </p>
             <p>
               <b>There is no error rate, and there cannot be one.</b> Nothing counts how many

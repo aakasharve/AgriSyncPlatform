@@ -138,7 +138,7 @@ export function mergeCallList(
   };
 
   for (const row of suffering) {
-    const entry = entryFor(row.farmId, row.name);
+    const entry = entryFor(row.farmId, row.farmId); // the suffering feed no longer names farms; Task 4 replaces this merge
     entry.suffering = row;
     entry.reasons.push({ kind: 'failing', label: 'Failed events', tone: 'red' });
   }

@@ -9,7 +9,16 @@ export interface FarmSummary {
 }
 export interface FarmsList { items: FarmSummary[]; totalCount: number; page: number; pageSize: number; }
 export interface SilentChurnItem { farmId: string; name: string; ownerPhone: string; plan: string; weeksSilent: number; lastLogAt: string | null; }
-export interface SufferingItem { farmId: string; name: string; errorCount: number; syncErrors: number; logErrors: number; voiceErrors: number; lastErrorAt: string; }
+/** One farm with repeated problems in the last 7 days (3 or more). Names come from `useFarmContacts`. */
+export interface SufferingItem {
+  farmId: string;
+  problemCount: number;
+  syncProblems: number;
+  entryProblems: number;
+  voiceProblems: number;
+  otherProblems: number;
+  lastProblemAt: string;
+}
 
 /**
  * THE ORG IS PART OF THE KEY (Preservation Register A7, Task 12 Step 3).
@@ -133,6 +142,6 @@ export function useSuffering(options?: FeedOptions) {
     queryKey: ['farms', 'suffering', org],
     queryFn: async () => { const { data } = await adminApi.get<AdminResponse<SufferingItem[]>>('/shramsafal/admin/farms/suffering'); return data; },
     enabled: options?.enabled !== false,
-    staleTime: 60_000, refetchInterval: 60_000,
+    staleTime: 60_000, refetchInterval: false,
   });
 }
