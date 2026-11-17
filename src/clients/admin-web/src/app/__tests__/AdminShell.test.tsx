@@ -155,32 +155,6 @@ function scopeWithModules(keys: string[]): MeScopeResponse {
   };
 }
 
-/** The REAL `SufferingItemDto` shape (`AdminMisRepository.cs:240-242`). */
-function sufferingRow(farmId: string, name: string) {
-  return {
-    farmId,
-    name,
-    errorCount: 12,
-    syncErrors: 4,
-    logErrors: 0,
-    voiceErrors: 3,
-    lastErrorAt: '2026-09-01T06:20:00.0000000Z',
-  };
-}
-
-/** The REAL `SilentChurnItemDto` shape (`AdminMisRepository.cs:209-215`). */
-function churnRow(farmId: string, name: string, over: Record<string, unknown> = {}) {
-  return {
-    farmId,
-    name,
-    ownerPhone: '98******10',
-    plan: 'trial',
-    weeksSilent: 3,
-    lastLogAt: '2026-08-10T04:00:00.0000000Z',
-    ...over,
-  };
-}
-
 /** The envelope these two endpoints really send (`AdminResponse<T>`). */
 function envelope(data: unknown) {
   return {
@@ -474,7 +448,7 @@ describe('the shortcut badges are gone (D4, founder 2026-08-31)', () => {
 });
 
 describe('the sidebar (A53, A58)', () => {
-  it('renders seven groups and nineteen destinations', async () => {
+  it('renders seven groups and eighteen destinations', async () => {
     serve();
     signIn({ display_name: 'Test Admin' });
     renderShell();
@@ -486,7 +460,8 @@ describe('the sidebar (A53, A58)', () => {
     for (const group of ['Overview', 'Company MIS', 'Operations', 'Product', 'Farms', 'Schedules', 'Admin']) {
       expect(within(sidebar).getByText(group, { selector: 'div' })).toBeInTheDocument();
     }
-    expect(within(sidebar).getAllByRole('link')).toHaveLength(19);
+    // B24 (founder, 2026-11-17): the whole Voice Pipeline page (V1-V5) is a double of Company MIS Quality, so its menu entry is gone: 19 -> 18.
+    expect(within(sidebar).getAllByRole('link')).toHaveLength(18);
   });
 
   it('marks exactly one item current, and Home is not current on /farms (A58)', async () => {
@@ -515,26 +490,8 @@ describe('the sidebar (A53, A58)', () => {
    * still proved — the slot renders, and it renders nothing when there is
    * nothing to report.
    */
-  it('renders the should-call-today count on the Home item (A53)', async () => {
-    serveWatchlists({
-      suffering: [sufferingRow('11111111-1111-1111-1111-111111111111', 'Wagholi Grapes')],
-      churn: [
-        churnRow('22222222-2222-2222-2222-222222222222', 'Ozar Onion'),
-        /* The SAME farm on both watchlists. One call, one row, one count —
-           if the badge said 3 the union would be a concatenation. */
-        churnRow('11111111-1111-1111-1111-111111111111', 'Wagholi Grapes'),
-      ],
-    });
-    signIn({ display_name: 'Test Admin' });
-    renderShell();
-    await screen.findByText(ORG_A_NAME);
+  // B24 (founder, 2026-11-17): H9 (farms a person should call today) is an idea shown as Not built yet, so the should-call-today badge on Home is retired.
 
-    await waitFor(() => expect(homeBadge()).not.toBeNull());
-    const badge = homeBadge()!;
-    expect(badge).toHaveTextContent('2');
-    /* A coloured pill with a bare number beside "Home" is undecodable. */
-    expect(badge).toHaveTextContent('2 farms need a person today');
-  });
 
   it('renders no badge at all when both watchlists are empty (A53)', async () => {
     serveWatchlists({ suffering: [], churn: [] });

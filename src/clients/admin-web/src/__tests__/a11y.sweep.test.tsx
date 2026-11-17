@@ -212,14 +212,7 @@ describe('Step 2 — a coloured dot never speaks alone', () => {
    * finding in words, and both hide the dot from the accessibility tree so
    * the words are not announced twice.
    */
-  it('Home’s section dot is aria-hidden and paired with the finding in words', () => {
-    const home = CODE['/src/pages/HomePage.tsx'];
-    expect(home).toMatch(/data-section-dot=\{state\}\s*\n\s*aria-hidden="true"/);
-    expect(home).toContain('<span className="sr-only">{words}</span>');
-    // `words` is REQUIRED alongside a state — a dot with no sentence cannot
-    // type-check, which is the guard this assertion stands over.
-    expect(home).toContain('words: string | null;');
-  });
+  // B24 (founder, 2026-11-17): H1-H7 (Home's section dots over the old board) are doubles or ideas shown as Not built yet; retired: Home's section dot is aria-hidden and paired with the finding in words.
 
   it('the freshness chip’s dot always sits beside a source and an age', () => {
     const chip = CODE['/src/components/ui/FreshnessChip.tsx'];

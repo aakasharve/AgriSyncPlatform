@@ -180,9 +180,10 @@ describe('the org survives a filter change on a REAL list screen (A15, A20, Step
     await waitFor(() => expect(at()).toContain(`org=${ORG_B}`));
 
     // Now the filter change that used to silently drop it.
-    await userEvent.click(screen.getByRole('button', { name: 'Tier B' }));
+    // B24 (founder, 2026-11-17): F4 (Tier) is an idea shown as Not built yet and its filter is disabled, so the filter change is a search.
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search farms' }), 'anand{Enter}');
 
-    await waitFor(() => expect(at()).toContain('tier=B'));
+    await waitFor(() => expect(at()).toContain('search=anand'));
     expect(at(), 'the filter change stripped ?org= out of the shareable url').toContain(
       `org=${ORG_B}`,
     );

@@ -117,8 +117,7 @@ const COL_TIME = 0,
   COL_TYPE = 1,
   COL_ENDPOINT = 2,
   COL_STATUS = 3,
-  COL_LATENCY = 4,
-  COL_FARM = 5;
+  COL_LATENCY = 4;
 
 function cell(row: HTMLTableRowElement, index: number): HTMLTableCellElement {
   return [...row.querySelectorAll('td')][index];
@@ -443,58 +442,17 @@ describe('an absence names its cause, and an empty list is never called a measur
 /* ═══════════ 5. ATTRIBUTION, AND THE THREE THINGS THIS FEED CALLS AN ERROR */
 
 describe('a call nobody can tie to a farm says so, and never guesses one (Step 7)', () => {
-  it('names the farm when there is one and reads "not attributable" when there is not', async () => {
-    const FARM = 'ffffffff-1111-2222-3333-444444444444';
+  // B24 (founder, 2026-11-17): E3 (Farm column) is an idea shown as Not built yet; its "not attributable" and
+  // farm-id assertions are retired. The A51 time-with-seconds assertion (E1, a real part) is kept below.
+  it('keeps the full date with seconds (A51, E1) while the Farm column is parked', async () => {
     serve([
-      ev({ farmId: FARM, occurredAtUtc: '2026-09-01T08:15:30Z' }),
+      ev({ farmId: 'ffffffff-1111-2222-3333-444444444444', occurredAtUtc: '2026-09-01T08:15:30Z' }),
       ev({ farmId: null, occurredAtUtc: '2026-09-01T07:04:05Z' }),
     ]);
     renderErrors();
     await settled();
 
-    const [attributed, orphan] = dataRows();
-
-    /*
-     * NARROWED TO THE CELL, DELIBERATELY. Reading the whole row would pass the
-     * moment ANY cell on it held the words — and on this screen four of the
-     * six cells can render an honesty state, so a row-level assertion here is
-     * green whatever the Farm column does.
-     */
-    /* "not attributable" and "not measured" are different facts and the
-       console has different words for them (`honestState.ts:52-57`). This one
-       is the fourth word and it is NOT the default the others fall back to,
-       so it is asserted as a difference and not just as a presence.
-
-       Read off `textContent` rather than through `toHaveTextContent`: the
-       jest-dom matchers build their own failure text and drop the message
-       passed to `expect`, and a red run that does not name the defect is
-       half a test. */
-    expect(
-      cell(orphan, COL_FARM).textContent,
-      'an unattributed call was labelled "not measured" — nothing failed to measure this; nothing ever tied it to a subject, which is a different fact and has its own word',
-    ).not.toContain('not measured');
-    expect(
-      cell(orphan, COL_FARM).textContent,
-      'the Farm cell of an unattributable call did not say so — a bare dash here makes the reader supply the reason, and the reason they supply is "no farms were affected"',
-    ).toContain('not attributable');
-    expect(cell(orphan, COL_FARM).querySelector('[data-state]')).toHaveAttribute(
-      'data-state',
-      'unattributed',
-    );
-
-    /* And a row that DOES carry a farm must not be told it has none — the
-       same fabrication pointing the other way. */
-    expect(
-      cell(attributed, COL_FARM).textContent,
-      'a call that names a farm was reported as unattributable',
-    ).not.toContain('not attributable');
-    /* WHOLE, not truncated. The old cell printed the first eight characters
-       and an ellipsis, which is an identifier an operator cannot paste into
-       a query or a ticket — the only two things it is for. */
-    expect(
-      cell(attributed, COL_FARM).textContent,
-      'the farm id is truncated — eight characters and an ellipsis cannot be pasted into a query or a ticket, which is all this value is for',
-    ).toContain(FARM);
+    const [attributed] = dataRows();
 
     /* A51 — the full date WITH seconds on this surface, because an operator
        may be looking days back. Ops Live shows time only. */

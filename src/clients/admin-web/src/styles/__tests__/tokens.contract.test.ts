@@ -465,7 +465,7 @@ describe('--font-mono outlived its deletion date, and says so (Task 27)', () => 
    */
   const MONO_FILES = [
     '/src/features/farmer-health/components/FarmerSearchBox.tsx',
-    '/src/features/farmer-health/FarmerHealthPage.tsx',
+    // B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet, so FarmerHealthPage.tsx no longer uses font-mono.
     '/src/pages/ForbiddenPage.tsx',
     '/src/pages/LoginPage.tsx',
     '/src/pages/ops/OpsErrorsPage.tsx',

@@ -30,10 +30,11 @@ import { ModuleKeys } from '@/lib/moduleKeys';
 
 /** The map as it stands today. Null means deliberately ungated. */
 const ROUTE_GUARDS: Record<string, string | null> = {
-  '/': null,                          // deliberate — KPI cards 403 independently
+  '/': null,                          // B24 (founder, 2026-11-17): now a redirect to /MIS/overview (D-151 a), which is guarded
+  '/home': null,                      // B24 (founder, 2026-11-17): Home moved here; two ideas, no request, so no guard
   '/ops/live': ModuleKeys.OpsLive,
   '/ops/errors': ModuleKeys.OpsErrors,
-  '/ops/voice': ModuleKeys.OpsVoice,
+  // B24 (founder, 2026-11-17): /ops/voice is gone: V1-V5 are doubles of Company MIS Quality #43-#45.
   '/metrics/nsm': ModuleKeys.MetricsNsm,
   '/farms': ModuleKeys.FarmsList,
   '/farms/silent-churn': ModuleKeys.FarmsSilentChurn,
@@ -124,8 +125,9 @@ describe('route to module-key map (A3)', () => {
     expect(actual).toEqual(ROUTE_GUARDS);
   });
 
-  it('guards seventeen routes and no more', () => {
-    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(17);
+  it('guards sixteen routes and no more', () => {
+    // B24 (founder, 2026-11-17): 17 -> 16, the /ops/voice route is removed (V1-V5 are doubles of Company MIS Quality).
+    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(16);
   });
 
   it('uses only module keys that exist in the ModuleKeys registry', () => {
@@ -151,7 +153,7 @@ describe('route to module-key map (A3)', () => {
 });
 
 describe('the three deliberately ungated routes (A4)', () => {
-  it.each(['/', '/schedules/templates', '/settings/admins'])(
+  it.each(['/', '/home', '/schedules/templates', '/settings/admins'])(
     '%s carries no EntitlementGuard, and that is the intended behaviour',
     (path) => {
       const route = declaredRoutes.find((r) => r.path === path);
@@ -163,8 +165,10 @@ describe('the three deliberately ungated routes (A4)', () => {
   it('keeps the comment explaining why Home is ungated', () => {
     // A4 preserves the REASONS, not only the absence. Comments do not survive
     // compilation, so this half is read from the source file.
-    expect(appSource).toContain('individual cards can 403 independently');
-    expect(appSource).toContain('No single module gate fits, so no guard here');
+    // B24 (founder, 2026-11-17): Home has no KPI cards any more (H1-H7 are doubles), so the old "cards can 403
+    // independently" reason is retired; the new reason (two ideas, no request, no single module gate) is asserted instead.
+    expect(appSource).toMatch(/no single module gate fits/i);
+    expect(appSource).toMatch(/there is no guard here/i);
   });
 
   it('keeps the comment explaining why Schedules and Settings are ungated', () => {

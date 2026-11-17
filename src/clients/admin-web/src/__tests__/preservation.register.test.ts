@@ -153,12 +153,12 @@ const REGISTER: Record<string, Row> = {
       shipped:
         'ten of thirteen in-shell routes are guarded and ModuleKeys holds 36 keys — ' +
         'the register prose said nine of twelve and 33. CR-2b (2026-11-15) adds the seven ' +
-        'Company MIS routes, each behind EntitlementGuard on metrics.nsm: 17 guards',
+        'Company MIS routes, each behind EntitlementGuard on metrics.nsm: 17 guards; B24 (2026-11-17) removes the /ops/voice route (the Voice Pipeline page V1-V5 is a double of Company MIS Quality #43-#45): 16 guards',
       decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose); CR-2b plan Task 4 (10 -> 17 guarded)',
       assert: () => {
         expect(Object.keys(ModuleKeys)).toHaveLength(36);
         const app = code('/src/App.tsx');
-        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(17);
+        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(16); // B24 (founder, 2026-11-17): 17 -> 16, /ops/voice is gone (V1-V5 are doubles; keeper: Company MIS Quality).
       },
     },
   },
@@ -168,14 +168,15 @@ const REGISTER: Record<string, Row> = {
     verdict: kept(() => {
       const app = code('/src/App.tsx');
       // Ungated means the path is declared with no guard element beside it.
-      for (const path of ['path="/"', 'path="/schedules/templates"', 'path="/settings/admins"']) {
+      for (const path of ['path="/"', 'path="/home"', 'path="/schedules/templates"', 'path="/settings/admins"']) {
         expect(app).toContain(path);
       }
       expect(app).not.toMatch(/path="\/schedules\/templates"[^\n]*EntitlementGuard/);
       expect(app).not.toMatch(/path="\/settings\/admins"[^\n]*EntitlementGuard/);
       // The reasons are comments, and comments are the artefact this row names.
       expect(raw('/src/App.tsx')).toContain('no matching module key');
-      expect(raw('/src/App.tsx')).toContain('403 independently');
+      // B24 (founder, 2026-11-17): Home has no KPI cards any more (H1-H7 are doubles), so the old "403 independently" reason is retired; the new reason is asserted.
+      expect(raw('/src/App.tsx')).toMatch(/no single module gate fits/i);
     }, '/src/__tests__/routes.contract.test.ts', '/src/__tests__/deepLink.contract.test.tsx'),
   },
 
@@ -190,9 +191,8 @@ const REGISTER: Record<string, Row> = {
       decidedBy: 'Task 23, on repo-is-truth grounds (AdminFarmerHealthRepository.cs:80-85)',
       assert: () => {
         const drill = code('/src/features/farmer-health/FarmerHealthDrilldown.tsx');
-        expect(drill).toContain('OPS_BLOCKS.sync.module');
-        expect(drill).toContain('OPS_BLOCKS.ai.module');
-        expect(drill).toContain('Ops data hidden');
+        // B24 (founder, 2026-11-17): P9-P11 (the sync and AI ops blocks) are ideas shown as Not built yet, so the per-block gate and the
+        // "Ops data hidden" panel are retired with them; the single-key mistake still must not come back.
         // The single-key version would read `canRead(ModuleKeys.OpsLive)`.
         expect(drill).not.toContain('ModuleKeys.OpsLive');
       },
@@ -363,7 +363,7 @@ const REGISTER: Record<string, Row> = {
         '/src/pages/users/UsersPage.tsx',
         '/src/pages/ops/OpsErrorsPage.tsx',
         '/src/pages/ops/OpsVoicePage.tsx',
-        '/src/pages/metrics/NorthStarPage.tsx',
+        // B24 (founder, 2026-11-17): /src/pages/metrics/NorthStarPage.tsx (W1-W7 are ideas) is dropped from this list.
       ]) {
         expect(code(page)).toMatch(/useListUrlState|useSearchParams/);
       }
@@ -373,9 +373,7 @@ const REGISTER: Record<string, Row> = {
   A19: {
     what: '?weeks 8/12/24 and ?days 7/14/30 flowing into the interpolated title',
     verdict: kept(() => {
-      expect(code('/src/pages/metrics/NorthStarPage.tsx')).toContain(
-        'title={`WVFD — last ${weeks} weeks`}',
-      );
+      // B24 (founder, 2026-11-17): the WVFD title (W1-W7 are ideas shown as Not built yet) is dropped from this row.
       expect(code('/src/pages/ops/OpsVoicePage.tsx')).toMatch(/\$\{days\}/);
     }, '/src/pages/metrics/__tests__/NorthStarPage.test.tsx', '/src/pages/ops/__tests__/OpsVoicePage.test.tsx'),
   },
@@ -516,14 +514,16 @@ const REGISTER: Record<string, Row> = {
     what: 'intervention-queue sorting — four columns, per-column default direction, tiebreak',
     verdict: kept(() => {
       expect(fileExists('/src/components/data/sortRows.ts')).toBe(true);
-      expect(code('/src/features/farmer-health/FarmerHealthPage.tsx')).toContain('lastActiveAt');
+      // B24 (founder, 2026-11-17): FH1 (the intervention queue) is an idea shown as Not built yet; the queue's own sorting assertion is retired.
+      expect(code('/src/features/farmer-health/FarmerHealthPage.tsx')).toContain('NotBuiltYet');
     }, '/src/components/data/__tests__/sortRows.test.ts', '/src/features/farmer-health/__tests__/FarmerHealthPage.test.tsx'),
   },
 
   A31: {
     what: 'the watchlist is collapsed by default and its order is FIXED, not user-sortable',
     verdict: kept(() => {
-      expect(code('/src/features/farmer-health/FarmerHealthPage.tsx')).toContain('weeklyDelta');
+      // B24 (founder, 2026-11-17): FH1 (the queue and its watchlist) is an idea shown as Not built yet; the fixed-order assertion is retired.
+      expect(code('/src/features/farmer-health/FarmerHealthPage.tsx')).toContain('NotBuiltYet');
     }, '/src/features/farmer-health/__tests__/FarmerHealthPage.test.tsx'),
   },
 
@@ -622,7 +622,7 @@ const REGISTER: Record<string, Row> = {
     what: 'the active org named on screen',
     verdict: kept(() => {
       expect(code('/src/app/AdminShell.tsx')).toContain('Active organization: ');
-      expect(code('/src/features/farmer-health/FarmerHealthPage.tsx')).toMatch(/orgName|organisation|organization/i);
+      // B24 (founder, 2026-11-17): the old Farmer Health landing named the org beside its cohort (FH1-FH5 are ideas); the shell line above is the keeper.
     }, '/src/app/__tests__/AdminShell.test.tsx'),
   },
 
@@ -808,7 +808,9 @@ const REGISTER: Record<string, Row> = {
     what: 'the SECOND Farmer Suffering Watchlist panel on Ops Live',
     verdict: kept(() => {
       const live = code('/src/pages/ops/OpsLivePage.tsx');
-      expect(live).toContain('topSufferingFarms');
+      // B24 (founder, 2026-11-17): L7 (the suffering watchlist on Live Health) is an idea shown as Not built yet; its panel stays, with no list.
+      expect(live).toContain('NotBuiltYet');
+      expect(live).not.toContain('topSufferingFarms');
     }, '/src/pages/ops/__tests__/OpsLivePage.test.tsx'),
   },
 
@@ -822,7 +824,7 @@ const REGISTER: Record<string, Row> = {
         'are out of date in the direction the register wanted',
       decidedBy: 'Task 26',
       assert: () => {
-        expect(code('/src/app/navBadges.ts')).toContain('useShouldCallToday');
+        // B24 (founder, 2026-11-17): H9 (the should-call-today count) is an idea shown as Not built yet, so the badge slot is empty again; the slot itself stays.
         expect(code('/src/app/AdminShell.tsx')).toContain('useNavBadges()');
       },
     },
@@ -864,7 +866,7 @@ const REGISTER: Record<string, Row> = {
         const nsm = code('/src/pages/metrics/NorthStarPage.tsx');
         // No client-side 4.5 anywhere: that was the fabrication half of A55.
         expect(nsm).not.toMatch(/\?\?\s*'?4\.5/);
-        expect(nsm).toContain('data-goal-fill');
+        // B24 (founder, 2026-11-17): W5 (the goal) reads "Goal not set yet" and draws no share of goal, so the goal-fill bar is retired.
         expect(code('/src/components/data/Sparkline.tsx')).toContain('const span = max || 1;');
       },
     },
@@ -886,7 +888,7 @@ const REGISTER: Record<string, Row> = {
     verdict: kept(() => {
       expect(code('/src/hooks/useShouldCallToday.ts')).toContain('SUFFERING_ENTRY_RULE');
       expect(code('/src/hooks/useShouldCallToday.ts')).toContain('CHURN_ENTRY_RULE');
-      expect(code('/src/pages/farms/SilentChurnPage.tsx')).toMatch(/14 days/);
+      // B24 (founder, 2026-11-17): S1-S3 (Silent Churn) are ideas shown as Not built yet, so its rule-subtitle (14 days) is retired.
     }, '/src/pages/farms/__tests__/SilentChurnPage.test.tsx', '/src/pages/farms/__tests__/SufferingPage.test.tsx'),
   },
 
@@ -1128,7 +1130,8 @@ describe('what still needs the founder’s signature', () => {
       .filter(([, s]) => /font-mono/.test(s.replace(/\/\*[\s\S]*?\*\//g, '')))
       .map(([p]) => p);
 
-    expect(users.length).toBe(6);
+    // B24 (founder, 2026-11-17): 6 -> 5: FarmerHealthPage.tsx no longer uses font-mono (FH1-FH5 are ideas).
+    expect(users.length).toBe(5);
   });
 
   it('records that @tanstack/react-table is gone and unsigned', () => {

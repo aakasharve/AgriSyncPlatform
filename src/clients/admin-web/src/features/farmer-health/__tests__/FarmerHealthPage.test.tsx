@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLocation } from 'react-router-dom';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -147,16 +147,6 @@ function cohort(over: Partial<CohortPatternsDto> = {}): CohortPatternsDto {
   };
 }
 
-const EMPTY_COHORT: CohortPatternsDto = {
-  scoreDistribution: bins({}),
-  interventionQueue: [],
-  watchlist: [],
-  engagementTierBreakdown: [],
-  pillarHeatmap: [],
-  trendByWeek: [],
-  farmerSufferingTop10: [],
-};
-
 function scopeBody(over: Partial<MeScopeResponse['scope']> = {}): MeScopeResponse {
   return {
     outcome: 'Resolved',
@@ -247,376 +237,26 @@ async function settled() {
 
 /* ── addressing the two lists and the four charts by their own hooks ────── */
 
-function list(id: 'fh-queue' | 'fh-watch'): HTMLElement {
-  return document.querySelector<HTMLElement>(`[data-list="${id}"]`)!;
-}
-
-function rowsOf(id: 'fh-queue' | 'fh-watch'): HTMLTableRowElement[] {
-  const table = within(list(id)).queryByRole('table');
-  if (!table) return [];
-  return [...table.querySelectorAll<HTMLTableRowElement>('tbody > tr')].filter(
-    (tr) => !tr.id.includes('detail'),
-  );
-}
-
-/** ONE CELL, never the row (Task 17's lesson: a whole-row assertion passes on
- *  a string that happens to appear in a neighbouring cell). */
-function cell(tr: HTMLTableRowElement, index: number): string {
-  return tr.querySelectorAll('td')[index]?.textContent?.trim() ?? '';
-}
-
-/** The farmer column of every visible row, in DOM order. */
-function order(id: 'fh-queue' | 'fh-watch'): string[] {
-  return rowsOf(id).map((tr) => cell(tr, 0));
-}
-
-function chart(id: string): HTMLElement {
-  return document.querySelector<HTMLElement>(`[data-chart="${id}"]`)!;
-}
-
-function chartTable(id: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-chart-table="${id}"]`);
-}
-
-/** A chart's data-table row, by the label in its row header. */
-function tableRow(id: string, label: string): HTMLTableRowElement {
-  const table = chartTable(id)!.querySelector('table')!;
-  return [...table.querySelectorAll<HTMLTableRowElement>('tbody > tr')].find(
-    (tr) => tr.querySelector('th')?.textContent?.trim() === label,
-  )!;
-}
-
-async function openWatchlist(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(list('fh-watch')).getByRole('button', { name: /Show all/ }));
-}
-
 /* ═══ 1. the prefix, the missing envelope, and the absent clock ═══════════ */
 
-describe('the endpoint this screen actually calls (A26, and the envelope A27 missed)', () => {
-  it('asks /admin/farmer-health/cohort — never /shramsafal/admin/ — and renders a BARE dto', async () => {
-    serve();
-    renderPage();
-    await settled();
-
-    /*
-     * 1. THE PREFIX. This is the assertion that fails the day somebody
-     *    centralises the admin prefix as a tidy-up. It reads the url the
-     *    SCREEN produced, so it covers the hook and the api module together —
-     *    `queryContracts.contract.test.tsx` covers the module on its own.
-     */
-    const cohortCalls = stub!.requests.filter((r) => r.url.includes('farmer-health'));
-    expect(
-      cohortCalls.map((r) => r.url),
-      'the farmer-health cohort url changed — a prefix that becomes /shramsafal/admin/ 404s both farmer-health screens, and nothing on screen would show it',
-    ).toEqual(['/admin/farmer-health/cohort']);
-    for (const request of stub!.requests) {
-      expect(request.url.startsWith('/shramsafal/admin/farmer-health')).toBe(false);
-    }
-
-    /*
-     * 2. THE ENVELOPE. `GetCohortPatternsHandler` returns the DTO bare. The
-     *    fixture above is bare, so if the client goes back to reading
-     *    `data.data` unconditionally every one of these rows disappears and
-     *    the screen renders empty over a 200 — which is exactly what shipped.
-     */
-    expect(rowsOf('fh-queue')).toHaveLength(3);
-    expect(chartTable('fh-score-distribution')).not.toBeNull();
-
-    /*
-     * 3. NO CLOCK, THEREFORE NO CHIP. Every other screen renders a freshness
-     *    chip here. This feed sends no `meta`, and a chip may only state an
-     *    age it actually has.
-     */
-    expect(document.querySelector('.chip-fresh')).toBeNull();
-    expect(document.querySelector('[data-no-clock]')?.textContent).toMatch(/sends no timestamp/);
-
-    /*
-     * 4. A39 — the org is named, and it may be, because THIS endpoint really
-     *    is scoped: every query joins the org-to-farm projection.
-     */
-    expect(document.querySelector('[data-scope-line]')?.textContent).toContain(ORG_NAME);
-  });
-
-  it('still renders when the server DOES send an envelope, and refuses to name an org for a platform admin', async () => {
-    /* Tolerance in both directions: the day the backend gives these two
-       endpoints the envelope every other one has, this screen must not break —
-       and it should start showing a chip rather than needing a second port. */
-    serve({
-      body: { data: cohort(), meta: { source: 'materialized', lastRefreshedUtc: '2026-09-01T08:00:00Z', ttlSeconds: 300 } },
-      scope: scopeBody({ isPlatformAdmin: true }),
-    });
-    renderPage();
-    await settled();
-
-    expect(rowsOf('fh-queue')).toHaveLength(3);
-
-    /*
-     * THE SUBTITLE MAY NOT NAME AN ORGANISATION FOR A PLATFORM ADMIN.
-     * `ScopeJoin` returns an empty fragment when `scope.IsPlatformAdmin`, so
-     * the figures cover every organisation while the topbar still names one.
-     * Three sentences of this shape were corrected in `74da3d3b`; this is the
-     * assertion that stops a fourth.
-     */
-    const scopeLine = document.querySelector('[data-scope-line]')!.textContent!;
-    expect(scopeLine).toContain('on the platform');
-    expect(
-      scopeLine,
-      'the subtitle named one organisation to a platform admin, whose figures are platform-wide',
-    ).not.toContain(ORG_NAME);
-  });
-});
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "asks /admin/farmer-health/cohort — never /shramsafal/admin/ — and rend".
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "still renders when the server DOES send an envelope, and refuses to na".
 
 /* ═══ 2. two lists, two sort contracts (A30, A31) ═════════════════════════ */
 
-describe('the queue sorts and the watchlist does not (A30, A31)', () => {
-  it('opens score-ascending with the lastActiveAt tiebreak, and the tiebreak is NOT flipped by direction', async () => {
-    const user = userEvent.setup();
-    serve();
-    renderPage();
-    await settled();
-
-    /*
-     * DEFAULT — score ASC. `worst` (5) first, then the two farms tied on 12,
-     * and the tie is broken by MOST RECENTLY ACTIVE: the worst farms who are
-     * still turning up come first. Remove the tiebreak and the two tied rows
-     * keep their server order, `tie-old` then `tie-new`, and this fails.
-     */
-    expect(
-      order('fh-queue'),
-      'the intervention queue lost its default order or its lastActiveAt tiebreak',
-    ).toEqual(['Farmer worst', 'Farmer tie-new', 'Farmer tie-old']);
-
-    /*
-     * FLIPPED — and the tiebreak is deliberately NOT flipped with it. The live
-     * code keyed on `sortKey === 'score'` in either direction while its
-     * comment said "score-asc"; Task 8 carried the code, not the comment.
-     * `tie-new` must still precede `tie-old`.
-     */
-    await user.click(within(list('fh-queue')).getByRole('button', { name: /Score/ }));
-    expect(order('fh-queue')).toEqual(['Farmer tie-new', 'Farmer tie-old', 'Farmer worst']);
-
-    /*
-     * URL-SYNCED (A30's other half). The sort was component-local state and
-     * died on every refresh; it is in the url now, under this list's OWN
-     * namespace, so a shared link restores the order it was shared in.
-     */
-    expect(where()).toContain('queue.sort=score');
-    expect(where()).toContain('queue.dir=desc');
-    /* The org survives the write — every url write goes through the
-       functional updater (A20). */
-    expect(where()).toContain(`org=${ORG}`);
-
-    /* THE COLLISION (T20). Sorting one list must not touch the other. */
-    expect(where()).not.toContain('watch.sort');
-  });
-
-  it('gives the watchlist a FIXED order with no sort controls, and says why on screen', async () => {
-    const user = userEvent.setup();
-    serve();
-    renderPage();
-    await settled();
-    await openWatchlist(user);
-
-    /*
-     * FIXED AT `weeklyDelta` ASCENDING — biggest drop first. Server order is
-     * rising-first, so a list that simply rendered `rows` fails here.
-     */
-    expect(
-      order('fh-watch'),
-      'the watchlist is no longer ordered biggest-drop-first',
-    ).toEqual(['Farmer w-falling-hard', 'Farmer w-falling-bit', 'Farmer w-rising']);
-
-    /*
-     * AND IT IS NOT A PREFERENCE. v3 makes every table sortable; porting that
-     * would silently convert a product decision into a user setting. The
-     * queue's four sort controls prove the assertion can find one when it is
-     * there.
-     */
-    const watchHeaders = within(list('fh-watch')).getAllByRole('columnheader');
-    for (const header of watchHeaders) {
-      expect(
-        within(header).queryByRole('button'),
-        'the watchlist grew a sort control — an order the product fixed became something a reader can change',
-      ).toBeNull();
-    }
-    expect(
-      within(list('fh-queue')).getAllByRole('columnheader').some((h) => within(h).queryByRole('button')),
-    ).toBe(true);
-
-    /* An order the reader cannot change and cannot explain is an order they
-       assume is arbitrary. */
-    expect(within(list('fh-watch')).getByText(/deliberately not sortable/i)).toBeInTheDocument();
-
-    /* A31 — collapsed by default, with a real disclosure. */
-    const showAll = within(list('fh-watch')).getByRole('button', { name: /Hide the list/ });
-    expect(showAll).toHaveAttribute('aria-expanded', 'true');
-    expect(showAll).toHaveAttribute('aria-controls');
-
-    /* The edge marks the subset still falling — the rows worth a call. v3's
-       rule, and here it earns its keep: on the intervention queue an edge on
-       every row would be decoration, on this list it is a finding. Asserted on
-       the style the way `DataList.test.tsx:936` does, because the edge is a
-       box-shadow token and there is no attribute to read. */
-    expect(rowsOf('fh-watch')[0].style.boxShadow).not.toBe('');
-    expect(rowsOf('fh-watch')[1].style.boxShadow).not.toBe('');
-    expect(
-      rowsOf('fh-watch')[2].style.boxShadow,
-      'the rising farm carried the still-falling edge, which makes the edge decoration',
-    ).toBe('');
-    /* And NOT on the queue, where every row already needs a person. */
-    expect(rowsOf('fh-queue').every((tr) => tr.style.boxShadow === '')).toBe(true);
-  });
-});
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "opens score-ascending with the lastActiveAt tiebreak, and the tiebreak".
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "gives the watchlist a FIXED order with no sort controls, and says why ".
 
 /* ═══ 3. the charts v3 never draws (B8, A32, A33) ═════════════════════════ */
 
-describe('the two charts v3 never draws, and the tables under all four (B8, A32, A33)', () => {
-  it('keeps the donut data table — visible now, not sr-only — and tells a measured zero from a gap', async () => {
-    serve();
-    renderPage();
-    await settled();
-
-    /*
-     * A32 — THE TABLE THAT NO SCREENSHOT REVIEW COULD SEE.
-     * `EngagementTierBreakdown.tsx:95` was `<details className="sr-only">`,
-     * which is precisely why `ChartShell` makes `dataTable` a REQUIRED prop.
-     * It still exists, under the same chart, with the same figures — and it is
-     * no longer hidden from the sighted operator who wanted an exact number.
-     */
-    const tiers = chartTable('fh-engagement-tiers');
-    expect(tiers, 'the engagement-tier data table is gone').not.toBeNull();
-    expect(chart('fh-engagement-tiers').contains(tiers!)).toBe(true);
-    expect(
-      tiers!.className,
-      'the tier data table went back to sr-only — the one accessibility affordance on this page, invisible in every review',
-    ).not.toContain('sr-only');
-
-    /*
-     * A33 — THE AXIS IS FIXED AT A/B/C/D, so a tier the server did not send
-     * keeps its place. And the two absences are told apart: tier A was
-     * measured at zero and prints 0; tier C was never sent and prints the
-     * honest non-value, never a 0.
-     */
-    expect(tableRow('fh-engagement-tiers', 'A').querySelectorAll('td')[0].textContent).toBe('0');
-    expect(
-      tableRow('fh-engagement-tiers', 'C').textContent,
-      'a tier with no reading was printed as a zero',
-    ).toMatch(/not measured/);
-
-    /* The same rule on the histogram: an empty bin is a measured 0, because
-       the query really does count every bin. */
-    expect(tableRow('fh-score-distribution', '11-20').querySelectorAll('td')[0].textContent).toBe(
-      '0',
-    );
-    expect(tableRow('fh-score-distribution', '0-10').querySelectorAll('td')[0].textContent).toBe(
-      '2',
-    );
-
-    /* And on the trend: an interior week with no row is a HOLE, not a trough,
-       and the shell says how many in words. */
-    expect(within(chart('fh-weekly-trend')).getByText(/never measured/)).toBeInTheDocument();
-    expect(chart('fh-weekly-trend').querySelector('[data-state="gap"]')).not.toBeNull();
-  });
-
-  it('draws the Investment pillar as an absence, because the scorer has never computed it', async () => {
-    serve();
-    renderPage();
-    await settled();
-
-    /*
-     * 🔴 THE FINDING THIS ASSERTION EXISTS FOR. The `investment` CTE in
-     * `mis.dwc_score_per_farm_week` is a documented placeholder —
-     * `SELECT DISTINCT farm_id, 0.0 AS reuse_ratio` — so the pillar scores 0
-     * for every farm, every week, always. The old heatmap drew that as
-     * `0.0 / 10` with a red bar and "7 failing", which is a measured finding
-     * about farms presented in the same shape as the five real pillars. It is
-     * not a finding; it is an unbuilt feature.
-     */
-    const investment = tableRow('fh-pillars', 'Investment');
-    expect(
-      investment.textContent,
-      'the Investment pillar was drawn as a measured 0 — it is a placeholder that has never been computed',
-    ).toMatch(/not measured/);
-    expect(investment.textContent).not.toContain('7');
-
-    /* A real pillar is unaffected — the rescue is keyed on the pillar, not on
-       the value, so a genuine 0 elsewhere is still a genuine 0. */
-    expect(tableRow('fh-pillars', 'Proof').querySelectorAll('td')[1].textContent).toBe('9.5');
-
-    /* And it is counted honestly: five of six, not six of six. */
-    expect(within(chart('fh-pillars')).getByText(/5 of 6 pillars measured/)).toBeInTheDocument();
-
-    /* The consequence, stated where a reader can act on it: the reachable
-       maximum is 90, not 100. */
-    expect(screen.getByText(/highest score any farm can currently reach/)).toBeInTheDocument();
-  });
-});
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "keeps the donut data table — visible now, not sr-only — and tells a me".
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "draws the Investment pillar as an absence, because the scorer has neve".
 
 /* ═══ 4. the cross-surface emptiness sum (A35, A36) ═══════════════════════ */
 
-describe('two empties, decided by a sum that spans three surfaces (A35, A36)', () => {
-  it('an unscored cohort gets the mandatory banner and makes NO claim about farms', async () => {
-    serve({ body: EMPTY_COHORT });
-    renderPage();
-    await settled();
-
-    /*
-     * A35 — MANDATORY C5 COPY, ASSERTED BYTE FOR BYTE INCLUDING THE
-     * SEMICOLON. It is a compliance sentence, not UI copy: rewording it, even
-     * to something that reads better, changes what was said.
-     */
-    expect(screen.getByText(/Scoring active from/).closest('[role="status"]')!.textContent).toBe(
-      'Scoring active from first deploy; data accumulating.',
-    );
-
-    /* A36, the understated half. No hint, because "all scored farms are above
-       the threshold" over an unscored cohort is a claim about farms nobody has
-       measured. */
-    expect(within(list('fh-queue')).getByText('No farms in intervention bucket yet.')).toBeInTheDocument();
-    expect(screen.queryByText(/above the 40-pt intervention threshold/)).toBeNull();
-
-    /* And the banner is not allowed to be the whole story: in production the
-       score view has never been populated (deployment task D3), and seven
-       swallowed database failures look identical to this. */
-    expect(screen.getByText(/cannot confirm that scoring has started/)).toBeInTheDocument();
-  });
-
-  it('a SCORED cohort with an empty queue says the opposite — and it is the histogram that decides', async () => {
-    /*
-     * THE TERM THAT CARRIES THE MEANING. Both lists are empty here, exactly as
-     * above; the ONLY difference is that the score histogram is not zero. Drop
-     * the third term from the sum and this test renders the understated copy
-     * and the banner, which is the collapse A36 exists to prevent.
-     */
-    serve({
-      body: {
-        ...EMPTY_COHORT,
-        scoreDistribution: bins({ '81-90': 6 }),
-      },
-    });
-    renderPage();
-    await settled();
-
-    expect(
-      screen.queryByText(/Scoring active from/),
-      'the banner fired over a cohort that HAS been scored — the histogram term was dropped from the emptiness sum',
-    ).toBeNull();
-    expect(within(list('fh-queue')).getByText('No farms in intervention bucket.')).toBeInTheDocument();
-    expect(screen.getByText(/above the 40-pt intervention threshold/)).toBeInTheDocument();
-  });
-
-  it('a broken request is a failure with a retry, never an empty cohort', async () => {
-    /* D9. An absence names its cause: a 500 must not arrive as "nothing needs
-       intervention", which on this screen is the best possible news. */
-    serve({ status: 500, body: {} });
-    renderPage();
-    await settled();
-
-    expect(await screen.findByRole('alert', undefined, { timeout: SETTLE_WAIT })).toBeInTheDocument();
-    expect(screen.queryByText(/Scoring active from/)).toBeNull();
-    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
-  });
-});
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "an unscored cohort gets the mandatory banner and makes NO claim about ".
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "a SCORED cohort with an empty queue says the opposite — and it is the ".
+// B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet (the landing reads no cohort feed). Retired: "a broken request is a failure with a retry, never an empty cohort".
 
 /* ═══ 5. the search box (A29, B7, A28) ════════════════════════════════════ */
 
@@ -694,7 +334,7 @@ describe('the farmer search probes before it navigates (A29, B7)', () => {
       miss.getAttribute('role'),
       'the miss became an assertive alert — it now interrupts a screen-reader user for a typo',
     ).toBe('status');
-    expect(rowsOf('fh-queue')).toHaveLength(3);
+    // B24 (founder, 2026-11-17): FH1 (the intervention queue) is an idea shown as Not built yet, so its three rows are no longer asserted.
     expect(where()).toContain('/farmer-health?');
 
     /* One attempt, not two: `retry: 0` on `useFarmerHealth` (A28). */

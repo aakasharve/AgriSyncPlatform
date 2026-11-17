@@ -282,7 +282,9 @@ function box(): HTMLElement {
 async function mountConsole(route: string, options_: ServerOptions) {
   stub = server(options_);
   authStore.set(SESSION);
-  go(route);
+  // B24 (founder, 2026-11-17): `/` now redirects to the guarded /MIS/overview, and Home lives at /home (ungated). These
+  // palette tests need a signed-in screen without a module grant, so what used to be `/` is now `/home`.
+  go(route === '/' ? '/home' : route);
   render(<App />);
   await screen.findByRole('complementary', { name: 'Sections' }, { timeout: WHOLE_CONSOLE_WAIT });
   await settle();
@@ -556,7 +558,10 @@ describe('the destinations the old palette did not have (Step 3)', () => {
        The placeholder now reads "Search by farm name" because the endpoint
        matches `LOWER(f.name)` and nothing else; the property this test is
        about is that the box is SEEDED from the url, and that is unchanged. */
-    expect(screen.getByRole('textbox', { name: 'Search farms' })).toHaveValue('कांबळे');
+    // B24 (founder, 2026-11-17): same assertion, now awaited: the lazy All Farms page is the first to load after /home, not after the old Home.
+    expect(
+      await screen.findByRole('textbox', { name: 'Search farms' }, { timeout: WHOLE_CONSOLE_WAIT }),
+    ).toHaveValue('कांबळे');
   });
 
   it('lands a farm whose NAME was withheld on the farm itself, not on the unfiltered list', async () => {
@@ -839,7 +844,7 @@ describe('the keyboard, and only the keys that are real (D4, founder 2026-08-31)
     /* The sidebar advertised ⌘1 / ⌘2 / ⌘F and nothing bound them. The founder
        chose REMOVE over implement, so the answer to all six of these is that
        the console does not move. */
-    expect(at()).toBe('/');
+    expect(at()).toBe('/home'); // B24 (founder, 2026-11-17): Home moved from / to /home.
     expect(noPalette()).not.toBeInTheDocument();
   });
 });

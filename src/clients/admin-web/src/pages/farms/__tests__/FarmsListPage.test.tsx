@@ -304,38 +304,8 @@ describe('server-side pagination at 40 per page (A17, B4)', () => {
 
 /* ══════════════════════════════════════════════════ B9 — the tier filter */
 
-describe('the tier A/B/C/D filter is server-side and survives (B9)', () => {
-  it('sends the tier to the server and resets the page, keeping the org (A18, A20)', async () => {
-    const user = userEvent.setup();
-    serve([farm()], 1284);
-    renderFarms(`/farms?org=${ORG}&page=3`);
-    await rowsAppear();
-
-    await user.click(screen.getByRole('button', { name: 'Tier B' }));
-
-    expect(param('tier')).toBe('B');
-    /* A filter change that leaves the reader on page 3 shows an empty list for
-       a filter that matched. */
-    expect(param('page')).toBe('1');
-    /* The functional updater, not the object form: `?org=` is the active
-       tenant and dropping it reads one organisation's data under another's. */
-    expect(param('org')).toBe(ORG);
-    await waitFor(() => expect(lastFarmsRequest().url).toContain('tier=B'));
-  });
-
-  it('presses off again, and the second press clears the filter', async () => {
-    const user = userEvent.setup();
-    serve([farm()], 1284);
-    renderFarms(`/farms?org=${ORG}&tier=B`);
-    await rowsAppear();
-
-    const chip = screen.getByRole('button', { name: 'Tier B' });
-    expect(chip).toHaveAttribute('aria-pressed', 'true');
-
-    await user.click(chip);
-    expect(param('tier')).toBeNull();
-  });
-});
+// B24 (founder, 2026-11-17): F4 (Tier) is an idea shown as Not built yet; the tier A/B/C/D filter is disabled with the mark,
+// so its two server-side filter tests are retired (the disabled filter is asserted in b24.ideas.test.tsx).
 
 /* ═══════════════════════════════════════════════════ A21 — the search box */
 
@@ -400,23 +370,7 @@ describe('an absence names its cause (D9)', () => {
     await waitFor(() => expect(stub!.requests.length).toBeGreaterThan(before));
   });
 
-  it('names the window AND the tier when a filtered page really is empty', async () => {
-    serve([], 0);
-    renderFarms(`/farms?org=${ORG}&tier=D`);
-
-    // COPY CORRECTED 2026-09-01: this said "in this organisation", which was FALSE.
-    // GetFarmsListAsync(page, pageSize, search, tier, ct) takes no org parameter —
-    // verified in IAdminMisRepository.cs. Neither do GetSilentChurnAsync nor
-    // GetSufferingAsync. The org is in the query KEY (T12), which separates the
-    // client cache; it is not in the QUERY, so the server returns the same rows
-    // whichever org is active. Claiming a scope the feed does not apply is the
-    // exact defect class this redesign exists to remove.
-    await screen.findByText('No farm this feed returns is in tier D');
-    expect(stateBlock()).toHaveAttribute('data-state', 'measured-zero');
-    /* The window is the SERVER's `meta.lastRefreshed`, never a `new Date()`
-       computed at render — that is the D5 fabricated-freshness defect. */
-    expect(screen.getByText(/The window was checked at 01 Sep 26/)).toBeInTheDocument();
-  });
+  // B24 (founder, 2026-11-17): F4 (Tier) is an idea shown as Not built yet; the empty-by-tier sentence is retired with the filter.
 
   it('shows a skeleton shaped like this table while the first page loads (B12)', async () => {
     stub = installAdapter(neverSettles);
@@ -446,7 +400,8 @@ describe('a background refetch says so instead of changing the table silently', 
     /* First load showed the skeleton, not the indicator. */
     expect(screen.queryByText('Refreshing…')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Tier B' }));
+    // B24 (founder, 2026-11-17): F4 (Tier) is an idea shown as Not built yet, so the filter change is now a search.
+    await user.type(screen.getByRole('textbox', { name: 'Search farms' }), 'anand{Enter}');
 
     /* `keepPreviousData`, narrowed to the org by `lib/orgQuery.ts`, holds the
        previous rows while the next page loads — so the reader needs telling
@@ -459,22 +414,16 @@ describe('a background refetch says so instead of changing the table silently', 
 /* ═══════════════════════════════════════════════ the cells, one at a time */
 
 describe('the cells', () => {
-  it('prints a measured zero as 0 and an unmeasured value as a grey word', async () => {
+  // B24 (founder, 2026-11-17): F4 Tier, F5 WVFD 7d and F6 Errors 24h are ideas shown as Not built yet; their cells print no value,
+  // so the measured-zero and "not measured" assertions on them are retired. F3 Last Log ("never") is a real part and stays.
+  it('says "never" for a farm that never logged (F3)', async () => {
     serve([
       farm({ farmId: 'a', errors24h: 0, engagementTier: null, wvfd7d: null, lastLogAt: null }),
     ]);
     renderFarms();
     await rowsAppear();
 
-    const [, , tier, wvfd, errors, lastLog] = cellsOf(dataRows()[0]);
-
-    /* `{f.errors24h || '—'}` used to print a dash over a measured zero — D18
-       pointing the other way. Zero errors in 24 hours is a reading. */
-    expect(errors.textContent).toBe('0');
-    /* A tier and a WVFD that have no row in the latest weekly aggregate are
-       not a D tier and not a zero. */
-    expect(within(tier).getByText('not measured')).toBeInTheDocument();
-    expect(within(wvfd).getByText('not measured')).toBeInTheDocument();
+    const lastLog = cellsOf(dataRows()[0])[5];
     /* "never logged" and "logged and stopped" are different facts. */
     expect(within(lastLog).getByText('never')).toBeInTheDocument();
   });

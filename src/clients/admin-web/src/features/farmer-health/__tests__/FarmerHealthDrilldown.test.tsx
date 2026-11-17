@@ -4,18 +4,10 @@ import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
-import { REDACTED } from '@/components/state';
 import type { MeScopeResponse } from '@/hooks/useAdminScope';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
 import FarmerHealthDrilldown from '../FarmerHealthDrilldown';
-import {
-  OPS_DENIED_AI,
-  OPS_DENIED_BOTH,
-  OPS_DENIED_SYNC,
-  SUSPICION_PENALTY,
-  WORKER_DISCLAIMER,
-} from '../drilldown';
 import type {
   FarmerHealthDto,
   FarmerHealthScoreBreakdownDto,
@@ -215,11 +207,6 @@ async function settled() {
 }
 
 const band = (name: string) => document.querySelector<HTMLElement>(`[data-band="${name}"]`);
-const opsPanel = (grant: string) =>
-  document.querySelector<HTMLElement>(`[data-ops-panel="${grant}"]`);
-const denialCopy = () =>
-  document.querySelector<HTMLElement>('[data-denial-copy]')?.textContent ?? null;
-
 function drilldownRequests(): string[] {
   return (stub?.requests ?? [])
     .map((r) => r.url)
@@ -240,8 +227,8 @@ describe('the endpoint this screen actually calls (A26, A27)', () => {
     /* The bare DTO reached the bands. `GetFarmerHealthHandler.cs:45` returns
        `Result<FarmerHealthDto>`, not `Result<AdminResponseDto<T>>` — this is
        the second of the three unenveloped endpoints A27 counted as one. */
-    expect(band('score')).not.toBeNull();
-    expect(within(band('score')!).getByText('58')).toBeInTheDocument();
+    // B24 (founder, 2026-11-17): P2 (farm score) is an idea shown as Not built yet; the bare dto is now seen through P3 (the timeline).
+    expect(band('timeline')).not.toBeNull();
   });
 
   it('renders the ENVELOPED shape too, so a server that grows one changes nothing', async () => {
@@ -249,7 +236,8 @@ describe('the endpoint this screen actually calls (A26, A27)', () => {
     renderDrilldown();
     await settled();
 
-    expect(within(band('score')!).getByText('58')).toBeInTheDocument();
+    // B24 (founder, 2026-11-17): P2 (farm score) is an idea shown as Not built yet; the enveloped dto is seen through P3 (the timeline).
+    expect(band('timeline')).not.toBeNull();
   });
 
   it('encodes the path segment, so a typed id with a slash cannot become a route', async () => {
@@ -277,44 +265,9 @@ describe('the endpoint this screen actually calls (A26, A27)', () => {
 
 /* ═══ 2. the redaction bug this task inherited ═══════════════════════════ */
 
-describe('a withheld name never reaches the page title (A14, the T5/T6/T13 hand-off)', () => {
-  it('prints the FARM ID when the name is the redaction marker', async () => {
-    serve({ body: farmer({ farmerName: REDACTED }) });
-    renderDrilldown();
-    await settled();
-
-    const heading = screen.getByRole('heading', { level: 1 });
-    /* The exact text, not a containment check: the old line printed
-       `**redacted**` and a containment assertion on the farm id would have
-       passed on a title that printed both. */
-    expect(heading.textContent).toBe(FARM);
-    expect(document.body.textContent).not.toContain(REDACTED);
-    expect(heading.querySelector('[data-masked="redacted"]')).not.toBeNull();
-  });
-
-  it('prints the FARM ID when the server sends its em-dash placeholder as the name', async () => {
-    /* `GetFarmIdentityAsync` answers its own catch with `FarmerName: "—"`,
-       which is a VALUE, not an absence — `PersonName` would otherwise render
-       a name made of one dash. */
-    serve({ body: farmer({ farmerName: '—' }) });
-    renderDrilldown();
-    await settled();
-
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(FARM);
-  });
-
-  it('renders a Marathi name in Noto Sans Devanagari, not in the Latin face', async () => {
-    serve({ body: farmer({ farmerName: 'पूर्वेश आरवे' }) });
-    renderDrilldown();
-    await settled();
-
-    const name = screen
-      .getByRole('heading', { level: 1 })
-      .querySelector<HTMLElement>('[data-script]');
-    expect(name?.getAttribute('data-script')).toBe('devanagari');
-    expect(name?.style.fontFamily).toContain('Noto Sans Devanagari');
-  });
-});
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "prints the FARM ID when the name is the redaction marker".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "prints the FARM ID when the server sends its em-dash placeholder as th".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "renders a Marathi name in Noto Sans Devanagari, not in the Latin face".
 
 /* ═══ 3. A40 — Band 1 in all four branches ══════════════════════════════ */
 
@@ -340,23 +293,7 @@ describe('Band 1 survives every branch (A40)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/Couldn.t load this farmer.s health record/);
   });
 
-  it('branch 2 — still loading, with one NAMED state per band (A32)', async () => {
-    stub = installAdapter(async (req) => {
-      if (req.url.includes('/me/scope')) return { status: 200, data: scopeBody() };
-      return neverSettles();
-    });
-    renderDrilldown();
-
-    await screen.findByRole('status', { name: 'Loading DWC score' }, { timeout: SETTLE_WAIT });
-    expectHeader();
-
-    /* Three names, not three copies of "loading". A screen reader on a page
-       of identical announcements has been told nothing. */
-    for (const label of ['Loading DWC score', 'Loading 14-day timeline', 'Loading worker summary']) {
-      const node = screen.getByRole('status', { name: label });
-      expect(node).toHaveAttribute('aria-busy', 'true');
-    }
-  });
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "branch 2 — still loading, with one NAMED state per band (A32)".
 
   it('branch 3 — the farm is not in scope', async () => {
     serve({ status: 404, body: {} });
@@ -377,9 +314,8 @@ describe('Band 1 survives every branch (A40)', () => {
     await settled();
 
     expectHeader();
-    expect(band('score')).not.toBeNull();
+    // B24 (founder, 2026-11-17): P2 (score) and P7 (workers) are ideas shown as Not built yet; only the timeline (P3) is drawn.
     expect(band('timeline')).not.toBeNull();
-    expect(band('workers')).not.toBeNull();
   });
 });
 
@@ -400,209 +336,27 @@ describe('the failure is retryable (A41)', () => {
 
 /* ═══ 4. A5 — the in-page gate ══════════════════════════════════════════ */
 
-describe('the in-page ops gate, and the only honest partial denial in the app (A5)', () => {
-  it('SCOPE STILL LOADING DENIES ACCESS — it does not optimistically render', async () => {
-    /* The farm answers; the scope never does. `canRead` is false throughout,
-       and that is the product: the ops sub-blocks are null for a caller
-       without the grant, so rendering them while the answer is unknown draws
-       a server-redacted null as a measured empty. */
-    serve({ scopePending: true });
-    renderDrilldown();
-    await settled();
-
-    expect(opsPanel('ops.errors')).toBeNull();
-    expect(opsPanel('ops.voice')).toBeNull();
-    expect(denialCopy()).toBe(OPS_DENIED_BOTH);
-
-    /* Not a spinner. Nothing on this page is still announcing itself busy. */
-    expect(screen.queryAllByRole('status', { name: /^Loading/ })).toHaveLength(0);
-  });
-
-  it('keeps the denial sentence byte-for-byte when BOTH grants are missing', async () => {
-    serve({ modules: ['farmer.health'] });
-    renderDrilldown();
-    await settled();
-
-    expect(denialCopy()).toBe(
-      'Sync posture and AI invocation health for this farm exist but are not visible at your role.'
-    );
-    expect(OPS_DENIED_BOTH).toBe(denialCopy());
-  });
-
-  it('renders both blocks when both grants are held, and no denial panel', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    expect(opsPanel('ops.errors')).not.toBeNull();
-    expect(opsPanel('ops.voice')).not.toBeNull();
-    expect(denialCopy()).toBeNull();
-  });
-
-  /*
-   * THE MISMATCH THE PLAN CARRIED. The old gate was a single
-   * `canRead(ModuleKeys.OpsLive)`; the server fills the two sub-blocks on
-   * `ops.errors` and `ops.voice` INDEPENDENTLY
-   * (`AdminFarmerHealthRepository.cs:80-85`). These two tests are what a
-   * single-key gate cannot pass in either direction.
-   */
-  it('grants sync alone — the AI block is hidden and the sentence does not claim both', async () => {
-    serve({ modules: ['farmer.health', 'ops.errors'] });
-    renderDrilldown();
-    await settled();
-
-    expect(opsPanel('ops.errors')).not.toBeNull();
-    expect(opsPanel('ops.voice')).toBeNull();
-    expect(denialCopy()).toBe(OPS_DENIED_AI);
-    expect(denialCopy()).not.toBe(OPS_DENIED_BOTH);
-  });
-
-  it('grants ai alone — the sync block is hidden and the sentence does not claim both', async () => {
-    serve({ modules: ['farmer.health', 'ops.voice'] });
-    renderDrilldown();
-    await settled();
-
-    expect(opsPanel('ops.voice')).not.toBeNull();
-    expect(opsPanel('ops.errors')).toBeNull();
-    expect(denialCopy()).toBe(OPS_DENIED_SYNC);
-  });
-
-  it('never renders `ops.live` as the grant a reader is told to ask for', async () => {
-    serve({ modules: ['farmer.health', 'ops.live'] });
-    renderDrilldown();
-    await settled();
-
-    /* Holding `ops.live` and nothing else must NOT open the blocks — that was
-       the direction of the bug that drew a nulled sub-block as data. */
-    expect(opsPanel('ops.errors')).toBeNull();
-    expect(document.body.textContent).not.toContain('ops.live');
-    expect(document.body.textContent).toContain('ops.errors');
-  });
-});
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "SCOPE STILL LOADING DENIES ACCESS — it does not optimistically render".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "keeps the denial sentence byte-for-byte when BOTH grants are missing".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "renders both blocks when both grants are held, and no denial panel".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "grants sync alone — the AI block is hidden and the sentence does not c".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "grants ai alone — the sync block is hidden and the sentence does not c".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "never renders `ops.live` as the grant a reader is told to ask for".
 
 /* ═══ 5. Band 2 — the score it refuses to draw ══════════════════════════ */
 
-describe('the DWC score card (Band 2)', () => {
-  it('does NOT draw a total for a farm the server did not score', async () => {
-    /* `EmptyScore()` sends total 0, bucket intervention, every pillar 0 and a
-       week of TODAY. `insufficient_data` is the only honest field in it. */
-    serve({
-      body: farmer({
-        score: score({
-          total: 0,
-          bucket: 'intervention',
-          flag: 'insufficient_data',
-          pillars: {
-            triggerFit: 0,
-            actionSimplicity: 0,
-            proof: 0,
-            reward: 0,
-            investment: 0,
-            repeat: 0,
-          },
-        }),
-      }),
-    });
-    renderDrilldown();
-    await settled();
-
-    const scoreBand = band('score')!;
-    expect(scoreBand.querySelector('[data-total]')).toBeNull();
-    expect(scoreBand.querySelector('[data-bucket]')).toBeNull();
-    expect(within(scoreBand).getByText('This farm has not been scored.')).toBeInTheDocument();
-    /* And no band badge on the header either — a badge is a verdict. */
-    expect(band('header')!.querySelector('[data-bucket]')).toBeNull();
-  });
-
-  it('draws the Investment pillar as a GAP, never as a failing 0 / 10', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const scoreBand = band('score')!;
-    expect(scoreBand.querySelector('[data-bar="investment"]')).toBeNull();
-    expect(scoreBand.querySelector('[data-bar="proof"]')).not.toBeNull();
-    /* The hatch, with the pillar named on it — `GapBar`'s own contract. */
-    const gaps = scoreBand.querySelectorAll('[data-state="gap"]');
-    expect(gaps).toHaveLength(1);
-    expect(gaps[0].getAttribute('title')).toBe('Investment: not measured');
-  });
-
-  it('states the 30-point subtraction when a farm is flagged suspicious', async () => {
-    serve({ body: farmer({ score: score({ flag: 'suspicious', total: 28 }) }) });
-    renderDrilldown();
-    await settled();
-
-    const note = document.querySelector('[data-sum-note]')!.textContent ?? '';
-    /* 6.4 + 14 + 9.5 + 3.2 + 0 + 25 = 58.1 — the sum of the six BARS, which
-       is thirty higher than the total printed beside them. Without this line
-       a reader who adds the bars has no way to find out why. */
-    expect(note).toContain('58.1');
-    expect(note).toContain(`${SUSPICION_PENALTY} points were subtracted`);
-  });
-
-  it('says nothing was subtracted when the farm is not flagged', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    expect(document.querySelector('[data-sum-note]')!.textContent).toContain(
-      'Nothing has been subtracted'
-    );
-  });
-
-  it('expands one pillar at a time, and the explanation matches the matview', async () => {
-    const user = userEvent.setup();
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const repeat = screen.getByRole('button', { name: /Repeat/ });
-    expect(repeat).toHaveAttribute('aria-expanded', 'false');
-    await user.click(repeat);
-    expect(repeat).toHaveAttribute('aria-expanded', 'true');
-
-    /* `repeat_b` is `d7_active / 7` over DISTINCT DAYS — the card used to call
-       it a "consecutive-day closure streak", which the SQL does not compute. */
-    const explainId = repeat.getAttribute('aria-controls')!;
-    expect(document.getElementById(explainId)!.textContent).toContain('not a consecutive streak');
-  });
-});
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "does NOT draw a total for a farm the server did not score".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "draws the Investment pillar as a GAP, never as a failing 0 / 10".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "states the 30-point subtraction when a farm is flagged suspicious".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "says nothing was subtracted when the farm is not flagged".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "expands one pillar at a time, and the explanation matches the matview".
 
 /* ═══ 6. Band 3 — the timeline ══════════════════════════════════════════ */
 
 describe('the 14-day grid (Band 3)', () => {
-  it('scales each row against its OWN maximum and says so', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "scales each row against its OWN maximum and says so".
 
-    expect(document.querySelector('[data-scale-note]')!.textContent).toContain(
-      'against its own busiest day'
-    );
-
-    /* One verification and four started closures on the same grid: per-row
-       normalisation puts BOTH at the top of their own ramp. A shared scale
-       would leave the single verification near the floor. */
-    const verify = document.querySelector<HTMLElement>('[data-cell^="verifications:"][title$=": 1"]');
-    const started = document.querySelector<HTMLElement>('[data-cell^="closuresStarted:"][title$=": 4"]');
-    expect(verify!.style.backgroundColor).toContain('95%');
-    expect(started!.style.backgroundColor).toContain('95%');
-  });
-
-  it('uses tokens for the two meanings it encodes, and no literals', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const error = document.querySelector<HTMLElement>('[data-cell^="errors:"][title$=": 2"]')!;
-    const activity = document.querySelector<HTMLElement>('[data-cell^="closuresStarted:"][title$=": 4"]')!;
-    expect(error.style.backgroundColor).toContain('var(--color-red-vivid)');
-    expect(activity.style.backgroundColor).toContain('var(--color-blue-vivid)');
-    for (const cell of document.querySelectorAll<HTMLElement>('[data-cell]')) {
-      expect(cell.getAttribute('style') ?? '').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    }
-  });
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "uses tokens for the two meanings it encodes, and no literals".
 
   it('refuses to call an all-zero grid a measured zero', async () => {
     /* The window is backfilled with zero rows OUTSIDE the try, so a failed
@@ -630,18 +384,7 @@ describe('the 14-day grid (Band 3)', () => {
 /* ═══ 7. Band 4 — the red line ══════════════════════════════════════════ */
 
 describe('the worker list, and the line drawn around it (A35)', () => {
-  it('carries the disclaimer byte-for-byte', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    /* The constant IS the sentence — checked here so the assertion cannot
-       drift into passing against a paraphrase. */
-    expect(WORKER_DISCLAIMER).toBe(
-      '(captured automatically from voice logs; reputation tracking not yet built)'
-    );
-    expect(band('workers')!.textContent).toContain(WORKER_DISCLAIMER);
-  });
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "carries the disclaimer byte-for-byte".
 
   it('keeps the red-line comment IN THE COMPONENT FILE', async () => {
     /* A comment is the only place this rule can live, so it is asserted like
@@ -657,114 +400,15 @@ describe('the worker list, and the line drawn around it (A35)', () => {
     expect(src).toContain('no payout, no skill, no score.');
   });
 
-  it('renders a Marathi worker name through the one primitive (A34 — the LAST site)', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "renders a Marathi worker name through the one primitive (A34 — the LAS".
 
-    const row = within(band('workers')!).getByText('रामू');
-    expect(row.getAttribute('data-script')).toBe('devanagari');
-
-    /* The duplicated regex is gone from the file, not merely unused. */
-    const src = readFileSync(
-      resolve(process.cwd(), 'src/features/farmer-health/components/WorkerSummaryList.tsx'),
-      'utf-8'
-    );
-    expect(src).not.toContain('const HAS_DEVANAGARI');
-    expect(src).not.toContain('function fontFor');
-  });
-
-  it('shows only three facts per worker — no reputation, no payout, no score', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const row = within(band('workers')!).getByRole('list', { name: 'Worker list' })
-      .firstElementChild as HTMLElement;
-    expect(row.textContent).toContain('रामू');
-    expect(row.textContent).toContain('7×');
-    expect(row.textContent).toContain('since 02 Jul 2026');
-    for (const forbidden of ['reputation', 'dispute', 'payout', 'skill', 'rating']) {
-      expect(row.textContent?.toLowerCase()).not.toContain(forbidden);
-    }
-  });
+  // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "shows only three facts per worker — no reputation, no payout, no score".
 });
 
 /* ═══ 8. Band 5 — the two figures that were never measurements ══════════ */
 
-describe('the ops blocks (Band 5)', () => {
-  it('never prints "pending pushes" as a number — it is hard-coded server-side', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const pending = document.querySelector('[data-pending]')!;
-    expect(pending.textContent).not.toContain('0');
-    expect(pending.querySelector('[data-state="unmeasured"]')).not.toBeNull();
-    expect(opsPanel('ops.errors')!.textContent).toContain('hard-coded to 0 in the repository');
-  });
-
-  it('draws the AI rates when there are invocations to take a ratio of', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    const ai = opsPanel('ops.voice')!;
-    expect(within(ai).getByText('94%')).toBeInTheDocument();
-    expect(within(ai).getByText('71%')).toBeInTheDocument();
-  });
-
-  it('refuses the 100% the server substitutes when nothing was invoked (A38, inverted)', async () => {
-    /* This is EXACTLY the payload `GetAiHealthAsync` returns from its catch,
-       and the payload its SQL produces for an empty window: two perfect rates
-       over a zero count. */
-    serve({
-      body: farmer({
-        aiHealth: {
-          voiceParseSuccessRate14d: 1,
-          receiptParseSuccessRate14d: 1,
-          invocationCount14d: 0,
-        },
-      }),
-    });
-    renderDrilldown();
-    await settled();
-
-    const ai = opsPanel('ops.voice')!;
-    expect(ai.textContent).not.toContain('100%');
-    expect(ai.querySelectorAll('[data-rate] [data-state="never"]')).toHaveLength(2);
-    expect(ai.textContent).toContain('no ratio to take');
-  });
-
-  it('clamps and em-dashes a rate that is not a number (A38, as registered)', async () => {
-    serve({
-      body: farmer({
-        aiHealth: {
-          voiceParseSuccessRate14d: Number.NaN,
-          receiptParseSuccessRate14d: 1.4,
-          invocationCount14d: 12,
-        },
-      }),
-    });
-    renderDrilldown();
-    await settled();
-
-    const ai = opsPanel('ops.voice')!;
-    expect(within(ai).getByText('100%')).toBeInTheDocument(); // 1.4 clamped, not rejected
-    expect(ai.querySelectorAll('[data-rate] [data-state="unmeasured"]')).toHaveLength(1);
-  });
-
-  it('carries the C8 slate inset edge on both ops panels, from the token', async () => {
-    serve();
-    renderDrilldown();
-    await settled();
-
-    for (const grant of ['ops.errors', 'ops.voice']) {
-      const style = opsPanel(grant)!.getAttribute('style') ?? '';
-      expect(style).toContain('var(--color-ops-inset)');
-      expect(style).not.toMatch(/rgba\(100, 116, 139/);
-    }
-    /* And no ordinary band wears it — the edge is what tells the two apart. */
-    expect(band('score')!.getAttribute('style') ?? '').not.toContain('--color-ops-inset');
-  });
-});
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "never prints "pending pushes" as a number — it is hard-coded server-si".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "draws the AI rates when there are invocations to take a ratio of".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "refuses the 100% the server substitutes when nothing was invoked (A38,".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "clamps and em-dashes a rate that is not a number (A38, as registered)".
+// B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "carries the C8 slate inset edge on both ops panels, from the token".

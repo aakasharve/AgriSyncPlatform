@@ -5,7 +5,7 @@ import { useLocation } from 'react-router-dom';
 import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import { DATE_FORMATS, fmt } from '@/lib/format';
-import type { OpsErrorEvent, OpsFarmError, OpsHealthData } from '@/hooks/useOpsHealth';
+import type { OpsErrorEvent, OpsHealthData } from '@/hooks/useOpsHealth';
 import OpsLivePage from '../OpsLivePage';
 
 /**
@@ -80,18 +80,6 @@ function event(over: Partial<OpsErrorEvent> = {}): OpsErrorEvent {
   };
 }
 
-function farm(over: Partial<OpsFarmError> = {}): OpsFarmError {
-  return {
-    farmId: '33333333-3333-3333-3333-333333333333',
-    errorCount: 9,
-    syncErrors: 4,
-    logErrors: 2,
-    voiceErrors: 0,
-    lastErrorAt: '2026-09-01T11:38:00.0000000Z',
-    ...over,
-  };
-}
-
 let stub: StubbedAdapter | null = null;
 
 afterEach(() => {
@@ -148,22 +136,6 @@ function url(): string {
   return screen.getByTestId('url').textContent ?? '';
 }
 
-function badge(id: string): HTMLElement {
-  return document.querySelector<HTMLElement>(`[data-rule="${id}"]`)!;
-}
-
-function tile(label: string): HTMLElement {
-  const kpis = document.querySelector<HTMLElement>('[data-kpis="ops-live"]')!;
-  return within(kpis).getByText(label).closest('[data-state]') as HTMLElement;
-}
-
-/** THE VALUE ELEMENT, not the tile: a tile's text also contains its caption
- *  and its note, so an assertion on the whole tile passes on a number that
- *  only appears in a sentence. */
-function tileValue(label: string): string {
-  return (tile(label).firstElementChild as HTMLElement).textContent!.trim();
-}
-
 function table(name: string): HTMLTableElement {
   return screen.getByRole('table', { name }) as HTMLTableElement;
 }
@@ -178,116 +150,10 @@ function column(name: string, index: number): string[] {
 
 /* ═══════ 1. three states, the eight unread rules, and the server's age ═══ */
 
-describe('the alert badge tells three different truths (D8, A27)', () => {
-  it('breaches red, clears green, reports an unreadable rule as neither — and R1–R8 as NOT CHECKED', async () => {
-    serve(health({ apiErrorSpike: true, voiceDegraded: false }));
-    renderLive();
-    await settled();
+// B24 (founder, 2026-11-17): L1 (alert rules R9/R10, the alert badge) is an idea shown as Not built yet; retired here, covered by b24.ideas.test.tsx.
+// B24 (founder, 2026-11-17): L2-L5 (the four AI pipeline tiles) are doubles of MIS Quality #43/#45; retired here, absence covered by b24.ideas.test.tsx.
 
-    /* R9 breached. */
-    expect(badge('R9')).toHaveAttribute('data-rule-state', 'breach');
-    expect(badge('R9')).toHaveTextContent('BREACH');
-    expect(badge('R9').className).toContain('bg-tint-red');
-
-    /* R10 clear. */
-    expect(badge('R10')).toHaveAttribute('data-rule-state', 'clear');
-    expect(badge('R10')).toHaveTextContent('CLEAR');
-    expect(badge('R10').className).toContain('bg-tint-green');
-
-    /* THREE TONES ON ONE SCREEN, from three different facts. The old badge
-       had two — `breached === true ? red : green` — so everything that was
-       not a breach was painted as a pass. The unread case is asserted in the
-       next test, on the fixture that produces it. */
-    const tones = new Set(
-      ['R9', 'R10', 'R1–R8'].map((id) => /bg-tint-\w+/.exec(badge(id).className)?.[0]),
-    );
-    expect(tones.size).toBe(3);
-
-    /* D8 — the row that replaces "all R1–R10 clear". */
-    expect(badge('R1–R8')).toHaveAttribute('data-rule-state', 'not-checked');
-    expect(badge('R1–R8')).toHaveTextContent('NOT CHECKED');
-    expect(badge('R1–R8')).not.toHaveTextContent('CLEAR');
-    expect(screen.getByText(/2 of the 3 entries above are rules this endpoint reads/)).toBeVisible();
-
-    /* R10's threshold is quoted in the SAME words `/ops/voice` uses. Two
-       screens, one rule, one number — and no 90% target anywhere. */
-    expect(screen.getAllByText(/20% .*6 hours|failure rate above 20% in 6 hours/).length).toBeGreaterThan(0);
-    expect(document.body.textContent).not.toContain('90%');
-
-    /* Plan Step 5, and it is a statement about the alerting system. */
-    expect(screen.getByText(/Would email/)).toBeVisible();
-
-    /*
-     * A27's SECOND HALF — THE CHIP STATES THE SERVER'S AGE.
-     *
-     * `computedAtUtc` is seven minutes old; this browser received the answer
-     * a moment ago. The old page fed the chip `dataUpdatedAt`, so it always
-     * read "Live · now" no matter how stale the snapshot behind it was.
-     */
-    const chip = document.querySelector('.chip-fresh')!;
-    expect(chip.textContent).toContain('7m ago');
-    expect(chip.textContent).not.toContain('now');
-  });
-});
-
-/* ═════════ 2. a zero that is not a reading, and an empty that is not a zero */
-
-describe('a substituted zero is reported as no reading (D18, and its server twin)', () => {
-  it('renders four unmeasured tiles and refuses to call either empty list a measured zero', async () => {
-    /* Exactly what `GetVoiceHealthAsync`'s catch block substitutes. */
-    serve(
-      health({
-        voiceInvocations24h: 0,
-        voiceFailures24h: 0,
-        voiceFailureRatePct: 0,
-        voiceAvgLatencyMs: 0,
-        voiceP95LatencyMs: 0,
-        /* `null` is what the endpoint sends when the alert view cannot be
-           read at all - the case the old two-state badge painted green. */
-        apiErrorSpike: null,
-        voiceDegraded: null,
-      }),
-    );
-    renderLive();
-    await settled();
-
-    for (const label of ['Calls', 'Failed calls', 'Failure rate', 'P95 latency']) {
-      expect(tile(label)).toHaveAttribute('data-state', 'unmeasured');
-      expect(tileValue(label)).not.toMatch(/0/);
-    }
-    /* The shapes the old page printed for a null field, as standalone
-       figures. The word boundary matters: R10's threshold is "20%", and an
-       assertion that banned the substring would have banned the rule. */
-    expect(document.body.textContent).not.toMatch(/\b0%/);
-    expect(document.body.textContent).not.toMatch(/\b0ms/);
-
-    /*
-     * AND THE ASSERTION THE OLD BADGE FAILED. `breached === null` is not a
-     * pass. `breached === true ? red : green` painted it green, beside a
-     * tick, under the word N/A - a rule nobody could read, in the colour of
-     * a rule that cleared.
-     */
-    for (const id of ['R9', 'R10']) {
-      expect(badge(id)).toHaveAttribute('data-rule-state', 'unread');
-      expect(badge(id)).toHaveTextContent('N/A');
-      expect(badge(id)).not.toHaveTextContent('CLEAR');
-      expect(badge(id).className).toContain('bg-tint-grey');
-      expect(badge(id).className).not.toContain('bg-tint-green');
-    }
-    expect(screen.getByText(/2 could not be read on this request at all/)).toBeVisible();
-
-    /* Both empty lists render the `unproven` panel, NOT MeasuredZero's
-       closing sentence — four queries behind this endpoint answer their own
-       database failures with an empty result and HTTP 200. */
-    expect(document.body.textContent).not.toContain('This is a measured zero');
-    expect(screen.getByText(/no token this platform issues carries a farm claim/i)).toBeVisible();
-    expect(
-      screen.getByText(/a broken query and a genuinely quiet two hours arrive here looking the same/i),
-    ).toBeVisible();
-  });
-});
-
-/* ═══════════════ 3. three lists, three namespaces, one screen ═══════════ */
+/* ═══════════════ 3. one table keeps its own sort ═══════════ */
 
 describe('the three tables do not fight over one ?sort (T7 ns, T8 prediction)', () => {
   it('sorting one leaves the others exactly as they were', async () => {
@@ -306,14 +172,6 @@ describe('the three tables do not fight over one ?sort (T7 ns, T8 prediction)', 
             farmId: null,
           }),
         ],
-        /* DELIBERATELY NOT IN THE ORDER THE TABLE DRAWS THEM. If the fixture
-           arrived pre-sorted, a table that lost its sort entirely would still
-           look right and the assertion below would pass over the defect. */
-        topSufferingFarms: [
-          farm({ farmId: 'bbbbbbbb-0000-0000-0000-000000000002', errorCount: 5, syncErrors: 7 }),
-          farm({ farmId: 'cccccccc-0000-0000-0000-000000000003', errorCount: 2, syncErrors: 3 }),
-          farm({ farmId: 'aaaaaaaa-0000-0000-0000-000000000001', errorCount: 9, syncErrors: 1 }),
-        ],
       }),
     );
     renderLive();
@@ -325,8 +183,7 @@ describe('the three tables do not fight over one ?sort (T7 ns, T8 prediction)', 
        in the reader's local zone, so a UTC fixture and an IST assertion would
        be a test about the machine the suite ran on. */
     expect(column('Recent events', 2)).toEqual(['/c-endpoint', '/a-endpoint', '/b-endpoint']);
-    const sufferingBefore = column('Farmer suffering watchlist', 0);
-    expect(sufferingBefore).toEqual(['aaaaaaaa…', 'bbbbbbbb…', 'cccccccc…']);
+// B24 (founder, 2026-11-17): L7 (suffering watchlist) is an idea shown as Not built yet; its sort assertions are retired.
 
     /* Sort the EVENTS table by endpoint. */
     await user.click(within(table('Recent events')).getByRole('button', { name: 'Endpoint' }));
@@ -336,32 +193,11 @@ describe('the three tables do not fight over one ?sort (T7 ns, T8 prediction)', 
       expect(column('Recent events', 2)).toEqual(['/a-endpoint', '/b-endpoint', '/c-endpoint']),
     );
 
-    /*
-     * …AND THE SUFFERING WATCHLIST DID NOT. This is asserted FIRST, before
-     * anything about the URL, because it is the defect: with one shared
-     * `?sort`, `endpoint` names no column on that table, its default order
-     * (worst farm first) is discarded, and the rows fall back to the order
-     * the server happened to send. A watchlist whose whole meaning is its
-     * order, silently reordered by a click on another table.
-     */
-    expect(column('Farmer suffering watchlist', 0)).toEqual(sufferingBefore);
-
     /* And the URL says which table was sorted. A bare `sort` is read by all
        three lists, so its absence is part of the contract. */
     expect(url()).toContain('events.sort=endpoint');
     expect(url()).not.toMatch(/[?&]sort=/);
     expect(url()).toContain(`org=${ORG}`);
-
-    /* And the other way round. */
-    await user.click(within(table('Farmer suffering watchlist')).getByRole('button', { name: 'Sync' }));
-    await waitFor(() => expect(url()).toContain('suffering.sort=syncErrors'));
-    expect(url()).toContain('events.sort=endpoint');
-    expect(column('Recent events', 2)).toEqual(['/a-endpoint', '/b-endpoint', '/c-endpoint']);
-    expect(column('Farmer suffering watchlist', 0)).toEqual([
-      'bbbbbbbb…',
-      'cccccccc…',
-      'aaaaaaaa…',
-    ]);
 
     /* A `client.error` row carries no status and no farm — three absences on
        one row, each named, none of them a zero. Read off THE CELLS. */
@@ -387,7 +223,6 @@ describe('a production operator is never told to start a .NET API (D7)', () => {
     expect(document.body.textContent).not.toContain('Backend unreachable');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
     /* Nothing is shown below, because nothing was received. */
-    expect(document.querySelector('[data-kpis="ops-live"]')).toBeNull();
   });
 
   it('names when the feed stopped, and never shows the last good number as current', async () => {
@@ -403,7 +238,7 @@ describe('a production operator is never told to start a .NET API (D7)', () => {
     const queryClient = makeTestQueryClient();
     renderLive({ queryClient });
     await settled();
-    expect(tileValue('Calls')).toBe('1,402');
+    // B24 (founder, 2026-11-17): the Calls tile (L2) is a double of MIS Quality #43 and is gone.
 
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: ['ops', 'health'] });

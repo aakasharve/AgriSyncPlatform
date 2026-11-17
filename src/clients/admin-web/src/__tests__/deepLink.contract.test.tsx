@@ -221,7 +221,8 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
    * would be turned away.
    */
   it.each([
-    ['/', 'Ops Now'],
+    // B24 (founder, 2026-11-17): Home moved from / to /home (and is now titled Home); / redirects to the guarded /MIS/overview.
+    ['/home', 'Home'],
     ['/schedules/templates', 'Schedule Templates'],
     ['/settings/admins', 'Admin Users'],
   ])('%s opens for a resolved scope with no modules at all', async (route, heading) => {

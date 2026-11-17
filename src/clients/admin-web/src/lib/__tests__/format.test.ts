@@ -220,7 +220,7 @@ describe('fmt.date / dateTime / time never throw on bad input', () => {
  * known failure shape in this repo.
  */
 describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
-  const CITED: Record<keyof typeof DATE_FORMATS, string> = {
+  const CITED: Partial<Record<keyof typeof DATE_FORMATS, string>> = {
     opsErrorsRow: 'src/pages/ops/OpsErrorsPage.tsx',
     opsLiveRow: 'src/pages/ops/OpsLivePage.tsx',
     opsLiveLastErr: 'src/pages/ops/OpsLivePage.tsx',
@@ -228,12 +228,12 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     farmsCreated: 'src/pages/farms/FarmsListPage.tsx',
     usersCreated: 'src/pages/users/UsersPage.tsx',
     usersLastLogin: 'src/pages/users/UsersPage.tsx',
-    churnLastLog: 'src/pages/farms/SilentChurnPage.tsx',
-    sufferLastErr: 'src/pages/farms/SufferingPage.tsx',
+    // B24 (founder, 2026-11-17): S1-S3 (Silent Churn) are ideas shown as Not built yet; the churnLastLog screen check is retired.
+    // B24 (founder, 2026-11-17): U1-U2 (Suffering) are ideas shown as Not built yet; the sufferLastErr screen check is retired.
     /* Re-pointed by Task 22: `InterventionQueueTable.tsx` is deleted and both
        cohort lists are `DataList` configurations on the screen itself, which
        imports the module rather than holding the literal. */
-    cohortRow: 'src/features/farmer-health/FarmerHealthPage.tsx',
+    // B24 (founder, 2026-11-17): FH1-FH5 (Farmer Health landing) are ideas shown as Not built yet; the cohortRow screen check is retired.
     workerSince: 'src/features/farmer-health/components/WorkerSummaryList.tsx',
     /* Added by Task 23 with the drilldown, which is the one screen v3 does
        not contain at all. All three replace literals the components held. */
@@ -241,19 +241,19 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     drilldownSyncRow: 'src/features/farmer-health/components/SyncStateBlock.tsx',
     timelineDay: 'src/features/farmer-health/components/FarmerTimeline.tsx',
     voiceDay: 'src/pages/ops/OpsVoicePage.tsx',
-    nsmWeek: 'src/pages/metrics/NorthStarPage.tsx',
-    nsmWeekFull: 'src/pages/metrics/NorthStarPage.tsx',
+    // B24 (founder, 2026-11-17): W1-W7 (WVFD) are ideas shown as Not built yet; the nsmWeek screen check is retired.
+    // B24 (founder, 2026-11-17): W1-W7 (WVFD) are ideas shown as Not built yet; the nsmWeekFull screen check is retired.
   };
 
   const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf-8');
 
   it('read the real screen files — not empty stubs', () => {
-    for (const rel of new Set(Object.values(CITED))) {
+    for (const rel of new Set(Object.values(CITED) as string[])) {
       expect(read(rel).length, rel).toBeGreaterThan(500);
     }
   });
 
-  it.each(Object.entries(CITED))(
+  it.each(Object.entries(CITED) as [string, string][])(
     '%s is the format its screen actually uses (or the screen now imports the module)',
     (key, rel) => {
       const src = read(rel);
