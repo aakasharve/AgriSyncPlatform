@@ -248,7 +248,7 @@ public sealed class AdminFarmerHealthRepository(
             : await db.VerificationEvents
                 .AsNoTracking()
                 .Where(v => entryIds.Contains(v.DailyLogId) && v.OccurredAtUtc < window.CountedAtUtc)
-                .Select(v => new { v.Id, v.DailyLogId, v.Status, v.OccurredAtUtc, v.Reason })
+                .Select(v => new { v.Id, v.DailyLogId, v.Status, v.OccurredAtUtc, v.Reason, v.VerifiedByUserId })
                 .ToListAsync(ct);
 
         var latestStatus = entryEvents
@@ -261,7 +261,8 @@ public sealed class AdminFarmerHealthRepository(
         // saver at creation: counted as selfChecked, never as confirmed or verified.
         var hasOtherCheck = entryEvents
             .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
-                        && !NotADeliberateCheckReasons.Contains(v.Reason))
+                        && !NotADeliberateCheckReasons.Contains(v.Reason)
+                        && !excludedUsers.Contains(v.VerifiedByUserId))
             .Select(v => v.DailyLogId)
             .ToHashSet();
 
