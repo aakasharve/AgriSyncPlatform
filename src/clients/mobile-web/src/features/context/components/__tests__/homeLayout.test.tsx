@@ -6,6 +6,10 @@
  * The crop cards on the log home screen (PLR-D5, founder brief 2026-10-24): one card = two zones + one
  * touch target. The photograph has NOTHING on it; the name sits big in its own panel; a small outlined
  * finger-tap cue is a hint only, because the WHOLE card is the button.
+ *
+ * Lane UI-7: every page now draws the SHARED look by default (`CropPlotPicker.tsx`, pinned in `CropPlotStepper.sharedLook.test.tsx`);
+ * this card is the CLASSIC look, still drawn for the one page that keeps it (compare, until its own lane). So these tests ask for it
+ * with `look: 'classic'` — what they pin is unchanged.
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +26,7 @@ const NAMES: [string, string, string, string[]][] = [
 const farm = (n: number) => NAMES.slice(0, n).map(([id, name, icon, plots]) => ({ id, name, iconName: icon, color: 'emerald', plots: plots.map((p, i) => ({ id: `${id}-${i + 1}`, name: p })) }) as unknown as CropProfile);
 const home = (n: number, onSel = () => {}) => render(
     <CropSelector mode="log" layout="stepper" crops={farm(n)} selectedCrops={[]} selectedPlots={{}} onSelectionChange={onSel}
-        stepper={{ labels: { entireFarmShort: 'प्लॉटला न जोडलेली कामे', entireFarmHelp: 'LONG-HELP' } }} />,
+        stepper={{ look: 'classic', labels: { entireFarmShort: 'प्लॉटला न जोडलेली कामे', entireFarmHelp: 'LONG-HELP' } }} />,
 );
 
 describe('one crop card: two zones, one touch target', () => {

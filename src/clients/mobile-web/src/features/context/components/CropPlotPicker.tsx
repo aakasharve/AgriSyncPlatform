@@ -94,7 +94,7 @@ export interface CropTileProps {
 /** A crop (or the whole farm) as a photo tile. Chosen = green border, tick; the strip across the top is the crop's own colour. */
 export const CropTile: React.FC<CropTileProps> = ({ testId, name, on, onClick, disabled, photo, color, count, wide = false, className = '' }) => (
     <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-pressed={on}
-        className={`relative flex overflow-hidden rounded-3xl border-2 transition active:scale-[0.97] disabled:opacity-60 ${wide ? 'w-full items-center gap-3 px-4 py-2.5 text-left' : 'flex-col items-center px-2 pb-2.5 pt-4 text-center'} ${on ? 'border-emerald-600 bg-emerald-50 shadow-[0_8px_20px_-10px_rgba(4,120,87,0.6)]' : 'border-stone-200 bg-white'} ${className}`}>
+        className={`relative flex overflow-hidden rounded-3xl border-2 transition active:scale-[0.97] disabled:opacity-60 ${wide ? 'w-full items-center gap-2.5 px-3 py-2.5 text-left' : 'flex-col items-center px-2 pb-2.5 pt-4 text-center'} ${on ? 'border-emerald-600 bg-emerald-50 shadow-[0_8px_20px_-10px_rgba(4,120,87,0.6)]' : 'border-stone-200 bg-white'} ${className}`}>
         {color && <span aria-hidden="true" data-part="accent" className={`absolute ${wide ? 'inset-y-0 left-0 w-1.5' : 'inset-x-0 top-0 h-1.5'} ${color}`} />}
         {photo}
         <span className={`${wide ? 'min-w-0 flex-1' : 'mt-1.5 w-full'}`}>
@@ -103,7 +103,7 @@ export const CropTile: React.FC<CropTileProps> = ({ testId, name, on, onClick, d
                 ? <span className="mt-0.5 block text-[12.5px] font-semibold leading-snug text-stone-600">{count}</span>
                 : <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11.5px] font-extrabold leading-snug ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'}`}>{count}</span>)}
         </span>
-        {on && <span className="absolute right-1.5 top-2.5 grid h-6 w-6 place-items-center rounded-full bg-emerald-600 text-white" data-part="tick"><Check size={15} strokeWidth={3} aria-hidden="true" /></span>}
+        {on && <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-600 text-white ${wide ? '' : 'absolute right-1.5 top-2.5'}`} data-part="tick"><Check size={15} strokeWidth={3} aria-hidden="true" /></span>}
     </button>
 );
 
