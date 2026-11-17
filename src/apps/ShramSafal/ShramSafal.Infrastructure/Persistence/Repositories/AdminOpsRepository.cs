@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
+using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 using ShramSafal.Domain.Farms;
 using System.Text.Json;
 
@@ -15,14 +16,14 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// Queries analytics.events directly for live operational health.
 /// Uses raw SQL via AnalyticsDbContext connection — no SaveChanges ever.
 ///
-/// Graceful degradation (older reads): the voice totals, the alert checks and
-/// the voice trend return empty values rather than throwing.
+/// Graceful degradation (older reads): the voice totals and the voice trend
+/// return empty values rather than throwing.
 ///
 /// <para>
 /// The exceptions let every failure escape: the app-versions methods at the
 /// end of this class (spec control-room-app-versions-2026-11-12), and the
-/// recent errors, the farms with repeated problems and the paged errors list
-/// (spec company-mis-real-numbers-2026-11-15, plan CR-2e).
+/// recent errors, the farms with repeated problems, the paged errors list and
+/// alert check R9 (spec company-mis-real-numbers-2026-11-15, plan CR-2e).
 /// </para>
 ///
 /// <para>
@@ -107,10 +108,13 @@ public sealed class AdminOpsRepository(
 
         try
         {
+            // One clock reading: R9's window ends at the moment this snapshot was computed.
+            var nowUtc = DateTime.UtcNow;
+
             var voice = await GetVoiceHealthAsync(conn, ct);
             var errors = await GetRecentErrorsAsync(conn, ct);
             var suffering = await GetRepeatedProblemFarmsAsync(conn, exclusions, ct);
-            var (r9, r10) = await GetAlertBreachesAsync(conn, ct);
+            var alertR9 = await GetApiErrorCheckAsync(conn, nowUtc, ct);
 
             return new AdminOpsHealthDto(
                 VoiceInvocations24h: voice.total,
@@ -120,9 +124,8 @@ public sealed class AdminOpsRepository(
                 VoiceP95LatencyMs: voice.p95Latency,
                 RecentErrors: errors,
                 TopSufferingFarms: suffering,
-                ApiErrorSpike: r9,
-                VoiceDegraded: r10,
-                ComputedAtUtc: DateTime.UtcNow);
+                AlertR9: alertR9,
+                ComputedAtUtc: nowUtc);
         }
         finally
         {
@@ -212,29 +215,38 @@ public sealed class AdminOpsRepository(
             .ToList();
     }
 
-    private static async Task<(bool? r9, bool? r10)> GetAlertBreachesAsync(
-        System.Data.Common.DbConnection conn, CancellationToken ct)
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29). Alert check R9, counted live: api.error
+    // rows in the 60 minutes before the request, from analytics.events only (no cross-farm factory on this polled
+    // route); judged by LiveAlertRules. Every server error counts, test accounts included (a server-health count).
+    // Replaces the read of the nightly mis.alert_r9/r10 views, which is gone. Nothing is caught: a failed count
+    // escapes and /admin/ops/health answers 500, never an unknown that reads as clear.
+    private static async Task<AlertCheckDto> GetApiErrorCheckAsync(
+        System.Data.Common.DbConnection conn, DateTime nowUtc, CancellationToken ct)
     {
-        // mis.alert_r9/r10 views only exist after Ops Phase 2 migration.
-        // Returns null (unknown) until then — frontend shows "—" rather than false.
-        bool? r9 = null, r10 = null;
-        try
+        var windowEndUtc = AsUtc(nowUtc);
+        var windowStartUtc = windowEndUtc - LiveAlertRules.ApiErrorWindow;
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*)
+            FROM analytics.events
+            WHERE event_type = 'api.error'
+              AND occurred_at_utc >= @windowStart
+              AND occurred_at_utc < @windowEnd
+            """;
+        AddParam(cmd, "@windowStart", windowStartUtc);
+        AddParam(cmd, "@windowEnd", windowEndUtc);
+
+        var raw = await cmd.ExecuteScalarAsync(ct);
+        var apiErrors = raw switch
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT breached FROM mis.alert_r9_api_error_spike LIMIT 1";
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            if (raw is bool b9) r9 = b9;
-        }
-        catch { /* view not yet created */ }
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT breached FROM mis.alert_r10_voice_degraded LIMIT 1";
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            if (raw is bool b10) r10 = b10;
-        }
-        catch { /* view not yet created */ }
-        return (r9, r10);
+            long l => checked((int)l),
+            int i => i,
+            _ => throw new InvalidOperationException(
+                $"Unexpected COUNT(*) result type '{raw?.GetType().FullName ?? "null"}' in GetApiErrorCheckAsync."),
+        };
+
+        return LiveAlertRules.ApiErrors(apiErrors, windowStartUtc, windowEndUtc);
     }
 
     // ───────────────────────────────────────────────────────────

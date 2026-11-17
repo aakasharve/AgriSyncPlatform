@@ -2,7 +2,7 @@ namespace ShramSafal.Application.Contracts.Dtos;
 
 /// <summary>
 /// Admin Ops Dashboard — real-time operational health snapshot.
-/// Sources: analytics.events (ai.invocation, api.error, client.error).
+/// Sources: analytics.events (ai.invocation, api.error, client.error) only; no cross-farm read.
 /// Refreshes every time the endpoint is called — no materialized view lag.
 /// </summary>
 public sealed record AdminOpsHealthDto(
@@ -21,12 +21,36 @@ public sealed record AdminOpsHealthDto(
     // (plan CR-2e Task 2, C1). At most 10, by count then latest.
     IReadOnlyList<OpsFarmErrorDto> TopSufferingFarms,
 
-    // Alert breach state (from mis.alert_r9/r10 — may be null if views not yet created)
-    bool? ApiErrorSpike,
-    bool? VoiceDegraded,
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29). R9, counted live on every call from
+    // analytics.events: api.error rows in the 60 minutes before the request; a breach above 30. The nightly
+    // mis.alert_r9/r10 views are no longer read. R10 (voice) is not here: it reads farm by farm and has its own
+    // route, GET /shramsafal/admin/ops/voice-check, which this polled route never opens (C11).
+    AlertCheckDto AlertR9,
 
     // When this snapshot was computed
     DateTime ComputedAtUtc);
+
+/// <summary>
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29). One alert check, judged live.
+/// <list type="bullet">
+/// <item><see cref="Rule"/>: <c>"R9"</c> (server errors) or <c>"R10"</c> (voice recordings failing).</item>
+/// <item><see cref="State"/>: <c>"breach"</c>, <c>"clear"</c> or <c>"not_judged"</c>. Not judged is never clear.</item>
+/// <item><see cref="Counted"/>: the figure the rule judges (R9: server errors; R10: failed recordings), null when
+/// it could not be counted. <see cref="OutOf"/>: R10's finished recordings; always null for R9.</item>
+/// <item><see cref="WindowStartUtc"/> to <see cref="WindowEndUtc"/>: the counted window; the end is the moment it
+/// was counted.</item>
+/// <item><see cref="Reason"/>: why a check is not judged (<c>"too_few_recordings"</c>,
+/// <c>"too_many_farms_for_live_count"</c>, <c>"farm_list_unreadable"</c>); null when judged.</item>
+/// </list>
+/// </summary>
+public sealed record AlertCheckDto(
+    string Rule,
+    string State,
+    int? Counted,
+    int? OutOf,
+    DateTime WindowStartUtc,
+    DateTime WindowEndUtc,
+    string? Reason);
 
 public sealed record OpsErrorEventDto(
     string EventType,

@@ -786,6 +786,9 @@ public static class DependencyInjection
 
         // Admin ops — real-time operational health dashboard + Phase 2 paginated endpoints
         services.AddScoped<GetOpsHealthHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29) — alert check R10 on its own route.
+        // Needs ICompanyMisReader and CompanyMisExclusions (Infrastructure) and TimeProvider.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsHealth.GetVoiceCheckHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
         // spec: control-room-app-versions-2026-11-12 (ADR 0028) — who uses which app version. Takes TimeProvider,
         // which AddBuildingBlocks and the Bootstrapper both register.
