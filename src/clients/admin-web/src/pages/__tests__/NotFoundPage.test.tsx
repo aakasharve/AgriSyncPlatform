@@ -141,6 +141,12 @@ describe('an unknown path renders a 404 and stops there (A43)', () => {
     // only copy of it.
     expect(at()).toBe(bad);
     expect(screen.getByText(bad, { exact: false })).toBeInTheDocument();
+
+    // B25: the way out reads "Go to Overview" and goes to the root (which lands on the Overview), not to /home.
+    // Kept in this one mount: the suite has no headroom for a second whole-console mount.
+    const out = screen.getByRole('link', { name: 'Go to Overview' });
+    expect(out).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', { name: /go to home/i })).toBeNull();
   });
 
   /*

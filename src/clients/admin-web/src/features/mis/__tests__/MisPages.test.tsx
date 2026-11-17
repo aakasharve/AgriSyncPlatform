@@ -218,7 +218,6 @@ describe('words on the pages (CR-2b Task 4)', () => {
     await countedShown();
     const has = (text: string) => (screen.getByTestId('mis-dashboard').textContent ?? '').includes(text);
     const notes: [string, string][] = [
-      ['overview', 'People who saved an entry'],
       ['overview', 'Only entries that came from a voice recording the app understood and checked.'],
       ['engagement', 'Times are when an entry reached the server; an entry saved without signal counts when the phone next connected.'],
       ['retention', 'by sign-up week (phone verified), not install'],
@@ -230,10 +229,11 @@ describe('words on the pages (CR-2b Task 4)', () => {
       await countedShown();
       expect([s, note, has(note)]).toEqual([s, note, true]);
     }
-    // DAU, WAU and MAU each say it.
+    // B24 (founder, 2026-11-17): the tile's `what` line takes the place of the static hint, so DAU, WAU and
+    // MAU each say it through that line ("People who saved at least one entry ...").
     fireEvent.click(screen.getByRole('button', { name: 'open overview' }));
     for (const k of ['dau', 'wau', 'mau']) {
-      expect([k, screen.getByTestId(`kpi-overview.${k}`).textContent?.includes('People who saved an entry')]).toEqual([k, true]);
+      expect([k, screen.getByTestId(`kpi-overview.${k}`).textContent?.includes('saved at least one entry')]).toEqual([k, true]);
     }
     // Retention: both the cohort grid and the curve carry the sign-up-week note.
     fireEvent.click(screen.getByRole('button', { name: 'open retention' }));

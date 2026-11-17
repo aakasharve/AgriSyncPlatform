@@ -629,3 +629,19 @@ describe('the list is paginated by the server and searched on commit', () => {
     expect(screen.queryByRole('status', { name: /Loading/ })).toBeNull();
   });
 });
+
+describe('no emoji on the Users page (B25)', () => {
+  it('B25_no_emoji_anywhere_on_the_page_and_the_phone_number_words_stay', async () => {
+    serve([user()]);
+    renderUsers();
+    await settled();
+    // The standing note is a disclosure, but its text is in the page: read the whole document.
+    const text = document.body.textContent ?? '';
+    expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
+    for (const el of document.querySelectorAll('[title],[aria-label]')) {
+      expect(/\p{Extended_Pictographic}/u.test(`${el.getAttribute('title') ?? ''} ${el.getAttribute('aria-label') ?? ''}`)).toBe(false);
+    }
+    // the words stay: only the symbol goes
+    expect(text).toContain('The phone numbers are shown in full, and that is the server');
+  });
+});

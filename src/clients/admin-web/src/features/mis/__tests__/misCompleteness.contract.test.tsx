@@ -8,6 +8,20 @@ import type { StubbedAdapter } from '@/test/stubAdapter';
 import { allNotMeasuredFixture, at, farmsBlockedFixture, misEnvelope, misFixture } from '@/test/misFixture';
 import { PLAN_ITEMS, PRINTS_SERVED_NUMBERS, planItem } from '@/test/misPlan';
 import { MIS_NOW, MIS_SECTIONS, countedShown, renderMis, serveMis } from '@/test/misPage';
+import linesRaw from '@/__tests__/fixtures/b24-metric-lines.json?raw';
+
+/**
+ * B25 ruling (b): the item's own `what`/`why` lines are fixed copy from the reviewed lines file
+ * (like the plan-worded definitions below). Only those exact strings of the item being checked
+ * are exempt; any other digit in the item is still a stray.
+ */
+const LINES = new Map((JSON.parse(linesRaw) as { key: string; what?: string; why?: string }[]).map((e) => [e.key, e]));
+function withoutOwnLines(text: string, key: string): string {
+  const e = LINES.get(key);
+  let out = text;
+  for (const line of [e?.what, e?.why]) if (line) out = out.split(line).join('');
+  return out;
+}
 
 /**
  * CR-2b Task 4 — every tile and card is a registered item, and every digit
@@ -225,7 +239,8 @@ function strayDigits(d: CompanyMis | null, section: string, root: HTMLElement): 
     if (!host) continue; // outside every tile, card and chart (filter row, range label, counted-at)
     const key = host.getAttribute('data-mis-item')!;
     if (isAxisTick(el)) continue;
-    let left = stripDates(text);
+    let left = withoutOwnLines(text, key);
+    left = stripDates(left);
     for (const re of PLAN_PHRASES) left = left.replace(re, '');
     left = stripAxis(left);
     if (d) left = stripTokens(left, tokensFor(d, nOf(key)));
@@ -318,6 +333,17 @@ describe('every tile and card is a registered item (CR-2b Task 4)', () => {
     expect(strays.map((x) => x.item)).toEqual(['overview.understanding']);
   });
 
+  it('An_invented_digit_next_to_the_items_own_lines_is_still_caught', () => {
+    // B25 (b): only the exact what/why strings are exempt; a digit beside them is still a stray.
+    const e = LINES.get('overview.understanding')!;
+    const box = document.createElement('div');
+    box.innerHTML = `<div data-mis-item="overview.understanding"><p>${e.what}</p><p>${e.why}</p><p>0</p></div>`;
+    document.body.appendChild(box);
+    const strays = strayDigits(D, 'probe', box);
+    box.remove();
+    expect(strays.map((x) => [x.item, x.text])).toEqual([['overview.understanding', '0']]);
+  });
+
   it('Not_served_items_show_their_sentence_and_no_digit', async () => {
     for (const s of MIS_SECTIONS) {
       const { container } = await open(s);
@@ -338,7 +364,7 @@ describe('every tile and card is a registered item (CR-2b Task 4)', () => {
         }
         expect([p.n, text.includes(p.why!)]).toEqual([p.n, true]);
         // A definition the plan words with a digit ("3 of their first 7 days") is not a number.
-        let bare = text;
+        let bare = withoutOwnLines(text, key); // B25 (b): this item's own what/why lines are fixed copy
         for (const re of PLAN_PHRASES) bare = bare.replace(re, '');
         if (!PRINTS_SERVED_NUMBERS.has(p.n)) expect([p.n, /\d/.test(bare), bare]).toEqual([p.n, false, bare]);
       }

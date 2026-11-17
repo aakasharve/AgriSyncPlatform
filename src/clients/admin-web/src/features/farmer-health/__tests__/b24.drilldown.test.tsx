@@ -131,8 +131,12 @@ describe('the one-farm page after B24', () => {
     }
     expect(t).toContain('Last entry reached the server');
     expect(t).not.toContain('Last activity');
-    // P8 value: 30 Aug 2026 (the feed's lastSyncAt) in whatever date form the console uses
-    expect(t).toMatch(/Aug|30\/08|30-08|2026-08-30/);
+    // B25: P8's value is asserted on P8's own element, not on the whole page (the timeline's own dates
+    // also say "Aug"). The feed's lastSyncAt is 30 Aug 2026, in whatever date form the console uses.
+    const p8 = document.querySelector<HTMLElement>('section[aria-label="Last entry reached the server"]');
+    expect(p8, 'P8 element').not.toBeNull();
+    expect(p8!.textContent).toMatch(/30 Aug|Aug 30|30\/08|30-08|2026-08-30/);
+    expect(p8!.textContent).not.toMatch(/not measured|not built yet/i);
     // P3: the four timeline rows are still there
     const timeline = document.querySelector<HTMLElement>('[data-band="timeline"]');
     expect(timeline).not.toBeNull();

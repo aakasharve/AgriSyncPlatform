@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe('the two lines on the Company MIS pages (B24)', () => {
   it('B24_every_rendered_MIS_tile_and_card_shows_its_what_and_why_as_text', async () => {
-    let shownWithLines = 0;
+    const withLines = new Set<string>();
     for (const s of MIS_SECTIONS) {
       stub = serveMis();
       const v = renderMis(s);
@@ -46,15 +46,17 @@ describe('the two lines on the Company MIS pages (B24)', () => {
         if (HEADLINE_KEYS.has(key)) continue;
         expect(text, `${key} what line`).toContain(e!.what!);
         expect(text, `${key} why line`).toContain(e!.why!);
-        shownWithLines += 1;
+        withLines.add(key);
       }
       v.unmount();
       stub.restore();
       stub = null;
       resetMisPeriod();
     }
-    // 73 items less the seven headline ones: every other one that renders as a tile or card carries both lines.
-    expect(shownWithLines).toBeGreaterThanOrEqual(40);
+    // B25: 73 items less the seven headline ones is 66, and ALL 66 must have been checked (not "at least 40").
+    const expected = MIS_ITEMS.filter((i) => !HEADLINE_KEYS.has(i.key)).map((i) => i.key).sort();
+    expect(expected).toHaveLength(66);
+    expect([...withLines].sort()).toEqual(expected);
   });
 
   it('B24_a_not_measured_item_shows_what_why_then_its_reason_and_keeps_the_MIS_wording', async () => {

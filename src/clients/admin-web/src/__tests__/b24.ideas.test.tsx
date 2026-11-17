@@ -246,6 +246,13 @@ describe('column ideas keep their header, print no value, and carry their lines 
     expect(document.body.textContent).toContain(e.what!);
     expect(document.body.textContent).toContain(e.why!);
     expect(document.body.textContent).not.toContain('aaaaaaaa-0000-0000-0000-000000000001');
+    // B25: the farm test also proves an error row was rendered (the farm id above is withheld from a real row,
+    // not from an empty table), and the standing note no longer claims an error "can name a farm".
+    const rows = [...table.querySelectorAll('tbody tr')].filter((r) => r.querySelector('td'));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].textContent).toContain('/shramsafal/sync/push');
+    expect(rows[0].textContent).toContain('500');
+    expect(document.body.textContent).not.toMatch(/can name a farm/i);
     for (const id of ['E1', 'E2']) expect(document.body.textContent).toContain(byId(id).what!);
   });
 });
