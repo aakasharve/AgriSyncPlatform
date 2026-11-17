@@ -30,7 +30,7 @@ function answer(over: Record<string, unknown> = {}) {
     farmId: FARM,
     farmerName: 'Zzowner Unique',
     farmName: 'Zzfarm Unique Mala',
-    phone: '9811122233',
+    phone: '9000000033',
     score: null,
     timeline: days(),
     syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z' },

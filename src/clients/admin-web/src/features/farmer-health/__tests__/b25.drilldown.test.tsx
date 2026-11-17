@@ -23,7 +23,7 @@ days[12] = { ...days[12], closuresStarted: 4, closuresSubmitted: 3 };
 days[13] = { ...days[13], closuresStarted: 1, proofAttached: 1, summariesViewed: 2, verifications: 83, errors: 97 };
 
 const ANSWER = {
-  farmId: FARM, farmerName: 'Zzfarmer Unique', farmName: 'Zzfarm Name', phone: '9811122233',
+  farmId: FARM, farmerName: 'Zzfarmer Unique', farmName: 'Zzfarm Name', phone: '9000000033',
   score: null, timeline: days,
   syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z' },
   aiHealth: null, verifications: null, workerSummary: [],

@@ -30,7 +30,7 @@ const WAIT = { timeout: 15_000 };
 
 const OWNER = 'Zzowner Unique';
 const FARM_NAME = 'Zzfarm Unique Mala';
-const PHONE = '9811122233';
+const PHONE = '9000000033';
 
 /** Fourteen India days from 2026-08-18; the marker counts are small and distinct. */
 function fourteenDays() {

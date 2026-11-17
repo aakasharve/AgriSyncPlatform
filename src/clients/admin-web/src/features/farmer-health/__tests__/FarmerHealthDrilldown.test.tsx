@@ -86,7 +86,7 @@ function farmer(over: Partial<FarmerHealthDto> = {}): FarmerHealthDto {
     farmId: FARM,
     farmerName: 'Purvesh Arve',
     farmName: 'Arve Mala',
-    phone: '9812345612',
+    phone: '9000000012',
     score: null,
     timeline: timeline(),
     syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z' },

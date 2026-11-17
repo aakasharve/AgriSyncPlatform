@@ -31,7 +31,7 @@ const ANSWER = {
   farmId: FARM,
   farmerName: 'Zzfarmer Unique',
   farmName: 'Zzfarm Name',
-  phone: '9811122233',
+  phone: '9000000033',
   // Fields the server no longer sends. If one still arrived, P2 and P9 must not draw it.
   score: {
     total: 5858, bucket: 'watchlist', flag: 'ok', weekStart: '2026-08-24',
@@ -132,7 +132,7 @@ describe('the one-farm page after B24', () => {
       expect(t, `${id} what`).toContain(e.what!);
       expect(t, `${id} why`).toContain(e.why!);
     }
-    for (const v of ['Zzfarmer Unique', 'Zzfarm Name', '9811122233', 'Zzworker Name', '93.9%']) expect(t, v).toContain(v);
+    for (const v of ['Zzfarmer Unique', 'Zzfarm Name', '9000000033', 'Zzworker Name', '93.9%']) expect(t, v).toContain(v);
     expect(t).not.toContain('0.94');
   });
 
