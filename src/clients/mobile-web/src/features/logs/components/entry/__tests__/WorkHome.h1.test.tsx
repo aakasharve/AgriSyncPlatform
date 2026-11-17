@@ -234,3 +234,88 @@ describe('the हजेरी card only when a head count was said (founder D-15
         expect(homeAttendanceShape({ ...REST_DAY, headcount: 3 })).toBe('card');
     });
 });
+
+describe('the money as a full-width dark card (founder D-150, note 1.2)', () => {
+    it('is stone-900 with white text, a 44 px amber circle with the rupee at left, and the label, the big amount and the small line', () => {
+        render(<WorkHome {...full({ cost: { today: 1200, yesterday: 0, soFar: 45000, scopeLabel: 'संपूर्ण शेत' } })} />);
+        const card = screen.getByTestId('running-cost-card');
+        expect(card.className).toContain('bg-stone-900');
+        expect(card.className).toContain('text-white');
+        expect(card.className).toContain('w-full');
+        expect(card.className).not.toContain('bg-white');
+        const circle = card.querySelector('span.rounded-full') as HTMLElement;
+        expect(circle.className).toContain('bg-amber-500');
+        expect(circle.className).toContain('h-11');
+        expect(circle.className).toContain('w-11');
+        expect(circle.querySelector('svg')).not.toBeNull();
+        expect(within(card).getByTestId('running-cost-scope').textContent).toBe('खर्च — संपूर्ण शेत · आजपर्यंत');
+        expect(within(card).getByTestId('running-cost-scope').className).toContain('text-[11.5px]');
+        const amount = within(card).getByTestId('running-cost-so-far');
+        expect(amount).toHaveTextContent('₹ 45,000');
+        expect(amount.className).toContain('text-[26px]');
+        expect(amount.className).toContain('font-extrabold');
+        expect(amount.className).toContain('text-amber-300');
+        // the small line carries the real figures; nothing recorded is the app's own "—", never "₹ 0"
+        expect(within(card).getByTestId('running-cost-recent').textContent).toBe('आज ₹ 1,200 · काल —');
+        expect(within(card).getByTestId('running-cost-today')).toHaveTextContent('₹ 1,200');
+        expect(within(card).getByTestId('running-cost-yesterday')).toHaveTextContent('—');
+        expect(card.textContent).not.toContain('₹ 0');
+    });
+
+    it('a plot or crop name goes in the label; no name says just "खर्च · आजपर्यंत"; no total shows "—" in the big place', () => {
+        const { rerender } = render(<WorkHome {...full({ cost: { today: 0, yesterday: 0, soFar: 0, scopeLabel: 'द्राक्ष G1' } })} />);
+        expect(screen.getByTestId('running-cost-scope').textContent).toBe('खर्च — द्राक्ष G1 · आजपर्यंत');
+        expect(screen.getByTestId('running-cost-so-far').textContent).toBe('—');
+        expect(screen.getByTestId('running-cost-recent').textContent).toBe('आज — · काल —');
+        rerender(<WorkHome {...full({ cost: { today: 0, yesterday: 0, soFar: 10, scopeLabel: '' } })} />);
+        expect(screen.getByTestId('running-cost-scope').textContent).toBe('खर्च · आजपर्यंत');
+    });
+
+    it('is drawn only when the caller hands the cost in (a person who may not see money is handed none)', () => {
+        render(<WorkHome {...full({ cost: undefined })} />);
+        expect(screen.queryByTestId('running-cost-card')).toBeNull();
+    });
+
+    it('has no tap and no button of its own (the old card had none; no chevron promises a place nobody wired)', () => {
+        render(<WorkHome {...full()} />);
+        const card = screen.getByTestId('running-cost-card');
+        expect(within(card).queryAllByRole('button')).toHaveLength(0);
+        expect(card.tagName).toBe('SECTION');
+    });
+});
+
+describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the picture puts on solid colours', () => {
+    const HEX: Record<string, string> = {
+        'text-white': '#ffffff', 'text-stone-200': '#e7e5e4', 'text-amber-300': '#fcd34d', 'text-emerald-50': '#ecfdf5',
+        'bg-stone-900': '#1c1917', 'bg-emerald-700': '#047857', 'bg-[#1448E6]': '#1448e6', 'bg-amber-500': '#f59e0b', 'text-stone-900': '#1c1917',
+    };
+    const lin = (c: number) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const lum = (hex: string) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255); };
+    const ratio = (fg: string, bg: string) => { const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x); return (a + 0.05) / (b + 0.05); };
+    const textClass = (el: HTMLElement) => Object.keys(HEX).find(k => k.startsWith('text-') && el.className.split(/\s+/).includes(k));
+    // text/90 on a solid: the picture's own "opacity .9" white, mixed into the blue
+    const white90OnBlue = () => { const f = [255, 255, 255].map((c, i) => Math.round(0.9 * c + 0.1 * [20, 72, 230][i])); return '#' + f.map(c => c.toString(16).padStart(2, '0')).join(''); };
+
+    it('the money card: the label, the small line and the amber figure on stone-900', () => {
+        render(<WorkHome {...full()} />);
+        for (const id of ['running-cost-scope', 'running-cost-recent', 'running-cost-so-far']) {
+            const cls = textClass(screen.getByTestId(id));
+            expect(cls, `${id} must use a colour this table knows`).toBeTruthy();
+            expect(ratio(HEX[cls as string], HEX['bg-stone-900'])).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    it('the green door: title and line on emerald-700; the blue door: title, line and pill on #1448E6', () => {
+        render(<WorkHome {...full()} />);
+        expect(ratio(HEX['text-white'], HEX['bg-emerald-700'])).toBeGreaterThanOrEqual(4.5);
+        expect(textClass(screen.getByTestId('home-tell-sub'))).toBe('text-emerald-50');
+        expect(ratio(HEX['text-emerald-50'], HEX['bg-emerald-700'])).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(HEX['text-white'], HEX['bg-[#1448E6]'])).toBeGreaterThanOrEqual(4.5);
+        expect(screen.getByTestId('home-plan-sub').className).toContain('text-white/90');
+        expect(ratio(white90OnBlue(), HEX['bg-[#1448E6]'])).toBeGreaterThanOrEqual(4.5);
+        // the pill is blue on white
+        expect(ratio(HEX['bg-[#1448E6]'], HEX['text-white'])).toBeGreaterThanOrEqual(4.5);
+        // the rupee on its amber circle
+        expect(ratio(HEX['text-stone-900'], HEX['bg-amber-500'])).toBeGreaterThanOrEqual(4.5);
+    });
+});

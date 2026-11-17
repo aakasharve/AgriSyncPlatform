@@ -133,7 +133,8 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
 
     it('the running-cost card is re-homed here, names what it covers, and shows "—" (never ₹ 0) for nothing recorded', () => {
         render(<Harness />);
-        expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च: संपूर्ण शेत');
+        // lane UI-6 (D-150, picture H1): the card is the full-width dark one; its label reads "खर्च — <scope> · आजपर्यंत"
+        expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च — संपूर्ण शेत · आजपर्यंत');
         expect(screen.getByTestId('running-cost-today')).toHaveTextContent('₹ 1,200');
         expect(screen.getByTestId('running-cost-yesterday')).toHaveTextContent('—');
         expect(screen.getByTestId('running-cost-so-far')).toHaveTextContent('₹ 45,000');
