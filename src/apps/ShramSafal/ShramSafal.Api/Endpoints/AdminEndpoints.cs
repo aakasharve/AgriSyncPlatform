@@ -5,6 +5,7 @@ using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
+using ShramSafal.Application.UseCases.Admin.GetFarmContacts;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
@@ -219,6 +220,52 @@ public static class AdminEndpoints
         .WithName("GetAdminFarms")
         .CacheOutput("AdminLive");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones for a list
+        // of farm ids (?ids=<comma-separated uuids>, 1 to 200), so the pages the console polls carry farm ids only
+        // and never open the audited cross-farm factory. Platform owners only (names and phones). Deliberately has
+        // no CacheOutput: each call writes one cross-farm audit row. A farm that does not exist is left out. A read
+        // failure is not caught: it answers 500, never an empty list.
+        group.MapGet("/admin/farms/contacts", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetFarmContactsHandler h,
+            string? ids,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsList)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
+
+            var r = await h.HandleAsync(new GetFarmContactsQuery(
+                ids, http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess)
+            {
+                return Results.Ok(r.Value.Select(c => new
+                {
+                    farmId = c.FarmId,
+                    name = c.Name,
+                    ownerPhone = c.OwnerPhone
+                }).ToList());
+            }
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    error = "contacts_ids_invalid"
+                }),
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetAdminFarmContacts");
+
         group.MapGet("/admin/farms/silent-churn", async (
             HttpContext http,
             IEntitlementResolver resolver,
@@ -244,6 +291,9 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsSuffering)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2) — a list across all farms: platform
+            // owners only. It reads analytics.events only and opens no cross-farm factory, so it keeps its cache.
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetSufferingQuery(http.User.GetUserIdOrEmpty()), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();

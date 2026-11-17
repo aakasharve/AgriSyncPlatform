@@ -26,11 +26,22 @@ public sealed record SilentChurnItemDto(
     int WeeksSilent,
     DateTime? LastLogAt);
 
+/// <summary>
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2). One farm with three or more problems in the
+/// last 7 days on requests that named the farm. ProblemCount is every problem; the four area counts split that
+/// same total (ProblemArea). No name: names come from <c>GET /shramsafal/admin/farms/contacts</c>.
+/// </summary>
 public sealed record SufferingItemDto(
     Guid FarmId,
-    string Name,
-    int ErrorCount,
-    int SyncErrors,
-    int LogErrors,
-    int VoiceErrors,
-    DateTime LastErrorAt);
+    int ProblemCount,
+    int SyncProblems,
+    int EntryProblems,
+    int VoiceProblems,
+    int OtherProblems,
+    DateTime LastProblemAt);
+
+/// <summary>
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1). A farm's name and its owner's phone (null when
+/// none is on record). OwnerAccountId is for server use (plans); the contacts route does not send it.
+/// </summary>
+public sealed record FarmContactDto(Guid FarmId, string Name, string? OwnerPhone, Guid OwnerAccountId);

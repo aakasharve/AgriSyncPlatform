@@ -12,16 +12,18 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// metrics endpoints. All queries are read-only.
 ///
 /// <para>
-/// The WVFD, silent-churn and suffering reads keep their older graceful
-/// empty-return. The farms and users lists do NOT (spec
-/// company-mis-real-numbers-2026-11-15): a failed read escapes and answers 500.
+/// The WVFD and silent-churn reads keep their older graceful empty-return.
+/// The farms and users lists, the suffering list and the farm contacts do NOT
+/// (spec company-mis-real-numbers-2026-11-15): a failed read escapes and
+/// answers 500.
 /// </para>
 ///
 /// <para>
-/// <paramref name="adminDbFactory"/> is needed only by the farms list, the
-/// cross-farm read here. It is optional so code that builds this repository by
-/// hand for the analytics queries keeps working; the container always supplies
-/// it (<c>AddShramSafalInfrastructure</c> registers the factory).
+/// <paramref name="adminDbFactory"/> is needed only by the farms list and the
+/// farm contacts, the cross-farm reads here. It is optional so code that builds
+/// this repository by hand for the analytics queries keeps working; the
+/// container always supplies it (<c>AddShramSafalInfrastructure</c> registers
+/// the factory).
 /// </para>
 /// </summary>
 public sealed class AdminMisRepository(
@@ -252,20 +254,28 @@ public sealed class AdminMisRepository(
         return scores;
     }
 
+    /// <summary>
+    /// Problems per farm in the last 24 hours (plan CR-2e, Task 1, F6), by the one farm rule and the one problem
+    /// rule (<see cref="AdminErrorFarm"/>, C1), so a farm shows the same count here as on Live Health.
+    /// </summary>
     private async Task<Dictionary<Guid, int>> ReadErrors24hAsync(Guid[] farmIds, CancellationToken ct)
     {
         var errors = new Dictionary<Guid, int>();
         await WithAnalyticsConnectionAsync(async conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT e.farm_id, COUNT(*)
-                FROM analytics.events e
-                WHERE e.event_type IN ('api.error','client.error')
-                  AND e.occurred_at_utc >= NOW() - INTERVAL '24 hours'
-                  AND e.farm_id = ANY(@ids)
-                GROUP BY e.farm_id
+            cmd.CommandText = $"""
+                SELECT p.farm, COUNT(*)
+                FROM (
+                    SELECT {AdminErrorFarm.FarmSql} AS farm
+                    FROM analytics.events
+                    WHERE {AdminErrorFarm.ProblemSql}
+                      AND occurred_at_utc >= NOW() - @window
+                ) p
+                WHERE p.farm = ANY(@ids)
+                GROUP BY p.farm
                 """;
+            AddParam(cmd, "@window", AdminErrorFarm.LastDay);
             AddParam(cmd, "@ids", farmIds);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) errors[r.GetGuid(0)] = (int)r.GetInt64(1);
@@ -356,30 +366,89 @@ public sealed class AdminMisRepository(
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2, U1/U2). Read from analytics.events on request
+    // by the one farm rule and the one problem rule (AdminErrorFarm): 7 days, 3 or more, at most 50. No farm name
+    // and no ssf.farms join: names come from the contacts route, so this read opens no cross-farm factory. Nothing
+    // is caught: a failed read answers 500, never an empty list.
     public async Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
     {
-        var conn = analyticsContext.Database.GetDbConnection();
-        var wasOpen = conn.State == System.Data.ConnectionState.Open;
-        if (!wasOpen) await conn.OpenAsync(ct);
-        try
+        IReadOnlyList<RepeatedProblemFarm> farms = [];
+        await WithAnalyticsConnectionAsync(async conn =>
         {
-            var items = new List<SufferingItemDto>();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT s.farm_id, COALESCE(f.name, s.farm_id::text),
-                    s.error_count, s.sync_errors, s.log_errors, s.voice_errors, s.last_error_at
-                FROM mis.farmer_suffering_watchlist s
-                LEFT JOIN ssf.farms f ON f.farm_id = s.farm_id
-                ORDER BY s.error_count DESC LIMIT 50
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-                items.Add(new SufferingItemDto(r.GetGuid(0), r.GetString(1),
-                    r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5), r.GetDateTime(6)));
-            return items;
+            farms = await AdminErrorFarm.ReadRepeatedProblemsAsync(
+                conn, AdminErrorFarm.LastWeek, minProblems: 3, maxFarms: 50, ct);
+        }, ct);
+
+        return farms
+            .Select(f => new SufferingItemDto(
+                FarmId: f.FarmId,
+                ProblemCount: f.ProblemCount,
+                SyncProblems: f.Sync,
+                EntryProblems: f.Entries,
+                VoiceProblems: f.Voice,
+                OtherProblems: f.Other,
+                LastProblemAt: f.LastProblemAt))
+            .ToList();
+    }
+
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1, C5). The farm rows come through the audited
+    // cross-farm factory, opened once (one admin_cross_tenant audit row naming the admin); with no ids it is not
+    // opened. Owner phones come from public.users on the analytics connection (C15). A factory that can see no
+    // farm at all throws: forced row-level security hides rows without an error, so an empty list would lie.
+    public async Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(
+        Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return [];
         }
-        catch { return []; }
-        finally { if (!wasOpen) await conn.CloseAsync(); }
+
+        if (adminDbFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AdminMisRepository)} was built without an admin DbContext factory, so it cannot "
+                + "read farm names across farms. Resolve it from the container.");
+        }
+
+        var wanted = farmIds.Distinct().Select(id => new FarmId(id)).ToList();
+
+        await using var ssf = await adminDbFactory.CreateAsync(
+            reason: $"{nameof(AdminMisRepository)}.farm-contacts",
+            actorUserId: adminUserId,
+            ct: ct);
+
+        if (!await ssf.Farms.AsNoTracking().AnyAsync(ct))
+        {
+            throw new InvalidOperationException(
+                "The admin context can see no farm at all. ssf.farms is under forced row-level security, "
+                + "which returns zero rows without an error to a connection that is not privileged; "
+                + "refusing to answer that these farms do not exist.");
+        }
+
+        var farms = await ssf.Farms
+            .AsNoTracking()
+            .Where(f => wanted.Contains(f.Id))
+            .Select(f => new { f.Id, f.Name, f.OwnerUserId, f.OwnerAccountId })
+            .ToListAsync(ct);
+
+        if (farms.Count == 0)
+        {
+            return [];
+        }
+
+        var phones = await ReadPhonesAsync(farms.Select(f => f.OwnerUserId.Value).Distinct().ToArray(), ct);
+
+        return farms
+            .Select(f => new FarmContactDto(
+                FarmId: f.Id.Value,
+                Name: f.Name,
+                OwnerPhone: phones.TryGetValue(f.OwnerUserId.Value, out var phone) && !string.IsNullOrWhiteSpace(phone)
+                    ? phone
+                    : null,
+                OwnerAccountId: f.OwnerAccountId.Value))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.FarmId)
+            .ToList();
     }
 
 

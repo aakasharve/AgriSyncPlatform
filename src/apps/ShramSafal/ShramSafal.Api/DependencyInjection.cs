@@ -801,6 +801,8 @@ public static class DependencyInjection
         // Admin MIS — Phase 3+ (WVFD, Farms, Users)
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones by id.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmContacts.GetFarmContactsHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSilentChurn.GetSilentChurnHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSuffering.GetSufferingHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetUsersList.GetUsersListHandler>();

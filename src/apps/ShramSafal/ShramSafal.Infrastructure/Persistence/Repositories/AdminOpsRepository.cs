@@ -3,7 +3,6 @@ using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Farms;
@@ -15,13 +14,14 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// Queries analytics.events directly for live operational health.
 /// Uses raw SQL via AnalyticsDbContext connection — no SaveChanges ever.
 ///
-/// Graceful degradation: if a view or column doesn't exist yet
-/// (e.g. api.error events before Ops Phase 1 middleware is deployed),
-/// the query returns empty collections rather than throwing.
+/// Graceful degradation (older reads): the voice totals, the alert checks and
+/// the voice trend return empty values rather than throwing.
 ///
 /// <para>
-/// The app-versions methods at the end of this class are the exception: they
-/// let every failure escape (spec control-room-app-versions-2026-11-12).
+/// The exceptions let every failure escape: the app-versions methods at the
+/// end of this class (spec control-room-app-versions-2026-11-12), and the
+/// recent errors, the farms with repeated problems and the paged errors list
+/// (spec company-mis-real-numbers-2026-11-15, plan CR-2e).
 /// </para>
 ///
 /// <para>
@@ -34,14 +34,39 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// </summary>
 public sealed class AdminOpsRepository(
     AnalyticsDbContext analyticsContext,
-    ILogger<AdminOpsRepository> logger,
     IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminOpsRepository
 {
+    /// <summary>
+    /// The columns of both error SELECTs (/admin/ops/health's recent errors and
+    /// /admin/ops/errors), in the order <see cref="ReadErrorRow"/> reads them.
+    /// One constant, so the two cannot drift apart.
+    ///
+    /// <para>
+    /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1, C3, C4).
+    /// The farm is <see cref="AdminErrorFarm.FarmSql"/> and its source
+    /// <see cref="AdminErrorFarm.SourceSql"/>. statusCode and latencyMs are read
+    /// as numbers only when they are 1 to 9 digits: a client.error row holds the
+    /// anonymous caller's raw body, and one bad report must not fail the page.
+    /// </para>
+    /// </summary>
+    private const string ErrorRowColumns =
+        "event_type, "
+        + "COALESCE(props->>'endpoint', 'unknown'), "
+        + "CASE WHEN props->>'statusCode' ~ '^[0-9]{1,9}$' THEN (props->>'statusCode')::int END, "
+        + "CASE WHEN props->>'latencyMs' ~ '^[0-9]{1,9}$' THEN (props->>'latencyMs')::int END, "
+        + AdminErrorFarm.FarmSql + ", "
+        + "occurred_at_utc, "
+        + "props->>'errorCode', "
+        + "props->>'workKept', "
+        + "props->>'message', "
+        + "props->>'appVersion', "
+        + AdminErrorFarm.SourceSql;
+
     /// <summary>
     /// Builds the DTO from a reader positioned on a row of either error
     /// projection. Shared so /admin/ops/health and /admin/ops/errors cannot
     /// drift into giving an admin two different answers about one failure.
-    /// Column order must match both SELECTs.
+    /// Column order is <see cref="ErrorRowColumns"/>.
     /// </summary>
     private static OpsErrorEventDto ReadErrorRow(System.Data.Common.DbDataReader r)
     {
@@ -60,7 +85,8 @@ public sealed class AdminOpsRepository(
             Message: r.IsDBNull(8) ? null : r.GetString(8),
             AppVersion: r.IsDBNull(9) ? null : r.GetString(9),
             Meaning: explanation?.Meaning,
-            UsualCause: explanation?.UsualCause);
+            UsualCause: explanation?.UsualCause,
+            FarmSource: r.IsDBNull(10) ? null : r.GetString(10));
     }
 
     public async Task<AdminOpsHealthDto> GetOpsHealthAsync(CancellationToken ct = default)
@@ -72,8 +98,8 @@ public sealed class AdminOpsRepository(
         try
         {
             var voice = await GetVoiceHealthAsync(conn, ct);
-            var errors = await GetRecentErrorsAsync(conn, logger, ct);
-            var suffering = await GetTopSufferingFarmsAsync(conn, ct);
+            var errors = await GetRecentErrorsAsync(conn, ct);
+            var suffering = await GetRepeatedProblemFarmsAsync(conn, ct);
             var (r9, r10) = await GetAlertBreachesAsync(conn, ct);
 
             return new AdminOpsHealthDto(
@@ -129,93 +155,50 @@ public sealed class AdminOpsRepository(
         return (0, 0, 0m, 0m, 0m);
     }
 
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1, C3). Nothing is caught: a failed read
+    // escapes and /admin/ops/health answers 500, so the page says it could not load instead of showing a blank
+    // panel that reads as "no errors".
     private static async Task<IReadOnlyList<OpsErrorEventDto>> GetRecentErrorsAsync(
-        System.Data.Common.DbConnection conn, ILogger logger, CancellationToken ct)
+        System.Data.Common.DbConnection conn, CancellationToken ct)
     {
         var results = new List<OpsErrorEventDto>();
-        try
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {ErrorRowColumns}
+            FROM analytics.events
+            WHERE event_type IN ('api.error', 'api.slow', 'client.error')
+              AND occurred_at_utc >= NOW() - INTERVAL '2 hours'
+            ORDER BY occurred_at_utc DESC
+            LIMIT 50
+            """;
+        using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
         {
-            using var cmd = conn.CreateCommand();
-            // api.error events are populated after RequestObservabilityMiddleware ships (Ops Phase 1).
-            // client.error events are populated after ClientErrorReporter ships (Ops Phase 3).
-            // Query gracefully returns empty list until those phases are deployed.
-            cmd.CommandText = """
-                SELECT
-                    event_type,
-                    COALESCE(props->>'endpoint', 'unknown')  AS endpoint,
-                    (props->>'statusCode')::int              AS status_code,
-                    (props->>'latencyMs')::int               AS latency_ms,
-                    farm_id,
-                    occurred_at_utc,
-                    props->>'errorCode'                      AS error_code,
-                    props->>'workKept'                       AS work_kept,
-                    props->>'message'                        AS message,
-                    props->>'appVersion'                     AS app_version
-                FROM analytics.events
-                WHERE event_type IN ('api.error', 'api.slow', 'client.error')
-                  AND occurred_at_utc >= NOW() - INTERVAL '2 hours'
-                ORDER BY occurred_at_utc DESC
-                LIMIT 50
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                results.Add(ReadErrorRow(r));
-            }
+            results.Add(ReadErrorRow(r));
         }
-        catch (Exception ex)
-        {
-            // Still graceful — an ops dashboard must not 500 because a props
-            // key is missing — but no longer silent. Before 2026-08-30 a wrong
-            // projection here returned an empty list and nothing anywhere said
-            // why; the admin just saw a blank panel.
-            logger.LogWarning(ex,
-                "AdminOpsRecentErrorsProjectionFailed. Returning an empty list; the "
-                + "/admin/ops/health error panel will be blank until this is fixed.");
-        }
+
         return results;
     }
 
-    private static async Task<IReadOnlyList<OpsFarmErrorDto>> GetTopSufferingFarmsAsync(
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2, L7). Farms with two or more problems in the
+    // last 24 hours, by the one farm rule and the one problem rule (AdminErrorFarm, C1), the areas by ProblemArea.
+    // At most 10. Reads analytics.events only (no cross-farm factory on this polled route). Nothing is caught.
+    private static async Task<IReadOnlyList<OpsFarmErrorDto>> GetRepeatedProblemFarmsAsync(
         System.Data.Common.DbConnection conn, CancellationToken ct)
     {
-        var results = new List<OpsFarmErrorDto>();
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    farm_id,
-                    COUNT(*)                                                           AS error_count,
-                    COUNT(*) FILTER (WHERE props->>'endpoint' LIKE '%sync%')          AS sync_errors,
-                    COUNT(*) FILTER (WHERE props->>'endpoint' LIKE '%log%')           AS log_errors,
-                    COUNT(*) FILTER (WHERE props->>'endpoint' LIKE '%voice%'
-                                       OR event_type = 'ai.invocation'
-                                       AND props->>'outcome' = 'failure')             AS voice_errors,
-                    MAX(occurred_at_utc)                                              AS last_error_at
-                FROM analytics.events
-                WHERE event_type IN ('api.error', 'client.error')
-                  AND occurred_at_utc >= NOW() - INTERVAL '24 hours'
-                  AND farm_id IS NOT NULL
-                GROUP BY farm_id
-                HAVING COUNT(*) >= 2
-                ORDER BY error_count DESC
-                LIMIT 10
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-            {
-                results.Add(new OpsFarmErrorDto(
-                    FarmId: r.GetGuid(0),
-                    ErrorCount: (int)r.GetInt64(1),
-                    SyncErrors: (int)r.GetInt64(2),
-                    LogErrors: (int)r.GetInt64(3),
-                    VoiceErrors: (int)r.GetInt64(4),
-                    LastErrorAt: r.GetDateTime(5)));
-            }
-        }
-        catch { /* graceful — returns empty */ }
-        return results;
+        var farms = await AdminErrorFarm.ReadRepeatedProblemsAsync(
+            conn, AdminErrorFarm.LastDay, minProblems: 2, maxFarms: 10, ct);
+
+        return farms
+            .Select(f => new OpsFarmErrorDto(
+                FarmId: f.FarmId,
+                ErrorCount: f.ProblemCount,
+                SyncErrors: f.Sync,
+                LogErrors: f.Entries,
+                VoiceErrors: f.Voice,
+                OtherErrors: f.Other,
+                LastErrorAt: f.LastProblemAt))
+            .ToList();
     }
 
     private static async Task<(bool? r9, bool? r10)> GetAlertBreachesAsync(
@@ -274,17 +257,7 @@ public sealed class AdminOpsRepository(
 
             using var dataCmd = conn.CreateCommand();
             dataCmd.CommandText = $"""
-                SELECT
-                    event_type,
-                    COALESCE(props->>'endpoint', 'unknown'),
-                    (props->>'statusCode')::int,
-                    (props->>'latencyMs')::int,
-                    farm_id,
-                    occurred_at_utc,
-                    props->>'errorCode',
-                    props->>'workKept',
-                    props->>'message',
-                    props->>'appVersion'
+                SELECT {ErrorRowColumns}
                 FROM analytics.events
                 WHERE event_type IN ('api.error', 'api.slow', 'client.error')
                   AND occurred_at_utc >= @since
@@ -303,14 +276,8 @@ public sealed class AdminOpsRepository(
 
             return new OpsErrorsPageDto(items, total, page, pageSize);
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "AdminOpsErrorsPagedProjectionFailed: page={Page} pageSize={PageSize}. "
-                + "Returning an empty page; /admin/ops/errors will look healthy when it is not.",
-                page, pageSize);
-            return new OpsErrorsPageDto([], 0, page, pageSize);
-        }
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1, C3). No catch: a failed read escapes and
+        // answers 500. The empty page it used to return made /admin/ops/errors look healthy when it was not.
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 
