@@ -30,7 +30,7 @@ export interface MetricLine {
 }
 
 export const METRIC_LINES: readonly MetricLine[] = [
-  { page: "Live Health", key: "live-alert-rules", label: "Alert rules", status: "idea", buildId: "L1", what: "Two automatic checks: over 30 server errors in an hour, and voice failing over 20% in six hours.", why: "Raises a flag when something breaks for many farmers at once." },
+  { page: "Live Health", key: "live-alert-rules", label: "Alert rules", status: "real", buildId: "L1", what: "Two automatic checks: over 30 server errors in an hour, and voice failing over 20% in six hours.", why: "Raises a flag when something breaks for many farmers at once." },
   { page: "Live Health", key: "live-recent-events", label: "Recent events", status: "real", buildId: "L6", what: "Every server error, slow save and phone-reported problem in the last two hours.", why: "Shows what is breaking right now, before farmers call to complain." },
   { page: "Live Health", key: "live-service-health", label: "Feeds this console depends on", status: "real", buildId: "L8", what: "Whether each data source behind this screen answered, and when it was last heard.", why: "Tells you whether the numbers on the screen can be trusted right now." },
   { page: "API Errors", key: "errors-list", label: "API errors", status: "real", buildId: "E1", what: "Each server error, slow save and phone-reported problem, with its time, place and status.", why: "Lets you see exactly what failed and when, so it gets fixed." },

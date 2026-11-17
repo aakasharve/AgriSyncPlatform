@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
 import { useOrgKey } from '@/lib/orgQuery';
 import type { FeedOptions } from './useFarms';
+import type { AlertCheck } from '@/lib/alertRules';
 
 export interface OpsErrorEvent {
   eventType: string;
@@ -30,8 +31,11 @@ export interface OpsHealthData {
   voiceP95LatencyMs: number;
   recentErrors: OpsErrorEvent[];
   topSufferingFarms: OpsFarmError[];
-  apiErrorSpike: boolean | null;
-  voiceDegraded: boolean | null;
+  /** R9, counted by the server over the last 60 minutes (C29). */
+  alertR9?: AlertCheck | null;
+  /** Kept on the wire for an old phone page only (C30). This console must not read them. */
+  apiErrorSpike?: boolean | null;
+  voiceDegraded?: boolean | null;
   computedAtUtc: string;
 }
 

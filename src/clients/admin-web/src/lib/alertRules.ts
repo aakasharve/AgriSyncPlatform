@@ -8,16 +8,20 @@
  * 24 hours and R10 under 96%; neither figure exists anywhere in this platform.
  *
  * Task 26 then needed the SAME two rules on Home: to count breaches on the
- * Active Alerts tile, and to take the Voice Success tile's tone from R10
- * rather than from the figure's own field. A second copy of "more than 30 API
+ * Active Alerts tile. (Home no longer takes the Voice Success tile's colour from
+ * R10 on the health answer: the health answer's old `voiceDegraded` flag is kept
+ * only for an old phone page and this console must not read it. R10 now comes
+ * from its own voice-check route, see `useOpsVoiceCheck`.)
+ *
+ * A second copy of "more than 30 API
  * errors in 1 hour" on a second screen is not a duplicated string — it is a
  * second statement of one fact about the database, and the console has already
  * been bitten once by exactly that shape (`nav.ts`: two destination lists that
  * had already drifted, one of them false).
  *
  * Two call sites is normally below the Rule of Three. It does not apply when
- * the two copies must AGREE for the console to be truthful: Home paints a tile
- * amber because R10 is breached, and Live Health explains R10. If those two
+ * the two copies must AGREE for the console to be truthful: Home counts a breach
+ * of R9 and Live Health explains R9 and R10. If those two
  * ever describe different thresholds, one of the screens is lying and no test
  * that reads only one of them can tell.
  *
@@ -98,8 +102,7 @@ export const R9: AlertRuleDefinition = {
  * failure rate over TWENTY-FOUR hours. They are two different readings of two
  * different windows, so a 24-hour figure can sit either side of R10's line
  * without contradicting it. Live Health says so in as many words and paints no
- * verdict on the figure; Home may take its TONE from the rule — that is Task
- * 26 Step 4 — but it may not say that this figure breached that rule.
+ * verdict on the figure; Home may not say that this figure breached that rule.
  */
 export const R10: AlertRuleDefinition = {
   id: 'R10',
@@ -128,3 +131,83 @@ export const RULES_NOT_CHECKED_BY_OPS_HEALTH = {
  */
 export const FROM_A_NIGHTLY_VIEW =
   'read from a materialized view rebuilt once a day at 02:00 UTC — this feed does not report when';
+
+
+/* ── C29: THE TWO CHECKS AS THE SERVER NOW ANSWERS THEM ───────────────────
+ * R9 comes on the health answer (`alertR9`), R10 from the voice-check route.
+ * Both carry a counted figure and the window they were counted over, so the
+ * words below are built from the answer and never from a constant. */
+
+export type CheckState = 'breach' | 'clear' | 'not_judged';
+export type VoiceCheckReason =
+  | 'too_few_recordings'
+  | 'too_many_farms_for_live_count'
+  | 'farm_list_unreadable';
+
+export interface AlertCheck {
+  rule: string;
+  state: CheckState;
+  counted: number | null;
+  outOf: number | null;
+  windowStartUtc: string | null;
+  windowEndUtc: string | null;
+  reason: VoiceCheckReason | null;
+}
+
+export const CHECK_WORD: Record<CheckState, string> = {
+  breach: 'Problem',
+  clear: 'Clear',
+  not_judged: 'Not judged',
+};
+
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? one : many;
+}
+
+/** R9: "31 errors in the last hour". Null when the server sent no count. */
+export function r9Figure(c: AlertCheck): string | null {
+  if (c.counted === null || c.counted === undefined) return null;
+  return `${c.counted.toLocaleString('en-IN')} ${plural(c.counted, 'error', 'errors')} in the last hour`;
+}
+
+/** R10: "3 of 10 recordings failed", or "2 recordings finished, too few to judge". */
+export function r10Figure(c: AlertCheck): string | null {
+  if (c.reason === 'too_few_recordings' && c.outOf !== null && c.outOf !== undefined) {
+    return `${c.outOf.toLocaleString('en-IN')} ${plural(c.outOf, 'recording', 'recordings')} finished, too few to judge`;
+  }
+  if (c.counted === null || c.counted === undefined || c.outOf === null || c.outOf === undefined) {
+    return null;
+  }
+  return `${c.counted.toLocaleString('en-IN')} of ${c.outOf.toLocaleString('en-IN')} recordings failed`;
+}
+
+export function reasonWords(reason: VoiceCheckReason | null): string | null {
+  switch (reason) {
+    case 'too_few_recordings':
+      return 'Too few recordings finished in this window to judge a failure rate.';
+    case 'too_many_farms_for_live_count':
+      return 'Too many farms for a live count, so no verdict was drawn.';
+    case 'farm_list_unreadable':
+      return 'The list of farms could not be read, so no verdict was drawn.';
+    default:
+      return null;
+  }
+}
+
+const INDIA_PARTS = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** The window in India time: "18 Nov, 09:00 to 10:00 India time". Null if either end is unreadable. */
+export function windowInIndiaTime(startUtc: string | null, endUtc: string | null): string | null {
+  if (!startUtc || !endUtc) return null;
+  const a = new Date(startUtc);
+  const b = new Date(endUtc);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return `${INDIA_PARTS.format(a)} to ${INDIA_PARTS.format(b)} India time`;
+}

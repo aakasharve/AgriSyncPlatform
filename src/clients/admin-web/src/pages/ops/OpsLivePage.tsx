@@ -9,7 +9,6 @@ import {
   LoadFailed,
   NotMeasured,
   MetricLines,
-  NotBuiltYet,
   StandingNote,
 } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
@@ -19,6 +18,18 @@ import { cn } from '@/lib/utils';
 import { PersonName } from '@/components/ui/PersonName';
 import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
 import { useOpsHealth } from '@/hooks/useOpsHealth';
+import { isVoiceCheckForbidden, useOpsVoiceCheck } from '@/hooks/useOpsVoiceCheck';
+import {
+  CHECK_WORD,
+  R9,
+  R10,
+  r9Figure,
+  r10Figure,
+  reasonWords,
+  windowInIndiaTime,
+  type AlertCheck,
+  type CheckState,
+} from '@/lib/alertRules';
 import type { OpsErrorEvent, OpsFarmError } from '@/hooks/useOpsHealth';
 
 /**
@@ -490,12 +501,62 @@ function serviceDetail(row: ServiceRow) {
   );
 }
 
+const CHECK_TONE: Record<CheckState, string> = {
+  breach: 'bg-tint-red text-red',
+  clear: 'bg-tint-green text-green',
+  not_judged: 'bg-tint-grey text-text-3',
+};
+
+interface CheckCardProps {
+  title: string;
+  rule: string;
+  /** null while loading or when the answer is not in hand */
+  check: AlertCheck | null;
+  figure: string | null;
+  /** Shown instead of a verdict when there is no answer. */
+  missing?: string | null;
+  loading?: boolean;
+  action?: React.ReactNode;
+}
+
+function CheckCard({ title, rule, check, figure, missing, loading, action }: CheckCardProps) {
+  const span = check ? windowInIndiaTime(check.windowStartUtc, check.windowEndUtc) : null;
+  const why = check && check.state === 'not_judged' ? reasonWords(check.reason) : null;
+  return (
+    <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-body font-bold text-text-1">{title}</h3>
+        {check && (
+          <span
+            className={cn(
+              'inline-block rounded-chip px-2 py-0.5 text-caption font-medium',
+              CHECK_TONE[check.state],
+            )}
+          >
+            {CHECK_WORD[check.state]}
+          </span>
+        )}
+      </div>
+      <p className="text-caption text-text-3">{rule}</p>
+      {loading && <p className="text-body text-text-2">Checking now.</p>}
+      {missing && <p className="text-body text-text-2">{missing}</p>}
+      {figure && <p className="text-body text-text-1">{figure}</p>}
+      {why && <p className="text-body text-text-2">{why}</p>}
+      {span && <p className="text-caption text-text-3">Counted over {span}</p>}
+      {action}
+    </div>
+  );
+}
+
 /* ───────────────────────────────────────────────────────────── THE SCREEN */
 
 export default function OpsLivePage() {
   const { data, isLoading, isFetching, isLoadingError, isRefetchError, error, refetch } =
     useOpsHealth();
   const nightly = useNightlyFeeds();
+  const voiceCheck = useOpsVoiceCheck();
+  const voiceForbidden = voiceCheck.isError && isVoiceCheckForbidden(voiceCheck.error);
+  const r9: AlertCheck | null = data?.alertR9 ?? null;
 
   /* A27, THE SECOND HALF. The server's own stamp, and nothing derived from
      this browser's clock. `dataUpdatedAt` — what the old page used — is the
@@ -569,7 +630,7 @@ export default function OpsLivePage() {
           lastHeard: null,
           lastHeardWhy: 'This console never reads these views, so it has never heard from them.',
           detail:
-            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This screen shows none of them: its alert checks are not built yet, and a rule this screen never ran cannot be reported as passing.',
+            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This screen shows none of them: it shows only R9 and R10, and a rule this screen never ran cannot be reported as passing.',
           facts: [
             ['Views', 'r1 smooth decay … r8 referral quality'],
             ['Read by', 'AlertDispatcherJob, daily at 03:30 UTC'],
@@ -664,8 +725,50 @@ export default function OpsLivePage() {
 
       {!feedDown && !loadFailed && (
         <>
-          {/* L1: an idea (B24). The old badges read a view rebuilt once a day; no verdict is drawn. */}
-          <NotBuiltYet metric="live-alert-rules" />
+          {/* L1: R9 from the health answer, R10 from its own route (C29). */}
+          <section className="flex flex-col gap-3" aria-labelledby="ops-live-checks">
+            <h2 id="ops-live-checks" className="text-h2 font-bold text-text-1">
+              Automatic checks
+            </h2>
+            <MetricLines metric="live-alert-rules" />
+            <div className="grid gap-3 md:grid-cols-2">
+              <CheckCard
+                title={`${R9.id} ${R9.name}`}
+                rule={R9.rule}
+                check={r9}
+                figure={r9 ? r9Figure(r9) : null}
+                missing={r9 ? null : 'The server did not send this check, so no verdict is shown.'}
+              />
+              <CheckCard
+                title={`${R10.id} ${R10.name}`}
+                rule={R10.rule}
+                check={voiceCheck.data ?? null}
+                figure={voiceCheck.data ? r10Figure(voiceCheck.data) : null}
+                loading={voiceCheck.isFetching && !voiceCheck.data}
+                missing={
+                  voiceForbidden
+                    ? 'Not available for this account.'
+                    : voiceCheck.isError
+                      ? 'Could not load this check.'
+                      : null
+                }
+                action={
+                  voiceForbidden ? null : (
+                    <div>
+                      <button
+                        type="button"
+                        className="rounded-chip border border-border px-3 py-1 text-caption font-medium text-text-1 disabled:opacity-50"
+                        disabled={voiceCheck.isFetching}
+                        onClick={() => void voiceCheck.refetch()}
+                      >
+                        {voiceCheck.isFetching ? 'Checking' : 'Check again'}
+                      </button>
+                    </div>
+                  )
+                }
+              />
+            </div>
+          </section>
 
           {/* L2 to L5 (the four AI pipeline tiles) are doubles of Company MIS Quality and are gone (B24). */}
 
