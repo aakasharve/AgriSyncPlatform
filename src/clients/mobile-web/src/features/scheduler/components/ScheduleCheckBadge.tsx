@@ -39,7 +39,7 @@ export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate,
         const who = [check.checkerName, checkDateLabel(check.checkedAt)].filter(Boolean).join(' · ');
         return (
             <div className="mt-1.5" data-testid={testId} data-check-state="Checked">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[14px] font-extrabold ${dark ? 'border border-emerald-300/40 bg-emerald-500/25 text-emerald-100' : 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'}`}>
+                <span className={`inline-flex max-w-full items-center gap-1.5 rounded-2xl px-3 py-1 text-left text-[14px] font-extrabold ${dark ? 'border border-emerald-300/40 bg-emerald-500/25 text-emerald-100' : 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'}`}>
                     <BadgeCheck size={16} aria-hidden="true" />{SC.checkedByShramSafal}
                 </span>
                 {who && <p className={`m-0 mt-0.5 text-[13px] font-bold ${dark ? 'text-white/75' : 'text-stone-600'}`} data-testid={`${testId}-who`}>{who}</p>}
@@ -48,7 +48,7 @@ export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate,
     }
     return (
         <div className="mt-1.5" data-testid={testId} data-check-state="NotChecked">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[14px] font-extrabold ${dark ? 'border border-white/20 bg-white/10 text-white/70' : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200'}`}>
+            <span className={`inline-flex max-w-full items-center gap-1.5 rounded-2xl px-3 py-1 text-left text-[14px] font-extrabold ${dark ? 'border border-white/20 bg-white/10 text-white/70' : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200'}`}>
                 <CircleDashed size={16} aria-hidden="true" />{SC.notCheckedByShramSafal}
             </span>
         </div>

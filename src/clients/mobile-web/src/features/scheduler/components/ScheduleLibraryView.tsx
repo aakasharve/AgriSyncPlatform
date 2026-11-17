@@ -262,8 +262,8 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                         const on = effectivePick === t.id;
                         return (
                             <div key={t.id} data-testid={`library-${t.id}`} data-picked={on ? 'yes' : 'no'}
-                                className={`flex items-stretch gap-2 rounded-2xl border-2 p-2 ${on ? 'border-[#1448E6] bg-blue-50' : 'border-stone-200 bg-white'}`}>
-                                <label className={`flex min-h-[56px] min-w-0 flex-1 items-start gap-2.5 focus-within:ring-2 focus-within:ring-[#1448E6]/40 ${locked ? 'opacity-90' : 'cursor-pointer'}`}>
+                                className={`flex flex-col gap-1 rounded-2xl border-2 p-2 ${on ? 'border-[#1448E6] bg-blue-50' : 'border-stone-200 bg-white'}`}>
+                                <label className={`flex min-h-[56px] w-full min-w-0 items-start gap-2.5 focus-within:ring-2 focus-within:ring-[#1448E6]/40 ${locked ? 'opacity-90' : 'cursor-pointer'}`}>
                                     <input type="radio" name="library-schedule" className="sr-only" checked={on} disabled={locked} onChange={() => setPicked(t.id)} data-testid={`library-pick-${t.id}`} />
                                     <span aria-hidden="true" className={`mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-[#1448E6]' : 'border-stone-400'} ${locked ? 'bg-stone-100' : 'bg-white'}`}>
                                         {on && <span className="h-3 w-3 rounded-full bg-[#1448E6]" />}
@@ -283,7 +283,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                     </span>
                                 </label>
                                 <Tap onClick={() => setDetail(t)} data-testid={`library-view-${t.id}`} aria-label={`${scheduleNameMr(t.name)} — पाहा`}
-                                    className="inline-flex min-h-[48px] shrink-0 items-center gap-1.5 self-start rounded-full bg-white px-3 text-[14.5px] font-extrabold text-stone-800 ring-1 ring-stone-300">
+                                    className="inline-flex min-h-[48px] shrink-0 items-center gap-1.5 self-end rounded-full bg-white px-3 text-[14.5px] font-extrabold text-stone-800 ring-1 ring-stone-300">
                                     {/* PROPOSED (Marathi) */}
                                     <Eye size={18} aria-hidden="true" />पाहा
                                 </Tap>

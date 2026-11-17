@@ -67,7 +67,7 @@ export const SchedulePictureMap: React.FC<{
                 {colour && <span aria-hidden="true" data-part="bar" className="absolute inset-y-0 left-0 w-1.5" style={{ background: colour }} />}
                 <PlotFace plot={p} day={dayOf(p)} />
                 {p.keys.length > 1 && (
-                    <span className="absolute right-1 top-1 rounded-full bg-stone-100 px-1.5 text-[10.5px] font-extrabold leading-4 text-stone-700" data-part="also">{words.alsoFollows(p.keys.length - 1)}</span>
+                    <span className="absolute bottom-1 right-1.5 rounded-full bg-stone-100 px-1.5 text-[10.5px] font-extrabold leading-4 text-stone-700" data-part="also">{words.alsoFollows(p.keys.length - 1)}</span>
                 )}
             </button>
         );
