@@ -822,7 +822,18 @@ public sealed class ErasureWorker(
         totalAnonymized += perTableCounts["log_practice_reasons"];
 
         // spec: plr-d10 lane SCH-ID-S (founder D-146; P6) - HIS picture and the schedule pictures he set: the rows AND their files. Institution logos stay.
-        var pictureStorage = sp.GetService<ShramSafal.Application.Ports.External.IAttachmentStorageService>();
+        // A storage that cannot even be built here (GetService THROWS when a registered service needs something this scope lacks) must never fail
+        // the erasure: the rows are deleted regardless, and each file the storage could not reach is counted in pictureFilesLeftInPlace, never hidden.
+        ShramSafal.Application.Ports.External.IAttachmentStorageService? pictureStorage = null;
+        try
+        {
+            pictureStorage = sp.GetService<ShramSafal.Application.Ports.External.IAttachmentStorageService>();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "ErasureWorker: the picture storage could not be created; his picture rows are still deleted and any file is counted as left in storage.");
+        }
+
         var picturesErased = await DeletePicturesOfUserAsync(admin, pictureStorage, targetUserId, logger, ct).ConfigureAwait(false);
         perTableCounts["pictures"] = picturesErased.Rows;
         totalAnonymized += picturesErased.Rows;

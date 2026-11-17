@@ -298,7 +298,7 @@ public sealed class PicturesRealPostgresTests(ITestOutputHelper output) : IAsync
         storage.Files.Should().HaveCount(4, "the other four files are untouched");
 
         // a second run changes nothing
-        var snapshot = await SuperuserListAsync("SELECT id::text || sha256 FROM ssf.pictures ORDER BY 1");
+        var snapshot = await SuperuserListAsync("SELECT \"Id\"::text || sha256 FROM ssf.pictures ORDER BY 1");
         var deletedBefore = storage.Deleted.Count;
         await using (var db = SuperuserContext())
         {
@@ -306,7 +306,7 @@ public sealed class PicturesRealPostgresTests(ITestOutputHelper output) : IAsync
             second.Should().Be((0, 0));
         }
 
-        (await SuperuserListAsync("SELECT id::text || sha256 FROM ssf.pictures ORDER BY 1")).Should().Equal(snapshot);
+        (await SuperuserListAsync("SELECT \"Id\"::text || sha256 FROM ssf.pictures ORDER BY 1")).Should().Equal(snapshot);
         storage.Deleted.Count.Should().Be(deletedBefore);
     }
 

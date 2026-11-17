@@ -132,10 +132,12 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
         string[] oldActivity = ["name", "category", "stageName", "startDay", "endDay", "frequencyMode", "intervalDays"];
         // L8b-1F appended "scope"; SCH-OWN-c (D-137; F222) appended whose own row it is, who typed the version, when, the version before, the four made-for
         // tags and the draft stages - all optional, all at the END (null on these rows: none is a person's own, none is tagged).
+        // SCH-ID-S (D-146) appended the one picture this reader sees (id, sha256, kind): null here, no picture is set.
         string[] newTemplate =
         [
             "ownerType", "sourceLabel", "check", "rowVersionTag", "hasStoredDays", "scope",
             "ownerUserId", "madeByUserId", "madeAtUtc", "previousVersionId", "variety", "soilType", "region", "climate", "draftStages",
+            "pictureId", "pictureSha256", "pictureKind",
         ];
         string[] newActivity = ["operationKey", "id", "part", "role", "nutrientKey", "afterActivityId", "storedFrequencyMode"];
 
