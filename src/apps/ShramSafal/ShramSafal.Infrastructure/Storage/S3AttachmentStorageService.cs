@@ -76,6 +76,12 @@ internal sealed class S3AttachmentStorageService(
         }
     }
 
+    public async Task DeleteAsync(string relativePath, CancellationToken ct = default)
+    {
+        // S3 DeleteObject answers success for a key that is not there, so this is idempotent without a probe.
+        await s3Client.DeleteObjectAsync(ResolveBucketName(), ResolveObjectKey(relativePath), ct);
+    }
+
     // spec: s3-put-signing-v4-fix-2026-06-10 — base media type only (everything before the
     // first `;`). Preserves the prior fallback to application/octet-stream for null/empty
     // input; avoids the .NET media-type-normalization-vs-SigV4 mismatch on PutObject.

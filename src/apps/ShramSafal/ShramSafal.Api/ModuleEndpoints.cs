@@ -42,6 +42,8 @@ public static class ModuleEndpoints
         // routes under /shramsafal/voice-diary/* for persist + read.
         group.MapVoiceDiaryEndpoints();
         group.MapAttachmentEndpoints();
+        // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule.
+        group.MapPictureEndpoints();
         group.MapPlanningEndpoints();
         group.MapPlannedActivityEndpoints();
         group.MapScheduleTemplateEndpoints();

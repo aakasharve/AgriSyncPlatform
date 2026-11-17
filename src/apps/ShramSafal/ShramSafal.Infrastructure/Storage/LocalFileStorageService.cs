@@ -62,6 +62,18 @@ internal sealed class LocalFileStorageService : IAttachmentStorageService
         return Task.FromResult<Stream?>(stream);
     }
 
+    public Task DeleteAsync(string relativePath, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var fullPath = ResolveSafePath(relativePath);
+        if (File.Exists(fullPath))
+        {
+            File.Delete(fullPath);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private string ResolveSafePath(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))

@@ -67,7 +67,15 @@ public sealed record ScheduleTemplateDto(
     string? SoilType = null,
     string? Region = null,
     string? Climate = null,
-    IReadOnlyList<StageDefinitionDto>? DraftStages = null);
+    IReadOnlyList<StageDefinitionDto>? DraftStages = null,
+    // spec: plr-d10 lane SCH-ID-S (founder D-146) - additive at the END and optional (P11: release 1.0.17 reads named fields only and ignores the
+    // rest; nothing here is renamed or removed). The ONE picture this schedule shows to THIS reader, decided on the server before the pull
+    // (PictureViewer / PicturePolicy): PictureKind is PERSON | SCHEDULE | INSTITUTION; PictureSha256 is the file's lower-case hex SHA-256 (the phone
+    // downloads GET /shramsafal/pictures/{PictureId} only when it differs from the one it holds). All three are null when the schedule shows no
+    // picture to this reader (the phone draws its letter badge); they are only ever set together.
+    Guid? PictureId = null,
+    string? PictureSha256 = null,
+    string? PictureKind = null);
 
 public sealed record CropTypeDto(
     string Name,

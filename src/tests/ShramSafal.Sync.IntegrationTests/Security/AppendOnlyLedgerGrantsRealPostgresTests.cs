@@ -293,6 +293,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    ledger's grants; it adds no column to any existing table. Down() drops its policy and the table - only what Up() added. Safe to revert and
         //    re-apply mid-proof.
         "20261113120000_AddLogPracticeReasons",
+        // ── Reviewed 2026-11-17 (spec: plr-d10 lane SCH-ID-S, founder D-146); Up() and Down() read in full: Up() creates ssf.pictures only (FORCE RLS, four
+        //    policies, SELECT + INSERT + UPDATE + DELETE for the app role on THIS new table - current state, not a ledger - and a TRUNCATE revoke on it); it
+        //    adds no column to any existing table and grants or revokes nothing on any ledger. Down() REFUSES while a picture row exists (the proof's data has
+        //    none), else drops its four policies and the table - only what Up() added. Safe to revert and re-apply mid-proof.
+        "20261117041736_AddPictures",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

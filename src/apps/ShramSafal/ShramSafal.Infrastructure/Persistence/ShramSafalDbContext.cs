@@ -203,6 +203,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // privilege (migration AddScheduleStepMoves); FORCE-RLS on its own farm_id (F8).
     public DbSet<ShramSafal.Domain.Planning.ScheduleStepMove> ScheduleStepMoves => Set<ShramSafal.Domain.Planning.ScheduleStepMove>();
 
+    // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule: one current row per person or schedule. FORCE-RLS: writes only
+    // under the setter's own user scope, reads open to every user scope and gated by the application (PictureViewer); migration AddPictures.
+    public DbSet<ShramSafal.Domain.Pictures.Picture> Pictures => Set<ShramSafal.Domain.Pictures.Picture>();
+
     // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - the reason kept on one item of one saved record ("का केलं"): one unchangeable row per
     // reason, a later one supersedes. APPEND-ONLY by privilege (migration AddLogPracticeReasons); FORCE-RLS on its own farm_id (F8).
     public DbSet<ShramSafal.Domain.Logs.LogPracticeReason> LogPracticeReasons => Set<ShramSafal.Domain.Logs.LogPracticeReason>();

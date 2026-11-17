@@ -216,6 +216,17 @@ public static class ShramSafalErrors
         "ShramSafal.Attribution.ExceedsHeadcount",
         "Every person this work entry counts is already named. Naming one more would contradict the count, and naming people never changes the count.");
 
+    // --- spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule. REST only (no phone mutation names them).
+    // NotFound answers a made-up id, a picture this person may not see and a schedule he may not see alike (E4).
+    public static readonly Error PictureNotFound = Error.NotFound("ShramSafal.PictureNotFound", "Picture was not found.");
+    public static readonly Error PictureEmpty = Error.Validation("ShramSafal.Picture.Empty", "The picture file is empty.");
+    public static readonly Error PictureTooLarge = Error.Validation(
+        "ShramSafal.Picture.TooLarge", "The picture is larger than 512 KB. Pictures are shrunk on the phone before they are sent.");
+    public static readonly Error PictureUnsupportedType = Error.Validation(
+        "ShramSafal.Picture.UnsupportedType", "Only a JPEG, PNG or WebP picture is accepted (checked from the file itself, not its name).");
+    public static readonly Error PictureForbidden = Error.Forbidden(
+        "ShramSafal.Picture.Forbidden", "This person may not set this picture.");
+
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
     // READ refusal: the caller is a member but their role may not read this

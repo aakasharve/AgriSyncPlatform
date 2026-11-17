@@ -201,6 +201,11 @@ public static class DependencyInjection
         services.AddScoped<GetAttachmentFileHandler>();
         services.AddScoped<ListAttachmentsForEntityHandler>();
 
+        // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule.
+        services.AddScoped<ShramSafal.Application.UseCases.Pictures.SetPictureHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Pictures.RemovePictureHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Pictures.GetPictureFileHandler>();
+
         services.AddScoped<GeneratePlanFromTemplateHandler>();
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
         services.AddScoped<GetTodaysPlanHandler>();
