@@ -994,7 +994,7 @@
     "label": "Recordings and photos read",
     "status": "real",
     "buildId": "P11",
-    "what": "How many voice recordings and photos from this farm were read in 14 days.",
+    "what": "How many voice recordings and photos from this farm finished reading in 14 days, saved or not.",
     "why": "Shows how much this farm relies on voice and photos to keep records."
   },
   {

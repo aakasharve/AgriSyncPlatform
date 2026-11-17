@@ -331,15 +331,31 @@ describe('the 14-day grid (Band 3)', () => {
   // B24 (founder, 2026-11-17): P1, P2, P4-P7 and P9-P11 are ideas shown as Not built yet (the page draws only P3 and P8). Retired: "uses tokens for the two meanings it encodes, and no literals".
 
   it('refuses to call an all-zero grid a measured zero', async () => {
-    /* The window is backfilled with zero rows OUTSIDE the try, so a failed
-       query and a quiet farm arrive identically. */
-    serve({ body: farmer({ timeline: timeline().map((d) => day(d.date)) }) });
+    // CR-2e C25 (main-session amendment): an all-zero timeline served beside a
+    // non-zero P6 (`verifications`) never says the farm recorded nothing. It says
+    // only that what these six rows count was zero in the last 14 India days.
+    // Kept from before: a zero is not dressed up as a reading, so no cell is drawn.
+    serve({
+      body: farmer({
+        timeline: timeline().map((d) => day(d.date)),
+        verifications: { confirmed: 1, verified: 2, disputed: 0, pending: 1, selfChecked: 3 },
+      }),
+    });
     renderDrilldown();
     await settled();
 
     const grid = band('timeline')!;
-    expect(within(grid).getByText(/Nothing was recorded on this farm in fourteen days/)).toBeInTheDocument();
     expect(grid.querySelector('[data-cell]')).toBeNull();
+    const said = (grid.textContent ?? '').replace(/\s+/g, ' ');
+    // a denial ("does not mean the farm recorded nothing") is allowed; a claim is not
+    const claim = /(?<!not mean (?:that )?the farm )recorded nothing/i;
+    expect(said).not.toMatch(claim);
+    expect(said).not.toMatch(/nothing was recorded/i);
+    expect(said).toMatch(/six rows/i);
+    expect(said).toMatch(/14|fourteen/i);
+    expect(said).toMatch(/India days?/i);
+    expect(document.body.textContent ?? '').not.toMatch(claim);
+    expect(document.querySelector('[data-metric="fh-verification-counts"]')).not.toBeNull();
     // CR-2e C14 (catches removed): a zero is now a served zero, so the old "backfilled with zero rows" caveat is retired.
     expect(grid.textContent).not.toContain('backfilled');
   });
