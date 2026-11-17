@@ -5,6 +5,9 @@
 # Do not edit by hand.
 * /metrics
 DELETE /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
+DELETE /shramsafal/pictures/institution/{rootId:guid}
+DELETE /shramsafal/pictures/person
+DELETE /shramsafal/pictures/schedule/{rootId:guid}
 GET /accounts/affiliation/events
 GET /accounts/affiliation/stats
 GET /accounts/health
@@ -75,6 +78,7 @@ GET /shramsafal/invitations/mine
 GET /shramsafal/logs/{id:guid}/original-voice
 GET /shramsafal/logs/{id:guid}/transitions
 GET /shramsafal/me/erasure/requests
+GET /shramsafal/pictures/{id:guid}
 GET /shramsafal/plan/stage
 GET /shramsafal/plan/today
 GET /shramsafal/question-events/recent
@@ -230,3 +234,6 @@ PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/authorities
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/plot-scope
 PUT /shramsafal/farms/{farmId:guid}/reminder-settings
 PUT /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
+PUT /shramsafal/pictures/institution/{rootId:guid}
+PUT /shramsafal/pictures/person
+PUT /shramsafal/pictures/schedule/{rootId:guid}
