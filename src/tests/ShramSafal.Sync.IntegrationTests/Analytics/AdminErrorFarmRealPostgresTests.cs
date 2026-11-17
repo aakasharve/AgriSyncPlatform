@@ -217,28 +217,74 @@ public sealed class AdminErrorFarmRealPostgresTests(Xunit.Abstractions.ITestOutp
         livePhone.LatencyMs.Should().BeNull();
     }
 
+    // C19 item 1: the connection opens, then the QUERY fails on the server. A connection that cannot open is
+    // outside every removed catch and proves nothing about them.
+
     [SkippableFact]
-    public async Task A_broken_errors_read_is_an_error_not_an_empty_page()
+    public async Task A_failed_errors_page_query_throws_never_an_empty_page()
     {
         await GuardAsync();
 
-        var droppedName = $"ssf_cr2e_dropped_{Guid.NewGuid():N}";
-        await using (var admin = new NpgsqlConnection(AdminConn))
+        await using (var db = await OpenSuperuserAsync())
         {
-            await admin.OpenAsync();
-            await ExecAsync(admin, $"CREATE DATABASE \"{droppedName}\"");
-            await ExecAsync(admin, $"DROP DATABASE \"{droppedName}\"");
+            foreach (var minutesAgo in new[] { 5, 15, 25 })
+            {
+                await EventAsync(db, ApiError, Now.AddMinutes(-minutesAgo), farmId: Farm1, props: Props(
+                    ("endpoint", "POST /shramsafal/logs"), ("statusCode", 500), ("latencyMs", 9),
+                    ("route", "POST /shramsafal/logs")));
+            }
         }
 
-        var droppedConn = new NpgsqlConnectionStringBuilder(AppConn) { Database = droppedName }.ConnectionString;
-        await using var scope = AdminScope(BuildProvider(analyticsConn: droppedConn));
+        await using var scope = AdminScope(BuildProvider());
         var repository = OpsRepository(scope.ServiceProvider);
 
-        var paged = () => repository.GetErrorsPagedAsync(1, 50, null, null);
-        var live = () => repository.GetOpsHealthAsync();
+        // The control: the same read answers three rows while the login may read the events.
+        (await repository.GetErrorsPagedAsync(1, 50, null, null)).Items.Should().HaveCount(3);
 
-        await paged.Should().ThrowAsync<Exception>("the paged read's catch is removed (C3, C14)");
-        await live.Should().ThrowAsync<Exception>("the live recent-errors read's catch is removed (C3, C14)");
+        await RevokeEventsReadAsync();
+
+        var paged = () => repository.GetErrorsPagedAsync(1, 50, null, null);
+        var thrown = await paged.Should().ThrowAsync<Exception>(
+            "the query is refused after the connection opened; the paged read has no catch (C3, C14)");
+        Output.WriteLine($"[EVIDENCE] errors page thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.Message.Should().Contain("permission denied", "it is the refused query that escaped");
+    }
+
+    [SkippableFact]
+    public async Task A_failed_live_recent_errors_query_throws_never_an_empty_list()
+    {
+        await GuardAsync();
+
+        await using (var db = await OpenSuperuserAsync())
+        {
+            await EventAsync(db, ApiSlow, Now.AddMinutes(-30), farmId: Farm1, props: Props(
+                ("endpoint", "GET /shramsafal/farms"), ("statusCode", 200), ("latencyMs", 6000),
+                ("route", "GET /shramsafal/farms")));
+            foreach (var minutesAgo in new[] { 5, 15 })
+            {
+                await EventAsync(db, ApiError, Now.AddMinutes(-minutesAgo), farmId: Farm1, props: Props(
+                    ("endpoint", "POST /shramsafal/logs"), ("statusCode", 500), ("latencyMs", 9),
+                    ("route", "POST /shramsafal/logs")));
+            }
+        }
+
+        await using var scope = AdminScope(BuildProvider());
+        var repository = OpsRepository(scope.ServiceProvider);
+
+        // The control: while rows can be read, Live answers the three recent errors and the farm.
+        var before = await repository.GetOpsHealthAsync();
+        before.RecentErrors.Should().HaveCount(3);
+        before.TopSufferingFarms.Should().ContainSingle(f => f.FarmId == Farm1);
+
+        // Only the recent-errors query reads an api.slow row (the repeated-problems query counts problems,
+        // and a slow request is not one), so this breaks that query alone.
+        await PoisonApiSlowRowsAsync();
+
+        var live = () => repository.GetOpsHealthAsync();
+        var thrown = await live.Should().ThrowAsync<Exception>(
+            "the recent-errors query fails after the connection opened; its catch is removed (C3, C14)");
+        Output.WriteLine($"[EVIDENCE] live recent errors thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.Message.Should().Contain("may not be read", "it is the refused row read that escaped");
     }
 
     // ── Errors 24h on All Farms ──────────────────────────────────────────────
@@ -343,9 +389,11 @@ public sealed class AdminErrorFarmRealPostgresTests(Xunit.Abstractions.ITestOutp
 
         var read = () => repository.GetFarmContactsAsync(Admin, new[] { Farm1, Farm2 });
 
-        var thrown = await read.Should().ThrowAsync<Exception>(
+        var thrown = await read.Should().ThrowAsync<InvalidOperationException>(
             "a factory that sees no farm at all must throw (answers 500), never answer [] (C5)");
         Output.WriteLine($"[EVIDENCE] thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.Message.Should().Contain("can see no farm at all",
+            "it is the blind-factory refusal itself, not some other failure");
 
         // The control: the same farms are there for a factory that can see them.
         await using var ownScope = AdminScope(BuildProvider());

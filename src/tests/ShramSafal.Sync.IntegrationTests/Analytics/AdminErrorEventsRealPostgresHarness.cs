@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
+using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
@@ -84,6 +85,52 @@ public abstract class AdminErrorEventsRealPostgresHarness(Xunit.Abstractions.ITe
         await db.OpenAsync();
         return db;
     }
+
+    // ── breaking a read AFTER its connection opened (C19 item 1) ─────────────
+    // The connection opens, the query is sent, the server refuses it. That is the only failure that
+    // is inside every removed catch; a connection that cannot open is outside all of them.
+
+    /// <summary>The counting login may no longer read <c>analytics.events</c> at all.</summary>
+    protected Task RevokeEventsReadAsync() =>
+        ExecAsSuperuserAsync($"REVOKE SELECT ON analytics.events FROM {IntegrationPostgres.AppRoleUser}");
+
+    /// <summary>
+    /// The counting login may read every column of <c>analytics.events</c> except <c>actor_user_id</c>, which
+    /// only the repeated-problems read touches (the test-account rule). Every other events read still works.
+    /// </summary>
+    protected async Task RevokeActorColumnAsync()
+    {
+        await using var db = await OpenSuperuserAsync();
+        var columns = new List<string>();
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText =
+                "SELECT column_name FROM information_schema.columns "
+                + "WHERE table_schema = 'analytics' AND table_name = 'events' AND column_name <> 'actor_user_id'";
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                columns.Add($"\"{r.GetString(0)}\"");
+            }
+        }
+
+        columns.Should().NotBeEmpty("the events table has columns to keep readable");
+        await ExecAsync(db, $"REVOKE SELECT ON analytics.events FROM {IntegrationPostgres.AppRoleUser}");
+        await ExecAsync(db, $"GRANT SELECT ({string.Join(", ", columns)}) ON analytics.events TO {IntegrationPostgres.AppRoleUser}");
+    }
+
+    /// <summary>
+    /// Reading an <c>api.slow</c> row now fails on the server (a row-level policy that raises). <c>api.slow</c> is
+    /// read by the Live recent-errors query and by no other events read, so only that read breaks.
+    /// </summary>
+    protected Task PoisonApiSlowRowsAsync() =>
+        ExecAsSuperuserAsync($"""
+            CREATE FUNCTION public.cr2e_refuse_row() RETURNS boolean LANGUAGE plpgsql AS
+            $$ BEGIN RAISE EXCEPTION 'cr2e: this row may not be read'; END $$;
+            ALTER TABLE analytics.events ENABLE ROW LEVEL SECURITY;
+            CREATE POLICY cr2e_refuse_slow ON analytics.events FOR SELECT TO {IntegrationPostgres.AppRoleUser}
+                USING (event_type <> 'api.slow' OR public.cr2e_refuse_row());
+            """);
 
     protected static AdminOpsRepository OpsRepository(
         IServiceProvider sp, IAdminDbContextFactory<ShramSafalDbContext>? factory = null) =>

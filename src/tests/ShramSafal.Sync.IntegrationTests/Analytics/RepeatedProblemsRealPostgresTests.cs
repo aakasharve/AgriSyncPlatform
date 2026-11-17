@@ -444,27 +444,65 @@ public sealed class RepeatedProblemsRealPostgresTests(Xunit.Abstractions.ITestOu
         suffering.Single(s => s.FarmId == TestFarm).ProblemCount.Should().Be(3);
     }
 
+    // C19 item 1: the connection opens, then the QUERY fails on the server. A connection that cannot open is
+    // outside every removed catch and proves nothing about them.
+
     [SkippableFact]
-    public async Task A_broken_read_escapes_never_an_empty_list()
+    public async Task A_failed_live_repeated_problems_query_throws_never_an_empty_list()
     {
         await GuardAsync();
 
-        var droppedName = $"ssf_cr2e_dropped_{Guid.NewGuid():N}";
-        await using (var admin = new NpgsqlConnection(AdminConn))
+        await WriteRowsAsync(async db =>
         {
-            await admin.OpenAsync();
-            await ExecAsync(admin, $"CREATE DATABASE \"{droppedName}\"");
-            await ExecAsync(admin, $"DROP DATABASE \"{droppedName}\"");
-        }
+            foreach (var hours in new[] { 1, 2, 3 })
+            {
+                await ProblemAsync(db, Farm1, TimeSpan.FromHours(hours));
+            }
+        });
 
-        var droppedConn = new NpgsqlConnectionStringBuilder(AppConn) { Database = droppedName }.ConnectionString;
-        await using var scope = AdminScope(BuildProvider(analyticsConn: droppedConn));
+        await using var scope = AdminScope(BuildProvider());
+        var repository = OpsRepository(scope.ServiceProvider);
 
-        var suffering = () => MisRepository(scope.ServiceProvider).GetSufferingAsync();
-        var live = () => OpsRepository(scope.ServiceProvider).GetOpsHealthAsync();
+        // The control: while every column can be read, the farm is on the Live list.
+        (await repository.GetOpsHealthAsync()).TopSufferingFarms.Should().ContainSingle(f => f.FarmId == Farm1);
 
-        await suffering.Should().ThrowAsync<Exception>("a failed read escapes to the 500 path, never an empty list");
-        await live.Should().ThrowAsync<Exception>("a failed read escapes to the 500 path, never an empty list");
+        // The person column is read by the repeated-problems query only (the test-account rule): the recent
+        // errors and voice reads of the same Live call still work, so only this query breaks.
+        await RevokeActorColumnAsync();
+
+        var live = () => repository.GetOpsHealthAsync();
+        var thrown = await live.Should().ThrowAsync<Exception>(
+            "the repeated-problems query is refused after the connection opened; nothing catches it (C14)");
+        Output.WriteLine($"[EVIDENCE] live repeated problems thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.Message.Should().Contain("permission denied", "it is the refused query that escaped");
+    }
+
+    [SkippableFact]
+    public async Task A_failed_suffering_query_throws_never_an_empty_list()
+    {
+        await GuardAsync();
+
+        await WriteRowsAsync(async db =>
+        {
+            foreach (var hours in new[] { 1, 2, 3 })
+            {
+                await ProblemAsync(db, Farm1, TimeSpan.FromHours(hours));
+            }
+        });
+
+        await using var scope = AdminScope(BuildProvider());
+        var repository = MisRepository(scope.ServiceProvider);
+
+        // The control: the farm has three problems and is listed.
+        (await repository.GetSufferingAsync()).Should().ContainSingle(s => s.FarmId == Farm1);
+
+        await RevokeEventsReadAsync();
+
+        var suffering = () => repository.GetSufferingAsync();
+        var thrown = await suffering.Should().ThrowAsync<Exception>(
+            "the query is refused after the connection opened; Suffering never answers an empty list");
+        Output.WriteLine($"[EVIDENCE] suffering thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.Message.Should().Contain("permission denied", "it is the refused query that escaped");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -119,10 +119,10 @@ public sealed class ProblemAreaTests
     [Fact]
     public void Every_problem_lands_in_exactly_one_area()
     {
-        // Every pattern of the production table (membership only: the expected bucket of each
-        // anchor is pinned by the tests above, never taken from the table), the anchors, an
-        // unknown pattern and no pattern at all.
-        var routes = new List<string?>(ProblemArea.KnownRoutes.Keys)
+        // This test's own pinned list of recorded routes (the anchors of C6 and C18; membership only:
+        // the expected bucket of each anchor is pinned by the tests above), an unknown pattern and no
+        // pattern at all. It reads nothing from production.
+        var routes = new List<string?>
         {
             "POST /shramsafal/sync/push",
             "GET /shramsafal/sync/pull",
@@ -133,6 +133,8 @@ public sealed class ProblemAreaTests
             "POST /shramsafal/ai/parse-voice-stream",
             "POST /shramsafal/ai/transcribe-stream",
             "POST /shramsafal/voice-diary/persist",
+            "GET /shramsafal/voice-diary/by-range",
+            "GET /shramsafal/voice-diary/by-id/{clipId:guid}",
             "GET /shramsafal/cr2e/a-route-nobody-mapped",
             null,
         };
