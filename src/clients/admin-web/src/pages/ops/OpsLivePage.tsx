@@ -114,14 +114,13 @@ import type { OpsErrorEvent, OpsFarmError } from '@/hooks/useOpsHealth';
  *      this is the server-side twin, which survives every client-side fix.
  *      A rate over zero calls and a latency of 0ms are not readings either.
  *
- *  (8) 🔴 FOUR MORE SWALLOW SITES, ALL INSIDE THIS ONE ENDPOINT.
- *      `AdminOpsRepository.cs:81` (voice), `:120` (recent errors), `:161`
- *      (suffering) and the two at `:172`/`:181` (the alert views) each answer
- *      a database failure with an empty or zero result and HTTP 200 — beside
- *      the five already catalogued at `AdminMisRepository.cs:219/:245/:287`
- *      and `AdminOpsRepository.cs:253/:293`. Both lists on this screen
- *      therefore supply `states.measuredZero.unproven`: an empty answer here
- *      cannot be claimed as a measured zero.
+ *  (8) THE RECENT-EVENTS READ NO LONGER SWALLOWS ITS FAILURE (C3, C20). The
+ *      `catch` that answered a database failure with an empty list and HTTP
+ *      200 is gone from `GetRecentErrorsAsync` and from the repeated-problems
+ *      read: a failed read answers 500 and this screen shows its own "could
+ *      not load" state. An empty recent-events list is therefore a real
+ *      "none", worded with its window. (The voice block of (7) still swallows;
+ *      its tiles are gone from this screen.)
  *
  *  (9) 🛑 THE RECENT-EVENTS LIST IS NOT ONLY ERRORS, AND IT IS CAPPED AT 50.
  *      `event_type IN ('api.error','api.slow','client.error')` … `LIMIT 50`
@@ -188,10 +187,10 @@ const EVENT_MEANING: Record<string, string> = {
   'client.error': "the farmer's own device reporting a script error or a failed fetch",
 };
 
-const UNATTRIBUTED =
-  'No token this platform issues carries a farm claim, so a server-side error row has no farm to name. Only an event the mobile client posts with a farmId in its body can be attributed.';
+const NOT_NAMED = 'Not named in the request';
 
-const EVENT_COLUMNS: DataListColumn<OpsErrorEvent>[] = [
+function buildEventColumns(contacts: Map<string, FarmContact>): DataListColumn<OpsErrorEvent>[] {
+  return [
   {
     key: 'time',
     label: 'Time',
@@ -254,19 +253,20 @@ const EVENT_COLUMNS: DataListColumn<OpsErrorEvent>[] = [
   {
     key: 'farm',
     label: 'Farm',
-    render: (e) =>
-      e.farmId ? (
+    render: (e) => {
+      if (!e.farmId) return <span className="text-text-2">{NOT_NAMED}</span>;
+      const contact = contacts.get(e.farmId.toLowerCase());
+      return (
         <span title={e.farmId} className="break-all">
-          {e.farmId.slice(0, 8)}…
+          {contact ? <PersonName name={contact.name} fallback={shortFarmId(e.farmId)} /> : shortFarmId(e.farmId)}
         </span>
-      ) : (
-        <NotMeasured state="unattributed" why={UNATTRIBUTED} />
-      ),
+      );
+    },
     sortType: 'text',
-    sortValue: (e) => e.farmId,
-    state: (e) => (e.farmId ? null : 'unattributed'),
+    sortValue: (e) => (e.farmId ? (contacts.get(e.farmId.toLowerCase())?.name ?? e.farmId) : null),
   },
-];
+  ];
+}
 
 /* ──────────────────────────────────────────────── THE SUFFERING TABLE */
 
@@ -506,9 +506,13 @@ export default function OpsLivePage() {
   const checkedAt = readAt ?? 'a time the server did not report';
 
 
-  const events = data?.recentErrors ?? [];
+  const events = useMemo(() => data?.recentErrors ?? [], [data]);
   const sufferingFarms = Array.isArray(data?.topSufferingFarms) ? data.topSufferingFarms : null;
   const contacts = useFarmContacts(useMemo(() => (sufferingFarms ?? []).map((f) => f.farmId), [sufferingFarms]));
+  const eventContacts = useFarmContacts(
+    useMemo(() => events.map((e) => e.farmId).filter((id): id is string => !!id), [events]),
+  );
+  const eventColumns = useMemo(() => buildEventColumns(eventContacts), [eventContacts]);
   const sufferingColumns = useMemo(() => buildSufferingColumns(contacts), [contacts]);
   /* Property (9). 50 is the server's LIMIT, so a full page is the one case
      where this table is a sample rather than the answer. */
@@ -538,11 +542,11 @@ export default function OpsLivePage() {
           id: 'events-2h',
           name: 'analytics.events · errors and slow calls, 2h',
           feeds: 'Recent events, below',
-          stateText: events.length > 0 ? 'Reporting' : 'Nothing received',
-          tone: events.length > 0 ? 'green' : 'grey',
+          stateText: 'Reporting',
+          tone: 'green',
           lastHeard: readAt,
           detail:
-            'Three event types, newest first, capped at fifty rows: api.error, api.slow and client.error. A failure inside this query is answered with an empty list and a success code, so an empty table cannot be read as a quiet two hours.',
+            'Three event types, newest first, capped at fifty rows: api.error, api.slow and client.error. A failed read shows as a failure, so an empty table means no events in the last two hours.',
           facts: [
             ['Window', 'trailing 2 hours'],
             ['Cap', '50 rows'],
@@ -680,7 +684,7 @@ export default function OpsLivePage() {
               noun={{ one: 'event', many: 'events' }}
               rows={events}
               rowKey={(e) => `${e.occurredAtUtc}-${e.eventType}-${e.endpoint}`}
-              columns={EVENT_COLUMNS}
+              columns={eventColumns}
               defaultSort={{ key: 'time', dir: 'desc' }}
               skeleton={{ rows: 5, cells: 6 }}
               states={{
@@ -689,17 +693,8 @@ export default function OpsLivePage() {
                 error: null,
                 onRetry: () => void refetch(),
                 measuredZero: {
-                  what: 'No error, slow call or client report in the last 2 hours',
+                  what: 'No errors in the last 2 hours',
                   checkedAt,
-                  unproven: (
-                    <>
-                      This query answers its own database failures with an empty list and a success
-                      code (<code>catch {'{'} returns empty {'}'}</code>,{' '}
-                      <code>AdminOpsRepository.cs:120</code>), so a broken query and a genuinely
-                      quiet two hours arrive here looking the same. Nothing was received at{' '}
-                      {checkedAt}, and that is all this screen can honestly say.
-                    </>
-                  ),
                 },
               }}
             />
@@ -790,20 +785,19 @@ export default function OpsLivePage() {
 
           <StandingNote
             title="What this screen cannot tell you"
-            summary="Whether an empty table means anything, and which farm most errors belong to."
+            summary="Which farms an error belongs to, and anything about one organisation."
             why={
               <>
                 <p>
-                  <b>Whether an empty table means anything.</b> The lookup behind the recent events
-                  answers its own database failure with an empty result and calls it a success. So a
-                  broken lookup and a genuinely quiet two hours arrive looking identical. Failures
-                  this screen <b>can</b> see &mdash; a refused permission, a timeout, a request that
-                  broke &mdash; are always named as failures.
+                  <b>What an empty table means.</b> An empty recent-events table means the server
+                  recorded no error, slow save or phone report in the last two hours. A lookup
+                  that fails is shown as a failure &mdash; a refused permission, a timeout, a
+                  request that broke &mdash; and never as an empty table.
                 </p>
                 <p>
-                  <b>Which farm most errors belong to.</b> Tying an error to a farm needs the
-                  farm&rsquo;s identifier on the error record, and almost nothing the server writes
-                  carries one.
+                  <b>Which farm every error belongs to.</b> The Farm column names a farm only when
+                  the request itself named one in its address. A row that says &ldquo;Not named in
+                  the request&rdquo; means the request did not say, not that no farm was hit.
                 </p>
                 <p>
                   <b>Anything about one organisation.</b> The server is asked nothing at all here,

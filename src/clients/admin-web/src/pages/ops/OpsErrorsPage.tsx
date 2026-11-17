@@ -116,14 +116,11 @@ import { useOpsErrors, type OpsErrorEvent } from '@/hooks/useOpsErrors';
  * show failures. Stated at the foot of the page; fixing it is one string in a
  * backend SQL list.
  *
- * 🔴 A DATABASE FAILURE IS ANSWERED AS AN EMPTY LIST WITH HTTP 200.
- * `GetErrorsPagedAsync` ends `catch { return new OpsErrorsPageDto([], 0, page,
- * pageSize); }` (`AdminOpsRepository.cs:253`) — the same shape Task 17 found
- * on the three MIS methods. So an empty answer here CANNOT be called a
- * measured zero, and this screen supplies `measuredZero.unproven`. Note the
- * difference from Users: there the query is provably broken. Here nothing is
- * known to be wrong with it — what is missing is any way to tell a quiet
- * window from an unreachable analytics database.
+ * A FAILED READ IS NOT AN EMPTY LIST (C3, C20). The swallowing `catch` that
+ * used to answer a database failure with an empty page and HTTP 200 is gone
+ * from `GetErrorsPagedAsync`: a failed read answers 500 and this screen shows
+ * its own "could not load" state. So an empty answer is a real "none", and the
+ * empty state says so with its window.
  *
  * 🔴 NO SERVER-SIDE ROW CAN EVER NAME A FARM. `farmId` is nullable in the
  * DTO, which is why Step 7's "not attributable" half is buildable. What the
@@ -563,32 +560,10 @@ export default function OpsErrorsPage() {
           error: isError ? error : null,
           onRetry: () => void refetch(),
           measuredZero: {
-            what: 'No call came back for this window',
+            /* An empty answer is a real "none": a failed read shows the
+               "could not load" state above and never reaches this. */
+            what: 'No errors in this window',
             checkedAt,
-            /* THE FIFTH CAUSE (T17). `MeasuredZero` closes with "This is a
-               measured zero, not a missing feed" — and this endpoint answers
-               a database failure with an empty list and a success code, so
-               that sentence is one this screen cannot stand behind. */
-            unproven: (
-              <>
-                <p>
-                  The request succeeded and carried no calls. On this screen that is usually the
-                  good reading — a window in which nothing failed — but it cannot be proved,
-                  because a database failure arrives looking exactly the same: the query behind
-                  this feed ends in a bare catch that returns an empty list with a success code, so
-                  an analytics database this API could not reach is reported as a quiet platform.
-                </p>
-                <p className="mt-2">
-                  Nothing is known to be wrong with the query itself. What is missing is any way
-                  for this console to tell the two apart, and until the server distinguishes them
-                  the zero will not be called a measurement.
-                </p>
-                <p className="mt-2">
-                  The window asked for was {windowWords}, and the server reported this answer at{' '}
-                  {checkedAt}.
-                </p>
-              </>
-            ),
           },
         }}
         /* B12 — shaped like the real thing: six columns. */
