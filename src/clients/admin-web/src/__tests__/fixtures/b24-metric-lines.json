@@ -632,8 +632,8 @@
     "page": "API Errors",
     "key": "errors-farm",
     "label": "Farm",
-    "status": "idea",
-    "what": "Which farm each error belongs to.",
+    "status": "real",
+    "what": "The farm each error belongs to, when the request named a farm.",
     "why": "Shows which farmers were hit by a problem, so someone can call them.",
     "buildId": "E3"
   },
@@ -731,8 +731,8 @@
     "page": "All Farms",
     "key": "farms-errors24h",
     "label": "Errors 24h",
-    "status": "idea",
-    "what": "Problems each farm hit in the last 24 hours.",
+    "status": "real",
+    "what": "Problems in the last 24 hours on requests that named this farm.",
     "why": "Shows which farmers are struggling with the app today.",
     "buildId": "F6"
   },
@@ -740,8 +740,8 @@
     "page": "Suffering",
     "key": "suffering-watchlist",
     "label": "Farmer suffering watchlist",
-    "status": "idea",
-    "what": "Farms with three or more failed actions or reported problems in the last 7 days.",
+    "status": "real",
+    "what": "Farms with three or more problems in 7 days on requests that named the farm.",
     "why": "Names the farmers most likely to give up, so someone helps them first.",
     "buildId": "U1"
   },
@@ -830,9 +830,9 @@
     "page": "Live Health",
     "key": "live-suffering-24h",
     "label": "Farms with repeated problems, last 24 hours",
-    "status": "idea",
+    "status": "real",
     "buildId": "L7",
-    "what": "Farms where something failed two or more times in the last day.",
+    "what": "Farms with two or more problems in the last day on requests that named the farm.",
     "why": "Lets the team call a farmer the same day things go wrong."
   },
   {
@@ -884,9 +884,9 @@
     "page": "Suffering",
     "key": "suffering-areas",
     "label": "Syncing, entries and voice columns",
-    "status": "idea",
+    "status": "real",
     "buildId": "U2",
-    "what": "Splits each farm's problems into syncing, saving entries and voice recording.",
+    "what": "Splits each farm's problems into syncing, saving entries, voice recording and other.",
     "why": "Tells the team which part of the app to look at before calling."
   },
   {

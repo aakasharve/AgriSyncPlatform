@@ -19,15 +19,17 @@ import type { SilentChurnItem, SufferingItem } from '../useFarms';
  * stated the flaw; Home must not quietly undo that by sorting on it.
  */
 
-function suffering(farmId: string, name: string, errorCount: number): SufferingItem {
+// CR-2e C7 (founder, 2026-11-17): the suffering row changed shape (U1 became real): it carries no farm name (names
+// come from the contacts route) and counts `problemCount`. The `_name` argument is kept so the cases below read the same.
+function suffering(farmId: string, _name: string, problemCount: number): SufferingItem {
   return {
     farmId,
-    name,
-    errorCount,
-    syncErrors: 1,
-    logErrors: 0,
-    voiceErrors: 1,
-    lastErrorAt: '2026-09-01T06:00:00.0000000Z',
+    problemCount,
+    syncProblems: 1,
+    entryProblems: 0,
+    voiceProblems: 1,
+    otherProblems: 0,
+    lastProblemAt: '2026-09-01T06:00:00.0000000Z',
   };
 }
 
@@ -91,10 +93,11 @@ describe('the order, one key at a time', () => {
       [churn(A, 'Wagholi', 2)],
       [],
     );
-    expect(rows.map((r) => r.name)).toEqual(['Wagholi', 'Sinnar']);
+    // Read by farm id: a farm known only from the suffering row carries no name any more.
+    expect(rows.map((r) => r.farmId)).toEqual([A, C]);
     /* And the big number really is on the row that came second — otherwise the
        assertion above would pass for the wrong reason. */
-    expect(rows[1].suffering?.errorCount).toBe(900);
+    expect(rows[1].suffering?.problemCount).toBe(900);
   });
 
   it('KEY 2 — equal reasons break on the longest silence, descending', () => {
@@ -106,7 +109,7 @@ describe('the order, one key at a time', () => {
     /* The missing-sorts-last rule the list component applies to every other
        column. "Not on the churn watchlist" is not "silent for zero weeks". */
     const rows = mergeCallList([suffering(C, 'NoReading', 400)], [churn(B, 'Measured', 1)], []);
-    expect(rows.map((r) => r.name)).toEqual(['Measured', 'NoReading']);
+    expect(rows.map((r) => r.farmId)).toEqual([B, C]);
   });
 
   it('KEY 3 — an exact tie falls back to the name, so the order is stable and explicable', () => {

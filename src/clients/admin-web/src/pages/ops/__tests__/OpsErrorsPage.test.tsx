@@ -29,11 +29,9 @@ import OpsErrorsPage from '../OpsErrorsPage';
  *     screen was the console's only `@tanstack/react-table` caller, and the
  *     library is gone. The behaviour it was there for is asserted directly.
  *
- *  4. AN EMPTY ANSWER IS NOT A MEASUREMENT. `GetErrorsPagedAsync` ends
- *     `catch { return new OpsErrorsPageDto([], 0, page, pageSize); }`
- *     (`AdminOpsRepository.cs:253`), so a database failure reaches this
- *     client as an empty list with HTTP 200. "This is a measured zero, not a
- *     missing feed" is a sentence this screen may not say.
+ *  4. A FAILED REQUEST IS NOT AN EMPTY LIST. Since CR-2e C3 a failed read
+ *     answers 500 and this screen shows "could not load"; an empty answer is a
+ *     real none (C20, asserted in OpsErrorsPage.farm.test.tsx).
  */
 
 const ORG = '11111111-1111-1111-1111-111111111111';
@@ -356,47 +354,7 @@ describe('server pagination survived the loss of the table library', () => {
 /* ═══════════ 4. AN EMPTY ANSWER IS NOT A MEASUREMENT (D9, Step 4) */
 
 describe('an absence names its cause, and an empty list is never called a measured zero', () => {
-  it('does not claim a measured zero over an answer this endpoint cannot prove', async () => {
-    serve([]);
-    renderErrors();
-    await settled();
-
-    /*
-     * ASSERTED FIRST. `MeasuredZero` closes every rendering with this
-     * sentence, and this endpoint answers a database failure with an empty
-     * list and HTTP 200 (`AdminOpsRepository.cs:253`) — so a quiet window and
-     * an unreachable analytics database arrive identical, and the sentence is
-     * one the screen cannot stand behind.
-     */
-    expect(
-      screen.queryByText(/This is a measured zero, not a missing feed/),
-      'the empty log was presented as a measured zero — this endpoint answers a database failure with an empty list and a success code, so the zero cannot be claimed as a reading',
-    ).toBeNull();
-
-    /* And the old string, which said something stronger and worse. */
-    expect(
-      screen.queryByText(/The system is healthy/),
-      'the console still renders "No errors found. The system is healthy." — a 500, a timeout and a 403 reported to an operator as a clean bill of health, on the screen whose job is to show failures',
-    ).toBeNull();
-
-    await screen.findByText('No call came back for this window');
-    expect(stateBlock()).toHaveAttribute('data-state', 'unmeasured');
-    expect(
-      screen.getByText(/ends in a bare catch that returns an empty list with a success code/),
-    ).toBeInTheDocument();
-
-    /*
-     * AND THE TIME IT NAMES COMES FROM THE KEY THE SERVER ACTUALLY SENDS.
-     * Merged into this mount rather than given its own: same fixture, same
-     * render, and the suite is at a measured timing cliff that one more
-     * parallel file makes worse (Task 29's problem).
-     */
-    expect(
-      screen.queryByText(/a time the server did not report/),
-      'the screen read `meta.lastRefreshed`, and the server sends `meta.lastRefreshedUtc` — so it reported having no timestamp while holding one',
-    ).toBeNull();
-    expect(screen.getByText(/the server reported this answer at 2026-09-01 /)).toBeInTheDocument();
-  });
+  // CR-2e C3|C20 (founder, 2026-11-17): the swallowing catch is gone, so an empty answer is a real none. Retired: 'does not claim a measured zero over an answer this endpoint cannot prove'; replaced by OpsErrorsPage.farm.test.tsx (empty answer says no errors in the window; failed request says could not load).
 
   it('renders a 500 as a failure with a retry, not as a quiet platform', async () => {
     stub = installAdapter(async () => ({ status: 500, data: {} }));

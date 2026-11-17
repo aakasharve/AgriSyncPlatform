@@ -91,7 +91,7 @@ describe('per-surface polling cadences (A23)', () => {
   it.each([
     ['ops/health', () => useOpsHealth(), 25_000, 30_000],
     ['ops/errors', () => useOpsErrors({ page: 1, pageSize: 50 }), 25_000, 30_000],
-    ['farms/suffering', () => useSuffering(), 60_000, 60_000],
+    // CR-2e C9 (founder, 2026-11-17): farms/suffering no longer polls; it moved to the no-poll list below.
     ['ops/voice', () => useOpsVoice(), 300_000, 300_000],
     ['metrics/wvfd', () => useWvfd(), 300_000, 300_000],
     ['farmer-health/cohort', () => useCohortPatterns(), 60_000, 300_000],
@@ -107,11 +107,14 @@ describe('per-surface polling cadences (A23)', () => {
   });
 
   it.each([
-    ['farms/list', () => useFarmsList(1, 40), 60_000],
-    ['farms/silent-churn', () => useSilentChurn(), 300_000],
-    ['users/list', () => useUsersList(1, 50), 60_000],
-    ['farmer-health/drilldown', () => useFarmerHealth('farm-1'), 60_000],
-  ] as const)('%s does NOT poll', async (_name, use, staleTime) => {
+    // CR-2e C9: All Farms still sets no interval (it must stay that way: it opens the audited factory); Suffering now
+    // says so with an explicit `false`.
+    ['farms/list', () => useFarmsList(1, 40), 60_000, undefined],
+    ['farms/suffering', () => useSuffering(), 60_000, false],
+    ['farms/silent-churn', () => useSilentChurn(), 300_000, undefined],
+    ['users/list', () => useUsersList(1, 50), 60_000, undefined],
+    ['farmer-health/drilldown', () => useFarmerHealth('farm-1'), 60_000, undefined],
+  ] as const)('%s does NOT poll', async (_name, use, staleTime, interval) => {
     // Only six surfaces poll. Adding an interval to a list screen is a load
     // change nobody would see in review.
     stub = installAdapter(async () => ({ status: 200, data: { data: {}, meta: {} } }));
@@ -121,7 +124,7 @@ describe('per-surface polling cadences (A23)', () => {
 
     const options = onlyQuery(queryClient).observers[0].options;
     expect(options.staleTime).toBe(staleTime);
-    expect(options.refetchInterval).toBeUndefined();
+    expect(options.refetchInterval).toBe(interval);
   });
 });
 

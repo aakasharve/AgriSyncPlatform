@@ -25,9 +25,9 @@ describe('the reviewed lines file itself (B24 fixture)', () => {
   it('B24_fixture_has_137_entries_in_the_stated_split', () => {
     expect(ENTRIES).toHaveLength(137);
     const count = (s: string) => ENTRIES.filter((e) => e.status === s).length;
-    expect(count('real')).toBe(51);
+    expect(count('real')).toBe(56); // CR-2e C7 (founder, 2026-11-17): E3 F6 U1 U2 L7 became real
     expect(count('not-measured')).toBe(35);
-    expect(count('idea')).toBe(33);
+    expect(count('idea')).toBe(28);
     expect(count('double')).toBe(18);
     expect(MIS).toHaveLength(73);
   });
@@ -67,10 +67,11 @@ describe('metricLines.ts carries the older-page entries verbatim (B24)', () => {
     }
   });
 
-  it('B24_metricLines_split_is_18_doubles_33_ideas_14_real', () => {
+  it('B24_metricLines_split_is_18_doubles_28_ideas_18_real', () => {
     const c = (s: string) => METRIC_LINES.filter((m) => m.status === s).length;
     expect(c('double')).toBe(18);
-    expect(c('idea')).toBe(33);
+    expect(c('idea')).toBe(28);
+    expect(c('real')).toBe(18);
     expect(c('real')).toBe(OLDER.filter((e) => e.status === 'real').length);
   });
 

@@ -207,7 +207,8 @@ describe('the three tables do not fight over one ?sort (T7 ns, T8 prediction)', 
     const cells = clientRow.querySelectorAll('td');
     expect(cells[3].textContent).toContain('not measured');
     expect(cells[3].textContent).not.toContain('0');
-    expect(cells[5].textContent).toContain('not attributable');
+    // CR-2e C20: a row whose request named no farm says so in words (the old 'not attributable' mark is gone).
+    expect(cells[5].textContent).toBe('Not named in the request');
   });
 });
 
