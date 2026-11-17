@@ -758,8 +758,8 @@
     "page": "Farmer Health drilldown",
     "key": "fh-timeline-errors",
     "label": "Errors",
-    "status": "idea",
-    "what": "For one farm, problems recorded on each of the last 14 days.",
+    "status": "real",
+    "what": "Problems on requests that named this farm, on each of the last 14 days.",
     "why": "Shows whether a farm went quiet after a run of failures.",
     "buildId": "P5"
   },
@@ -929,7 +929,7 @@
     "page": "Farmer Health drilldown",
     "key": "fh-name-phone",
     "label": "Farmer name and phone",
-    "status": "idea",
+    "status": "real",
     "buildId": "P1",
     "what": "The farm owner's name and phone number.",
     "why": "So the team can call the right person straight from this page."
@@ -947,25 +947,25 @@
     "page": "Farmer Health drilldown",
     "key": "fh-timeline-verifies",
     "label": "Checked",
-    "status": "idea",
+    "status": "real",
     "buildId": "P4",
-    "what": "Entries on this farm checked and confirmed by someone, day by day.",
+    "what": "Entries on this farm checked by a person on purpose, counted once per entry each day.",
     "why": "Shows whether the farm's records are trusted, not only typed in."
   },
   {
     "page": "Farmer Health drilldown",
     "key": "fh-verification-counts",
     "label": "Checks on entries",
-    "status": "idea",
+    "status": "real",
     "buildId": "P6",
-    "what": "Entries confirmed, verified, disputed and still waiting for a check on this farm.",
+    "what": "Entries confirmed, verified, disputed, waiting, or checked only by the person who saved them.",
     "why": "A pile of waiting or disputed entries is a reason to call."
   },
   {
     "page": "Farmer Health drilldown",
     "key": "fh-workers",
     "label": "Workers",
-    "status": "idea",
+    "status": "real",
     "buildId": "P7",
     "what": "The five workers named most often in this farm's entries.",
     "why": "Shows who actually does the work, so a call can mention them."
@@ -983,16 +983,16 @@
     "page": "Farmer Health drilldown",
     "key": "fh-reading-rates",
     "label": "Voice and photo reading",
-    "status": "idea",
+    "status": "real",
     "buildId": "P10",
-    "what": "Share of this farm's voice recordings and receipt photos read and saved successfully.",
+    "what": "Share of this farm's voice recordings read and saved; photos are counted, not yet scored.",
     "why": "If reading fails often, the farmer stops trusting voice and photos."
   },
   {
     "page": "Farmer Health drilldown",
     "key": "fh-reading-count",
     "label": "Recordings and photos read",
-    "status": "idea",
+    "status": "real",
     "buildId": "P11",
     "what": "How many voice recordings and photos from this farm were read in 14 days.",
     "why": "Shows how much this farm relies on voice and photos to keep records."

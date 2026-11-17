@@ -7,8 +7,8 @@ import FarmerHealthDrilldown from '../FarmerHealthDrilldown';
 
 /**
  * B25 (2026-11-17), one-farm page: the real behaviours B24 retired without cover are asserted again
- * on the four real timeline rows (Started, Submitted, Proof, Summary), and an idea row (Checked, Errors)
- * is ONE "Not built yet" cell spanning the 14 days, never 14 blank squares that look like a measured zero.
+ * on the timeline rows. After CR-2e Task 3 all six rows are real (Started, Submitted, Proof, Summary,
+ * Checked, Errors), so the one "Not built yet" cell the B25 tests pinned on the last two is retired.
  */
 
 const ORG = '11111111-1111-1111-1111-111111111111';
@@ -20,12 +20,12 @@ const days = Array.from({ length: 14 }, (_, i) => ({
   closuresStarted: 0, closuresSubmitted: 0, proofAttached: 0, summariesViewed: 0, verifications: 0, errors: 0,
 }));
 days[12] = { ...days[12], closuresStarted: 4, closuresSubmitted: 3 };
-days[13] = { ...days[13], closuresStarted: 1, proofAttached: 1, summariesViewed: 2, verifications: 8383, errors: 9797 };
+days[13] = { ...days[13], closuresStarted: 1, proofAttached: 1, summariesViewed: 2, verifications: 83, errors: 97 };
 
 const ANSWER = {
-  farmId: FARM, farmerName: 'Zzfarmer Unique', phone: '98******12',
+  farmId: FARM, farmerName: 'Zzfarmer Unique', farmName: 'Zzfarm Name', phone: '9811122233',
   score: null, timeline: days,
-  syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z', pendingPushes: 0, failedPushesLast7d: 6143, lastErrors: [] },
+  syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z' },
   aiHealth: null, verifications: null, workerSummary: [],
 };
 
@@ -89,41 +89,39 @@ describe('the one-farm timeline, real rows (B25)', () => {
     expect(startedOne.style.backgroundColor).not.toBe('');
   });
 
-  it('B25_the_four_real_rows_use_tokens_and_no_hex_colour', async () => {
+  it('B25_the_six_real_rows_use_tokens_and_no_hex_colour', async () => {
     const tl = await shown();
     const cells = [...tl.querySelectorAll<HTMLElement>('[data-cell]')];
-    expect(cells.length).toBe(4 * 14);
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P4 and P5 became real
+    expect(cells.length).toBe(6 * 14);
     for (const c of cells) expect(c.getAttribute('style') ?? '', c.getAttribute('data-cell') ?? '').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     const lit = cells.filter((c) => (c.getAttribute('style') ?? '').includes('background-color'));
     expect(lit.length).toBeGreaterThan(0);
     for (const c of lit) expect(c.style.backgroundColor).toContain('var(--color-');
   });
 
-  it('B25_the_accessible_table_names_four_event_types_and_two_rows_not_built_yet', async () => {
+  it('B25_the_accessible_table_names_all_six_event_types', async () => {
     const tl = await shown();
     const cap = (tl.querySelector('table caption')!.textContent ?? '').toLowerCase();
-    for (const w of ['started', 'submitted', 'proof', 'summary']) expect(cap, w).toContain(w);
-    expect(cap).toMatch(/two (more )?rows?[^.]*not built yet/);
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P4 and P5 became real
+    for (const w of ['started', 'submitted', 'proof', 'summary', 'checked', 'errors']) expect(cap, w).toContain(w);
+    expect(cap).not.toMatch(/not built yet/);
     expect(tl.querySelectorAll('table[aria-label="Activity by event type and day"] tbody tr')).toHaveLength(6);
   });
 });
 
-describe('an idea row is one Not built yet cell (B25)', () => {
-  it('B25_Checked_and_Errors_are_each_one_cell_spanning_the_14_days_with_no_squares', async () => {
+describe('the Checked and Errors rows are real rows (B25, CR-2e Task 3)', () => {
+  it('B25_Checked_and_Errors_are_each_14_day_cells_with_the_served_values', async () => {
     const tl = await shown();
-    for (const label of ['Checked', 'Errors']) {
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P4 and P5 became real
+    for (const [label, key, value] of [['Checked', 'verifications', '83'], ['Errors', 'errors', '97']] as const) {
       const tr = rowOf(tl, label);
-      const cells = [...tr.querySelectorAll('td')];
-      expect([label, cells.length]).toEqual([label, 1]);
-      expect([label, cells[0].getAttribute('colspan')]).toEqual([label, '14']);
-      expect(cells[0].textContent?.trim()).toBe('Not built yet');
-      expect(tr.querySelector('[data-cell]')).toBeNull();
-      // no tooltip anywhere in the row claims a count
-      for (const el of tr.querySelectorAll('[title]')) expect(el.getAttribute('title')).not.toMatch(/\d/);
-      // and none of the served counts (8383 checked, 9797 errors) reach the row
-      expect(tr.textContent).not.toMatch(/8383|9797/);
+      expect([label, tr.querySelectorAll('td').length]).toEqual([label, 14]);
+      expect([label, tr.querySelectorAll('[data-cell]').length]).toEqual([label, 14]);
+      expect(tr.textContent).not.toMatch(/Not built yet/);
+      expect(tl.querySelector(`[data-cell="${key}:2026-08-31"]`)!.textContent?.trim()).toBe(value);
     }
-    expect(tl.querySelectorAll('[data-cell]')).toHaveLength(4 * 14);
+    expect(tl.querySelectorAll('[data-cell]')).toHaveLength(6 * 14);
   });
 
   it('B25_the_P4_header_reads_Checked_not_Verifications', async () => {

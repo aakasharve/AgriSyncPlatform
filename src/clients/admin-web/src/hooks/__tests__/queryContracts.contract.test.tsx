@@ -113,7 +113,8 @@ describe('per-surface polling cadences (A23)', () => {
     ['farms/suffering', () => useSuffering(), 60_000, false],
     ['farms/silent-churn', () => useSilentChurn(), 300_000, undefined],
     ['users/list', () => useUsersList(1, 50), 60_000, undefined],
-    ['farmer-health/drilldown', () => useFarmerHealth('farm-1'), 60_000, undefined],
+    // CR-2e C21: the one-farm page opens the audited factory on every load, so its hook now says "no interval" with an explicit `false`.
+    ['farmer-health/drilldown', () => useFarmerHealth('farm-1'), 60_000, false],
   ] as const)('%s does NOT poll', async (_name, use, staleTime, interval) => {
     // Only six surfaces poll. Adding an interval to a list screen is a load
     // change nobody would see in review.

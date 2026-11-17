@@ -8,11 +8,7 @@ import type { MeScopeResponse } from '@/hooks/useAdminScope';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
 import FarmerHealthDrilldown from '../FarmerHealthDrilldown';
-import type {
-  FarmerHealthDto,
-  FarmerHealthScoreBreakdownDto,
-  FarmerHealthTimelineDayDto,
-} from '../farmer-health.types';
+import type { FarmerHealthDto, FarmerHealthTimelineDayDto } from '../farmer-health.types';
 
 /**
  * THE FARMER-HEALTH DRILLDOWN — the biggest single feature loss in the v3
@@ -60,25 +56,6 @@ const FARM = '22222222-2222-2222-2222-222222222222';
 
 /* ═══════════════════════════════════════════════════════════ fixtures ════ */
 
-function score(over: Partial<FarmerHealthScoreBreakdownDto> = {}): FarmerHealthScoreBreakdownDto {
-  return {
-    total: 58,
-    bucket: 'watchlist',
-    flag: 'ok',
-    pillars: {
-      triggerFit: 6.4,
-      actionSimplicity: 14,
-      proof: 9.5,
-      reward: 3.2,
-      /* The placeholder the server really sends for every farm, every week. */
-      investment: 0,
-      repeat: 25,
-    },
-    weekStart: '2026-08-24',
-    ...over,
-  };
-}
-
 function day(date: string, over: Partial<FarmerHealthTimelineDayDto> = {}): FarmerHealthTimelineDayDto {
   return {
     date,
@@ -108,23 +85,17 @@ function farmer(over: Partial<FarmerHealthDto> = {}): FarmerHealthDto {
   return {
     farmId: FARM,
     farmerName: 'Purvesh Arve',
-    phone: '98******12',
-    score: score(),
+    farmName: 'Arve Mala',
+    phone: '9812345612',
+    score: null,
     timeline: timeline(),
-    syncState: {
-      lastSyncAt: '2026-08-30T09:05:00.0000000Z',
-      pendingPushes: 0,
-      failedPushesLast7d: 2,
-      lastErrors: [
-        { ts: '2026-08-30T08:00:00Z', endpoint: '/sync/push', status: 500, message: 'boom' },
-      ],
-    },
+    syncState: { lastSyncAt: '2026-08-30T09:05:00.0000000Z' },
     aiHealth: {
-      voiceParseSuccessRate14d: 0.94,
-      receiptParseSuccessRate14d: 0.71,
-      invocationCount14d: 33,
+      voice: { finishedJobs14d: 20, savedJobs14d: 15, savedPct14d: 75, notMeasuredReason: null },
+      receipt: { finishedJobs14d: 7, savedJobs14d: null, savedPct14d: null, notMeasuredReason: 'saved_not_recorded' },
+      patti: { finishedJobs14d: 0, savedJobs14d: null, savedPct14d: null, notMeasuredReason: 'saved_not_recorded' },
     },
-    verifications: { confirmed: 1, verified: 2, disputed: 0, pending: 1 },
+    verifications: { confirmed: 1, verified: 2, disputed: 0, pending: 1, selfChecked: 3 },
     workerSummary: [
       {
         workerId: 'w-1',
@@ -303,9 +274,8 @@ describe('Band 1 survives every branch (A40)', () => {
     expectHeader();
     /* A scope statement, not a 404 page — preserved verbatim. */
     expect(screen.getByText('Farm not found in your scope.')).toBeInTheDocument();
-    /* And the swallowed scope query is named, because `catch { return false }`
-       makes a dropped connection look identical to a missing grant. */
-    expect(document.body.textContent).toContain('catch { return false; }');
+    // CR-2e C14 (catches removed): the old line naming the swallowed scope query (`catch { return false; }`) is retired with the catch itself.
+    expect(document.body.textContent).not.toContain('catch {');
   });
 
   it('branch 4 — the data', async () => {
@@ -314,7 +284,9 @@ describe('Band 1 survives every branch (A40)', () => {
     await settled();
 
     expectHeader();
-    // B24 (founder, 2026-11-17): P2 (score) and P7 (workers) are ideas shown as Not built yet; only the timeline (P3) is drawn.
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P1, P4, P5, P6, P7, P10, P11 became real; the farm score (P2) stays Not built yet.
+    expect(document.querySelector('[data-metric="fh-name-phone"]')).not.toBeNull();
+    expect(document.querySelector('[data-metric="fh-workers"]')).not.toBeNull();
     expect(band('timeline')).not.toBeNull();
   });
 });
@@ -368,7 +340,8 @@ describe('the 14-day grid (Band 3)', () => {
     const grid = band('timeline')!;
     expect(within(grid).getByText(/Nothing was recorded on this farm in fourteen days/)).toBeInTheDocument();
     expect(grid.querySelector('[data-cell]')).toBeNull();
-    expect(grid.textContent).toContain('backfilled with zero rows');
+    // CR-2e C14 (catches removed): a zero is now a served zero, so the old "backfilled with zero rows" caveat is retired.
+    expect(grid.textContent).not.toContain('backfilled');
   });
 
   it('keeps the accessible figures table under the grid (A32)', async () => {

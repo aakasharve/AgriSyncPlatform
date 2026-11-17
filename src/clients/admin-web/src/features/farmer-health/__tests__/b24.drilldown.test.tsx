@@ -7,10 +7,9 @@ import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import FarmerHealthDrilldown from '../FarmerHealthDrilldown';
 
 /**
- * B24 (founder, 2026-11-17) — the one-farm page. The feed still arrives and still carries every
- * old value, but the page draws only P3 (14-day timeline: started, submitted, proof, summary) and
- * P8 (labelled "Last entry reached the server"). P1, P2, P4 to P7, P9 to P11 are ideas: no value from
- * the answer reaches the screen. The block once titled "AI health" is now "Voice and photo reading".
+ * B24 (founder, 2026-11-17) — the one-farm page. After CR-2e Task 3 the page draws P1, P3 to P8, P10
+ * and P11 from the answer; only P2 (farm score) and P9 (refused uploads) stay ideas, and no value
+ * reaches the screen for them. The block once titled "AI health" is now "Voice and photo reading".
  */
 
 interface Entry { page: string; label: string; status: string; buildId: string; what?: string; why?: string }
@@ -26,24 +25,30 @@ const days = Array.from({ length: 14 }, (_, i) => ({
   closuresStarted: 0, closuresSubmitted: 0, proofAttached: 0, summariesViewed: 0, verifications: 0, errors: 0,
 }));
 days[12] = { ...days[12], closuresStarted: 4, closuresSubmitted: 3 };
-days[13] = { ...days[13], closuresStarted: 1, verifications: 8383, errors: 9797 };
+days[13] = { ...days[13], closuresStarted: 1, verifications: 83, errors: 97 };
 
 const ANSWER = {
   farmId: FARM,
   farmerName: 'Zzfarmer Unique',
-  phone: '98******12',
+  farmName: 'Zzfarm Name',
+  phone: '9811122233',
+  // Fields the server no longer sends. If one still arrived, P2 and P9 must not draw it.
   score: {
-    total: 58, bucket: 'watchlist', flag: 'ok', weekStart: '2026-08-24',
+    total: 5858, bucket: 'watchlist', flag: 'ok', weekStart: '2026-08-24',
     pillars: { triggerFit: 6.4, actionSimplicity: 14, proof: 9.5, reward: 3.2, investment: 0, repeat: 25 },
   },
   timeline: days,
   syncState: {
-    lastSyncAt: '2026-08-30T09:05:00.0000000Z', pendingPushes: 0, failedPushesLast7d: 6143,
+    lastSyncAt: '2026-08-30T09:05:00.0000000Z', failedPushesLast7d: 6143,
     lastErrors: [{ ts: '2026-08-30T08:00:00Z', endpoint: '/sync/push', status: 500, message: 'zzboom' }],
   },
-  aiHealth: { voiceParseSuccessRate14d: 0.94, receiptParseSuccessRate14d: 0.71, invocationCount14d: 3333 },
-  verifications: { confirmed: 4151, verified: 4252, disputed: 4454, pending: 4555 },
-  workerSummary: [{ workerId: 'w-1', name: 'Zzworker Name', assignmentCount: 7717, firstSeenUtc: '2026-07-02T04:00:00.0000000Z' }],
+  aiHealth: {
+    voice: { finishedJobs14d: 33, savedJobs14d: 31, savedPct14d: 93.9, notMeasuredReason: null },
+    receipt: { finishedJobs14d: 12, savedJobs14d: null, savedPct14d: null, notMeasuredReason: 'saved_not_recorded' },
+    patti: { finishedJobs14d: 0, savedJobs14d: null, savedPct14d: null, notMeasuredReason: 'saved_not_recorded' },
+  },
+  verifications: { confirmed: 41, verified: 52, disputed: 44, pending: 45, selfChecked: 67 },
+  workerSummary: [{ workerId: 'w-1', name: 'Zzworker Name', assignmentCount: 77, firstSeenUtc: '2026-07-02T04:00:00.0000000Z' }],
 };
 
 let stub: StubbedAdapter | null = null;
@@ -94,23 +99,41 @@ describe('the one-farm page after B24', () => {
   it('B24_idea_values_from_the_answer_are_never_drawn', async () => {
     await shown();
     const t = document.body.textContent ?? '';
-    // P1 name and phone, P2 score and parts, P4 checked and P5 errors per day, P6 checks, P7 workers,
-    // P9 refused uploads, P10 and P11 reading rates and counts. Each marker is unique to the answer above.
-    for (const v of ['Zzfarmer Unique', '98******12', 'Zzworker Name', 'zzboom', '/sync/push', '94%', '71%', '0.94', '0.71']) {
-      expect(t, v).not.toContain(v);
+    // P2 score and P9 refused uploads are still ideas: nothing the answer carries for them reaches the page.
+    for (const v of ['5858', 'zzboom', '/sync/push']) expect(t, v).not.toContain(v);
+    expect(t).not.toMatch(/(^|\D)6143(\D|$)/);
+    for (const key of ['fh-score', 'fh-failed-uploads']) {
+      const el = document.querySelector<HTMLElement>(`[data-metric="${key}"]`)!;
+      expect(el, key).not.toBeNull();
+      expect(el).toHaveAttribute('data-state', 'not-built-yet');
     }
-    for (const n of ['8383', '9797', '6143', '4151', '4252', '4454', '4555', '7717', '3333']) expect(t, `digit run ${n}`).not.toMatch(new RegExp(`(^|\\D)${n}(\\D|$)`));
   });
 
   it('B24_each_idea_shows_Not_built_yet_with_its_two_lines', async () => {
     await shown();
     const t = document.body.textContent ?? '';
-    for (const id of ['P1', 'P2', 'P4', 'P5', 'P6', 'P7', 'P9', 'P10', 'P11']) {
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P1, P4, P5, P6, P7, P10 and P11 became real; only P2 and P9 remain ideas.
+    for (const id of ['P2', 'P9']) {
       const e = byId(id);
       expect(t, `${id} label`).toContain(e.label);
       expect(t, `${id} what`).toContain(e.what!);
       expect(t, `${id} why`).toContain(e.why!);
     }
+    expect(document.querySelectorAll('[data-state="not-built-yet"]')).toHaveLength(2);
+  });
+
+  it('B24_the_seven_parts_that_became_real_show_their_value_and_both_lines', async () => {
+    await shown();
+    const t = document.body.textContent ?? '';
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P1, P4, P5, P6, P7, P10, P11 became real
+    for (const id of ['P1', 'P4', 'P5', 'P6', 'P7', 'P10', 'P11']) {
+      const e = byId(id);
+      expect(e.status, `${id} status in the lines file`).toBe('real');
+      expect(t, `${id} what`).toContain(e.what!);
+      expect(t, `${id} why`).toContain(e.why!);
+    }
+    for (const v of ['Zzfarmer Unique', 'Zzfarm Name', '9811122233', 'Zzworker Name', '93.9%']) expect(t, v).toContain(v);
+    expect(t).not.toContain('0.94');
   });
 
   it('B24_the_AI_health_block_is_now_Voice_and_photo_reading', async () => {
@@ -143,11 +166,14 @@ describe('the one-farm page after B24', () => {
     for (const row of ['Started', 'Submitted', 'Proof', 'Summary']) expect(timeline!.textContent).toContain(row);
   });
 
-  it('B24_timeline_columns_P4_Checked_and_P5_Errors_carry_the_mark', async () => {
+  it('B24_timeline_columns_P4_Checked_and_P5_Errors_are_real_rows', async () => {
     await shown();
     const timeline = document.querySelector<HTMLElement>('[data-band="timeline"]')!;
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P4 and P5 became real
     expect(timeline.textContent).toContain(byId('P4').label);
     expect(timeline.textContent).toContain(byId('P5').label);
-    expect(timeline.textContent).toContain('Not built yet');
+    expect(timeline.textContent).not.toContain('Not built yet');
+    expect(timeline.querySelector('[data-cell="verifications:2026-08-31"]')!.textContent?.trim()).toBe('83');
+    expect(timeline.querySelector('[data-cell="errors:2026-08-31"]')!.textContent?.trim()).toBe('97');
   });
 });
