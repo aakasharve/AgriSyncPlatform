@@ -28,6 +28,7 @@ public sealed class PullSyncChangesHandler(
     IComplianceSignalRepository complianceSignalRepository,
     EvaluateComplianceHandler evaluateComplianceHandler,
     TenantContext tenantContext,
+    IPictureStore pictureStore,
     ILogger<PullSyncChangesHandler> logger)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
@@ -422,7 +423,11 @@ public sealed class PullSyncChangesHandler(
             return Result.Failure<SyncPullResponseDto>(templatesResult.Error);
         }
 
-        var scheduleTemplates = templatesResult.Value ?? [];
+        // spec: plr-d10 lane SCH-ID-S (founder D-146; P11) - the picture each schedule shows to THIS reader (three optional fields at the END of the
+        // DTO), decided here from the seats he holds (his read scopes above), never by the phone. A failed picture read fails the pull like any other
+        // phase-1 read; the phone retries.
+        var scheduleTemplates = await SchedulePictureAttacher.AttachAsync(
+            repository, pictureStore, query.UserId, scopes.Values, templatesResult.Value ?? [], ct);
         // spec: plr-d10 lane L8b-3 (R6, D-76) - the मुख्य schedule of every plot-season he may see, from the SAME rows and the SAME
         // library listing this pull already holds (so a row he may not see is never named, and no query path skips the reader's filter).
         var mainFacts = MainScheduleFactsReader.FromListing(scheduleTemplates);

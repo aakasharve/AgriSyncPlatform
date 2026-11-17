@@ -67,6 +67,8 @@ public sealed class ActorRoleIsFarmScopedTests
 
         public Task<Stream?> OpenReadAsync(string relativePath, CancellationToken ct = default)
             => Task.FromResult<Stream?>(null);
+
+        public Task DeleteAsync(string relativePath, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     [Fact]

@@ -5114,6 +5114,68 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("organization_memberships", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Pictures.Picture", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Bytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("bytes");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("SetAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("set_at_utc");
+
+                    b.Property<Guid>("SetByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("set_by_user_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetByUserId")
+                        .HasDatabaseName("ix_pictures_set_by");
+
+                    b.HasIndex("Kind", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_pictures_kind_subject");
+
+                    b.ToTable("pictures", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_pictures_bytes", "bytes > 0 AND bytes <= 524288");
+
+                            t.HasCheckConstraint("ck_pictures_kind", "kind IN ('PERSON','SCHEDULE','INSTITUTION')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedActivity", b =>
                 {
                     b.Property<Guid>("Id")
