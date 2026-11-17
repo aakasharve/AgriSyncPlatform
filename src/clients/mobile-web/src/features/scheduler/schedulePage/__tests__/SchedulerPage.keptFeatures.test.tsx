@@ -85,6 +85,28 @@ describe('crop and plot pick', () => {
         expect(screen.queryByTestId('sched-tabs')).toBeNull();
     });
 
+    it('lane UI-7: the choice is the shared crop -> plot picker — crop tiles and plot chips in the crop\'s own colour; only the chosen crop\'s plots show', () => {
+        mount([crop([plot(), plot({ id: 'plot-2', name: 'B' })], { color: 'bg-purple-500' }), crop([plot({ id: 'plot-9', name: 'Z' })], { id: 'crop-2', name: 'Onion', color: 'bg-pink-500' })]);
+        const part = (el: HTMLElement, name: string) => el.querySelector(`[data-part="${name}"]`);
+        // tiles: the crop's colour strip; the chosen crop's tile is ticked and counts "1 पैकी 2 प्लॉट" (the plot chosen of the crop's plots)
+        expect(part(screen.getByTestId('pick-crop-crop-1'), 'accent')?.className).toContain('bg-purple-500');
+        expect(part(screen.getByTestId('pick-crop-crop-2'), 'accent')?.className).toContain('bg-pink-500');
+        expect(part(screen.getByTestId('pick-crop-crop-1'), 'tick')).toBeTruthy();
+        expect(part(screen.getByTestId('pick-crop-crop-2'), 'tick')).toBeNull();
+        expect(screen.getByTestId('pick-crop-crop-1')).toHaveTextContent('1 पैकी 2 प्लॉट');
+        // chips: the crop's colour dot; tapping one chooses that plot (one at a time, as before)
+        expect(part(screen.getByTestId('pick-plot-plot-1'), 'dot')?.className).toContain('bg-purple-500');
+        expect(screen.queryByTestId('pick-plot-plot-9')).toBeNull();
+        fireEvent.click(screen.getByTestId('pick-plot-plot-2'));
+        expect(screen.getByTestId('pick-plot-plot-1')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('pick-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
+        // the other crop: its first plot is chosen, as before, and the chips are now that crop's — it has one plot, so no chip row
+        fireEvent.click(screen.getByTestId('pick-crop-crop-2'));
+        expect(screen.getByTestId('pick-crop-crop-2')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByTestId('plot-pick')).toBeNull();
+        expect(screen.getByTestId('pick-crop-crop-1')).toHaveAttribute('aria-pressed', 'false');
+    });
+
     it('one crop with one plot: no chips to choose from', () => {
         mount();
         expect(screen.queryByTestId('crop-pick')).toBeNull();
@@ -310,7 +332,11 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         mount([crop([plot(), plot({ id: 'plot-2', name: 'B' })])]);
         fireEvent.click(screen.getByTestId('open-editor'));
         expect(screen.queryByTestId('editor-this-plot-only')).toBeNull();
+        // lane UI-7: the editor's plot choice is the shared chip too — the crop's colour dot, a tick on the chosen plot
+        expect(screen.getByTestId('editor-plot-plot-1').querySelector('[data-part="dot"]')).toBeTruthy();
+        expect(screen.getByTestId('editor-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(screen.getByTestId('editor-plot-plot-2'));
+        expect(screen.getByTestId('editor-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
         expect(text('editor-plot-name')).toBe('द्राक्ष · B');
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
         expect(text('editor-this-plot-only')).toBe('हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.');

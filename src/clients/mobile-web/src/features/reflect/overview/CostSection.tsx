@@ -18,7 +18,7 @@
  * says it is partial, and why, in his language (`reflectCopy`).
  */
 import React, { useState } from 'react';
-import { ChevronRight, TrendingUp, Wallet } from 'lucide-react';
+import { ChevronRight, IndianRupee, TrendingUp, Wallet } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { reflectCopy } from '../reflectCopy';
 import { topOf, type MoneyFigure, type PartialReason, type SeasonTotals, type Spend, type SpendBar, type SpendPoint, type SpendRange } from './moneyModel';
@@ -49,6 +49,31 @@ export const MoneyNotes: React.FC<{ figures: readonly MoneyFigure[]; testId: str
     return reasons.length > 0
         ? <span className="block space-y-0.5" data-testid={`${testId}-partial`}>{reasons.map(r => <span key={r} className="block text-[12.5px] font-bold text-amber-800" data-testid={`${testId}-partial-${r}`}>{line[r]}</span>)}</span>
         : null;
+};
+
+/**
+ * Lane UI-7 (founder D-150, picture O2) — the face of the "उत्पन्न आणि खर्च" header when it is a dark strip: an amber rupee circle, the section's
+ * name, the amount in amber, and the hint. The amount is the SAME figure the section's first card holds ("आतापर्यंत एकूण खर्च", `totals.cost`,
+ * the server's ledger, narrowed with the page) — never a record's own total; nothing recorded is "—", never ₹ 0 (P4); a figure made from an
+ * incomplete set says "अपूर्ण". The page draws it only for a seat that may see money (`totals.cost.hidden` is false).
+ * It is the CONTENT of `SectionBlock`'s toggle (`strip`), so the fold, the remembered fold and the reorder buttons are the section's own.
+ */
+export const MoneyStripFace: React.FC<{ figure: MoneyFigure; hint?: string }> = ({ figure, hint }) => {
+    const copy = reflectCopy(useOptionalLanguage()?.language);
+    return (
+        <span className="flex min-w-0 flex-1 items-center gap-3" data-testid="cost-strip">
+            <span data-part="rupee" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-500 text-stone-900"><IndianRupee size={19} strokeWidth={2.5} aria-hidden="true" /></span>
+            <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-bold leading-tight text-white/85">{copy.moneyStripTitle}</span>
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                    <Num className="text-[20px] font-extrabold leading-tight text-amber-300" testId="cost-strip-amount">{money(figure.amount)}</Num>
+                    <span className="text-[12px] font-bold text-white/75">{copy.moneyStripSpent}</span>
+                    <PartialTag figure={figure} testId="cost-strip-partial" />
+                </span>
+                {hint && <span className="block text-[11.5px] font-semibold leading-snug text-white/65">{hint}</span>}
+            </span>
+        </span>
+    );
 };
 
 /** The old "In hand income" card, in words. Opens उत्पन्न — never for money he may not see. */

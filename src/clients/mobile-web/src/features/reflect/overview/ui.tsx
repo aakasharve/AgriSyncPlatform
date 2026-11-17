@@ -73,23 +73,34 @@ export const SectionBlock: React.FC<{
     onToggle?: () => void;
     /** Order controls, drawn only while the page's "क्रम बदला" is on; an edge passes `undefined` (drawn disabled). */
     reorder?: { onMoveUp?: () => void; onMoveDown?: () => void };
-}> = ({ id, title, icon, tone, hint, count, children, open: openProp, onToggle, reorder }) => {
+    /**
+     * Lane UI-7 (founder D-150, picture O2) — the header as a DARK STRIP: this replaces the icon, title, hint and count inside the toggle
+     * (the money section's `MoneyStripFace`). The fold (`open` / `onToggle`), the chevron and the reorder buttons are the section's own,
+     * unchanged. Omit it and the header is exactly what it was.
+     */
+    strip?: React.ReactNode;
+}> = ({ id, title, icon, tone, hint, count, children, open: openProp, onToggle, reorder, strip }) => {
     const [ownOpen, setOwnOpen] = useState(true);
     const open = openProp ?? ownOpen;
     const toggle = onToggle ?? (() => setOwnOpen(o => !o));
     return (
         <section data-testid={`reflect-section-${id}`}
             className="overflow-hidden rounded-[26px] border border-white/60 bg-white/80 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] backdrop-blur-md">
-            <div className="flex items-center">
+            <div className={`flex items-center ${strip ? 'bg-stone-900' : ''}`}>
                 <Tap onClick={toggle} aria-expanded={open} data-testid={`reflect-section-${id}-toggle`}
-                    className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left">
-                    <IconDot tone={tone}>{icon}</IconDot>
-                    <span className="min-w-0 flex-1">
-                        <span className="block text-[17.5px] font-extrabold leading-tight text-stone-900">{title}</span>
-                        {hint && <span className="block text-[12.5px] font-semibold leading-snug text-stone-500">{hint}</span>}
-                    </span>
-                    {count}
-                    <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    rippleColor={strip ? 'rgba(252,211,77,0.25)' : undefined}
+                    className={`flex min-h-[64px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left ${strip ? 'bg-stone-900 text-white' : ''}`}>
+                    {strip ?? (
+                        <>
+                            <IconDot tone={tone}>{icon}</IconDot>
+                            <span className="min-w-0 flex-1">
+                                <span className="block text-[17.5px] font-extrabold leading-tight text-stone-900">{title}</span>
+                                {hint && <span className="block text-[12.5px] font-semibold leading-snug text-stone-500">{hint}</span>}
+                            </span>
+                            {count}
+                        </>
+                    )}
+                    <ChevronDown size={22} className={`shrink-0 transition-transform ${strip ? 'text-white/70' : 'text-stone-400'} ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </Tap>
                 {reorder && (
                     <span className="flex shrink-0 gap-1.5 pr-3" data-testid={`reflect-section-${id}-reorder`}>

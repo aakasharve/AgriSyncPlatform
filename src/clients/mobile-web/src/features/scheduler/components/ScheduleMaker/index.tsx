@@ -23,7 +23,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2 } from 'lucide-react';
 import type { CropProfile } from '../../../../types';
 import type { CropScheduleTemplate } from '../../scheduler.types';
-import { BigButton, ChoiceChips, Chip, GlassCard, SANS, SectionHead, Tap } from '../../../../shared/components/ui/placeUi';
+import { BigButton, Chip, GlassCard, SANS, SectionHead, Tap } from '../../../../shared/components/ui/placeUi';
+import CropPlotPicker from '../../../context/components/CropPlotPicker';
 import { getScheduleById } from '../../planning/ClientPlanEngine';
 import { libraryTemplates } from '../ScheduleLibraryView';
 import { DAY_ZERO_LABEL, OWNER_LABEL, SC } from '../../schedulePage/scheduleCopy';
@@ -100,8 +101,14 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
         <div className="space-y-4" style={{ fontFamily: SANS }} data-testid="schedule-editor">
             <GlassCard testId="editor-plot-card">
                 <SectionHead title={SC.edPlot} />
-                {crops.length > 1 && <div className="mt-2"><ChoiceChips items={crops.map(c => [c.id, cropNameIn(c.name, language, c.masterId)] as const)} value={cropId} onPick={pickCrop} testId="editor-crop" /></div>}
-                {crop && crop.plots.length > 1 && <div className="mt-2"><ChoiceChips items={crop.plots.map(p => [p.id, p.name] as const)} value={plotId} onPick={setPlotId} testId="editor-plot" /></div>}
+                {/* Lane UI-7 (founder D-150) — the shared crop -> plot picker (tiles, then plot chips in the crop's colour); same model as before:
+                    one crop, one plot (the crop's first on a crop change), a row drawn only when there is something to choose. */}
+                {(crops.length > 1 || (crop?.plots.length ?? 0) > 1) && (
+                    <div className="mt-2">
+                        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pickCrop} onTogglePlot={(_cropId, id) => setPlotId(id)}
+                            choiceOnly testIds={{ crop: key => `editor-crop-${key}`, plot: id => `editor-plot-${id}` }} />
+                    </div>
+                )}
                 <p className="m-0 mt-2 px-1 text-[17px] font-black text-stone-900" data-testid="editor-plot-name">{crop ? cropNameIn(crop.name, language, crop.masterId) : '—'} · {plot?.name ?? SC.noPlots}</p>
             </GlassCard>
 

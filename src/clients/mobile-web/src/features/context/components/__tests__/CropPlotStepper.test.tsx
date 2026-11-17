@@ -34,7 +34,8 @@ describe('CropSelector layout="stepper"', () => {
         render(<Harness />);
         expect(screen.getByTestId('the-lead').getAttribute('data-step')).toBe('crop');
         expect(screen.getByTestId('flow-crop-cane').textContent).toContain('ऊस');
-        expect(screen.getByTestId('flow-crop-cane').textContent).toContain('ऊस १ · ऊस २');
+        // UI-7: the shared tile says how many plots, not their names (the names are the next question)
+        expect(screen.getByTestId('flow-crop-cane').textContent).toContain('2 प्लॉट');
         expect(screen.getByTestId('flow-crop-cane').querySelector('img')?.getAttribute('src')).toBe('/images/crops/Sugarcane.jpg');
         expect(screen.getByTestId('flow-crop-whole-farm').textContent).toContain('Entire Farm');
         expect(screen.queryByTestId('flow-plot-cane-1')).toBeNull();
@@ -141,7 +142,9 @@ describe('CropSelector layout="stepper"', () => {
         const card = screen.getByTestId('flow-sel-cane');
         expect(card.textContent).toContain('CHOSEN-CROP');
         expect(card.textContent).toContain('ऊस');
-        expect(card.className).toContain('from-emerald-700');
+        // UI-7: the shared tile, chosen = green border and a tick (was a solid green card)
+        expect(card.className).toContain('border-emerald-600');
+        expect(card.querySelector('[data-part="tick"]')).toBeTruthy();
     });
 
     it('another crop is added from a tray behind one "+", not squeezed into the strip', () => {

@@ -29,6 +29,10 @@
  * offered. The money section reads the SERVER's cost ledger (`overview/useMoneyLedger.ts`), never a log's own total;
  * money this person may not see is "—" (founder D-22), and a total made from an incomplete set says so.
  *
+ * Lane UI-7 (founder D-150, 2026-11-17): शेताची स्थिती is the ONE crop -> plot picker every page uses (`context/components/CropPlotPicker.tsx`; the page still
+ * starts on every crop and every plot: `sel === null`), and the closed "उत्पन्न आणि खर्च" header is a dark money strip with the spent-so-far figure
+ * (`overview/CostSection.tsx` `MoneyStripFace`), absent for a seat that may not see money. Folds, order and reorder are untouched (D-4).
+ *
  * Lane RF2 (the founder's screen 1, 2026-10-30): the plot cards show only what happened, as chips in the result
  * screen's colours (no numbered squares, no colour key), plus a "संपूर्ण शेत" card for whole-farm work; a card opens
  * the plot's day (`day/DaySheets.PlotDayView`: buckets, then the time chips, each opening its recording inline). The
@@ -73,7 +77,7 @@ import { useReflectCopy } from './day/RecordingParts';
 import { useDayListen } from './day/useDayListen';
 import { ActivityCalendar, type CalendarMode } from './overview/ActivityCalendar';
 import { buildCalendarDay } from './overview/calendarModel';
-import { CostSection, InHandCard } from './overview/CostSection';
+import { CostSection, InHandCard, MoneyStripFace } from './overview/CostSection';
 import { DayBar } from './overview/DayBar';
 import { PastDayTell } from './overview/PastDayTell';
 import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
@@ -376,13 +380,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         {tellPastDay && <div className="mt-3"><PastDayTell dateKey={dateKey} onTell={tellPastDay} testId="past-day-tell-cal" /></div>}
                     </SectionBlock>
                 );
-            case 'cost':
+            case 'cost': {
+                const costHint = plotsOnly ? `${plotScopeCopy(language).totalsLabel} · ${plotScopeCopy(language).costHint}` : plotScopeCopy(language).costHint;
                 return (
-                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose"
-                        hint={plotsOnly ? `${plotScopeCopy(language).totalsLabel} · ${plotScopeCopy(language).costHint}` : plotScopeCopy(language).costHint} {...fold}>
+                    // Lane UI-7 (founder D-150) — the header is a dark money strip with the spent-so-far figure (the section's first card), for a seat that may
+                    // see money; for one that may not (`totals.cost.hidden`) it stays the plain header, exactly as before. Fold, order and reorder are the section's own.
+                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint={costHint}
+                        strip={money.totals.cost.hidden ? undefined : <MoneyStripFace figure={money.totals.cost} hint={costHint} />} {...fold}>
                         <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
                     </SectionBlock>
                 );
+            }
         }
     };
 

@@ -25,7 +25,8 @@ import { useBackDismiss } from '../core/navigation/useBackDismiss';
 import { computeDayState, getTaskCompletion } from '../shared/utils/dayState';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
-import { ChoiceChips, GlassCard, PageBar, SANS, Tap } from '../shared/components/ui/placeUi';
+import { GlassCard, PageBar, SANS, Tap } from '../shared/components/ui/placeUi';
+import CropPlotPicker from '../features/context/components/CropPlotPicker';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import ScheduleMaker from '../features/scheduler/components/ScheduleMaker';
 import ScheduleLibraryView, { libraryTemplates } from '../features/scheduler/components/ScheduleLibraryView';
@@ -231,11 +232,17 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         setView('HOME');
     };
 
+    // Lane UI-7 (founder D-150) — the crop and plot choice is THE shared picker: crop photo tiles, then the chosen crop's plot chips, each in the
+    // crop's own colour. The page keeps its own model (one crop, one plot; `pick` sets the crop's first plot) and its rule that a row is drawn
+    // only when there is something to choose; the library asks for the crop only.
+    const pickerIds = { cropRow: 'crop-pick', plotRow: 'plot-pick', crop: (key: string) => `pick-crop-${key}`, plot: (id: string) => `pick-plot-${id}` };
     const cropChips = crops.length > 1 && (
-        <div className="space-y-1" data-testid="crop-pick">
-            <p className="m-0 px-1 text-[13.5px] font-extrabold text-stone-600">{SC.cropPick}</p>
-            <ChoiceChips items={crops.map(c => [c.id, nameOf(c)] as const)} value={cropId} onPick={pick} testId="pick-crop" />
-        </div>
+        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pick} onTogglePlot={() => undefined}
+            hidePlots choiceOnly cropQuestion={SC.cropPick} testIds={pickerIds} />
+    );
+    const placePicker = (crops.length > 1 || (crop?.plots.length ?? 0) > 1) && (
+        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pick} onTogglePlot={(_cropId, id) => setPlotId(id)}
+            choiceOnly cropQuestion={SC.cropPick} plotQuestion={SC.plotPick} testIds={pickerIds} />
     );
 
     const shell = (title: string, back: (() => void) | undefined, body: React.ReactNode) => (
@@ -314,13 +321,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     return shell(SC.title, onBack, (
         <>
             {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
-            {cropChips}
-            {crop && crop.plots.length > 1 && (
-                <div className="space-y-1" data-testid="plot-pick">
-                    <p className="m-0 px-1 text-[13.5px] font-extrabold text-stone-600">{SC.plotPick}</p>
-                    <ChoiceChips items={crop.plots.map(p => [p.id, p.name] as const)} value={plotId} onPick={setPlotId} testId="pick-plot" />
-                </div>
-            )}
+            {placePicker}
             {crop && !plot && <GlassCard testId="sched-no-plot"><p className="m-0 text-[17px] font-black text-stone-900">{SC.noPlots}</p></GlassCard>}
             {crop && plot && !resolved && (
                 <GlassCard testId="sched-no-schedule">

@@ -25,17 +25,18 @@ const Harness: React.FC = () => {
 };
 
 describe('chosen and not chosen without reading', () => {
-    it('plots: chosen = green + ring + tick; not chosen = grey + dashed + empty ring', () => {
+    it('plots: chosen = green ring + tick; not chosen = plain grey ring, no tick', () => {
         render(<Harness />);
         fireEvent.click(screen.getByTestId('flow-crop-cane'));
         fireEvent.click(screen.getByTestId('flow-plot-cane-2'));
         const on = screen.getByTestId('flow-plot-cane-2');
         const off = screen.getByTestId('flow-plot-cane-1');
-        expect(on.className).toContain('from-emerald-700');
-        expect(on.className).toContain('ring-emerald-300');
+        // UI-7: the shared chip — chosen = green ring + a tick; not chosen = plain grey ring, no tick
+        expect(on.className).toContain('ring-emerald-500');
+        expect(on.className).toContain('bg-emerald-50');
         expect(on.querySelector('svg')).toBeTruthy();
-        expect(off.className).toContain('border-dashed');
-        expect(off.className).toContain('bg-stone-100');
+        expect(off.className).toContain('ring-stone-300');
+        expect(off.className).toContain('bg-white');
         expect(off.querySelector('svg')).toBeNull();
     });
 

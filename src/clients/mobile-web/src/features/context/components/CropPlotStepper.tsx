@@ -14,6 +14,11 @@
  *     plots he actually worked — across crops. "सर्व" shortcuts select everything.
  *   - the moment at least one plot (or the whole farm) is chosen, `footer` renders.
  *
+ * Lane UI-7 (founder D-150): the tiles and chips are THE shared crop -> plot look (`CropPlotPicker.tsx`: crop photo tiles in the
+ * crop's colour, plot chips with its colour dot) — the same on the log flow, PlanForm, the task-done sheet and the place picker. The
+ * questions, their order, the selection rules and the test ids did not change. The classic look (big photo cards, green plot tiles)
+ * stays behind `look: 'classic'` and for compare's own flags, until compare's lane.
+ *
  * Back is always one step and always a big labelled button: it clears the choice and
  * returns to the crop question. A crop with a single plot has that plot chosen for him
  * (see `cropSelection.ts`). No Marathi is invented here: every string is an existing
@@ -28,6 +33,7 @@ import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, useCropPicture } 
 import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
+import { CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
 import {
     EMPTY_SELECTION, allCropsSelected, allPlotsSelected, isGlobal, isReady, pendingCrops,
     plotsOf, selectAllPlots, selectEverything, toggleCrop, toggleGlobal, togglePlot, type Selection,
@@ -35,7 +41,8 @@ import {
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
-export interface StepperCrop { id: string; name: string; iconName: string; plots: readonly { id: string; name: string }[] }
+/** A `CropProfile` fits. `color` (the crop's `bg-…` class) and `masterId` are what the shared look (UI-7) reads from it. */
+export interface StepperCrop { id: string; name: string; iconName: string; masterId?: string; color?: string; plots: readonly { id: string; name: string }[] }
 export type StepperStep = 'crop' | 'plot';
 export interface StepperLabels {
     /** Select every crop and every plot. Hidden when absent. */
@@ -84,6 +91,14 @@ export interface StepperExtras {
     hideAddCrop?: boolean;
     /** Lane CMP-T — two colours only: the ring of a chosen crop that still has no plot chosen is emerald, not amber. Default false (the log page keeps its amber). */
     calmRings?: boolean;
+    /**
+     * Lane UI-7 (founder D-150) — which look the tiles and chips have. `'shared'` = the one crop -> plot look every page uses
+     * (`CropPlotPicker.tsx`: photo tiles in the crop's colour, plot chips with its colour dot); the order of the questions, the
+     * selection rules and every test id are the same in both. `'classic'` = the look before UI-7 (big photo cards, green plot tiles).
+     * Default: shared — except for the page that sets compare's own flags (`hideEntireFarm`, `hideAddCrop`, `calmRings`): compare
+     * waits for its own lane, so it keeps the classic look until then (it passes no `look`; it is not edited).
+     */
+    look?: 'shared' | 'classic';
 }
 export interface CropPlotStepperProps extends StepperExtras {
     crops: readonly StepperCrop[];
@@ -108,10 +123,14 @@ const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'image
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false, look,
 }) => {
     const languageContext = useOptionalLanguage();
     const language = languageContext?.language ?? 'en';
+    // spec I18 — the count words ("2 पैकी 2 प्लॉट") follow the crop names: the app's default outside a provider is Marathi.
+    const countLanguage = languageContext?.language ?? 'mr';
+    // Lane UI-7 — the shared look everywhere, but compare (it sets these three flags and nothing else does) keeps the classic one until its own lane.
+    const classic = look === 'classic' || (look === undefined && (hideEntireFarm || hideAddCrop || calmRings));
     // spec I18 — every crop name in his language (the founder's crop master); the stored name is never changed.
     // Outside the language provider (tests, previews) the app's own default, Marathi.
     const crops = storedCrops.map(c => ({ ...c, name: cropNameIn(c.name, languageContext?.language ?? 'mr') }));
@@ -127,6 +146,32 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const entireFarmHint = resolveOversightString(language, 'entireFarmHint');
     const renderFooter = (dense: boolean) => (typeof footer === 'function' ? footer({ dense }) : footer);
     const renderLead = (cropNames: string[]) => (typeof lead === 'function' ? lead({ step, cropNames, global }) : lead);
+
+    if (step === 'crop' && !classic) {
+        // Lane UI-7 — the shared look: a photo tile per crop (its colour strip, "N प्लॉट"), two to a row, then "संपूर्ण शेत" as one wide row.
+        // The question is the same as before (which crop, or the whole farm) and a tap does exactly what the old card did.
+        return (
+            <div className="px-3 pb-3 pt-2" style={{ fontFamily: SANS }} data-testid="flow-step-crop" data-crop-count={crops.length}>
+                {renderLead([])}
+                <div className="grid grid-cols-2 gap-2.5" data-testid="flow-crop-grid">
+                    {crops.map(c => (
+                        <CropTile key={c.id} testId={`flow-crop-${c.id}`} name={c.name} on={false} disabled={disabled}
+                            color={cropColorOf(c.color)} photo={<PickerCropPhoto crop={c} px={64} />}
+                            count={<PlotCount total={c.plots.length} language={countLanguage} />}
+                            onClick={() => { emit(sel.crops.includes(c.id) ? sel : toggleCrop(sel, c)); go('plot'); }} />
+                    ))}
+                </div>
+                {!hideEntireFarm && (
+                    <div className="mt-2.5">
+                        <CropTile wide testId="flow-crop-whole-farm" name={entireFarm} on={false} disabled={disabled}
+                            photo={<img src={ENTIRE_FARM_IMAGE} alt="" width={56} height={56} className="h-14 w-14 shrink-0 select-none rounded-full object-cover shadow-sm" draggable={false} />}
+                            count={<span data-testid="flow-crop-whole-farm-sub">{labels?.entireFarmShort ?? entireFarmHint}</span>}
+                            onClick={() => { emit(toggleGlobal(EMPTY_SELECTION)); go('plot'); }} />
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     if (step === 'crop') {
         // Crops + the entire farm, as one grid of equal cards: one column on a phone, two where there is room.
@@ -189,7 +234,26 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                     {/* Back (big, labelled) + the chosen crops as photos; the others are one small tap away. */}
                     <div className="relative flex items-center gap-2" data-testid="flow-strip">
                         <FlowBackButton stacked onClick={goBack} />
-                        {chosen.map(c => (
+                        {/* Lane UI-7 — the shared look: the chosen crop is the same photo tile, ticked, in the crop's colour. A crop that still
+                            needs a plot keeps the amber ring (the log page's old signal); tapping it removes the crop, as before. */}
+                        {!classic && chosen.map(c => {
+                            const ring = pending.includes(c.id) && !calmRings ? 'ring-[3px] ring-amber-300' : 'ring-[3px] ring-emerald-300';
+                            const remove = () => { const n = toggleCrop(sel, c); emit(n); if (n.crops.length === 0) go('crop'); };
+                            return multiCrop ? (
+                                <CropTile key={c.id} testId={`flow-sel-${c.id}`} name={c.name} on disabled={disabled} color={cropColorOf(c.color)}
+                                    photo={<PickerCropPhoto crop={c} px={28} />} onClick={remove}
+                                    className={`h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 ${ring}`} />
+                            ) : (
+                                <CropTile key={c.id} wide testId={`flow-sel-${c.id}`} name={c.name} on disabled={disabled} color={cropColorOf(c.color)}
+                                    photo={<PickerCropPhoto crop={c} px={46} />} onClick={remove}
+                                    count={<>
+                                        {labels?.selectedCrop && <span className="block text-[11.5px] font-bold text-emerald-700 max-[339px]:hidden">{labels.selectedCrop}</span>}
+                                        <PlotCount total={c.plots.length} picked={plotsOf(sel, c.id).length} language={countLanguage} />
+                                    </>}
+                                    className={`h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 ${ring}`} />
+                            );
+                        })}
+                        {classic && chosen.map(c => (
                             <button key={c.id} type="button" disabled={disabled} aria-pressed="true" data-testid={`flow-sel-${c.id}`}
                                 onClick={() => { const n = toggleCrop(sel, c); emit(n); if (n.crops.length === 0) go('crop'); }}
                                 className={`relative flex h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-900 text-left text-white shadow-lg ring-[3px] active:scale-95 ${multiCrop ? 'flex-col justify-between px-2 py-1.5' : 'items-center gap-2.5 px-2.5'} ${pending.includes(c.id) && !calmRings ? 'ring-amber-300' : 'ring-emerald-300'}`}>
@@ -247,9 +311,20 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
 
                     <div className="mt-3.5">{renderLead(chosen.map(c => c.name))}</div>
 
-                    <div className={`grid gap-2 ${cols}`}>
+                    <div className={classic ? `grid gap-2 ${cols}` : 'flex flex-wrap gap-2'} data-testid="flow-plot-list">
                         {shown.map(({ crop, plot }) => {
                             const on = plotsOf(sel, crop.id).includes(plot.id);
+                            if (!classic) {
+                                // Lane UI-7 — the shared look: a chip with the crop's colour dot; several crops on screen: a small crop photo says which.
+                                return (
+                                    <PlotChip key={plot.id} testId={`flow-plot-${plot.id}`} name={plot.name} on={on} disabled={disabled} color={crop.color} size="lg"
+                                        lead={multiCrop ? <PickerCropPhoto crop={crop} px={22} /> : undefined}
+                                        mark={marked?.plotIds.includes(plot.id)
+                                            ? <span data-testid={`flow-plot-mark-${plot.id}`} className="absolute -right-1 -top-2 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-extrabold leading-none text-amber-900">{marked.label}</span>
+                                            : undefined}
+                                        onClick={() => emit(togglePlot(sel, crop.id, plot.id))} />
+                                );
+                            }
                             return (
                                 <button key={plot.id} type="button" disabled={disabled} aria-pressed={on} data-testid={`flow-plot-${plot.id}`}
                                     onClick={() => emit(togglePlot(sel, crop.id, plot.id))}
