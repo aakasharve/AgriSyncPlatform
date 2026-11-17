@@ -43,6 +43,9 @@ export function useFarmerHealth(farmId: string | null | undefined, options?: { e
     queryFn: ({ signal }) => farmerHealthApi.getFarmerHealth(trimmed, signal),
     enabled: !explicitlyDisabled && trimmed.length > 0,
     staleTime: 60_000,
+    /* Each load of the one-farm page writes an audit row: never poll, never refetch on focus. */
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
     retry: 0, // 404s must fail fast — the search box's not-found path depends on it (A28)
   });
 }

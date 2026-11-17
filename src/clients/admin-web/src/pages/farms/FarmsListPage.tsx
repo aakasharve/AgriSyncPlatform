@@ -1,5 +1,6 @@
 import { metaRefreshedAt } from '@/lib/api';
 import { Wheat } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
 import { Masked, MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasured, StandingNote } from '@/components/state';
@@ -225,6 +226,12 @@ function farmDetail(farm: FarmSummary) {
   return (
     <div className="flex flex-col gap-3">
       <p>{lastLog ? `Last log ${lastLog}.` : NEVER_LOGGED}</p>
+      <Link
+        to={`/farmer-health/${encodeURIComponent(farm.farmId)}`}
+        className="w-fit text-body font-semibold text-text-1 underline"
+      >
+        Open this farm&rsquo;s page
+      </Link>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         <dt className="text-text-3">Farm id</dt>
         {/* The identifier an operator files a ticket with, and the only value
