@@ -125,7 +125,9 @@ public sealed class AdminOpsRepository(
                 RecentErrors: errors,
                 TopSufferingFarms: suffering,
                 AlertR9: alertR9,
-                ComputedAtUtc: nowUtc);
+                ComputedAtUtc: nowUtc,
+                ApiErrorSpike: alertR9.State == LiveAlertRules.Breach,
+                VoiceDegraded: null);
         }
         finally
         {

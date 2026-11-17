@@ -14,7 +14,7 @@ namespace ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 /// accounts included (it measures the server, not a farmer).</item>
 /// <item><b>R10</b>, voice recordings failing: voice jobs created in the <see cref="VoiceWindow"/> before the
 /// request that have finished (<see cref="CompanyMisCalculator.IsFinishedJobStatus"/>), jobs started by a test
-/// account left out; a breach when the failed share is more than <see cref="VoiceFailedPctLimit"/> percent. Fewer
+/// account or on a farm owned by one left out; a breach when the failed share is more than <see cref="VoiceFailedPctLimit"/> percent. Fewer
 /// than <see cref="MinFinishedRecordings"/> finished is not judged, never clear (Review Focus 4).</item>
 /// </list>
 /// </summary>
@@ -88,10 +88,17 @@ public static class LiveAlertRules
             return Voice(NotJudged, counted: null, outOf: null, start, end, CompanyMisCalculator.FarmListUnreadable);
         }
 
+        // Company MIS rule: leave out jobs started by a test account and jobs on farms owned by one.
+        var excludedFarmIds = rows.Farms
+            .Where(f => excludedUserIds.Contains(f.OwnerUserId))
+            .Select(f => f.FarmId)
+            .ToHashSet();
+
         var finished = rows.VoiceJobs
             .Where(j => j.CreatedAtUtc >= start
                         && j.CreatedAtUtc < end
                         && !excludedUserIds.Contains(j.UserId)
+                        && !excludedFarmIds.Contains(j.FarmId)
                         && CompanyMisCalculator.IsFinishedJobStatus(j.Status))
             .ToList();
         var failed = finished.Count(j => string.Equals(j.Status, nameof(AiJobStatus.Failed), StringComparison.Ordinal));

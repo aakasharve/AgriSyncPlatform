@@ -28,7 +28,15 @@ public sealed record AdminOpsHealthDto(
     AlertCheckDto AlertR9,
 
     // When this snapshot was computed
-    DateTime ComputedAtUtc);
+    DateTime ComputedAtUtc,
+
+    // Obsolete (plan CR-2e C30): sent only because the phone app's old admin page still reads them; they leave
+    // with that page in CR-2d. Use AlertR9 instead. = AlertR9.State == "breach".
+    bool? ApiErrorSpike = null,
+
+    // Obsolete (plan CR-2e C30): same reason. Always null: the voice check lives on its own route
+    // (GET /shramsafal/admin/ops/voice-check). Leaves in CR-2d.
+    bool? VoiceDegraded = null);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29). One alert check, judged live.
