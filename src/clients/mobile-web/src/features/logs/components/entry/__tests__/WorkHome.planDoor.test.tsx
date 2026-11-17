@@ -6,7 +6,7 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8c-2 Task 1; founder D-24, D-26, D-79, P5) - the plan door on the work home and
  * the route behind it, through the REAL `AppRouter` (real `renderLogView`, real `LogEntryFlow`, real `WorkHome`, real `SimpleRoutes`, real
  * plan page; only the contexts the router reads and the mic hardware are stubbed):
- *   - the primary owner and a holder of AssignWork (or PlanWork) see "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा" with "N कामे चालू";
+ *   - the primary owner and a holder of AssignWork (or PlanWork) see "नियोजन करा" (lane UI-6, founder D-150: it used to read "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा") with "N कामे चालू";
  *   - a plain worker - and a सहमालक or मुकादम the server gave nothing, and a seat whose authorities the phone does not know - sees
  *     "तुमच्यावर सोपवलेली कामे" with his own count (D-26: the label grants nothing; unknown fails closed);
  *   - the door opens the route 'plan-work' from both, and the page that opens is the planner's or the assignee's by the same answer;
@@ -165,7 +165,8 @@ describe('the door by seat (D-26: the server\'s authorities, never a label)', ()
     it('the primary owner: the plan door with the count of open work (not done, not cancelled, this farm only)', async () => {
         const door = await openHome();
         expect(door).toHaveAttribute('data-kind', 'plan');
-        expect(within(door).getByTestId('home-plan-title')).toHaveTextContent('कामांची जबाबदारी सोपवा / कामांचे नियोजन करा');
+        expect(within(door).getByTestId('home-plan-title')).toHaveTextContent('नियोजन करा');
+        expect(within(door).getByTestId('home-plan-title').textContent).toBe('नियोजन करा');
         await waitFor(() => expect(within(door).getByTestId('home-plan-count')).toHaveAttribute('data-count', '3'));
         expect(within(door).getByTestId('home-plan-count')).toHaveTextContent('3 कामे चालू');
     });
@@ -257,7 +258,7 @@ describe('English mode: English only', () => {
     it('the door for a planner and for a worker', async () => {
         h.language = 'en';
         const planner = await openHome();
-        expect(within(planner).getByTestId('home-plan-title')).toHaveTextContent('Hand over work / Plan the work');
+        expect(within(planner).getByTestId('home-plan-title')).toHaveTextContent('Plan the work');
         expect(planner.textContent).not.toMatch(/[ऀ-ॿ]/);
         cleanup();
         seat('Worker', [], WORKER);

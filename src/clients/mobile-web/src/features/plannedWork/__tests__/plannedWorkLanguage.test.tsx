@@ -73,7 +73,7 @@ describe('the word tables', () => {
         expect(w.submitAssign).toBe('काम सोपवा');
         expect(w.submitRemind).toBe('आठवण ठेवा');
         expect(w.nobody).toBe('फक्त आठवण (कोणालाही नाही)');
-        expect(PLAN_DOOR_WORDS.mr.plan).toBe('कामांची जबाबदारी सोपवा / कामांचे नियोजन करा');
+        expect(PLAN_DOOR_WORDS.mr.plan).toBe('नियोजन करा'); // lane UI-6 (founder D-150): was 'कामांची जबाबदारी सोपवा / कामांचे नियोजन करा'
         expect(PLAN_DOOR_WORDS.mr.mine).toBe('तुमच्यावर सोपवलेली कामे');
         expect(PLAN_DOOR_WORDS.mr.openCount(4)).toBe('4 कामे चालू');
     });

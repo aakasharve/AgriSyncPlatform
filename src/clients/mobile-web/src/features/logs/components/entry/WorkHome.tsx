@@ -24,6 +24,11 @@
  * with the rule in big text, until today's work and the headcount are both told; its button is this page's own
  * "झालेले काम सांगा" step (crop → plot → mic, rule CTX-1). Once both are told it opens the names. The old door's way to
  * the हजेरी place (वही, आढावा, people) stays as the card's small "हजेरी वही बघा" link. Same people as before.
+ *
+ * Lane UI-6 (founder D-150, notes 1.2 and 2.4; the approved picture H1): the Home is TWO big doors and nothing louder. Top to
+ * bottom: the update card; the question "काय करायचं आहे?" as one small line (the big Sathi banner is gone - the picture has none);
+ * the solid green record door (the biggest block); the solid blue "नियोजन करा" door under it (`PlanDoor`); the हजेरी card, only
+ * when a head count was said; the money as a full-width dark card.
  */
 import React from 'react';
 import { ChevronRight, Mic } from 'lucide-react';
@@ -52,20 +57,16 @@ export interface WorkHomeProps {
 export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor }) => (
     <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
         <AppUpdateCard />
-        <div className="relative flex min-h-[88px] items-center overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 pl-[26%] pr-3">
-            <img src="/images/sathi/sathi-points-down-both.png" alt="" width={1086} height={1448}
-                className="pointer-events-none absolute bottom-0 left-1 top-[-8px] h-[calc(100%+8px)] w-[24%] object-contain object-bottom" />
-            <h2 className="m-0 py-3 text-[22px] font-extrabold leading-tight text-stone-900" data-testid="home-title">{HOME_WORDS.title}</h2>
-        </div>
+        <h2 className="m-0 px-1 text-[15px] font-bold leading-snug text-stone-600" data-testid="home-title">{HOME_WORDS.title}</h2>
 
         <Tap onClick={onTell} data-testid="home-tell" rippleColor="rgba(255,255,255,0.35)"
-            className="flex min-h-[132px] w-full items-center gap-4 rounded-[28px] bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-left text-white shadow-[0_10px_26px_rgba(5,150,105,0.35)]">
-            <span className="grid h-[76px] w-[76px] shrink-0 place-items-center rounded-full bg-white text-emerald-700 shadow-md"><Mic size={42} strokeWidth={2.4} aria-hidden="true" /></span>
+            className="flex min-h-[132px] w-full items-center gap-3 rounded-[20px] bg-emerald-700 px-4 py-5 text-left text-white shadow-[0_8px_20px_rgba(4,120,87,0.28)]">
+            <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full bg-white/20 text-white"><Mic size={28} strokeWidth={2.4} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[26px] font-extrabold leading-tight">{HOME_WORDS.tell}</span>
-                <span className="mt-1 block text-[16px] font-semibold leading-snug text-emerald-50">{HOME_WORDS.tellSub}</span>
+                <span className="block text-[26px] font-extrabold leading-[1.15]" data-testid="home-tell-title">{HOME_WORDS.tell}</span>
+                <span className="mt-1 block text-[13px] font-semibold leading-snug text-emerald-50" data-testid="home-tell-sub">{HOME_WORDS.tellSub}</span>
             </span>
-            <ChevronRight size={28} className="shrink-0" aria-hidden="true" />
+            <ChevronRight size={24} className="shrink-0" aria-hidden="true" />
         </Tap>
 
         {planDoor && <PlanDoor {...planDoor} />}
