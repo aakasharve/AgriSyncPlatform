@@ -505,7 +505,7 @@ export default function OpsLivePage() {
           lastHeard: null,
           lastHeardWhy: 'This console never reads these views, so it has never heard from them.',
           detail:
-            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This endpoint reads two. That is why this screen says NOT CHECKED rather than CLEAR for them: it has no state for them, and a rule this screen never ran cannot be reported as passing.',
+            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This screen shows none of them: its alert checks are not built yet, and a rule this screen never ran cannot be reported as passing.',
           facts: [
             ['Views', 'r1 smooth decay … r8 referral quality'],
             ['Read by', 'AlertDispatcherJob, daily at 03:30 UTC'],
@@ -668,8 +668,8 @@ export default function OpsLivePage() {
             <MetricLines metric="live-service-health" />
             <p className="text-caption text-text-2">
               These feeds do not share a clock, so this section carries no single freshness chip.
-              Each row states when that feed was last heard, and two of them have no timestamp this
-              screen can read at all. Open a row for what it is and what it cannot say.
+              Each row states when that feed was last heard; the eight daily alert views have no
+              timestamp this screen can read. Open a row for what it is and what it cannot say.
             </p>
             <DataList<ServiceRow>
               id="ops-live-services"
