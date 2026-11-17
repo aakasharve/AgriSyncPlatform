@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { QueryCache } from '@tanstack/react-query';
@@ -8,25 +8,16 @@ import {
   FeedDown,
   LoadFailed,
   NotMeasured,
-  NotMeasuredPanel,
+  MetricLines,
+  NotBuiltYet,
   StandingNote,
 } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
-import { KpiCard } from '@/components/ui/KpiCard';
-import {
-  FROM_A_NIGHTLY_VIEW,
-  R9,
-  R10,
-  RULES_NOT_CHECKED_BY_OPS_HEALTH,
-  RULE_WORD,
-  ruleStateOf,
-  type RuleState,
-} from '@/lib/alertRules';
 import { metaRefreshedAt, type AdminResponse } from '@/lib/api';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useOpsHealth } from '@/hooks/useOpsHealth';
-import type { OpsErrorEvent, OpsFarmError, OpsHealthData } from '@/hooks/useOpsHealth';
+import type { OpsErrorEvent } from '@/hooks/useOpsHealth';
 
 /**
  * LIVE HEALTH — the screen where the console stops contradicting itself.
@@ -170,118 +161,16 @@ import type { OpsErrorEvent, OpsFarmError, OpsHealthData } from '@/hooks/useOpsH
 
 /* ─────────────────────────────────────────────────────────── THE RULES */
 
-/**
- * THE FOUR STATES, THE TWO RULES AND THEIR THRESHOLDS NOW LIVE IN
- * `@/lib/alertRules` — moved there by Task 26, unchanged.
- *
- * Not a tidy-up. Home counts R9 and R10 breaches on its Active Alerts tile and
- * takes its Voice Success tone from R10, so those threshold sentences are now
- * read by TWO screens. A second copy of "voice failure rate above 20% in 6
- * hours" would be a second statement of one fact about the database, and the
- * day one of them changed the other would go on rendering the old number under
- * the same rule id — the drift `nav.ts` was written to end, in a place where it
- * would make one of two screens lie about an alert.
- *
- * Every word rendered below is byte-identical to what this screen rendered
- * before the move; the file it now comes from carries the SQL citations.
- */
-interface RuleRow {
-  id: string;
-  name: string;
-  /** The rule in the words of the SQL that defines it. */
-  rule: string;
-  state: RuleState;
-  meta: string;
-}
-
-function rulesFrom(data: OpsHealthData | undefined): RuleRow[] {
-  return [
-    {
-      id: R9.id,
-      name: R9.name,
-      rule: R9.rule,
-      state: data ? ruleStateOf(data.apiErrorSpike) : 'unread',
-      meta:
-        data && data.apiErrorSpike !== null
-          ? FROM_A_NIGHTLY_VIEW
-          : `${R9.view} could not be read on this request`,
-    },
-    {
-      id: R10.id,
-      name: R10.name,
-      rule: R10.rule,
-      state: data ? ruleStateOf(data.voiceDegraded) : 'unread',
-      meta:
-        data && data.voiceDegraded !== null
-          ? FROM_A_NIGHTLY_VIEW
-          : `${R10.view} could not be read on this request`,
-    },
-    {
-      /* D8, in one row. Property (5) is why the sentence is about THIS
-         endpoint rather than about the platform. */
-      id: RULES_NOT_CHECKED_BY_OPS_HEALTH.id,
-      name: RULES_NOT_CHECKED_BY_OPS_HEALTH.name,
-      rule: RULES_NOT_CHECKED_BY_OPS_HEALTH.rule,
-      state: 'not-checked',
-      meta:
-        'this endpoint reads two views and these are not among them, so this screen has no state to report for them',
-    },
-  ];
-}
-
-function AlertBadge({ row }: { row: RuleRow }) {
-  /* THREE TONES, NOT TWO. The old badge chose between red and green on
-     `breached === true`, so `null` — the value the endpoint sends when the
-     view is missing — was painted green with a tick beside the word "N/A".
-     Unknown is grey here, and grey is not a quieter green. */
-  const tone =
-    row.state === 'breach'
-      ? 'bg-tint-red text-red'
-      : row.state === 'clear'
-        ? 'bg-tint-green text-green'
-        : 'bg-tint-grey text-text-3';
-
-  return (
-    <div
-      data-rule={row.id}
-      data-rule-state={row.state}
-      className={cn('glass-tile flex flex-col gap-1 rounded-panel px-5 py-4', tone)}
-    >
-      <div className="flex items-baseline gap-3">
-        <p className="min-w-0 flex-1 text-body font-semibold text-text-1">
-          {row.id} · {row.name}
-        </p>
-        <span className="flex-none text-caption font-semibold tabular-nums">
-          {RULE_WORD[row.state]}
-        </span>
-      </div>
-      <p className="text-caption text-text-2">{row.rule}</p>
-      <p className="text-caption text-text-3">{row.meta}</p>
-    </div>
-  );
-}
 
 /* ────────────────────────────────────────────────────────── THE FIGURES */
 
-/** Property (7). Five zeroes are what the `catch` sends, so nothing in the
- *  block is claimed as a reading when they all arrive together. */
-function voiceIsUnreadable(d: OpsHealthData): boolean {
-  return (
-    d.voiceInvocations24h === 0 &&
-    d.voiceFailures24h === 0 &&
-    d.voiceFailureRatePct === 0 &&
-    d.voiceAvgLatencyMs === 0 &&
-    d.voiceP95LatencyMs === 0
-  );
-}
 
-/** A duration of 0ms is the server's `COALESCE`, not a measurement — the same
- *  rule Task 19 applies to `avgLatencyMs` on `/ops/voice`. */
+/* ─────────────────────────────────────────────────── THE EVENTS TABLE */
+
+/** A duration of 0ms is the server's `COALESCE`, not a measurement. */
 function latencyOf(v: number | null | undefined): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
 }
-
-/* ─────────────────────────────────────────────────── THE EVENTS TABLE */
 
 const EVENT_TONE: Record<string, string> = {
   'api.error': 'bg-tint-red text-red',
@@ -379,109 +268,6 @@ const EVENT_COLUMNS: DataListColumn<OpsErrorEvent>[] = [
 
 /* ──────────────────────────────────────────────── THE SUFFERING TABLE */
 
-/**
- * 🛑 PROPERTY (10) — WHAT CAN REACH THIS PANEL, AND WHAT ITS THREE
- * BREAKDOWN COLUMNS CAN SAY. Traced through the backend on 2026-09-01.
- *
- * The query is `WHERE event_type IN ('api.error','client.error') AND
- * occurred_at_utc >= NOW() - INTERVAL '24 hours' AND farm_id IS NOT NULL
- * GROUP BY farm_id HAVING COUNT(*) >= 2 ORDER BY error_count DESC LIMIT 10`
- * (`AdminOpsRepository.cs:128-150`). Three consequences:
- *
- *  A. `farm_id IS NOT NULL` IS A NARROW DOOR. The middleware reads the farm
- *     off a `farm_id` claim (`RequestObservabilityMiddleware.cs:161-162`) and
- *     no token this platform issues carries one — Task 18 verified that on
- *     the issuer, and `/telemetry/client-error` reads the same absent claim
- *     (`Program.cs:684`). A row is attributed only when the mobile client
- *     posts it through `/analytics/ingest`, which lifts `props.farmId` out of
- *     the body (`IngestEventsHandler.cs:114-123`). In `mobile-web` exactly
- *     one `emitClientError` call site supplies that prop: the voice-clip
- *     archive failure (`VoiceClipRetention.ts:376`). So in practice a farm
- *     appears here by failing to archive a voice clip twice in a day, and an
- *     empty panel is not evidence that no farmer is suffering.
- *
- *  B. THE THREE COLUMNS ARE `LIKE` MATCHES ON THE ENDPOINT, NOT A SPLIT.
- *     `FILTER (WHERE props->>'endpoint' LIKE '%sync%')`, `'%log%'`,
- *     `'%voice%'`. An endpoint containing two of those words is counted
- *     twice, an endpoint containing none is in the total and in no column,
- *     and a row with no `endpoint` prop at all — which is every row the one
- *     attributed emitter in (A) produces — scores 0 in all three. They do not
- *     sum to the total and are not meant to be read as parts of it.
- *
- *  C. THE `voice` COLUMN HAS A DEAD BRANCH. Its filter reads
- *     `endpoint LIKE '%voice%' OR event_type = 'ai.invocation' AND
- *     props->>'outcome' = 'failure'`, and `AND` binds tighter than `OR`, so
- *     the second half is `(ai.invocation AND failure)` — a combination the
- *     outer `WHERE event_type IN ('api.error','client.error')` has already
- *     excluded. It can never contribute. Whoever wrote it meant failed AI
- *     calls to count; they do not.
- */
-const SUFFERING_COLUMNS: DataListColumn<OpsFarmError>[] = [
-  {
-    key: 'farm',
-    label: 'Farm',
-    /* A52 — farm id and NOTHING ELSE. This feed carries no name; the one on
-       `/farms/suffering` does. Inventing one here would need a second call
-       per row. */
-    render: (f) => (
-      <span title={f.farmId} className="break-all">
-        {f.farmId.slice(0, 8)}…
-      </span>
-    ),
-    sortType: 'text',
-    sortValue: (f) => f.farmId,
-  },
-  {
-    key: 'errorCount',
-    label: 'Events',
-    align: 'right',
-    render: (f) => <span className="font-semibold text-red">{fmt.num(f.errorCount)}</span>,
-    sortType: 'num',
-    sortValue: (f) => f.errorCount,
-    defaultDir: 'desc',
-  },
-  {
-    key: 'syncErrors',
-    label: 'Sync',
-    align: 'right',
-    render: (f) => fmt.num(f.syncErrors),
-    sortType: 'num',
-    sortValue: (f) => f.syncErrors,
-    defaultDir: 'desc',
-  },
-  {
-    key: 'logErrors',
-    label: 'Logs',
-    align: 'right',
-    render: (f) => fmt.num(f.logErrors),
-    sortType: 'num',
-    sortValue: (f) => f.logErrors,
-    defaultDir: 'desc',
-  },
-  {
-    key: 'voiceErrors',
-    label: 'Voice',
-    align: 'right',
-    render: (f) => fmt.num(f.voiceErrors),
-    sortType: 'num',
-    sortValue: (f) => f.voiceErrors,
-    defaultDir: 'desc',
-  },
-  {
-    key: 'lastErrorAt',
-    label: 'Last event',
-    /* A51's other half — minutes, not seconds. This is a summary column over
-       a 24-hour window, not a log line. */
-    render: (f) => (
-      <span className="tabular-nums">
-        {fmt.time(f.lastErrorAt, DATE_FORMATS.opsLiveLastErr) ?? <NotMeasured />}
-      </span>
-    ),
-    sortType: 'date',
-    sortValue: (f) => f.lastErrorAt,
-    defaultDir: 'desc',
-  },
-];
 
 /* ────────────────────────────────────── THE NIGHTLY FEEDS, DERIVED */
 
@@ -508,7 +294,6 @@ const SCREEN_LABELS: Record<string, string> = {
   'users/list': 'Users',
   'ops/errors': 'API Errors',
   'ops/health': 'Live Health',
-  'ops/voice': 'Voice Pipeline',
   'metrics/wvfd': 'North Star WVFD',
   'farmer-health/cohort': 'Farmer Health',
   'farmer-health/drilldown': 'Farmer Health drilldown',
@@ -669,24 +454,12 @@ export default function OpsLivePage() {
   const readAt = fmt.dateTime(serverStamp, DATE_FORMATS.usersLastLogin);
   const checkedAt = readAt ?? 'a time the server did not report';
 
-  const rules = useMemo(() => rulesFrom(data), [data]);
-  const readHere = rules.filter((r) => r.state !== 'not-checked');
-  const breached = rules.filter((r) => r.state === 'breach');
-  const unread = readHere.filter((r) => r.state === 'unread');
 
   const events = data?.recentErrors ?? [];
-  const farms = data?.topSufferingFarms ?? [];
   /* Property (9). 50 is the server's LIMIT, so a full page is the one case
      where this table is a sample rather than the answer. */
   const eventsCapped = events.length >= 50;
 
-  const unreadable = data ? voiceIsUnreadable(data) : false;
-  const invocations = data && !unreadable ? data.voiceInvocations24h : null;
-  const failures = data && !unreadable ? data.voiceFailures24h : null;
-  /* A rate needs a denominator. With no calls the server sends 0 because of
-     its own `COALESCE`, not because nothing failed. */
-  const failureRate = data && !unreadable && data.voiceInvocations24h > 0 ? data.voiceFailureRatePct : null;
-  const p95 = data && !unreadable ? latencyOf(data.voiceP95LatencyMs) : null;
 
   const services: ServiceRow[] = data
     ? [
@@ -708,23 +481,6 @@ export default function OpsLivePage() {
           ],
         },
         {
-          id: 'voice-counters',
-          name: 'analytics.events · AI calls, 24h',
-          feeds: 'The four tiles above',
-          stateText: unreadable ? 'No reading' : 'Reporting',
-          tone: unreadable ? 'grey' : 'green',
-          lastHeard: readAt,
-          detail: unreadable
-            ? 'Every one of the five figures came back as zero. That is also exactly what this query returns when it throws — the catch block substitutes (0, 0, 0, 0, 0) — so the tiles above report no reading rather than a quiet day.'
-            : 'Counts every ai.invocation row in the trailing 24 hours. It is not only voice: receipt photos and patti photos are the same kind of call and are counted here too, because the feed records the call and not what it was for.',
-          facts: [
-            ['Window', 'trailing 24 hours'],
-            ['Filter', "event_type = 'ai.invocation'"],
-            ['Calls', fmt.num(invocations) ?? 'no reading'],
-            ['On failure', 'returns five zeroes with HTTP 200'],
-          ],
-        },
-        {
           id: 'events-2h',
           name: 'analytics.events · errors and slow calls, 2h',
           feeds: 'Recent events, below',
@@ -738,75 +494,6 @@ export default function OpsLivePage() {
             ['Cap', '50 rows'],
             ['Rows', fmt.num(events.length) ?? '0'],
             ['Not included', "sync.mutation_rejected — a 200 that refused a farmer's work"],
-          ],
-        },
-        {
-          id: 'suffering-24h',
-          name: 'analytics.events · attributed errors, 24h',
-          feeds: 'The suffering watchlist, below',
-          stateText: farms.length > 0 ? 'Reporting' : 'Nothing received',
-          tone: farms.length > 0 ? 'green' : 'grey',
-          lastHeard: readAt,
-          detail:
-            'Farms with two or more attributed error events in a day, worst ten first. Attribution needs a farm id on the row, and almost nothing the server emits carries one, so this list is much narrower than its title suggests.',
-          facts: [
-            ['Window', 'trailing 24 hours'],
-            ['Entry', '2 or more events'],
-            ['Cap', 'top 10 farms'],
-            ['Farms listed', fmt.num(farms.length) ?? '0'],
-          ],
-        },
-        {
-          id: 'alert-r9',
-          name: 'mis.alert_r9_api_error_spike',
-          feeds: 'The R9 badge above',
-          stateText: data.apiErrorSpike === null ? 'Not readable' : 'Read',
-          tone: data.apiErrorSpike === null ? 'grey' : 'blue',
-          lastHeard: null,
-          lastHeardWhy:
-            'A materialized view holds the answer from its last rebuild. This endpoint reports the state and not the rebuild time, so this screen cannot say how old the verdict is.',
-          detail:
-            'A materialized view counting api.error rows in one hour, breaching above thirty. Rebuilt once a day at 02:00 UTC by MisRefreshJob, which is the only thing in this repository that refreshes it.',
-          facts: [
-            ['Rule', 'more than 30 API errors in 1 hour'],
-            ['Rebuild', 'daily, 02:00 UTC'],
-            ['Verdict', data.apiErrorSpike === null ? 'not readable' : data.apiErrorSpike ? 'BREACH' : 'CLEAR'],
-            ['Delivery on breach', 'one line in the API host log'],
-          ],
-        },
-        {
-          id: 'alert-r10',
-          name: 'mis.alert_r10_voice_degraded',
-          feeds: 'The R10 badge above',
-          stateText: data.voiceDegraded === null ? 'Not readable' : 'Read',
-          tone: data.voiceDegraded === null ? 'grey' : 'blue',
-          lastHeard: null,
-          lastHeardWhy:
-            'A materialized view holds the answer from its last rebuild. This endpoint reports the state and not the rebuild time, so this screen cannot say how old the verdict is.',
-          detail:
-            'A materialized view over ai.invocation rows in six hours, breaching above a 20% failure rate. Rebuilt once a day at 02:00 UTC. The tiles above cover 24 hours, so their failure rate is not the number this rule reads.',
-          facts: [
-            ['Rule', 'voice failure rate above 20% in 6 hours'],
-            ['Rebuild', 'daily, 02:00 UTC'],
-            ['Verdict', data.voiceDegraded === null ? 'not readable' : data.voiceDegraded ? 'BREACH' : 'CLEAR'],
-            ['Delivery on breach', 'one line in the API host log'],
-          ],
-        },
-        {
-          id: 'alert-r1-r8',
-          name: 'mis.alert_r1 … r8 (eight views)',
-          feeds: 'The daily alert job only — nothing in this console',
-          stateText: 'Not read here',
-          tone: 'grey',
-          lastHeard: null,
-          lastHeardWhy: 'This console never reads these views, so it has never heard from them.',
-          detail:
-            'Eight more detector views exist and AlertDispatcherJob reads all ten once a day. This endpoint reads two. That is why the R1–R8 row above says NOT CHECKED rather than CLEAR: this screen has no state for them, and a rule this screen never ran cannot be reported as passing.',
-          facts: [
-            ['Views', 'r1 smooth decay … r8 referral quality'],
-            ['Read by', 'AlertDispatcherJob, daily at 03:30 UTC'],
-            ['Read here', 'no'],
-            ['Delivery on breach', 'one line in the API host log'],
           ],
         },
         {
@@ -864,10 +551,10 @@ export default function OpsLivePage() {
             Live Health
           </h1>
           <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
-            The two automatic checks the server actually runs, how the AI has behaved over the last
-            24 hours, and whether each of the sources behind those numbers answered. This covers the
-            whole platform: the server is never asked about one organisation here, so switching
-            organisation in the top bar changes nothing on this screen.
+            What the server reported in the last two hours, and whether each of the sources behind it
+            answered. This covers the whole platform: the server is never asked about one
+            organisation here, so switching organisation in the top bar changes nothing on this
+            screen.
           </p>
         </div>
         {/* A chip may only state an age it actually has, and the age it states
@@ -888,7 +575,7 @@ export default function OpsLivePage() {
           /* Rendered ONLY inside the sentence that disowns it — the FeedDown
              contract, asserted in this screen's test: the figure appears in
              that span and nowhere else on the page. */
-          lastGood={`${fmt.num(events.length)} events and ${fmt.num(farms.length)} farms at ${checkedAt}`}
+          lastGood={`${fmt.num(events.length)} events at ${checkedAt}`}
         />
       )}
 
@@ -896,110 +583,17 @@ export default function OpsLivePage() {
 
       {!feedDown && !loadFailed && (
         <>
-          {/* ── D8: three states, and eight rules that say so ───────────── */}
-          <section className="flex flex-col gap-3" aria-labelledby="ops-live-rules">
-            <h2 id="ops-live-rules" className="text-h2 font-bold text-text-1">
-              Alert rules
-            </h2>
-            <div data-rules="ops-live" className="grid gap-4 lg:grid-cols-3">
-              {rules.map((row) => (
-                <AlertBadge key={row.id} row={row} />
-              ))}
-            </div>
+          {/* L1: an idea (B24). The old badges read a view rebuilt once a day; no verdict is drawn. */}
+          <NotBuiltYet metric="live-alert-rules" />
 
-            {/* Plan Step 5, verified in `AlertDispatcherJob.cs` rather than
-                carried over from the prototype's copy. */}
-            <NotMeasuredPanel
-              title="Evaluated, but never delivered"
-              why={
-                <>
-                  A breach writes one line to the API host log and nothing else. The job that reads
-                  these views runs once a day at 03:30 UTC, builds an email body and then logs it
-                  with the words &ldquo;Would email&rdquo; &mdash; the SMTP wiring is still a TODO.
-                  No email, no SMS, no push, no page, and nobody is on call. A breach reaches a
-                  person only when somebody opens this page or reads the log, so read the states
-                  above as &ldquo;what the rule found&rdquo; and never as &ldquo;somebody was
-                  told&rdquo;.
-                </>
-              }
-            />
-
-            <p className="text-caption text-text-3">
-              {fmt.num(readHere.length)} of the {fmt.num(rules.length)} entries above are rules this
-              endpoint reads, and {fmt.num(breached.length)} of those{' '}
-              {breached.length === 1 ? 'is' : 'are'} breached.
-              {unread.length > 0 && (
-                <>
-                  {' '}
-                  {fmt.num(unread.length)} could not be read on this request at all.
-                </>
-              )}{' '}
-              Both verdicts come from materialized views rebuilt once a day at 02:00 UTC, so a CLEAR
-              here describes the window that ended at the last rebuild rather than the last hour.
-              The remaining entry stands for eight named rules this endpoint does not read, which is
-              why it says NOT CHECKED rather than CLEAR.
-            </p>
-          </section>
-
-          {/* ── the four tiles ─────────────────────────────────────────── */}
-          <section className="flex flex-col gap-3" aria-labelledby="ops-live-voice">
-            <h2 id="ops-live-voice" className="text-h2 font-bold text-text-1">
-              AI pipeline &mdash; last 24 hours
-            </h2>
-            <div data-kpis="ops-live" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard
-                label="Calls"
-                value={fmt.num(invocations)}
-                state={invocations === null ? 'unmeasured' : 'ok'}
-                tone="blue"
-                caption={`read at ${checkedAt}`}
-                note="Voice parses, receipt extractions and patti extractions together. The feed records the call, not what it was for."
-              />
-              <KpiCard
-                label="Failed calls"
-                value={fmt.num(failures)}
-                state={failures === null ? 'unmeasured' : 'ok'}
-                tone={failures !== null && failures > 0 ? 'red' : 'blue'}
-                caption={`read at ${checkedAt}`}
-                note="A failure is a call that did not complete. Nothing here measures whether a call that DID complete understood the farmer."
-              />
-              <KpiCard
-                label="Failure rate"
-                value={fmt.pct(failureRate)}
-                state={failureRate === null ? 'unmeasured' : 'ok'}
-                /* No verdict is painted: R10's line is a different window, so
-                   there is nothing on this figure to be right or wrong about. */
-                tone="blue"
-                caption={
-                  invocations !== null && invocations > 0
-                    ? `over ${fmt.num(invocations)} calls`
-                    : 'no call was measured in this window'
-                }
-                note="R10 watches a 20% failure rate over 6 hours. This figure covers 24 hours, so it is not the number that rule reads."
-              />
-              <KpiCard
-                label="P95 latency"
-                value={fmt.ms(p95)}
-                state={p95 === null ? 'unmeasured' : 'ok'}
-                tone="blue"
-                caption={p95 === null ? 'no duration was recorded' : `read at ${checkedAt}`}
-                note="The server sends 0 when it has no latency to send, so a zero is treated as the absence it stands for rather than as an instant reply."
-              />
-            </div>
-            {unreadable && (
-              <p className="text-caption text-text-3">
-                All five figures came back as zero, which is also what this query returns when it
-                fails &mdash; its catch block substitutes zeroes and the request still succeeds. The
-                tiles report no reading rather than a quiet day.
-              </p>
-            )}
-          </section>
+          {/* L2 to L5 (the four AI pipeline tiles) are doubles of Company MIS Quality and are gone (B24). */}
 
           {/* ── recent events ──────────────────────────────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-events">
             <h2 id="ops-live-events" className="text-h2 font-bold text-text-1">
               Recent events &mdash; last 2 hours
             </h2>
+            <MetricLines metric="live-recent-events" />
             <p className="text-caption text-text-2">
               Not all of these are failures. <b>api.slow</b> is a write that succeeded and took over
               two seconds, and <b>client.error</b> is the farmer&rsquo;s own device reporting a
@@ -1046,63 +640,15 @@ export default function OpsLivePage() {
             )}
           </section>
 
-          {/* ── A52 / B10: kept, because it is not the other one ────────── */}
-          <section className="flex flex-col gap-3" aria-labelledby="ops-live-suffering">
-            <h2 id="ops-live-suffering" className="text-h2 font-bold text-text-1">
-              Farmer suffering watchlist &mdash; last 24 hours
-            </h2>
-            <p className="text-caption text-text-2">
-              Farms with two or more attributed error events in the last 24 hours, worst ten first,
-              computed live on this request. This is <b>not</b> the Farmer Suffering screen: that
-              one reads a nightly view over seven days, needs three events, counts failed AI calls
-              too, and can name the farm. This one carries the farm id and nothing else.
-            </p>
-            <DataList<OpsFarmError>
-              id="ops-live-suffering"
-              urlNamespace="suffering"
-              label="Farmer suffering watchlist"
-              caption="Farms with repeated attributed errors in the last 24 hours, with the endpoint words their errors matched."
-              noun={{ one: 'farm', many: 'farms' }}
-              rows={farms}
-              rowKey={(f) => f.farmId}
-              columns={SUFFERING_COLUMNS}
-              defaultSort={{ key: 'errorCount', dir: 'desc' }}
-              skeleton={{ rows: 4, cells: 6 }}
-              states={{
-                isLoading,
-                isFetching,
-                error: null,
-                onRetry: () => void refetch(),
-                measuredZero: {
-                  what: 'No farm reached two attributed errors in the last 24 hours',
-                  checkedAt,
-                  unproven: (
-                    <>
-                      A row needs a farm id, and no token this platform issues carries a farm claim
-                      &mdash; so every error the server itself records arrives unattributed and can
-                      never appear here. In practice only the mobile client&rsquo;s voice-clip
-                      archive failure posts an event with a farm id in its body. This query also
-                      answers its own failures with an empty list and a success code
-                      (<code>AdminOpsRepository.cs:161</code>). An empty panel is therefore not
-                      evidence that no farmer is suffering.
-                    </>
-                  ),
-                },
-              }}
-            />
-            <p className="text-caption text-text-3">
-              Sync, Logs and Voice are <b>LIKE</b> matches on the endpoint text, not a split of the
-              total: an endpoint containing two of those words counts twice, one containing none
-              counts in the total only, and an event with no endpoint at all &mdash; which is what
-              the one attributed emitter produces &mdash; scores zero in all three.
-            </p>
-          </section>
+          {/* L7: an idea (B24). Not built yet, no number, no list. */}
+          <NotBuiltYet metric="live-suffering-24h" />
 
           {/* ── plan Step 8: additive, and it goes below ────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-services">
             <h2 id="ops-live-services" className="text-h2 font-bold text-text-1">
               Service health
             </h2>
+            <MetricLines metric="live-service-health" />
             <p className="text-caption text-text-2">
               These feeds do not share a clock, so this section carries no single freshness chip.
               Each row states when that feed was last heard, and two of them have no timestamp this
@@ -1142,32 +688,20 @@ export default function OpsLivePage() {
 
           <StandingNote
             title="What this screen cannot tell you"
-            summary="How old the two green verdicts are, what the other eight checks found, and which farm most errors belong to."
+            summary="Whether an empty table means anything, and which farm most errors belong to."
             why={
               <>
                 <p>
-                  <b>How old the R9 and R10 verdicts are.</b> Both come from summaries that are
-                  rebuilt once a day, at about 7:30am India time, and the server sends the verdict
-                  without saying when the rebuild happened. So <b>CLEAR</b> means &ldquo;this check
-                  found nothing the last time it ran&rdquo;, not &ldquo;nothing is wrong right
-                  now&rdquo;.
+                  <b>Whether an empty table means anything.</b> The lookup behind the recent events
+                  answers its own database failure with an empty result and calls it a success. So a
+                  broken lookup and a genuinely quiet two hours arrive looking identical. Failures
+                  this screen <b>can</b> see &mdash; a refused permission, a timeout, a request that
+                  broke &mdash; are always named as failures.
                 </p>
                 <p>
-                  <b>Anything about checks R1 to R8.</b> Eight more checks exist and a nightly job
-                  runs them &mdash; but this screen is never told the result.{' '}
-                  <b>NOT CHECKED</b> describes what this screen knows, not whether the check ran.
-                </p>
-                <p>
-                  <b>Whether an empty table means anything.</b> Four separate lookups sit behind this
-                  one page, and each of them answers its own database failure with an empty or zero
-                  result and calls it a success. So a broken lookup and a genuinely quiet hour
-                  arrive looking identical. Failures this screen <b>can</b> see &mdash; a refused
-                  permission, a timeout, a request that broke &mdash; are always named as failures.
-                </p>
-                <p>
-                  <b>Which farm most errors belong to.</b> Tying an error to a farm needs the farm&rsquo;s
-                  identifier on the error record, and almost nothing the server writes carries one.
-                  So the watchlist above sees only a narrow slice of what farmers actually hit.
+                  <b>Which farm most errors belong to.</b> Tying an error to a farm needs the
+                  farm&rsquo;s identifier on the error record, and almost nothing the server writes
+                  carries one.
                 </p>
                 <p>
                   <b>Anything about one organisation.</b> The server is asked nothing at all here,

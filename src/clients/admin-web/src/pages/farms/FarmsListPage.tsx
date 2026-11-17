@@ -2,12 +2,11 @@ import { metaRefreshedAt } from '@/lib/api';
 import { Wheat } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { Masked, NotMeasured, StandingNote } from '@/components/state';
+import { Masked, MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { useListUrlState } from '@/lib/useListUrlState';
-import { cn } from '@/lib/utils';
 import { useFarmsList } from '@/hooks/useFarms';
 import type { FarmSummary } from '@/hooks/useFarms';
 
@@ -93,16 +92,6 @@ const PAGE_SIZE = 40;
 
 const TIERS = ['A', 'B', 'C', 'D'] as const;
 
-/** v3 `theme.css:547-550`, on our token layer. Tint background, signal ink;
- *  no raw hex, and none of the four vivid fills — those are bars and dots
- *  only (globals.css §A.5). */
-const TIER_CLASS: Record<string, string> = {
-  A: 'bg-tint-green text-green',
-  B: 'bg-tint-blue text-blue',
-  C: 'bg-tint-amber text-amber',
-  D: 'bg-tint-red text-red',
-};
-
 /**
  * The owner phone, or the ABSENCE it stands for.
  *
@@ -119,19 +108,6 @@ function ownerPhoneOf(farm: FarmSummary): string | null {
   const value = farm.ownerPhone?.trim();
   return !value || value === NO_PHONE_SENTINEL ? null : value;
 }
-
-/**
- * Why a blank tier and a blank WVFD are not a D tier and not a zero.
- *
- * Stated from the SQL rather than from v3's copy. The prototype says the farm
- * is too young; what the query actually says is narrower and provable: tier
- * and WVFD come from a LEFT JOIN onto the most recent week in
- * `mis.wvfd_weekly` (`AdminMisRepository.cs:115-116`), so a farm with no row
- * in THAT week has neither. Too young is one way to have no row; it is not
- * the only one, and asserting it would be inventing a cause.
- */
-const NO_WEEKLY_ROW =
-  'No row in the most recent week of the WVFD aggregate, so there is no tier and no score to show. That is not a D tier and it is not a zero.';
 
 const NEVER_LOGGED = 'No log has been recorded on this farm.';
 
@@ -184,57 +160,39 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     defaultDir: 'asc',
   },
   {
+    /* F4 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
     key: 'tier',
-    label: 'Tier',
-    render: (f) =>
-      f.engagementTier ? (
-        <span
-          data-tier={f.engagementTier}
-          className={cn(
-            'inline-grid size-8 place-items-center rounded-chip text-caption font-bold',
-            TIER_CLASS[f.engagementTier] ?? 'bg-tint-grey text-text-2',
-          )}
-        >
-          {f.engagementTier}
-        </span>
-      ) : (
-        <NotMeasured why={NO_WEEKLY_ROW} />
-      ),
-    sortType: 'text',
-    sortValue: (f) => f.engagementTier,
-    /* The state is what makes an absent tier park at the bottom in BOTH
-       directions instead of sorting as an empty string. */
-    state: (f) => (f.engagementTier ? null : 'unmeasured'),
-    defaultDir: 'asc',
-  },
-  {
-    key: 'wvfd7d',
-    label: 'WVFD 7d',
-    align: 'right',
-    render: (f) => fmt.num(f.wvfd7d, 1) ?? <NotMeasured why={NO_WEEKLY_ROW} />,
-    sortType: 'num',
-    sortValue: (f) => f.wvfd7d,
-    state: (f) => (f.wvfd7d === null ? 'unmeasured' : null),
-    /* Worst-first is the reading an operator wants on a score column (A30's
-       rule, applied to this screen's own score). */
-    defaultDir: 'desc',
-  },
-  {
-    key: 'errors24h',
-    label: 'Errors 24h',
-    align: 'right',
-    /* NO honesty state: this is a COUNT, and 0 is a reading. `{f.errors24h ||
-       '—'}` used to print a dash over a measured zero, which is D18 pointing
-       the other way — it made "we checked and found none" look like "we have
-       no reading". */
-    render: (f) => (
-      <span className={cn(f.errors24h > 0 && 'font-semibold text-red')}>
-        {fmt.num(f.errors24h)}
-      </span>
+    label: (
+      <>
+        Tier
+        <NotBuiltYetMark />
+      </>
     ),
-    sortType: 'num',
-    sortValue: (f) => f.errors24h,
-    defaultDir: 'desc',
+    render: () => null,
+  },
+  {
+    /* F5 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
+    key: 'wvfd7d',
+    label: (
+      <>
+        WVFD 7d
+        <NotBuiltYetMark />
+      </>
+    ),
+    align: 'right',
+    render: () => null,
+  },
+  {
+    /* F6 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
+    key: 'errors24h',
+    label: (
+      <>
+        Errors 24h
+        <NotBuiltYetMark />
+      </>
+    ),
+    align: 'right',
+    render: () => null,
   },
   {
     key: 'lastLog',
@@ -263,19 +221,12 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
 
 /** The expandable-row detail (D11's replacement). Every sentence is derived
  *  from a field on the row — nothing here is typed prose about a farm. */
-function farmDetail(farm: FarmSummary, checkedAt: string) {
-  const errors = fmt.num(farm.errors24h) ?? String(farm.errors24h);
+function farmDetail(farm: FarmSummary) {
   const lastLog = fmt.date(farm.lastLogAt, DATE_FORMATS.churnLastLog);
 
   return (
     <div className="flex flex-col gap-3">
-      <p>
-        {farm.errors24h > 0
-          ? `${errors} ${farm.errors24h === 1 ? 'error' : 'errors'} on this farm in the last 24 hours.`
-          : `No API error on this farm in the last 24 hours. The window was checked at ${checkedAt}, so this is a measured zero, not a missing feed.`}{' '}
-        {lastLog ? `Last log ${lastLog}.` : NEVER_LOGGED}{' '}
-        {farm.engagementTier === null || farm.wvfd7d === null ? NO_WEEKLY_ROW : ''}
-      </p>
+      <p>{lastLog ? `Last log ${lastLog}.` : NEVER_LOGGED}</p>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         <dt className="text-text-3">Farm id</dt>
         {/* The identifier an operator files a ticket with, and the only value
@@ -304,14 +255,13 @@ export default function FarmsListPage() {
    */
   const url = useListUrlState();
   const page = url.page;
-  const tier = url.get('tier') ?? undefined;
   const search = url.get('search') ?? undefined;
 
   const { data, isLoading, isFetching, isError, error, refetch } = useFarmsList(
     page,
     PAGE_SIZE,
     search,
-    tier,
+    undefined,
   );
 
   const items = data?.data?.items ?? [];
@@ -348,13 +298,7 @@ export default function FarmsListPage() {
         <FreshnessChip source="live-aggregated" lastRefreshed={lastRefreshed} />
       </div>
 
-      {/* ── the tier filter (B9) ────────────────────────────────────────────
-          Kept as a screen control rather than a facet, for the reason in the
-          `url` note above. It is laid out like a `SummaryFacets` row so the
-          two read as the same kind of thing, and the counts a facet would
-          carry are deliberately absent: the server has not been asked how many
-          farms are in each tier, and a number this screen cannot prove is a
-          number it does not print. */}
+      {/* The tier filter (F4): an idea (B24). Disabled, marked, and never sent to the server. */}
       <div
         role="group"
         aria-label="Filter by tier"
@@ -362,32 +306,25 @@ export default function FarmsListPage() {
       >
         <span className="w-24 flex-none text-caption font-semibold text-text-2">By tier</span>
         <div className="flex flex-wrap gap-2">
-          {TIERS.map((t) => {
-            const pressed = tier === t;
-            return (
-              <button
-                key={t}
-                type="button"
-                aria-pressed={pressed}
-                /* A20 — `toggle` writes `tier` and resets `page` in ONE
-                   functional update, so `?org=` survives and the reader is
-                   not left on page 5 of a filter that matched three rows. */
-                onClick={() => url.toggle('tier', t)}
-                className={cn(
-                  'rounded-full border px-3.5 py-2 text-body transition-colors',
-                  pressed
-                    ? cn('border-transparent font-bold', TIER_CLASS[t])
-                    : 'glass-quiet border-control-edge text-text-1 hover:border-blue hover:bg-wash',
-                )}
-              >
-                Tier {t}
-              </button>
-            );
-          })}
+          {TIERS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="glass-quiet cursor-not-allowed rounded-full border border-control-edge px-3.5 py-2 text-body text-text-3 opacity-60"
+            >
+              Tier {t}
+            </button>
+          ))}
         </div>
-        <span className="text-caption text-text-3">
-          Applied by the server over every farm, not just this page.
-        </span>
+        <NotBuiltYetMark />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="farms-list" />
+        <MetricLines metric="farms-total" />
+        <MetricLines metric="farms-last-log" />
       </div>
 
       {pageScoped && (
@@ -404,7 +341,7 @@ export default function FarmsListPage() {
       <DataList<FarmSummary>
         id="farms"
         label="All farms"
-        caption="Every farm with its owner phone, engagement tier, weekly verified farm-days, errors in the last 24 hours, most recent log and creation date. Select a row to open its detail."
+        caption="Every farm with its owner phone, most recent log and creation date. Select a row to open its detail."
         noun={{ one: 'farm', many: 'farms' }}
         rows={items}
         rowKey={(f) => f.farmId}
@@ -438,11 +375,7 @@ export default function FarmsListPage() {
           searchesOver:
             'The server matches the farm name only — the owner and the phone number are not searched.',
         }}
-        /* v3's rule, unchanged: the leading edge marks the rows whose app
-           failed on the farmer today, and it points at a number already
-           coloured beside it, so it needs no key. */
-        rowEdge={(f) => (f.errors24h > 0 ? 'red' : null)}
-        expand={(f) => farmDetail(f, checkedAt)}
+        expand={(f) => farmDetail(f)}
         states={{
           isLoading,
           isFetching,
@@ -452,9 +385,7 @@ export default function FarmsListPage() {
           error: isError ? error : null,
           onRetry: () => void refetch(),
           measuredZero: {
-            what: tier
-              ? `No farm this feed returns is in tier ${tier}`
-              : 'No farms returned by this feed',
+            what: 'No farms returned by this feed',
             checkedAt,
           },
         }}
@@ -462,6 +393,12 @@ export default function FarmsListPage() {
            this table is. */
         skeleton={{ rows: 8, cells: 7 }}
       />
+
+      <div className="flex flex-col gap-2">
+        <NotBuiltYetLines metric="farms-tier" />
+        <NotBuiltYetLines metric="farms-wvfd7d" />
+        <NotBuiltYetLines metric="farms-errors24h" />
+      </div>
 
       <StandingNote
         title="What this list does not carry"

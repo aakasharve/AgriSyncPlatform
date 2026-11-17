@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { NotMeasuredPanel } from '@/components/state';
+import { MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasuredPanel } from '@/components/state';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import type { FarmerHealthTimelineDayDto } from '../farmer-health.types';
 
@@ -52,6 +52,8 @@ interface RowMeta {
   source: string;
   /** A failure, or an activity. The only two meanings this grid encodes. */
   failure?: boolean;
+  /** B24: an idea (P4, P5). The row keeps its place and its header says so; no cell draws a count. */
+  idea?: true;
 }
 
 const ROWS: RowMeta[] = [
@@ -59,14 +61,18 @@ const ROWS: RowMeta[] = [
   { key: 'closuresSubmitted', label: 'Submitted', source: 'closure.submitted' },
   { key: 'proofAttached', label: 'Proof', source: 'proof.attached' },
   { key: 'summariesViewed', label: 'Summary', source: 'closure_summary.viewed' },
-  { key: 'verifications', label: 'Verifies', source: 'verification.recorded' },
+  { key: 'verifications', label: 'Verifies', source: 'verification.recorded', idea: true },
   {
     key: 'errors',
     label: 'Errors',
     source: 'api.error and client.error',
     failure: true,
+    idea: true,
   },
 ];
+
+/** The rows whose counts are real today (P3). */
+const REAL_ROWS = ROWS.filter((r) => !r.idea);
 
 /** Ramp 18% → 95% of the row's own maximum; a single event still has to read.
  *  Whole percent, because it is fed straight into a `color-mix`. */
@@ -116,7 +122,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
       errors: 0,
     };
     for (const d of days) {
-      for (const row of ROWS) {
+      for (const row of REAL_ROWS) {
         if (d[row.key] > max[row.key]) max[row.key] = d[row.key];
       }
     }
@@ -124,7 +130,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
   }, [days]);
 
   const total = useMemo(
-    () => days.reduce((n, d) => n + ROWS.reduce((m, row) => m + d[row.key], 0), 0),
+    () => days.reduce((n, d) => n + REAL_ROWS.reduce((m, row) => m + d[row.key], 0), 0),
     [days]
   );
 
@@ -153,7 +159,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
           why={
             <>
               <p>
-                All six event types are zero on all {fmt.num(days.length)} days. That is what a
+                All four event types counted here are zero on all {fmt.num(days.length)} days. That is what a
                 genuinely quiet farm looks like — and it is also what a failed query looks like: the
                 timeline read answers its own exception with an empty result, and the fourteen-day
                 window is then backfilled with zero rows outside that <code>try</code>, so both
@@ -186,8 +192,9 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
           this grid cannot support, and the old caption invited it. */}
       <p data-scale-note="" className="mb-3 text-caption text-text-3">
         Each row is shaded against its own busiest day, not against the other rows — a dark cell in
-        Verifies and a dark cell in Started are not the same number. The figure is in the cell.
+        Started and a dark cell in Submitted are not the same number. The figure is in the cell.
       </p>
+      <MetricLines metric="fh-timeline" className="mb-3" />
 
       <div className="overflow-x-auto">
         <table
@@ -223,8 +230,16 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                   title={`Counts ${row.source}`}
                 >
                   {row.label}
+                  {row.idea && <NotBuiltYetMark />}
                 </th>
                 {days.map((d) => {
+                  if (row.idea) {
+                    return (
+                      <td key={`${row.key}-${d.date}`} className="p-0">
+                        <div aria-hidden="true" className="h-7 w-7 rounded-chip bg-wash" />
+                      </td>
+                    );
+                  }
                   const count = d[row.key];
                   const pct = intensityPct(count, maxByRow[row.key]);
                   return (
@@ -264,6 +279,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                 {ROWS.map((r) => (
                   <th key={r.key} className="py-1 pr-3 text-right font-semibold">
                     {r.label}
+                    {r.idea && <NotBuiltYetMark />}
                   </th>
                 ))}
               </tr>
@@ -276,7 +292,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                   </th>
                   {ROWS.map((r) => (
                     <td key={r.key} className="py-0.5 pr-3 text-right">
-                      {d[r.key]}
+                      {r.idea ? null : d[r.key]}
                     </td>
                   ))}
                 </tr>
@@ -285,6 +301,11 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
           </table>
         </div>
       </details>
+
+      <div className="mt-3 flex flex-col gap-2">
+        <NotBuiltYetLines metric="fh-timeline-verifies" />
+        <NotBuiltYetLines metric="fh-timeline-errors" />
+      </div>
     </section>
   );
 }

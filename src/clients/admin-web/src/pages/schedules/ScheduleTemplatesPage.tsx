@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn, RenderedField } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
+import { MetricLines, NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
 import { fmt } from '@/lib/format';
 import { useScheduleTemplates } from '@/hooks/useScheduleTemplates';
 import type { ScheduleTemplate } from '@/hooks/useScheduleTemplates';
@@ -257,6 +257,8 @@ export default function ScheduleTemplatesPage() {
             tell them when. */}
         <p className="text-caption text-text-3">Reference data &mdash; no timestamp available</p>
       </div>
+
+      <MetricLines metric="templates-list" />
 
       <DataList<ScheduleTemplate>
         id="schedule-templates"

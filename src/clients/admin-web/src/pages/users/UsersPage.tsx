@@ -2,7 +2,7 @@ import { metaRefreshedAt } from '@/lib/api';
 import { Users } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { Masked, NotMeasured, StandingNote } from '@/components/state';
+import { Masked, MetricLines, NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
@@ -401,6 +401,12 @@ export default function UsersPage() {
           {fmt.num(totalCount)}.
         </p>
       )}
+
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="users-list" />
+        <MetricLines metric="users-total" />
+        <MetricLines metric="users-last-signin" />
+      </div>
 
       <DataList<UserSummary>
         id="users"

@@ -76,3 +76,7 @@ export { ScoringActiveBanner } from './ScoringActiveBanner';
 export type { ScoringActiveBannerProps } from './ScoringActiveBanner';
 export { InterventionQueueEmpty } from './InterventionQueueEmpty';
 export type { InterventionQueueEmptyProps } from './InterventionQueueEmpty';
+
+/* "Not built yet": an older-page idea that shows its two lines and no number (B24) */
+export { NotBuiltYet, NotBuiltYetMark, NotBuiltYetLines, MetricLines } from './NotBuiltYet';
+export type { NotBuiltYetProps } from './NotBuiltYet';

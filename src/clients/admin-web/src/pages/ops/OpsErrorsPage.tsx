@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { NotMeasured, StandingNote } from '@/components/state';
+import { MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasured, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt } from '@/lib/api';
@@ -190,9 +190,6 @@ const NO_STATUS =
 const NO_LATENCY =
   'No duration was written for this row. Only the request middleware times a call; an error reported by the farmer\'s device carries no latency to record.';
 
-const NOT_ATTRIBUTABLE =
-  'No farm is recorded against this call, and on this feed that is the normal case rather than the exception. The middleware that writes these rows takes the farm from a farm_id claim on the signed-in token, and no token this platform issues carries one — so every server-side row lands unattributed. A farm can appear here only when the farmer\'s own app reported the error and sent its farm id with it.';
-
 /**
  * What each event type IS, in words. The badge, its colour and the sentence
  * behind it all come from here, so this screen cannot call `api.slow` a
@@ -340,33 +337,15 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
     defaultDir: 'desc',
   },
   {
+    /* E3 (B24): an idea. The column keeps its place and its header says so; no cell draws a value from the answer, so no id, no dash and no word that stands for a value. Its two lines sit under the table. */
     key: 'farm',
-    label: 'Farm',
-    /**
-     * STEP 7's ATTRIBUTION HALF — the part that is NOT blocked, because
-     * `farmId` is already nullable on the DTO.
-     *
-     * "not attributable" is the fourth word in the honest-state vocabulary
-     * (`honestState.ts:56`) and it exists for exactly this: a value that is
-     * absent because nothing tied the record to a subject, which is a
-     * different fact from "not measured". Guessing a farm from the endpoint,
-     * or from whoever else was active, is the fabrication this console exists
-     * to refuse.
-     *
-     * The id is printed WHOLE. The old cell showed `slice(0, 8) + '…'`, and a
-     * truncated identifier is one an operator cannot paste into a query or a
-     * ticket — the only two things this value is for. No farm NAME comes back
-     * on this feed at all; that is stated once, at the foot of the screen.
-     */
-    render: (e) =>
-      e.farmId ? (
-        <span className="font-mono text-caption break-all text-text-2">{e.farmId}</span>
-      ) : (
-        <NotMeasured state="unattributed" why={NOT_ATTRIBUTABLE} />
-      ),
-    sortType: 'text',
-    sortValue: (e) => e.farmId,
-    defaultDir: 'asc',
+    label: (
+      <>
+        Farm
+        <NotBuiltYetMark />
+      </>
+    ),
+    render: () => null,
   },
 ];
 
@@ -506,10 +485,15 @@ export default function OpsErrorsPage() {
         </p>
       )}
 
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="errors-list" />
+        <MetricLines metric="errors-total" />
+      </div>
+
       <DataList<OpsErrorRow>
         id="ops-errors"
         label="API errors"
-        caption="Every recorded call in the window, with the time, the event type, the endpoint, the HTTP status, the latency and the farm the call could be attributed to."
+        caption="Every recorded call in the window, with the time, the event type, the endpoint, the HTTP status, and the latency."
         noun={{ one: 'call', many: 'calls' }}
         rows={rows}
         rowKey={(e) => e.key}
@@ -587,6 +571,8 @@ export default function OpsErrorsPage() {
         /* B12 — shaped like the real thing: six columns. */
         skeleton={{ rows: 8, cells: 6 }}
       />
+
+      <NotBuiltYetLines metric="errors-farm" />
 
       <StandingNote
         title="What this screen does not carry"

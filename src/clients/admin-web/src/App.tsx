@@ -20,7 +20,6 @@ const NotFoundPage            = lazy(() => import('@/pages/NotFoundPage'));
 
 const OpsLivePage             = lazy(() => import('@/pages/ops/OpsLivePage'));
 const OpsErrorsPage           = lazy(() => import('@/pages/ops/OpsErrorsPage'));
-const OpsVoicePage            = lazy(() => import('@/pages/ops/OpsVoicePage'));
 const NorthStarPage           = lazy(() => import('@/pages/metrics/NorthStarPage'));
 const FarmsListPage           = lazy(() => import('@/pages/farms/FarmsListPage'));
 const SilentChurnPage         = lazy(() => import('@/pages/farms/SilentChurnPage'));
@@ -291,18 +290,18 @@ export default function App() {
                       </RequireAuth>
                     }
                   >
-                    {/* HomePage is a KPI collage — individual cards can 403 independently without
-                        hiding the whole page. No single module gate fits, so no guard here. */}
-                    <Route path="/" element={<HomePage />} />
+                    {/* B24: `/` opens Company MIS Overview (D-151 a default). Home moved to `/home`
+                        and holds two ideas that make no request, so no single module gate fits and
+                        there is no guard here. `/ops/voice` is not a route: the Voice Pipeline page
+                        was a double of Company MIS Quality; its file stays for CR-2d. */}
+                    <Route path="/" element={<Navigate to="/MIS/overview" replace />} />
+                    <Route path="/home" element={<HomePage />} />
 
                     <Route path="/ops/live" element={
                       <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
                     } />
                     <Route path="/ops/errors" element={
                       <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
-                    } />
-                    <Route path="/ops/voice" element={
-                      <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
                     } />
                     <Route path="/metrics/nsm" element={
                       <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>

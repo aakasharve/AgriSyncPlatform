@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   LifeBuoy,
   MapPinned,
-  Mic,
   Repeat2,
   Settings as SettingsIcon,
   Star,
@@ -107,7 +106,8 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { to: '/', label: 'Home', Icon: HomeIcon, group: 'Overview', module: null },
+  /* B24: `/` now opens Company MIS Overview; Home lives at `/home` and holds two ideas. */
+  { to: '/home', label: 'Home', Icon: HomeIcon, group: 'Overview', module: null },
   // Company MIS (CR-2b): the seven pages of the approved combined look, each on the
   // company answer of GET /shramsafal/admin/mis/company. Explicit paths, one per page,
   // so the palette test can find each as a declared route.
@@ -120,7 +120,6 @@ export const NAV: NavItem[] = [
   { to: '/MIS/operations', label: 'Operations', Icon: LifeBuoy, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
   { to: '/ops/live', label: 'Live Health', Icon: Zap, group: 'Operations', module: ModuleKeys.OpsLive },
   { to: '/ops/errors', label: 'API Errors', Icon: AlertTriangle, group: 'Operations', module: ModuleKeys.OpsErrors },
-  { to: '/ops/voice', label: 'Voice Pipeline', Icon: Mic, group: 'Operations', module: ModuleKeys.OpsVoice },
   { to: '/metrics/nsm', label: 'WVFD', Icon: Star, group: 'Product', module: ModuleKeys.MetricsNsm },
   { to: '/farms', label: 'All Farms', Icon: Wheat, group: 'Farms', module: ModuleKeys.FarmsList },
   { to: '/farms/silent-churn', label: 'Silent Churn', Icon: TrendingDown, group: 'Farms', module: ModuleKeys.FarmsSilentChurn },
