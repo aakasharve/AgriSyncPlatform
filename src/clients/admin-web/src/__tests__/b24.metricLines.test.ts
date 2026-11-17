@@ -25,9 +25,9 @@ describe('the reviewed lines file itself (B24 fixture)', () => {
   it('B24_fixture_has_137_entries_in_the_stated_split', () => {
     expect(ENTRIES).toHaveLength(137);
     const count = (s: string) => ENTRIES.filter((e) => e.status === s).length;
-    expect(count('real')).toBe(63); // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): E3 F6 U1 U2 L7 P1 P4 P5 P6 P7 P10 P11 became real
+    expect(count('real')).toBe(67); // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): E3 F6 U1 U2 L7 P1 P4 P5 P6 P7 P10 P11 S1 S2 S3 H9 became real
     expect(count('not-measured')).toBe(35);
-    expect(count('idea')).toBe(21);
+    expect(count('idea')).toBe(17);
     expect(count('double')).toBe(18);
     expect(MIS).toHaveLength(73);
   });
@@ -67,11 +67,11 @@ describe('metricLines.ts carries the older-page entries verbatim (B24)', () => {
     }
   });
 
-  it('B24_metricLines_split_is_18_doubles_21_ideas_25_real', () => {
+  it('B24_metricLines_split_is_18_doubles_17_ideas_29_real', () => {
     const c = (s: string) => METRIC_LINES.filter((m) => m.status === s).length;
     expect(c('double')).toBe(18);
-    expect(c('idea')).toBe(21); // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P1 P4 P5 P6 P7 P10 P11 became real
-    expect(c('real')).toBe(25);
+    expect(c('idea')).toBe(17); // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): P1 P4 P5 P6 P7 P10 P11 S1 S2 S3 H9 became real
+    expect(c('real')).toBe(29);
     expect(c('real')).toBe(OLDER.filter((e) => e.status === 'real').length);
   });
 

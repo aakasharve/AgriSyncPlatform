@@ -23,7 +23,7 @@ import SilentChurnPage from '../SilentChurnPage';
 // B24 (founder, 2026-11-17): S1-S3 are ideas shown as Not built yet (the page reads no feed). Retired: "finds a Devanagari farm from a romanised phone-call spelling".
 // B24 (founder, 2026-11-17): S1-S3 are ideas shown as Not built yet (the page reads no feed). Retired: "says what the box actually searches when nothing matches".
 
-// The new behaviour is covered by src/__tests__/b24.ideas.test.tsx.
+// CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): S1, S2 and S3 became real; the new behaviour is covered by SilentChurnPage.real.test.tsx.
 it('still has a page component to mount', () => {
   expect(typeof SilentChurnPage).toBe('function');
 });

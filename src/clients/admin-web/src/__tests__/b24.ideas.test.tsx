@@ -5,7 +5,6 @@ import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import HomePage from '@/pages/HomePage';
 import NorthStarPage from '@/pages/metrics/NorthStarPage';
-import SilentChurnPage from '@/pages/farms/SilentChurnPage';
 import FarmsListPage from '@/pages/farms/FarmsListPage';
 import OpsLivePage from '@/pages/ops/OpsLivePage';
 import OpsErrorsPage from '@/pages/ops/OpsErrorsPage';
@@ -40,7 +39,7 @@ function serveBusyFeeds() {
       return { status: 200, data: { data: [{ farmId: 'f1', name: 'Zzfarm', errorCount: 7, syncErrors: 2, logErrors: 0, voiceErrors: 5, lastErrorAt: '2026-08-31T09:15:00Z' }], meta: META } };
     }
     if (req.url.includes('/admin/farms/silent-churn')) {
-      return { status: 200, data: { data: [{ farmId: 'f1', name: 'Zzfarm', ownerPhone: '9876543210', plan: 'trial', weeksSilent: 3, lastLogAt: null }], meta: META } };
+      return { status: 200, data: { data: { countedAtUtc: '2026-09-01T08:30:00Z', farms: [{ farmId: 'f1', name: 'Zzfarm', ownerPhone: '9876543210', band: '7-13', daysSilent: 9, lastEntryUtc: null, planCode: null, planStatus: null }], notMeasuredReason: null }, meta: META } };
     }
     if (req.url.includes('/admin/farms')) {
       return { status: 200, data: { data: { items: [], totalCount: 0, page: 1, pageSize: 40 }, meta: META } };
@@ -84,27 +83,25 @@ function expectNoDoubleLabelsOf(page: string) {
   }
 }
 
-describe('Home at /home holds its two ideas and none of its doubles (B24)', () => {
-  it('B24_Home_shows_H8_and_H9_as_Not_built_yet_and_no_H1_to_H7', async () => {
+describe('Home at /home holds its one idea and none of its doubles (B24)', () => {
+  it('B24_Home_shows_H8_as_Not_built_yet_and_no_H1_to_H7', async () => {
     serveBusyFeeds();
     renderWithProviders(<HomePage />, { route: `/home?org=${ORG}` });
     await waitFor(() => panelFor('H8'), WAIT);
     expectIdea('H8');
-    expectIdea('H9');
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): H9 (the call list) became real. Retired: its Not built yet assertion; covered by HomePage.callList.test.tsx.
     expectNoDoubleLabelsOf('Home');
   });
 
   it('B24_Home_makes_no_request_to_the_old_feeds', async () => {
     serveBusyFeeds();
     renderWithProviders(<HomePage />, { route: `/home?org=${ORG}` });
-    await waitFor(() => panelFor('H9'), WAIT);
+    await waitFor(() => panelFor('H8'), WAIT);
     await new Promise((r) => setTimeout(r, 300));
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): H9 became real, so Home now asks the suffering and silent-churn reads; it still asks for nothing else.
     for (const u of urls()) {
       expect(u).not.toContain('/admin/ops/health');
       expect(u).not.toContain('/admin/metrics/wvfd');
-      expect(u).not.toContain('/admin/farms');
-      expect(u).not.toContain('suffering');
-      expect(u).not.toContain('silent-churn');
     }
   });
 });
@@ -131,17 +128,8 @@ describe('WVFD is seven ideas and asks for nothing (B24)', () => {
   });
 });
 
-describe('Silent Churn, Suffering and the Farmer Health landing are ideas only (B24)', () => {
-  it('B24_Silent_Churn_shows_S1_S2_S3_as_ideas_and_never_draws_the_feed', async () => {
-    serveBusyFeeds();
-    renderWithProviders(<SilentChurnPage />, { route: `/farms/silent-churn?org=${ORG}` });
-    await waitFor(() => panelFor('S1'), WAIT);
-    for (const id of ['S1', 'S2', 'S3']) expectIdea(id);
-    await new Promise((r) => setTimeout(r, 300));
-    expect(document.body.textContent).not.toContain('Zzfarm');
-    expect(document.body.textContent).not.toContain('9876543210');
-    for (const u of urls()) expect(u).not.toContain('silent-churn');
-  });
+describe('The Farmer Health landing is ideas only (B24; Silent Churn and Suffering are real since CR-2e)', () => {
+  // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): S1, S2 and S3 became real. Retired: B24_Silent_Churn_shows_S1_S2_S3_as_ideas_and_never_draws_the_feed; covered by SilentChurnPage.real.test.tsx.
 
   // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): U1 became real. Retired: B24_Suffering_shows_U1_and_U2_as_ideas_and_never_draws_the_feed (U2 became real too); covered by SufferingPage.real.test.tsx.
 

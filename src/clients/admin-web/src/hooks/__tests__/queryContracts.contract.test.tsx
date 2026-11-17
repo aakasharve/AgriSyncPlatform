@@ -111,7 +111,9 @@ describe('per-surface polling cadences (A23)', () => {
     // says so with an explicit `false`.
     ['farms/list', () => useFarmsList(1, 40), 60_000, undefined],
     ['farms/suffering', () => useSuffering(), 60_000, false],
-    ['farms/silent-churn', () => useSilentChurn(), 300_000, undefined],
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): S1-S3 became real: the silent-farms read opens the audited factory on every load, so it no longer polls
+    // (the old 5-minute cadence is retired) and says "no interval" with an explicit `false`, like Suffering.
+    ['farms/silent-churn', () => useSilentChurn(), 30_000, false],
     ['users/list', () => useUsersList(1, 50), 60_000, undefined],
     // CR-2e C21: the one-farm page opens the audited factory on every load, so its hook now says "no interval" with an explicit `false`.
     ['farmer-health/drilldown', () => useFarmerHealth('farm-1'), 60_000, false],

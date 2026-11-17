@@ -887,10 +887,15 @@ const REGISTER: Record<string, Row> = {
   A57: {
     what: 'the two rule-definition subtitles — the only place either list states its rule',
     verdict: kept(() => {
-      expect(code('/src/hooks/useShouldCallToday.ts')).toContain('SUFFERING_ENTRY_RULE');
-      expect(code('/src/hooks/useShouldCallToday.ts')).toContain('CHURN_ENTRY_RULE');
-      // B24 (founder, 2026-11-17): S1-S3 (Silent Churn) are ideas shown as Not built yet, so its rule-subtitle (14 days) is retired.
-    }, '/src/pages/farms/__tests__/SilentChurnPage.test.tsx', '/src/pages/farms/__tests__/SufferingPage.test.tsx'),
+      // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): S1-S3 and H9 became real. A57 pinned two
+      // constants in the hook (SUFFERING_ENTRY_RULE, CHURN_ENTRY_RULE = "no log recorded for more than 14 days") that
+      // described the OLD feeds and an old 14-day rule that no page states any more. What A57 protects (each list states
+      // its own rule where it is shown) is still true of the new pages, so it is asserted where they state it now:
+      // Silent Churn's subtitle (7 days or more, counted when opened) and Suffering's (three or more problems in the window).
+      expect(code('/src/pages/farms/SilentChurnPage.tsx')).toContain('no entry for 7 days or more');
+      expect(code('/src/pages/farms/SufferingPage.tsx')).toContain('three or more');
+      expect(code('/src/pages/farms/SufferingPage.tsx')).toContain('WINDOW_WORDS');
+    }, '/src/pages/farms/__tests__/SilentChurnPage.real.test.tsx', '/src/pages/farms/__tests__/SufferingPage.real.test.tsx'),
   },
 
   A58: {

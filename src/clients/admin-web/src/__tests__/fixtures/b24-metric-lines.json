@@ -821,7 +821,7 @@
     "page": "Home",
     "key": "home-call-list",
     "label": "Farms a person should call today",
-    "status": "idea",
+    "status": "real",
     "buildId": "H9",
     "what": "Farms gone quiet or hitting repeated problems, named with the owner's phone number.",
     "why": "Gives the team a short list of farmers to call before they give up."
@@ -857,7 +857,7 @@
     "page": "Silent Churn",
     "key": "silent-watchlist",
     "label": "Farms gone silent",
-    "status": "idea",
+    "status": "real",
     "buildId": "S1",
     "what": "Farms with no entry for a week or more, with owner phone and last entry.",
     "why": "Names the farms to call back before they stop using the app for good."
@@ -866,7 +866,7 @@
     "page": "Silent Churn",
     "key": "silent-plan",
     "label": "Plan",
-    "status": "idea",
+    "status": "real",
     "buildId": "S2",
     "what": "Whether the farm's owner is on the free plan, a trial or a paid plan.",
     "why": "Helps decide who to call first when a paying farm goes quiet."
@@ -875,7 +875,7 @@
     "page": "Silent Churn",
     "key": "silent-groups",
     "label": "By silence and by plan",
-    "status": "idea",
+    "status": "real",
     "buildId": "S3",
     "what": "Counts of silent farms grouped by weeks silent and by plan.",
     "why": "Shows at a glance whether quiet farms are new trials or paying farms."
