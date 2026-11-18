@@ -138,13 +138,14 @@ describe('Live Health alert checks (L1, real)', () => {
     }
   });
 
-  it('Too_few_recordings_says_not_enough_recordings_to_judge', async () => {
+  it('Too_few_recordings_says_too_few_to_judge', async () => {
     // Review Focus 4: two recordings, one failed, is neither "voice failing" nor "clear".
+    // CR-2e C29 (binding, it replaced Task 5's text) fixes the words: "2 recordings finished, too few to judge".
     serve(() => health({ alertR9: r9('clear', 0) }), () => ok(r10({ state: 'not_judged', counted: 1, outOf: 2, reason: 'too_few_recordings' })));
     render();
     await settled();
     await waitFor(() => expect(body()).toMatch(/Not judged/i), WAIT);
-    expect(body()).toMatch(/not enough recordings to judge/i);
+    expect(body()).toMatch(/2 recordings finished, too few to judge/i);
   });
 
   it('a missing alertR9 shows no verdict word for R9', async () => {
