@@ -2,6 +2,7 @@ import {
     type CropScheduleTemplate,
     type ScheduleCheckInfo,
     type ScheduleOwnerType,
+    type SchedulePictureKind,
     type FrequencyMode,
     type OneTimeExpectation,
     type PeriodicExpectation,
@@ -46,6 +47,10 @@ type ReferenceScheduleTemplate = {
     hasStoredDays?: boolean;
     // spec: plr-d10 lane SCH-OWN-b (F228) - the person whose own schedule this row is; no check applies to it.
     ownerUserId?: string;
+    // spec: plr-d10 lane SCH-ID-P (D-146, D-148) - the picture the server shows for this schedule to this reader (all three or none).
+    pictureId?: string;
+    pictureSha256?: string;
+    pictureKind?: SchedulePictureKind;
 };
 
 const STAGE_NOTE_FALLBACKS: Record<StageCode | 'CUSTOM', string> = {
@@ -378,6 +383,10 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         ...(referenceTemplate.scope ? { scope: referenceTemplate.scope } : {}),
         ...(referenceTemplate.hasStoredDays === true ? { hasStoredDays: true } : {}),
         ...(referenceTemplate.ownerUserId ? { ownerUserId: referenceTemplate.ownerUserId } : {}),
+        // spec: plr-d10 lane SCH-ID-P - the three picture fields, all or none (a built-in or fallback schedule never has them).
+        ...(referenceTemplate.pictureId && referenceTemplate.pictureSha256 && referenceTemplate.pictureKind
+            ? { pictureId: referenceTemplate.pictureId, pictureSha256: referenceTemplate.pictureSha256, pictureKind: referenceTemplate.pictureKind }
+            : {}),
         totalDurationDays: Math.max(1, referenceTemplate.totalDays),
         description: `Server-managed template for ${toDisplayName(cropCode)}.`,
         adoptionScore: 0,
@@ -461,7 +470,28 @@ function parseReferenceTemplate(input: unknown): ReferenceScheduleTemplate | nul
         ...(toStringValue(source.scope).trim() ? { scope: toStringValue(source.scope).trim() } : {}),
         ...(source.hasStoredDays === true ? { hasStoredDays: true } : {}),
         ...(toStringValue(source.ownerUserId).trim() ? { ownerUserId: toStringValue(source.ownerUserId).trim() } : {}),
+        ...(readPictureFields(source) ?? {}),
     };
+}
+
+const PICTURE_KINDS: ReadonlySet<string> = new Set(['PERSON', 'SCHEDULE', 'INSTITUTION']);
+const PICTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const PICTURE_SHA256 = /^[0-9a-f]{64}$/;
+
+/**
+ * spec: plr-d10 lane SCH-ID-P (D-146, D-148) - the three optional fields the server appended to each template (`pictureId`, `pictureSha256`,
+ * `pictureKind`), read from any pulled row. They are set together or not at all: a row with one missing, one that is not shaped as the server
+ * writes it (a guid, lower-case 64-hex, one of the three kinds), or an old server's row with none, yields null - never a half picture, and nothing
+ * unreadable ever becomes part of a request address. Exported so the picture downloader reads names the same way the catalog does.
+ */
+export function readPictureFields(source: unknown): { pictureId: string; pictureSha256: string; pictureKind: SchedulePictureKind } | null {
+    if (!source || typeof source !== 'object') return null;
+    const row = source as Record<string, unknown>;
+    const id = toStringValue(row.pictureId).trim().toLowerCase();
+    const sha = toStringValue(row.pictureSha256).trim().toLowerCase();
+    const kind = toStringValue(row.pictureKind).trim().toUpperCase();
+    if (!PICTURE_ID.test(id) || !PICTURE_SHA256.test(sha) || !PICTURE_KINDS.has(kind)) return null;
+    return { pictureId: id, pictureSha256: sha, pictureKind: kind as SchedulePictureKind };
 }
 
 const OWNER_TYPES: ReadonlySet<string> = new Set(['EXPERT', 'INSTITUTION', 'USER', 'SYSTEM_DEFAULT']);

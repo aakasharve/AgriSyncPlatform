@@ -148,7 +148,18 @@ export interface CropScheduleTemplate {
      * own schedule, to which NO check applies: a missing `check` on it means "no check applies", never "not checked". Absent on every outside row.
      */
     ownerUserId?: string;
+    /**
+     * spec: plr-d10-redesign-real-integration-2026-10-25 (lane SCH-ID-P; founder D-146, D-148) - the picture the server chose to show for this schedule to
+     * THIS reader (an owner's photo, the schedule's own picture, or an institution's logo). The three fields come together or not at all, and an old
+     * server sends none: no picture = the letter or leaf badge. `pictureSha256` is what the phone compares with the file it holds.
+     */
+    pictureId?: string;
+    pictureSha256?: string;
+    pictureKind?: SchedulePictureKind;
 }
+
+/** Whose picture it is (the server's `PictureKind` on the wire): a person (round), a schedule or an institution (square). */
+export type SchedulePictureKind = 'PERSON' | 'SCHEDULE' | 'INSTITUTION';
 
 // Overrides allow per-plot customization — definitions moved to
 // domain/types/scheduler.types; re-exported above for back-compat.
