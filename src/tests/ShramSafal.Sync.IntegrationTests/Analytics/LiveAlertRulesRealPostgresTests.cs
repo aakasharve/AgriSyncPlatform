@@ -240,6 +240,48 @@ public sealed class LiveAlertRulesRealPostgresTests(Xunit.Abstractions.ITestOutp
         (await AllCrossFarmAuditRowsAsync()).Should().Be(auditBefore + 1);
     }
 
+    /// <summary>
+    /// C31 fix (5) / C19: the R9 count fails on the server AFTER the connection opened, while the reads before it in
+    /// the health answer (voice, recent errors, repeated-problem farms) still work. The failure is a row-level policy
+    /// that raises only for the statement whose text carries R9's own upper bound (<c>occurred_at_utc &lt; $n</c>, which
+    /// no other events read uses). The health read throws (the route answers 500), never "clear" or 0.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_failed_R9_count_escapes()
+    {
+        await GuardAsync();
+        await using (var db = await OpenSuperuserAsync())
+        {
+            await ManyAsync(db, ApiError, 3, Now.AddMinutes(-10));
+        }
+
+        var provider = BuildProvider();
+
+        // The control: before the failure is armed, the whole health answer is computed.
+        (await HealthAsync(provider)).AlertR9.Counted.Should().Be(3);
+
+        await ExecAsSuperuserAsync($"""
+            CREATE FUNCTION public.c31_refuse_r9() RETURNS boolean LANGUAGE plpgsql AS
+            $$ BEGIN RAISE EXCEPTION 'c31: the R9 count may not be read'; END $$;
+            ALTER TABLE analytics.events ENABLE ROW LEVEL SECURITY;
+            CREATE POLICY c31_refuse_r9_count ON analytics.events FOR SELECT TO {IntegrationPostgres.AppRoleUser}
+                USING (true);
+            CREATE POLICY c31_refuse_r9_only ON analytics.events AS RESTRICTIVE FOR SELECT TO {IntegrationPostgres.AppRoleUser}
+                USING (current_query() NOT LIKE '%occurred_at_utc < $%' OR public.c31_refuse_r9());
+            """);
+
+        await using var scope = AdminScope(provider);
+        var repository = OpsRepository(scope.ServiceProvider);
+
+        // The construction: the reads before R9 still work as the same login (they read the same rows).
+        var load = () => repository.GetOpsHealthAsync();
+        var thrown = await load.Should().ThrowAsync<Exception>(
+            "a failed R9 count escapes (the route answers 500), never an answer that reads as clear or as 0");
+        Output.WriteLine($"[EVIDENCE] thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
+        thrown.Which.ToString().Should().Contain("c31: the R9 count may not be read", "it is the R9 count that escaped");
+        thrown.Which.ToString().Should().Contain("GetApiErrorCheckAsync", "the earlier reads did not fail; the R9 count did");
+    }
+
     // ── R10 ──────────────────────────────────────────────────────────────────
 
     [SkippableFact]
