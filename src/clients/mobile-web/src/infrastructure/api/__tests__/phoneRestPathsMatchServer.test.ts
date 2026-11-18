@@ -367,6 +367,22 @@ describe('lane F99 (F100, N-3): every phone REST path is a route the server has,
         // spec: plr-d10 lane ATT-W - "पुढे ठरवा" on a step a followed schedule asks: the server's `MoveScheduleStep` route, with the method the phone uses.
         expect(shown).toContain('POST features/attention/data/rescheduleStep.ts /shramsafal/farms/{…}/schedule-steps/move');
         expect(routes).toContainEqual({ method: 'POST', path: '/shramsafal/farms/{farmId:guid}/schedule-steps/move' });
+        // spec: plr-d10 lane SCH-ID-P - the schedule makers' pictures. The owner's two actions are direct PUT / DELETE calls (the raw image as the body, no
+        // sync mutation) on the person path and the schedule path; the downloader GETs the file by id. The server has seven picture routes; the phone calls
+        // five of them and NEVER the staff-only institution pair.
+        expect(shown).toContain('PUT features/scheduler/pictures/schedulePictureApi.ts /shramsafal/pictures/person');
+        expect(shown).toContain('DELETE features/scheduler/pictures/schedulePictureApi.ts /shramsafal/pictures/person');
+        expect(shown).toContain('PUT features/scheduler/pictures/schedulePictureApi.ts /shramsafal/pictures/schedule/{…}');
+        expect(shown).toContain('DELETE features/scheduler/pictures/schedulePictureApi.ts /shramsafal/pictures/schedule/{…}');
+        expect(shown.some(s => s.endsWith('features/scheduler/pictures/schedulePictureDownload.ts /shramsafal/pictures/{…}'))).toBe(true);
+        for (const route of [
+            { method: 'PUT', path: '/shramsafal/pictures/person' },
+            { method: 'DELETE', path: '/shramsafal/pictures/person' },
+            { method: 'PUT', path: '/shramsafal/pictures/schedule/{rootId:guid}' },
+            { method: 'DELETE', path: '/shramsafal/pictures/schedule/{rootId:guid}' },
+            { method: 'GET', path: '/shramsafal/pictures/{id:guid}' },
+        ]) expect(routes).toContainEqual(route);
+        expect(shown.filter(s => s.includes('/shramsafal/pictures/institution'))).toEqual([]);
     });
 
     it('no phone path is missing from the server, and no call uses a method the route does not answer', () => {

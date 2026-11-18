@@ -25,9 +25,6 @@ import type { SchedulePictureRow } from '../../../infrastructure/storage/schedul
 import { readPictureFields } from '../../../infrastructure/reference/TemplateCatalog';
 import type { SchedulePictureKind } from '../scheduler.types';
 
-/** The file's address: a GET under the ShramSafal group, the id (a guid the catalog has already checked) as the last segment. */
-export const SCHEDULE_PICTURE_PATH = '/shramsafal/pictures/';
-
 /** The server holds at most 512 KB per picture; a little room for its own rounding, nothing more. */
 export const MAX_HELD_PICTURE_BYTES = 600 * 1024;
 
@@ -159,7 +156,9 @@ async function run(db: AgriLogDatabase, rawTemplates: unknown[], deps: ScheduleP
 
         let response: Response;
         try {
-            response = await doFetch(`${SCHEDULE_PICTURE_PATH}${want.pictureId}`, { method: 'GET', headers });
+            // GET /shramsafal/pictures/{id}: the file's address is a path under the ShramSafal group; the id (a guid the catalog has already
+            // checked) is its last segment, and nothing else is ever put in the address.
+            response = await doFetch(`/shramsafal/pictures/${want.pictureId}`, { method: 'GET', headers });
         } catch {
             // No answer at all (offline, a dropped connection): say nothing about the picture, keep everything, stop here.
             out.offline = true;

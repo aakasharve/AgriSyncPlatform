@@ -13,6 +13,7 @@
  * (`OWNER_LABEL`: "ॲपमधलं मूळ शेड्यूल", "शेतकऱ्याने स्वतः बनवलेलं", ...) - never an invented institution.
  * Everything the old dark card said about the schedule stays under the name: the lineage, ShramSafal's check, and the note on a schedule the check
  * does not stand behind.
+ * On his OWN schedule the owner also gets a small photo action (`SchedulePictureChooser`: "फोटो लावा"); nobody else sees it.
  */
 import React from 'react';
 import LineageRibbon from '../../schedule-authoring/components/LineageRibbon';
@@ -22,6 +23,7 @@ import { OWNER_LABEL } from './scheduleCopy';
 import { scheduleNameMr } from './scheduleNames';
 import { realCreatorName } from './ScheduleCreatorBadge';
 import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
+import { SchedulePictureChooser } from '../pictures/SchedulePictureChooser';
 import { scheduleMapWords } from './scheduleMapCopy';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
@@ -60,6 +62,8 @@ export const ScheduleOwnerBar: React.FC<{
             />
             {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
             <ScheduleCheckBadge template={template} tone="light" testId="sched-check" />
+            {/* spec: plr-d10 lane SCH-ID-P (D-146, D-148) - the OWNER's small photo action; it draws nothing for anyone else */}
+            <SchedulePictureChooser template={template} />
             {children}
         </section>
     );
