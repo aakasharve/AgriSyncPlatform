@@ -63,10 +63,16 @@ describe('Live Health real behaviours (B25)', () => {
     // the last-heard cell holds no value: it is the named unmeasured mark, never a time
     expect(cells[3].querySelector('[data-state="unmeasured"]')).not.toBeNull();
     expect(cells[3].textContent).not.toMatch(/\d/);
-    expect(row!.textContent).not.toMatch(/\bCLEAR\b|\bBREACH\b/);
-    // and the four rows that showed values from doubles or ideas stay out
+    expect(row!.textContent).not.toMatch(/\bClear\b|\bProblem\b|\bNot judged\b/i);
+    // CR-2e C31 (1): the voice check is a feed row of its own, so the list shows these five rows, each named.
     const names = [...table.querySelectorAll('tbody > tr[aria-controls] td:first-child')].map((c) => c.textContent ?? '');
-    expect(names).toHaveLength(4);
+    expect(names).toEqual([
+      'AgriSync API · /admin/ops/health',
+      'AgriSync API · /shramsafal/admin/ops/voice-check',
+      'analytics.events · errors and slow calls, 2h',
+      'mis.alert_r1 … r8 (eight views)',
+      'Nightly metrics rebuild',
+    ]);
   });
 });
 
@@ -78,6 +84,12 @@ describe('Live Health ideas stay ideas when the server serves a value (B25)', ()
     const el = document.querySelector<HTMLElement>('[data-metric="live-alert-rules"]')!;
     expect(el).not.toBeNull();
     expect(el.textContent).not.toContain('Not built yet');
-    expect(document.body.textContent).not.toContain('BREACH');
+    // C31 (6): the page never says "BREACH"; the check is per card, in the card's own verdict words.
+    // The health answer carries no alertR9 and the voice reply carries no state, so neither card names a verdict.
+    for (const id of ['R9', 'R10']) {
+      const card = [...document.querySelectorAll('h3')].find((h) => (h.textContent ?? '').startsWith(`${id} `))!.parentElement!.parentElement!;
+      expect(card, id).toBeTruthy();
+      expect(card.textContent, id).not.toMatch(/Problem|Clear|Not judged/);
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import type { OpsHealthData } from '@/hooks/useOpsHealth';
@@ -140,7 +141,7 @@ describe('Live Health alert checks (L1, real)', () => {
 
   it('Too_few_recordings_says_too_few_to_judge', async () => {
     // Review Focus 4: two recordings, one failed, is neither "voice failing" nor "clear".
-    // CR-2e C29 (binding, it replaced Task 5's text) fixes the words: "2 recordings finished, too few to judge".
+    // CR-2e C31 (the recorded wording ruling; C29 does not contain these words) fixes them: "2 recordings finished, too few to judge".
     serve(() => health({ alertR9: r9('clear', 0) }), () => ok(r10({ state: 'not_judged', counted: 1, outOf: 2, reason: 'too_few_recordings' })));
     render();
     await settled();
@@ -224,4 +225,114 @@ describe('the voice check is requested once (C11)', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
     expect(voiceCalls()).toHaveLength(2);
   }, 90_000);
+});
+
+/** The card of one rule, found by its own heading ("R9 ..." or "R10 ..."), so a word is read from that card only. */
+function cardOf(id: 'R9' | 'R10'): HTMLElement {
+  const h = [...document.querySelectorAll('h3')].find((e) => (e.textContent ?? '').startsWith(`${id} `));
+  expect(h, `${id} card`).toBeTruthy();
+  return h!.parentElement!.parentElement as HTMLElement;
+}
+const VERDICTS = /\b(Clear|Problem|Not judged)\b/;
+/** The app's own default query options (App.tsx: staleTime 60 s, retry 1, no focus refetch), not the test helper's. */
+const appClient = (over: { retry?: number | false } = {}) =>
+  new QueryClient({ defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false, retry: 1, ...over } } });
+
+describe('each check card names its own verdict (C31 (6))', () => {
+  it('R9 Clear while R10 Problem', async () => {
+    serve(() => health({ alertR9: r9('clear', 4) }), () => ok(r10({ state: 'breach', counted: 3, outOf: 10 })));
+    render();
+    await settled();
+    await waitFor(() => expect(spoken(cardOf('R10'))).toMatch(/3 of 10 recordings failed/), WAIT);
+    expect(spoken(cardOf('R9'))).toMatch(/\bClear\b/);
+    expect(spoken(cardOf('R9'))).not.toMatch(/\b(Problem|Not judged)\b/);
+    expect(spoken(cardOf('R10'))).toMatch(/\bProblem\b/);
+    expect(spoken(cardOf('R10'))).not.toMatch(/\b(Clear|Not judged)\b/);
+  });
+
+  it('R9 Problem while R10 Clear', async () => {
+    serve(() => health({ alertR9: r9('breach', 31) }), () => ok(r10({ state: 'clear', counted: 1, outOf: 10 })));
+    render();
+    await settled();
+    await waitFor(() => expect(spoken(cardOf('R10'))).toMatch(/1 of 10 recordings failed/), WAIT);
+    expect(spoken(cardOf('R9'))).toMatch(/\bProblem\b/);
+    expect(spoken(cardOf('R9'))).not.toMatch(/\b(Clear|Not judged)\b/);
+    expect(spoken(cardOf('R10'))).toMatch(/\bClear\b/);
+    expect(spoken(cardOf('R10'))).not.toMatch(/\b(Problem|Not judged)\b/);
+  });
+
+  it('R9 Clear while R10 Not judged', async () => {
+    serve(() => health({ alertR9: r9('clear', 0) }), () => ok(r10({ state: 'not_judged', counted: 1, outOf: 2, reason: 'too_few_recordings' })));
+    render();
+    await settled();
+    await waitFor(() => expect(spoken(cardOf('R10'))).toMatch(/Not judged/), WAIT);
+    expect(spoken(cardOf('R9'))).toMatch(/\bClear\b/);
+    expect(spoken(cardOf('R10'))).not.toMatch(/\b(Clear|Problem)\b/);
+  });
+});
+
+describe('the voice check with the app default query options (C31 (2))', () => {
+  it('a 500 reply is requested exactly once, though the app default is retry 1', async () => {
+    serve(() => health({ alertR9: r9('clear', 0) }), () => ({ status: 500, data: { code: 'boom' } }));
+    render(appClient());
+    await settled();
+    await waitFor(() => expect(body()).toMatch(/could not load/i), WAIT);
+    // The default retry waits 1 s before its second try; wait past it.
+    await new Promise((r) => setTimeout(r, 3_000));
+    expect(voiceCalls()).toHaveLength(1);
+  }, 30_000);
+});
+
+describe('a failed "Check again" after an answered check (C31 (3))', () => {
+  it('shows no verdict badge, says it could not load, and labels any earlier answer with its time', async () => {
+    let n = 0;
+    serve(
+      () => health({ alertR9: r9('breach', 31) }),
+      () => (++n === 1 ? ok(r10({ state: 'clear', counted: 1, outOf: 10 })) : { status: 500, data: { code: 'boom' } }),
+    );
+    render();
+    await settled();
+    await waitFor(() => expect(spoken(cardOf('R10'))).toMatch(/\bClear\b/), WAIT);
+
+    fireEvent.click(screen.getByRole('button', { name: /Check again/i }));
+    await waitFor(() => expect(voiceCalls()).toHaveLength(2), WAIT);
+    await waitFor(() => expect(spoken(cardOf('R10'))).toMatch(/could not load/i), WAIT);
+
+    const card = spoken(cardOf('R10'));
+    expect(card, 'no verdict badge after a failed check').not.toMatch(VERDICTS);
+    // The R9 card is unaffected and still shows its own verdict.
+    expect(spoken(cardOf('R9'))).toMatch(/\bProblem\b/);
+    // If the earlier answer is still shown, it is labelled as the earlier check, with its time.
+    if (/recordings failed/.test(card)) {
+      expect(card).toMatch(/Earlier check/i);
+      expect(card).toMatch(/Earlier check at \S*\d/i);
+    }
+  });
+});
+
+describe('opening Live Health again asks the voice check again (C31 (4))', () => {
+  it('a re-open asks again; time passing and a window focus without a re-open do not', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout'] });
+    serve(() => health({ alertR9: r9('clear', 0) }), () => ok(r10({ state: 'clear', counted: 1, outOf: 10 })));
+    // One client for both opens; it keeps answers (default gcTime) and treats 60 s as fresh, as the app does.
+    const client = appClient({ retry: false });
+    const first = render(client);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(voiceCalls()).toHaveLength(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(voiceCalls(), 'asked again without a re-open').toHaveLength(1);
+
+    first.unmount();
+    render(client);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(voiceCalls(), 'a re-open must ask again').toHaveLength(2);
+  }, 60_000);
 });
