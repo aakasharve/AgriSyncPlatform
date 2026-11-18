@@ -74,17 +74,12 @@ import type { OpsErrorEvent, OpsFarmError } from '@/hooks/useOpsHealth';
  *      sends no stamp there is no chip at all rather than a "Live · now"
  *      that means "we just asked".
  *
- *  (3) 🛑 R9 AND R10 ARE NOT LIVE. They are read `SELECT breached FROM
- *      mis.alert_r9_api_error_spike` / `..._r10_voice_degraded`
- *      (`AdminOpsRepository.cs:163-186`), and both are MATERIALIZED VIEWS
- *      (`20260502000000_AnalyticsRewrite.cs:424-456`). A matview holds the
- *      answer from the last time it was rebuilt, and the only thing in this
- *      repository that rebuilds them is `MisRefreshJob` — once a day, at
- *      02:00 UTC (`MisRefreshJob.cs:124-129`, views listed at `:72-73`).
- *      So a CLEAR badge means "the rule found nothing when the view was last
- *      built", which is up to a day ago, over a window that ended then. The
- *      endpoint does not report when that was, so this screen cannot state
- *      the age of either verdict and says so instead of implying "now".
+ *  (3) R9 AND R10 ARE LIVE COUNTS NOW (C29). R9 is counted live from
+ *      analytics.events and comes with the health answer (`alertR9`); no
+ *      nightly view is read for it. R10 comes from its own route,
+ *      `/shramsafal/admin/ops/voice-check`, asked when this page opens and
+ *      when a person presses "Check again". Each verdict carries its counted
+ *      figure and the window it was counted over.
  *
  *  (4) THE TWO RULES, IN THE WORDS OF THE SQL THAT DEFINES THEM.
  *      R9  `COUNT(*) > 30` over `event_type = 'api.error'` in `1 hour`.
@@ -557,6 +552,15 @@ export default function OpsLivePage() {
   const voiceCheck = useOpsVoiceCheck();
   const voiceForbidden = voiceCheck.isError && isVoiceCheckForbidden(voiceCheck.error);
   const r9: AlertCheck | null = data?.alertR9 ?? null;
+  /* After a failed "Check again" the earlier answer may still be in hand; it
+     is shown only as the earlier check, with its time, never as a verdict. */
+  const earlierAt = voiceCheck.dataUpdatedAt
+    ? fmt.dateTime(new Date(voiceCheck.dataUpdatedAt).toISOString(), DATE_FORMATS.usersLastLogin)
+    : null;
+  const earlierFigure = voiceCheck.data ? r10Figure(voiceCheck.data) : null;
+  const earlierVoiceFigure = earlierFigure
+    ? `Earlier check${earlierAt ? ` at ${earlierAt}` : ''}: ${earlierFigure}`
+    : null;
 
   /* A27, THE SECOND HALF. The server's own stamp, and nothing derived from
      this browser's clock. `dataUpdatedAt` — what the old page used — is the
@@ -591,13 +595,13 @@ export default function OpsLivePage() {
         {
           id: 'ops-health',
           name: 'AgriSync API · /admin/ops/health',
-          feeds: 'Every figure on this screen',
+          feeds: 'Recent events and the API error check (R9)',
           stateText: 'Answering',
           tone: 'green',
           lastHeard: readAt,
           lastHeardWhy: 'The response carried no computedAtUtc.',
           detail:
-            'One request assembles four independent queries against analytics.events plus two reads of the alert views. It answered this request. The endpoint sits behind a 30-second server-side output cache, so the snapshot can be up to half a minute older than the response that carried it — which is why the chip above states the server’s stamp rather than the moment this browser was answered.',
+            'One request assembles the independent queries against analytics.events, including the live count for R9. It answered this request. The endpoint sits behind a 30-second server-side output cache, so the snapshot can be up to half a minute older than the response that carried it — which is why the chip above states the server’s stamp rather than the moment this browser was answered.',
           facts: [
             ['Poll', 'every 30 seconds'],
             ['Server cache', '30 seconds (Program.cs:131)'],
@@ -619,6 +623,34 @@ export default function OpsLivePage() {
             ['Cap', '50 rows'],
             ['Rows', fmt.num(events.length) ?? '0'],
             ['Not included', "sync.mutation_rejected — a 200 that refused a farmer's work"],
+          ],
+        },
+        {
+          id: 'voice-check',
+          name: 'AgriSync API · /shramsafal/admin/ops/voice-check',
+          feeds: 'The voice check (R10), above',
+          stateText: voiceForbidden
+            ? 'Not available'
+            : voiceCheck.isError
+              ? 'Could not load'
+              : voiceCheck.data
+                ? 'Answered'
+                : 'Checking',
+          tone: voiceForbidden
+            ? 'grey'
+            : voiceCheck.isError
+              ? 'red'
+              : voiceCheck.data
+                ? 'green'
+                : 'grey',
+          lastHeard: null,
+          lastHeardWhy: 'This answer carries no server timestamp.',
+          detail:
+            'A live count of finished voice recordings over the last six hours, asked when this page opens and when Check again is pressed. It is not polled.',
+          facts: [
+            ['Route', '/shramsafal/admin/ops/voice-check'],
+            ['Asked', 'on opening this page, and on Check again'],
+            ['Poll', 'none'],
           ],
         },
         {
@@ -742,8 +774,14 @@ export default function OpsLivePage() {
               <CheckCard
                 title={`${R10.id} ${R10.name}`}
                 rule={R10.rule}
-                check={voiceCheck.data ?? null}
-                figure={voiceCheck.data ? r10Figure(voiceCheck.data) : null}
+                check={voiceCheck.isError ? null : (voiceCheck.data ?? null)}
+                figure={
+                  voiceCheck.data
+                    ? voiceCheck.isError
+                      ? earlierVoiceFigure
+                      : r10Figure(voiceCheck.data)
+                    : null
+                }
                 loading={voiceCheck.isFetching && !voiceCheck.data}
                 missing={
                   voiceForbidden

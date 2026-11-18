@@ -7,9 +7,9 @@ import type { AlertCheck } from '@/lib/alertRules';
  * R10 (voice failing over 20% in six hours), asked of its own route.
  *
  * Each call counts live and writes audit rows on the server, and the answer is
- * not cached there. So it is requested once when the page opens and again only
- * when a person presses "Check again": no polling, no retry, no refetch on
- * window focus, and the answer never goes stale on its own.
+ * not cached there. So it is requested each time the page opens (no cached
+ * answer older than the page) and again when a person presses "Check again":
+ * no polling, no retry, no refetch on window focus.
  */
 export function useOpsVoiceCheck() {
   const org = useOrgKey();
@@ -23,7 +23,7 @@ export function useOpsVoiceCheck() {
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    staleTime: Infinity,
+    staleTime: 0,
   });
 }
 
