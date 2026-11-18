@@ -3,7 +3,7 @@ import { QrCode, ShieldCheck, UserCheck, Sprout } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
-import PhoneDigitBoxes from '../shared/components/PhoneDigitBoxes';
+import PhoneField from '../shared/components/PhoneField';
 import PasswordField from '../features/auth/components/PasswordField';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { APP_VERSION } from '../buildInfo';
@@ -246,8 +246,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                         <label htmlFor="auth-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
                             {c.password.phone}
                         </label>
-                        <PhoneDigitBoxes
+                        <PhoneField
                             id="auth-phone"
+                            autoComplete="username"
                             language={language}
                             placeholder="9876543210"
                             value={phone}

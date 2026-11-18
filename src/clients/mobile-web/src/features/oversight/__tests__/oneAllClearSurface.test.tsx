@@ -235,6 +235,11 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
         expect(screen.getByTestId('strip-approval')).toHaveTextContent('मंजुरीसाठी ४');
         expect(screen.queryByTestId('strip-rest')).toBeNull();
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
+        // Founder change note 2026-11-17: the chips sit in ONE line (a row that slides sideways), never wrapped one below the other.
+        const chipRow = screen.getByTestId('strip-chip-row');
+        expect(chipRow.className).toContain('flex-nowrap');
+        expect(chipRow.className).toContain('overflow-x-auto');
+        expect(chipRow.className).not.toMatch(/(^|\s)flex-wrap(\s|$)/);
 
         // ...and the sentence he read underneath it is nowhere on the screen.
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();

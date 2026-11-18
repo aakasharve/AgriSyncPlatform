@@ -233,6 +233,9 @@ describe('today\'s tools', () => {
         fireEvent.click(screen.getByTestId('today-spend'));
         expect(screen.getByTestId('money-lens')).toBeInTheDocument();
         expect(text('close-day')).toBe('दिवस पूर्ण करा');
+        // Founder change note 2026-11-17: no black block on the schedule tab; the button is the app's solid green.
+        expect(screen.getByTestId('close-day').className).toContain('bg-emerald-600');
+        expect(screen.getByTestId('close-day').className).not.toMatch(/stone-9|black/);
         fireEvent.click(screen.getByTestId('close-day'));
         expect(p.onCloseDay).toHaveBeenCalledTimes(1);
         noEnglish();

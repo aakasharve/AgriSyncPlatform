@@ -81,7 +81,9 @@ const StripSignals: React.FC<StripSignalsProps> = ({
 
     return (
         <div data-testid="strip-signals" className="flex w-full items-center gap-2 rounded-2xl border border-stone-200 bg-white px-2 py-1.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            {/* Founder change note 2026-11-17: the chips sit in ONE line, never one below the other. A row that is wider than
+                the space slides sideways (scrollbar hidden), the chevron button stays put on the right. */}
+            <div data-testid="strip-chip-row" className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {showApproval && <ApprovalChip farmId={farmId} language={language} variant="chip" data-testid="strip-approval" />}
                 {showUnsent && (
                     <button type="button" onClick={onOpenSync} data-testid="strip-unsent" className={`${chipBase} border-sky-200 bg-sky-50 text-sky-900`}>

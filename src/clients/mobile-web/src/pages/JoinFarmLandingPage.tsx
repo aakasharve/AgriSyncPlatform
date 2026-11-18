@@ -34,7 +34,7 @@ import { joinByCodeCopy } from '../features/onboarding/components/joinByCodeCopy
 import { joinLandingCopy, otpVerifyProblem, type JoinProblem } from '../features/onboarding/qr/joinLandingCopy';
 import { waitingSeatKind } from '../features/onboarding/components/PendingJoinRequests';
 import { useLanguage } from '../i18n/LanguageContext';
-import PhoneDigitBoxes from '../shared/components/PhoneDigitBoxes';
+import PhoneField from '../shared/components/PhoneField';
 // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
 // skip consent entirely: this page sent the number (startOtp) and verified it with no
 // consent anywhere. The tick now sits on the phone step and is recorded before the send.
@@ -527,7 +527,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         </label>
 
                         <div className="mt-5">
-                            <PhoneDigitBoxes
+                            <PhoneField
                                 id="join-phone"
                                 large
                                 autoFocus

@@ -88,7 +88,7 @@ export const ScheduleTools: React.FC<{
                 </Tap>
                 {onCloseDay && (
                     <Tap onClick={onCloseDay} data-testid="close-day"
-                        className="mt-2.5 flex min-h-[52px] w-full items-center justify-center rounded-full bg-stone-900 px-5 text-[16px] font-extrabold text-white">
+                        className="mt-2.5 flex min-h-[52px] w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-[16px] font-extrabold text-white">
                         <CalendarRange size={18} className="mr-2" aria-hidden="true" />{SC.closeDay}
                     </Tap>
                 )}

@@ -7,7 +7,7 @@
  * (I16 — LANG-2): words in ONE language (`authCopy`), never Marathi and English side by side.
  */
 import React, { useRef, useState } from 'react';
-import PhoneDigitBoxes from '../../../shared/components/PhoneDigitBoxes';
+import PhoneField from '../../../shared/components/PhoneField';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { authCopy } from '../authCopy';
@@ -92,7 +92,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
                 <label htmlFor="otp-phone" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
                     {c.phone}
                 </label>
-                <PhoneDigitBoxes
+                <PhoneField
                     id="otp-phone"
                     language={language}
                     placeholder={c.phonePlaceholder}
