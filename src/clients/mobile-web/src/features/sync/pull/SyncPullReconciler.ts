@@ -41,6 +41,7 @@ import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
 import { dispatchPostReconcileEvents } from './reconcilers/postReconcileEvents';
 import { markLogsRebuilt } from './logsRebuildMarker';
 import { INPUT_LIBRARY_POLL_MS, runInputLibraryStep } from './reconcilers/inputLibraryDownload';
+import { syncSchedulePictures } from '../../scheduler/pictures/schedulePictureDownload';
 
 export { dayLedgerMetaKey } from './helpers/dayLedgerMetaKey';
 
@@ -174,6 +175,10 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     // landed and OUTSIDE its Dexie transaction, at most every INPUT_LIBRARY_POLL_MS. Fire and forget: the step never throws,
     // and the .catch (which also covers a throw before the first await) means nothing it does can fail or delay this pull.
     void Promise.resolve().then(() => runInputLibraryStep(db, { minIntervalMs: INPUT_LIBRARY_POLL_MS })).catch(() => undefined);
+    // spec: plr-d10 lane SCH-ID-P (D-146, D-148) - the pictures the pull NAMED for each schedule (an owner's photo, a schedule's picture, a logo),
+    // fetched only when their sha changed, after the pull has landed and outside its transaction. Fire and forget: the step never throws, a
+    // refusal or an offline phone just leaves the letter or leaf badge, and nothing it does can fail or delay this pull.
+    void Promise.resolve().then(() => syncSchedulePictures(db, (payload as { scheduleTemplates?: unknown }).scheduleTemplates)).catch(() => undefined);
     if (withdrawnMoney > 0 && typeof window !== 'undefined') {
         // The money cache merges pulls; a withdrawn money record must leave it too (re-read from the phone's store).
         window.dispatchEvent(new CustomEvent('agrisync:finance-records-withdrawn'));

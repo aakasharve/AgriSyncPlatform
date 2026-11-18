@@ -54,9 +54,9 @@ afterEach(async () => { await Dexie.delete(NAME); });
 
 describe("Dexie v28 - the farm's tasks and reminders", () => {
     it('is the current version and declares the plannedWork store, keyed by id and indexed as the plan says', () => {
-        expect(DATABASE_VERSION).toBe(28);
+        expect(DATABASE_VERSION).toBeGreaterThanOrEqual(28); // v29 (lane SCH-ID-P) follows; its own test pins the number
         const db = new AgriLogDatabase(NAME);
-        expect(db.verno).toBe(28);
+        expect(db.verno).toBeGreaterThanOrEqual(28);
         const store = db.table('plannedWork');
         expect(store.schema.primKey.name).toBe('id');
         expect(store.schema.indexes.map(i => i.name)).toEqual(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc']);
@@ -78,8 +78,8 @@ describe("Dexie v28 - the farm's tasks and reminders", () => {
 
         const db = new AgriLogDatabase(NAME);
         await db.open();
-        expect(db.verno).toBe(28);
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'plannedWork'].sort());
+        expect(db.verno).toBeGreaterThanOrEqual(28);
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'plannedWork', 'schedulePictures'].sort()); // schedulePictures is v29's (lane SCH-ID-P)
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect(await db.table('inputLibrary').get('current')).toBeDefined();
         expect((await db.scheduleSubscriptions.get('sub-1'))?.state).toBe('Active');

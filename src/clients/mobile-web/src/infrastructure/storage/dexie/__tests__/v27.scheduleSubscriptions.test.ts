@@ -74,7 +74,7 @@ describe('Dexie v27 - the plot\'s chosen schedule', () => {
         const db = new AgriLogDatabase(NAME);
         await db.open();
         expect(db.verno).toBeGreaterThanOrEqual(27);
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleSubscriptions', 'plannedWork'].sort()); // plannedWork is v28's (lane L8c-1)
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleSubscriptions', 'plannedWork', 'schedulePictures'].sort()); // plannedWork is v28's (lane L8c-1), schedulePictures v29's (lane SCH-ID-P)
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect(await db.table('inputLibrary').get('current')).toBeDefined();
         expect(await db.scheduleSubscriptions.count()).toBe(0);

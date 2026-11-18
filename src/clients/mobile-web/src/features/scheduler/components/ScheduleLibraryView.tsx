@@ -34,7 +34,7 @@ import { cropNameIn } from '../../../shared/names/namesIn';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
-import { ScheduleCreatorBadge, ownerPictureShape, realCreatorName } from '../schedulePage/ScheduleCreatorBadge';
+import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
 import { scheduleMapWords, type ScheduleMapLanguage } from '../schedulePage/scheduleMapCopy';
 
 /**
@@ -268,7 +268,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                     <span aria-hidden="true" className={`mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-[#1448E6]' : 'border-stone-400'} ${locked ? 'bg-stone-100' : 'bg-white'}`}>
                                         {on && <span className="h-3 w-3 rounded-full bg-[#1448E6]" />}
                                     </span>
-                                    <ScheduleCreatorBadge name={realCreatorName(t)} size={44} shape={ownerPictureShape(t.ownerType)} tone="light" testId={`library-badge-${t.id}`} />
+                                    <ScheduleMakerBadge template={t} size={44} tone="light" testId={`library-badge-${t.id}`} />
                                     <span className="min-w-0 flex-1">
                                         <span className="block break-words text-[16px] font-black leading-snug text-stone-900" data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</span>
                                         {/* PROPOSED (Marathi) */}

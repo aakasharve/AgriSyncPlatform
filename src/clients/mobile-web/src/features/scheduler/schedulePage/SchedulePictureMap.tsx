@@ -17,7 +17,7 @@
 import React, { useMemo, useState } from 'react';
 import { PickerCropPhoto, PlotCount } from '../../context/components/CropPlotPicker';
 import { scheduleNameMr } from './scheduleNames';
-import { ScheduleCreatorBadge, ownerPictureShape } from './ScheduleCreatorBadge';
+import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
 import { MAP_PLOT_H, layoutScheduleMap, type MapPlot, type MapSchedule, type ScheduleMapModel } from './scheduleMapModel';
 import { scheduleMapWords, type ScheduleMapLanguage } from './scheduleMapCopy';
 
@@ -83,7 +83,7 @@ export const SchedulePictureMap: React.FC<{
                 data-colour={s.colour} data-plots={s.plotIds.length} data-own={s.own ? 'yes' : 'no'}
                 style={{ top: place.top, height: place.height, borderColor: s.colour, ...(on ? { boxShadow: `0 0 0 3px ${s.colour}55` } : {}) }}
                 className={`absolute inset-x-0 flex overflow-hidden rounded-2xl border-[3px] bg-white p-1.5 text-center transition active:scale-[0.98] ${tall ? 'flex-col items-center justify-center gap-1' : 'items-center gap-1.5 text-left'}`}>
-                <ScheduleCreatorBadge name={s.creator} size={tall ? 44 : 34} shape={ownerPictureShape(s.ownerType)} tone="light" testId={`map-badge-${s.key}`} />
+                <ScheduleMakerBadge template={s.template} size={tall ? 44 : 34} tone="light" testId={`map-badge-${s.key}`} />
                 <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 block break-words text-[12px] font-extrabold leading-tight text-stone-900" data-part="schedule-name">{name}</span>
                     <span className="mt-0.5 inline-block rounded-full px-2 text-[11px] font-extrabold leading-[18px] text-white" style={{ background: s.colour }} data-part="plot-count">

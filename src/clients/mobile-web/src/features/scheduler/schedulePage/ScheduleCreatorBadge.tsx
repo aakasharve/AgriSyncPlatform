@@ -9,8 +9,11 @@
  *
  * Lane UI-8 (founder D-148 layout C, D-150): the same badge now also sits on a WHITE card (`tone="light"`) and is SQUARE for an institution's
  * logo (`shape="square"`; a person's picture stays round). A picture, when one comes, fills the same place in either shape.
+ *
+ * Lane SCH-ID-P (D-146, D-148): the real picture now arrives (`features/scheduler/pictures/ScheduleMakerBadge`). A picture the screen cannot draw (a
+ * file that fails to decode) drops back to the letter or leaf, never a broken-image mark.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Leaf } from 'lucide-react';
 import type { CropScheduleTemplate } from '../scheduler.types';
 
@@ -51,13 +54,15 @@ export function creatorLetter(name: string | null | undefined): string | null {
 
 export const ScheduleCreatorBadge: React.FC<ScheduleCreatorBadgeProps> = ({ imageUrl = null, name = null, size = 56, shape = 'round', tone = 'dark', testId = 'sched-badge', sizeClass }) => {
     const letter = creatorLetter(name);
+    const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+    const picture = imageUrl && imageUrl !== brokenUrl ? imageUrl : null;
     const look = tone === 'light' ? 'bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200' : 'bg-emerald-500/25 text-emerald-200 ring-2 ring-white/30';
     return (
-        <span data-testid={testId} data-kind={imageUrl ? 'image' : letter ? 'letter' : 'leaf'} data-shape={shape} aria-hidden="true"
+        <span data-testid={testId} data-kind={picture ? 'image' : letter ? 'letter' : 'leaf'} data-shape={shape} aria-hidden="true"
             style={sizeClass ? undefined : { width: size, height: size, fontSize: Math.round(size * 0.46) }}
             className={`grid shrink-0 place-items-center overflow-hidden font-black ${sizeClass ?? ''} ${shape === 'square' ? 'rounded-xl' : 'rounded-full'} ${look}`}>
-            {imageUrl
-                ? <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+            {picture
+                ? <img src={picture} alt="" className="h-full w-full object-cover" onError={() => setBrokenUrl(picture)} />
                 : letter ?? <Leaf size={Math.round(size * 0.5)} aria-hidden="true" />}
         </span>
     );

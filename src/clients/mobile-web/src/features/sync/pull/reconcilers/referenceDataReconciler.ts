@@ -17,9 +17,18 @@
 import type { SyncPullResponse } from '../../../../infrastructure/api/AgriSyncClient';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import type { CostCategoryRef } from '../../../../domain/finance/CostCategory';
+import { schedulePicturesSignature } from '../../../scheduler/pictures/schedulePictureDownload';
 
 export const REFERENCE_DATA_VERSION_META_KEY =
     'shramsafal_reference_data_version_hash_v1';
+
+/**
+ * spec: plr-d10 lane SCH-ID-P - which pictures the last pull named for the schedules. The server's version hash covers the schedules' content
+ * but NOT their picture fields, so a photo added, replaced or removed would otherwise never reach the stored list (and a phone that restarts
+ * offline would lose it from its schedules).
+ */
+export const SCHEDULE_PICTURES_SIGNATURE_META_KEY =
+    'shramsafal_schedule_pictures_signature_v1';
 
 type ReferencePayload = SyncPullResponse & {
     scheduleTemplates?: unknown[];
@@ -81,6 +90,26 @@ export async function reconcileReferenceData(
         });
 
         referenceDataUpdated = true;
+    }
+
+    // Same schedules, other pictures: only the schedule list is rewritten (the other three rows and the update flag are untouched).
+    const picturesSignature = schedulePicturesSignature(scheduleTemplates);
+    const previousPictures = await db.appMeta.get(SCHEDULE_PICTURES_SIGNATURE_META_KEY);
+    const previousPicturesSignature = typeof previousPictures?.value === 'string' ? previousPictures.value : '';
+    if (!referenceDataUpdated && previousPicturesSignature !== picturesSignature) {
+        await db.referenceData.put({
+            key: 'scheduleTemplates',
+            data: scheduleTemplates,
+            versionHash: referenceDataVersionHash,
+            updatedAt: receivedAtUtc,
+        });
+    }
+    if (previousPicturesSignature !== picturesSignature) {
+        await db.appMeta.put({
+            key: SCHEDULE_PICTURES_SIGNATURE_META_KEY,
+            value: picturesSignature,
+            updatedAt: receivedAtUtc,
+        });
     }
 
     await db.appMeta.put({
