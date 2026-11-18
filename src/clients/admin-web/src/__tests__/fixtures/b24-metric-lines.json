@@ -587,7 +587,7 @@
     "page": "Live Health",
     "key": "live-alert-rules",
     "label": "Alert rules",
-    "status": "idea",
+    "status": "real",
     "what": "Two automatic checks: over 30 server errors in an hour, and voice failing over 20% in six hours.",
     "why": "Raises a flag when something breaks for many farmers at once.",
     "buildId": "L1"

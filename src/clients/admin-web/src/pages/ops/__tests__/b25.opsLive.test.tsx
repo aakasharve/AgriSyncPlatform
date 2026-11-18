@@ -73,12 +73,11 @@ describe('Live Health real behaviours (B25)', () => {
 describe('Live Health ideas stay ideas when the server serves a value (B25)', () => {
   it('B25_an_alert_verdict_is_served_and_not_drawn', async () => {
     await shown(health({ apiErrorSpike: true, voiceDegraded: true }));
-    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L7 (the 24-hour farm list) became real; only the alert idea (L1) stays an idea.
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L1 became real. Retired: its Not built yet assertion; the checks are covered by OpsLivePage.alerts.test.tsx.
+    // What stays: the old served flags (apiErrorSpike, voiceDegraded) are still never drawn as a verdict.
     const el = document.querySelector<HTMLElement>('[data-metric="live-alert-rules"]')!;
     expect(el).not.toBeNull();
-    expect(el.textContent).toContain('Not built yet');
-    // The verdict: no BREACH or CLEAR badge and no rule badge element.
-    expect(document.querySelector('[data-rule]')).toBeNull();
+    expect(el.textContent).not.toContain('Not built yet');
     expect(document.body.textContent).not.toContain('BREACH');
   });
 });

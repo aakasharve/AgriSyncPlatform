@@ -149,12 +149,17 @@ describe('The Farmer Health landing is ideas only (B24; Silent Churn and Sufferi
   });
 });
 
-describe('Live Health keeps L6 and L8, parks L1, drops L2 to L5 (B24)', () => {
-  it('B24_Live_Health_shows_L1_as_an_idea_and_none_of_L2_to_L5', async () => {
+describe('Live Health keeps L6 and L8, shows L1 as real, drops L2 to L5 (B24)', () => {
+  it('B24_Live_Health_shows_L1_as_real_and_none_of_L2_to_L5', async () => {
     serveBusyFeeds();
     renderWithProviders(<OpsLivePage />, { route: `/ops/live?org=${ORG}` });
-    await waitFor(() => panelFor('L1'), WAIT);
-    expectIdea('L1');
+    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L1 became real. Retired: its Not built yet panel; the checks themselves are covered by OpsLivePage.alerts.test.tsx.
+    const l1 = byId('L1');
+    await waitFor(() => expect(document.querySelector('[data-metric="live-alert-rules"]')).not.toBeNull(), WAIT);
+    const el = document.querySelector<HTMLElement>('[data-metric="live-alert-rules"]')!;
+    expect(el.textContent).toContain(l1.what!);
+    expect(el.textContent).toContain(l1.why!);
+    expect(el.textContent).not.toContain('Not built yet');
     // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): L7 became real; its idea assertion is retired (OpsLivePage.repeated.test.tsx).
     expectNoDoubleLabelsOf('Live Health');
     expect(document.body.textContent).not.toMatch(/\bAI\b/);
