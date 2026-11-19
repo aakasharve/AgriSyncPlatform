@@ -103,6 +103,19 @@ export function reviewReasonLabel(reason: string): string {
     return 'वेगळी दिसली — एकदा पाहा';
 }
 
+/**
+ * lane HONESTY-2 (H2) — what the अहवाल says about a period whose income was never recorded, and the note under a
+ * figure made only from the amounts that were. Harvest income is not entered anywhere yet, so "no income" here is
+ * "no income was written down", never "no income came" - a month of spending alone must not read "तोटा" (P4).
+ * PROPOSED (Marathi); this page has no English twin.
+ */
+export const REPORT_WORDS = {
+    noIncome: 'उत्पन्न अजून नोंदवलेलं नाही',
+    /** The same "अपूर्ण" the whole-farm overview uses (`reflectCopy.partialTag`), with what the figure is made of. */
+    recordedOnly: 'अपूर्ण — फक्त नोंदवलेल्या रकमांवर आधारित',
+    spentTitle: 'खर्च',
+} as const;
+
 /** `1 नोंद`, `3 नोंदी`. */
 export const entriesCount = (n: number): string => `${n} ${n === 1 ? 'नोंद' : 'नोंदी'}`;
 
