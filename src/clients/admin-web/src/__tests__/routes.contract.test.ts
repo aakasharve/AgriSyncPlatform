@@ -1,0 +1,295 @@
+import { createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
+import { render } from '@testing-library/react';
+import { BrowserRouter, Navigate, Route } from 'react-router-dom';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import App from '@/App';
+// Vite's ?raw import — the two ungated-route COMMENTS are part of A4 and comments
+// do not survive compilation, so that half has to be read from the source text.
+import appSource from '../App.tsx?raw';
+import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
+import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
+import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { ModuleKeys } from '@/lib/moduleKeys';
+
+/**
+ * CHARACTERISATION TEST — Preservation Register A3, A4, A45, and the
+ * application-level React Query defaults half of A23.
+ *
+ * This file reads App.tsx STRUCTURALLY rather than as text. `App` calls no
+ * hooks (verified), so calling it returns the element tree without rendering,
+ * and the route table can be walked as data. That survives reformatting, import
+ * reordering and prettier; it does not survive someone moving the routes into a
+ * generated array, which is exactly the change that should have to be looked at.
+ *
+ * The three ungated routes are the sharp edge. `/`, `/schedules/templates` and
+ * `/settings/admins` are ungated ON PURPOSE. Adding a guard to any of them is
+ * not a consistency cleanup — it locks every user out of the console's home page
+ * or its settings, because no ModuleKey exists that would let anyone back in.
+ */
+
+/** The map as it stands today. Null means deliberately ungated. */
+const ROUTE_GUARDS: Record<string, string | null> = {
+  '/': null,                          // B24 (founder, 2026-11-17): now a redirect to /MIS/overview (D-151 a), which is guarded
+  '/home': null,                      // B24 (founder, 2026-11-17): Home moved here; two ideas, no request, so no guard
+  '/ops/live': ModuleKeys.OpsLive,
+  '/ops/errors': ModuleKeys.OpsErrors,
+  // B24 (founder, 2026-11-17): /ops/voice is gone: V1-V5 are doubles of Company MIS Quality #43-#45.
+  '/metrics/nsm': ModuleKeys.MetricsNsm,
+  '/farms': ModuleKeys.FarmsList,
+  '/farms/silent-churn': ModuleKeys.FarmsSilentChurn,
+  '/farms/suffering': ModuleKeys.FarmsSuffering,
+  '/farmer-health': ModuleKeys.FarmerHealth,
+  '/farmer-health/:farmId': ModuleKeys.FarmerHealth,
+  '/users': ModuleKeys.AdminUsers,
+  // Company MIS (CR-2b): seven pages on the WVFD key, and the bare /MIS redirect.
+  '/MIS/overview': ModuleKeys.MetricsNsm,
+  '/MIS/acquisition': ModuleKeys.MetricsNsm,
+  '/MIS/engagement': ModuleKeys.MetricsNsm,
+  '/MIS/retention': ModuleKeys.MetricsNsm,
+  '/MIS/quality': ModuleKeys.MetricsNsm,
+  '/MIS/farms': ModuleKeys.MetricsNsm,
+  '/MIS/operations': ModuleKeys.MetricsNsm,
+  '/MIS': null,                       // a redirect to /MIS/overview, which is guarded
+  '/schedules/templates': null,       // deliberate — no ModuleKey exists yet
+  '/settings/admins': null,           // deliberate — no ModuleKey exists yet
+};
+
+/** Routes that sit OUTSIDE the auth + scope shell, by design. */
+const PUBLIC_ROUTES = ['/login', '/403'];
+
+const CATCH_ALL = '*';
+
+interface ElementProps {
+  children?: ReactNode;
+  element?: ReactNode;
+  path?: string;
+  module?: string;
+  to?: string;
+  replace?: boolean;
+  client?: QueryClient;
+}
+
+function propsOf(element: ReactElement): ElementProps {
+  return element.props as ElementProps;
+}
+
+/** Every element in the tree, descending through both `children` and `element`. */
+function flatten(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
+  if (Array.isArray(node)) {
+    for (const child of node) flatten(child, out);
+    return out;
+  }
+  if (!isValidElement(node)) return out;
+  const element = node as ReactElement;
+  out.push(element);
+  const props = propsOf(element);
+  if (props.children !== undefined) flatten(props.children, out);
+  if (props.element !== undefined) flatten(props.element, out);
+  return out;
+}
+
+const tree = App() as ReactElement;
+const allElements = flatten(tree);
+const routeElements = allElements.filter((e) => e.type === Route);
+
+/** The module key of the EntitlementGuard inside a route's own `element` prop. */
+function guardOf(route: ReactElement): string | null {
+  const guard = flatten(propsOf(route).element).find((e) => e.type === EntitlementGuard);
+  return guard ? (propsOf(guard).module ?? null) : null;
+}
+
+const declaredRoutes = routeElements
+  .filter((r) => typeof propsOf(r).path === 'string')
+  .map((r) => ({ path: propsOf(r).path as string, guard: guardOf(r) }));
+
+afterEach(() => {
+  localStorage.clear();
+});
+
+describe('route to module-key map (A3)', () => {
+  it('declares exactly the twenty-four routes the console has today', () => {
+    const paths = declaredRoutes.map((r) => r.path);
+    expect(paths.slice().sort()).toEqual(
+      [...Object.keys(ROUTE_GUARDS), ...PUBLIC_ROUTES, CATCH_ALL].sort(),
+    );
+    expect(paths).toHaveLength(24);
+  });
+
+  it('gives every guarded route its exact module key', () => {
+    const actual = Object.fromEntries(
+      declaredRoutes
+        .filter((r) => r.path in ROUTE_GUARDS)
+        .map((r) => [r.path, r.guard]),
+    );
+    expect(actual).toEqual(ROUTE_GUARDS);
+  });
+
+  it('guards sixteen routes and no more', () => {
+    // B24 (founder, 2026-11-17): 17 -> 16, the /ops/voice route is removed (V1-V5 are doubles of Company MIS Quality).
+    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(16);
+  });
+
+  it('uses only module keys that exist in the ModuleKeys registry', () => {
+    const known = new Set<string>(Object.values(ModuleKeys));
+    for (const route of declaredRoutes) {
+      if (route.guard !== null) expect(known.has(route.guard)).toBe(true);
+    }
+  });
+
+  it('keeps the ModuleKeys registry at its current size', () => {
+    // Mirrors ShramSafal.Domain.Organizations.ModuleKey (moduleKeys.ts:9). A key
+    // silently dropped here becomes a route that can never be entered.
+    expect(Object.keys(ModuleKeys)).toHaveLength(36);
+    expect(new Set(Object.values(ModuleKeys)).size).toBe(36);
+  });
+
+  it('gates the drilldown on the same key as the farmer-health landing page', () => {
+    const landing = declaredRoutes.find((r) => r.path === '/farmer-health');
+    const drilldown = declaredRoutes.find((r) => r.path === '/farmer-health/:farmId');
+    expect(drilldown?.guard).toBe(landing?.guard);
+    expect(drilldown?.guard).toBe(ModuleKeys.FarmerHealth);
+  });
+});
+
+describe('the three deliberately ungated routes (A4)', () => {
+  it.each(['/', '/home', '/schedules/templates', '/settings/admins'])(
+    '%s carries no EntitlementGuard, and that is the intended behaviour',
+    (path) => {
+      const route = declaredRoutes.find((r) => r.path === path);
+      expect(route).toBeDefined();
+      expect(route?.guard).toBeNull();
+    },
+  );
+
+  it('keeps the comment explaining why Home is ungated', () => {
+    // A4 preserves the REASONS, not only the absence. Comments do not survive
+    // compilation, so this half is read from the source file.
+    // B24 (founder, 2026-11-17): Home has no KPI cards any more (H1-H7 are doubles), so the old "cards can 403
+    // independently" reason is retired; the new reason (two ideas, no request, no single module gate) is asserted instead.
+    expect(appSource).toMatch(/no single module gate fits/i);
+    expect(appSource).toMatch(/there is no guard here/i);
+  });
+
+  it('keeps the comment explaining why Schedules and Settings are ungated', () => {
+    expect(appSource).toContain('no matching module key');
+    expect(appSource).toContain('Relying on RequireScope');
+  });
+
+  it('leaves /login and /403 outside the auth + scope shell', () => {
+    // /403 must stay outside RequireScope or an unresolved scope would redirect
+    // to a page that itself redirects (ForbiddenPage is where a denial lands).
+    const shellRoute = routeElements.find((r) => propsOf(r).path === undefined);
+    const insideShell = flatten(propsOf(shellRoute as ReactElement).children)
+      .filter((e) => e.type === Route)
+      .map((e) => propsOf(e).path);
+
+    for (const path of PUBLIC_ROUTES) expect(insideShell).not.toContain(path);
+    for (const path of Object.keys(ROUTE_GUARDS)) expect(insideShell).toContain(path);
+  });
+
+  /*
+   * CHANGED IN TASK 27 STEP 2, WITH THE BEHAVIOUR IT DESCRIBES (A43).
+   *
+   * This assertion used to be titled "sends every unmatched path Home with
+   * replace, and no 404 page exists", and it was a true description of a
+   * defect. The catch-all redirected silently, so a typo, a stale bookmark
+   * and a genuine broken link all produced the same thing — Home, with the
+   * address bar rewritten. D11 (`/farms/:farmId`, never registered, clicked
+   * from every row of a `cursor-pointer` table) survived its entire life
+   * inside that mask, which is the whole argument for the change.
+   *
+   * The register row is not ticked as "preserved"; it is ticked as decided.
+   */
+  it('renders a real 404 for an unmatched path, and redirects nowhere', () => {
+    const catchAll = routeElements.find((r) => propsOf(r).path === CATCH_ALL);
+    expect(catchAll).toBeDefined();
+
+    const redirect = flatten(propsOf(catchAll as ReactElement).element).find(
+      (e) => e.type === Navigate,
+    );
+    expect(redirect).toBeUndefined();
+  });
+
+  /*
+   * The catch-all sits INSIDE the shell route, not beside /login and /403.
+   * That is what keeps an unknown path answering with the same gate every
+   * known path answers with: anonymous still goes to /login, and a signed-in
+   * reader gets the nav next to the message. Moving it out would make "does
+   * this address exist?" the one question this console answers before
+   * checking who is asking.
+   */
+  it('keeps the catch-all inside the authenticated shell', () => {
+    const shellRoute = routeElements.find((r) => propsOf(r).path === undefined);
+    const insideShell = flatten(propsOf(shellRoute as ReactElement).children)
+      .filter((e) => e.type === Route)
+      .map((e) => propsOf(e).path);
+    expect(insideShell).toContain(CATCH_ALL);
+  });
+});
+
+describe('provider nesting order is load-bearing (A45)', () => {
+  /*
+   * CHANGED IN TASK 3, WITH THE BEHAVIOUR IT DESCRIBES.
+   *
+   * The chain was five deep and began with ThemeProvider. Dark mode was
+   * dropped outright (D1, founder 2026-08-31), ThemeProvider.tsx was deleted,
+   * and the chain is now four. This assertion did not become wrong — the
+   * console changed, and the test changed with it in the same commit.
+   *
+   * The part that still matters is unchanged and is the whole reason A45
+   * exists: AdminAuthProvider calls useQueryClient() and must sit inside
+   * QueryClientProvider; ActiveOrgProvider must wrap AdminAuthProvider
+   * because login() invalidates a scope key whose last segment is the
+   * active org. Flip either and the console breaks quietly.
+   */
+  it('nests QueryClient, Router, ActiveOrg, AdminAuth in that order', () => {
+    // Each provider is the single child of the one above it, so the chain can be
+    // walked.
+    const chain: unknown[] = [];
+    let current: ReactElement | null = tree;
+    while (current && chain.length < 4) {
+      chain.push(current.type);
+      const children: ReactNode = propsOf(current).children;
+      current = isValidElement(children) ? (children as ReactElement) : null;
+    }
+
+    expect(chain).toEqual([
+      QueryClientProvider,
+      BrowserRouter,
+      ActiveOrgProvider,
+      AdminAuthProvider,
+    ]);
+  });
+
+  // The `useTheme` row is gone with its provider. The two that remain are the
+  // fail-fast property that made the chain assertion above meaningful.
+  it.each([
+    ['useActiveOrg', useActiveOrg, 'useActiveOrg must be used inside ActiveOrgProvider'],
+    ['useAdminAuth', useAdminAuth, 'useAdminAuth must be used within AdminAuthProvider'],
+  ])('%s throws by name when used outside its provider', (_name, hook, message) => {
+    // Fail fast beats undefined-at-runtime: a consumer mounted in the wrong
+    // place breaks the build-time smoke test instead of quietly reading
+    // `undefined` and rendering an empty console.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Consumer = () => {
+      hook();
+      return null;
+    };
+    expect(() => render(createElement(Consumer))).toThrow(message);
+    consoleError.mockRestore();
+  });
+});
+
+describe('application React Query defaults (A23)', () => {
+  it('sets staleTime 60000, refetchOnWindowFocus false and retry 1', () => {
+    // Read off the real QueryClient instance App.tsx hands to the provider
+    // (App.tsx:34-42), not off the source text.
+    const provider = allElements.find((e) => e.type === QueryClientProvider);
+    const defaults = propsOf(provider as ReactElement).client?.getDefaultOptions().queries;
+
+    expect(defaults?.staleTime).toBe(60_000);
+    expect(defaults?.refetchOnWindowFocus).toBe(false);
+    expect(defaults?.retry).toBe(1);
+  });
+});

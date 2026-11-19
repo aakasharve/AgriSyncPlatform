@@ -1,51 +1,173 @@
+import { useMemo } from 'react';
 import { TrendingDown } from 'lucide-react';
-import { format } from 'date-fns';
-import { useSilentChurn } from '@/hooks/useFarms';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { LoadingState, MeasuredZero, MetricLines, NotMeasuredPanel } from '@/components/state';
+import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
+import { PersonName } from '@/components/ui/PersonName';
+import { formatError } from '@/components/state';
+import { metaRefreshedAt } from '@/lib/api';
+import { DATE_FORMATS, fmt } from '@/lib/format';
+import {
+  NO_PLAN_LABEL,
+  SILENT_BANDS,
+  daysSilentWords,
+  isForbiddenError,
+  notMeasuredWords,
+  planGroup,
+  planWords,
+} from '@/lib/silentFarms';
+import { useSilentChurn, type SilentFarm } from '@/hooks/useFarms';
+
+/**
+ * SILENT CHURN (`/farms/silent-churn`) — farms that have gone quiet, counted live (CR-2e C26).
+ *
+ * The server counts each farm's last entry when the page opens and groups the
+ * farms that have been silent 7 days or more (or never saved an entry). Each
+ * load writes audit rows, so the page never refreshes on its own.
+ *
+ * A reason the server could not count is shown in words, never as an empty
+ * list. A failed request says "could not load".
+ */
+function FarmTable({ farms, caption }: { farms: SilentFarm[]; caption: string }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-body">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr className="text-caption text-text-3">
+            <th scope="col" className="py-1 pr-4 font-semibold">Farm</th>
+            <th scope="col" className="py-1 pr-4 font-semibold">Owner phone</th>
+            <th scope="col" className="py-1 pr-4 font-semibold">Days silent</th>
+            <th scope="col" className="py-1 pr-4 font-semibold">Last entry</th>
+            <th scope="col" className="py-1 font-semibold">Plan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {farms.map((f) => (
+            <tr key={f.farmId} className="border-t border-border">
+              <td className="py-1.5 pr-4 text-text-1">
+                <PersonName name={f.name} fallback={`${f.farmId.slice(0, 8)}…`} />
+              </td>
+              <td className="py-1.5 pr-4 text-text-2">{f.ownerPhone ?? 'Phone not recorded'}</td>
+              <td className="py-1.5 pr-4 text-text-2">{daysSilentWords(f)}</td>
+              <td className="py-1.5 pr-4 text-text-2">
+                {fmt.dateTime(f.lastEntryUtc, DATE_FORMATS.usersLastLogin) ?? 'No entry recorded'}
+              </td>
+              <td className="py-1.5 text-text-2">{planWords(f)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function SilentChurnPage() {
-  const { data, isLoading } = useSilentChurn();
-  const items = data?.data ?? [];
+  const { data, isLoading, isError, error, refetch } = useSilentChurn();
+  const answer = data?.data;
+  const reason = answer?.notMeasuredReason ?? null;
+  const farms = useMemo(() => answer?.farms ?? [], [answer]);
+
+  const byBand = useMemo(
+    () => SILENT_BANDS.map((b) => ({ ...b, farms: farms.filter((f) => f.band === b.band) })),
+    [farms],
+  );
+  const byPlan = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const f of farms) map.set(planGroup(f), (map.get(planGroup(f)) ?? 0) + 1);
+    return [...map.entries()].sort(
+      (a, b) =>
+        (a[0] === NO_PLAN_LABEL ? 1 : 0) - (b[0] === NO_PLAN_LABEL ? 1 : 0) || b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+  }, [farms]);
+
+  const countedAt =
+    fmt.dateTime(answer?.countedAtUtc, DATE_FORMATS.usersLastLogin) ?? 'a time the server did not report';
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between px-1">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-text-primary">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-danger to-warning text-white shadow-[0_4px_12px_rgba(220,38,38,0.35)]"><TrendingDown size={18} strokeWidth={2.5}/></span>
-          Silent Churn Watchlist
-        </h1>
-        <FreshnessChip source="materialized" lastRefreshed={data?.meta?.lastRefreshed} />
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
+            <TrendingDown size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
+            Silent Churn Watchlist
+          </h1>
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Farms that have gone quiet: no entry for 7 days or more, or no entry ever. Counted when
+            this page opened.
+          </p>
+        </div>
+        <FreshnessChip source="live" lastRefreshed={metaRefreshedAt(data?.meta)} />
       </div>
-      <p className="text-sm text-text-muted px-1">Paid farms with WVFD = 0 for 2+ consecutive weeks. Act before renewal.</p>
-      <Card>
-        <CardHeader>
-          <CardTitle><span className="inline-grid h-6 w-6 place-items-center rounded-[7px] text-white bg-gradient-to-br from-danger to-warning"><TrendingDown size={14} strokeWidth={2.5}/></span>{items.length} farms at risk</CardTitle>
-          <FreshnessChip source="materialized" lastRefreshed={data?.meta?.lastRefreshed} />
-        </CardHeader>
-        <CardContent>
-          {isLoading&&<div className="flex flex-col gap-2">{Array.from({length:5}).map((_,i)=><div key={i} className="h-9 animate-pulse rounded bg-surface-sidebar"/>)}</div>}
-          {!isLoading&&!items.length&&<div className="py-10 text-center text-sm text-text-muted">No farms in silent churn</div>}
-          {!isLoading&&!!items.length&&(
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-row-divider text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-text-muted">
-                {['Farm','Phone','Plan','Weeks Silent','Last Log'].map(h=><th key={h} className="py-2 pr-4 first:pl-0">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {items.map((f,i)=>(
-                  <tr key={i} className="border-b border-row-divider last:border-0 hover:bg-surface-sidebar">
-                    <td className="py-2.5 pr-4 font-semibold text-text-primary">{f.name}</td>
-                    <td className="py-2.5 pr-4 font-mono text-[12px] text-text-muted">{f.ownerPhone}</td>
-                    <td className="py-2.5 pr-4 text-[12px] text-text-muted">{f.plan}</td>
-                    <td className="py-2.5 pr-4"><span className="font-mono text-[15px] font-extrabold text-danger">{f.weeksSilent}w</span></td>
-                    <td className="py-2.5 font-mono text-[12px] text-text-muted">{f.lastLogAt?format(new Date(f.lastLogAt),'dd MMM yyyy'):'Never'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="silent-watchlist" />
+        <MetricLines metric="silent-plan" />
+        <MetricLines metric="silent-groups" />
+      </div>
+
+      {isLoading ? (
+        <LoadingState label="Counting silent farms…" />
+      ) : isError ? (
+        <div role="alert" data-state="load-failed" className="rounded-panel bg-tint-red px-5 py-4">
+          <p className="text-h3 font-semibold text-text-1">Could not load the silent farms.</p>
+          <p className="mt-1 text-body text-text-2">
+            {isForbiddenError(error) ? 'Not available for this account.' : formatError(error)}
+          </p>
+          <p className="mt-1 text-body text-text-2">
+            Nothing is shown because nothing was received. This is not an empty list.
+          </p>
+          {!isForbiddenError(error) && (
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+              Retry
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      ) : reason ? (
+        <NotMeasuredPanel title="Silent farms not counted" why={notMeasuredWords(reason)} />
+      ) : farms.length === 0 ? (
+        <MeasuredZero what="No farm has been silent for 7 days or more" checkedAt={countedAt} />
+      ) : (
+        <>
+          <section aria-label="Counts by silence and by plan" className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-panel bg-tint-grey px-5 py-4">
+              <h2 className="text-h3 font-semibold text-text-1">By days silent</h2>
+              <ul className="mt-2 text-body text-text-2">
+                {byBand.map((b) => (
+                  <li key={b.band} data-band-count={b.band}>
+                    {b.label}: {b.farms.length} {b.farms.length === 1 ? 'farm' : 'farms'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-panel bg-tint-grey px-5 py-4">
+              <h2 className="text-h3 font-semibold text-text-1">By plan</h2>
+              <ul className="mt-2 text-body text-text-2">
+                {byPlan.map(([label, count]) => (
+                  <li key={label} data-plan-count={label}>
+                    {label}: {count} {count === 1 ? 'farm' : 'farms'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+
+          {byBand.map((b) => (
+            <section key={b.band} aria-label={b.label} data-band={b.band} className="flex flex-col gap-2">
+              <h2 className="text-h2 font-semibold text-text-1">
+                {b.label} ({b.farms.length} {b.farms.length === 1 ? 'farm' : 'farms'})
+              </h2>
+              {b.farms.length === 0 ? (
+                <p className="text-body text-text-2">
+                  No farm in this group when counted at {countedAt}.
+                </p>
+              ) : (
+                <FarmTable farms={b.farms} caption={`Farms ${b.label}`} />
+              )}
+            </section>
+          ))}
+        </>
+      )}
     </div>
   );
 }

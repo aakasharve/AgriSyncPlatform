@@ -526,9 +526,9 @@ git commit -m "test(admin-web): characterise the invisible machinery before the 
 - Consumes v3 `theme.css` (252 class rules) and CONTRACT.md section 7.7 (colour), section 8 (banned), section 10 (quality floor).
 - Produces the token set every later task styles against. **No component may introduce a raw hex value from here on.**
 
-- [ ] **Step 1: Replace the @theme block with the v3 tokens.** Map the v3 custom properties onto Tailwind v4 @theme names so utilities generate: blue 4F46E5 (interactive and neutral-informational), green 0F8A5F (positive), red E11D48 (needs a person, or a failure), amber B45309 (stale or warning), text-3 8A9990 (EVERY honesty state), plus the vivid fills for bar fills and dots only — never for text — and the tint backgrounds. Keep radius-card and radius-kpi.
+- [x] **Step 1: Replace the @theme block with the v3 tokens.** Map the v3 custom properties onto Tailwind v4 @theme names so utilities generate: blue 4F46E5 (interactive and neutral-informational), green 0F8A5F (positive), red E11D48 (needs a person, or a failure), amber B45309 (stale or warning), text-3 8A9990 (EVERY honesty state), plus the vivid fills for bar fills and dots only — never for text — and the tint backgrounds. Keep radius-card and radius-kpi.
 
-- [ ] **Step 2: Encode the two product colour constraints as named tokens, with their IDs in a comment (A37)**
+- [x] **Step 2: Encode the two product colour constraints as named tokens, with their IDs in a comment (A37)**
 
 ```css
 @theme {
@@ -544,25 +544,89 @@ git commit -m "test(admin-web): characterise the invisible machinery before the 
 
 Then replace the ad-hoc hex literals at `DwcScoreCard.tsx:28-145`, `AiHealthBlock.tsx:27-32` and `SyncStateBlock.tsx:33` with these tokens.
 
-- [ ] **Step 3: Lock light mode.** Set index.html to lang en with data-mode light, and delete data-theme fresh. Delete the dusk rules (D2). For the dark palette do whichever the founder ticked in D1:
+> **Executed 2026-08-31 (`793c16f4`). Step 3's "if dropped" branch was DANGEROUS as written.**
+> It says to *"delete the custom-variant dark declaration"* and separately to strip the `dark:`
+> utilities. **Deleting that line first makes the leftover utilities LIVE, not inert.** Tailwind v4's
+> built-in `dark` variant is `@media (prefers-color-scheme: dark)`; the old file rebound `dark` to
+> `[data-mode='dark']`, an attribute nothing ever set, which is what made them dead. Remove the
+> rebinding and the survivors fall back to the built-in media query — measured in the compiled
+> stylesheet mid-task, producing exactly the `prefers-color-scheme` rule `CONTRACT.md` §8 bans, and
+> repainting the console for any admin on a dark-themed laptop. **Both halves must land together.**
+> Six `dark:` utilities survived in four farmer-health components and `PlaceholderPage.tsx`; all
+> stripped. Built CSS now contains zero `prefers-color-scheme` rules and zero `dark:` classes.
+>
+> Step 2's file list said **three** files carry the ad-hoc hexes. There are **four** —
+> `FarmerHealthDrilldown.tsx:41` holds a second copy of the C7 teal and `:150` a second copy of the
+> C8 inset. A constraint living in two places with its reason attached to only one is precisely what
+> the named token exists to prevent. `AiHealthBlock.tsx` and `SyncStateBlock.tsx` each had a second
+> literal the plan also missed (`:46` and `:61`). All tokenised, with a test that fails if any
+> literal reappears anywhere in `src`.
+>
+> `app.js:360-363` is off by three — the override is at `app.js:363`. `globals.css:101-228` starts
+> right but the block runs to **241**.
+
+- [x] **Step 3: Lock light mode.** Set index.html to lang en with data-mode light, and delete data-theme fresh. Delete the dusk rules (D2). For the dark palette do whichever the founder ticked in D1:
   - **If dropped:** delete the dark-mode block, delete the custom-variant dark declaration, delete ThemeProvider.tsx, remove the toggle from the shell, and STRIP every dark utility from every ported component. Leaving them inert is how a dead capability comes back as a bug.
   - **If kept:** keep the custom-variant dark declaration bound to the data-mode attribute VERBATIM (A47). It is bound to the attribute, not to the Tailwind class strategy and not to prefers-color-scheme; adopting the v3 stylesheet wholesale without it silently neutralises every dark utility in the code being carried over.
 
-- [ ] **Step 4: Rebuild the primitives on cn() (A48).** Keep `lib/utils.ts` exactly as it is. Rebuild Button, Card and KpiCard with CVA variants resolving to the new tokens. Do NOT ship the v3 hand-written as-star classes alongside Tailwind utilities — two parallel styling systems is the failure this task exists to prevent. Map each as-star concept onto the token layer instead.
+- [x] **Step 4: Rebuild the primitives on cn() (A48).** Keep `lib/utils.ts` exactly as it is. Rebuild Button, Card and KpiCard with CVA variants resolving to the new tokens. Do NOT ship the v3 hand-written as-star classes alongside Tailwind utilities — two parallel styling systems is the failure this task exists to prevent. Map each as-star concept onto the token layer instead.
 
   KpiCard gains the v3 honesty behaviour: a state prop, and when state is not ok the tone is FORCED to grey regardless of the caller's tone — the v3 one-line "honesty wins" override (`app.js:360-363`).
 
-- [ ] **Step 5: Add the quality-floor rules from CONTRACT.md section 10.** prefers-reduced-motion kills all animation and scroll-behaviour; a print media block hides chrome with break-inside avoid on panels; focus is 2px indigo at 2px offset everywhere and outlines are never removed; breakpoints at 1280 / 1279 / 1023 with the sidebar collapsing to a horizontal strip below 1024.
+- [x] **Step 5: Add the quality-floor rules from CONTRACT.md section 10.** prefers-reduced-motion kills all animation and scroll-behaviour; a print media block hides chrome with break-inside avoid on panels; focus is 2px indigo at 2px offset everywhere and outlines are never removed; breakpoints at 1280 / 1279 / 1023 with the sidebar collapsing to a horizontal strip below 1024.
 
-- [ ] **Step 6: Remove the desktop-only viewport lock.** `index.html:6` declares a fixed 1280 viewport, which makes the console desktop-only by construction. v3 is responsive to 1023 and below. Change to width=device-width, initial-scale=1.
+- [x] **Step 6: Remove the desktop-only viewport lock.** `index.html:6` declares a fixed 1280 viewport, which makes the console desktop-only by construction. v3 is responsive to 1023 and below. Change to width=device-width, initial-scale=1.
 
-- [ ] **Step 7: Verify nothing regressed.** Run: `npm run build && npm run test && npm run lint`. Expected: all three exit 0. The console still renders old screens on new tokens — visually different, functionally identical.
+- [x] **Step 7: Verify nothing regressed.** Run: `npm run build && npm run test && npm run lint`. Expected: all three exit 0. The console still renders old screens on new tokens — visually different, functionally identical.
 
-- [ ] **Step 8: Commit** — `feat(admin-web): one token layer from v3, light mode locked`
+- [x] **Step 8: Commit** — `feat(admin-web): one token layer from v3, light mode locked`
 
 ---
 
 ### Task 4: One formatter module — the thing that does not exist today
+
+> **Executed 2026-08-31 (`168f4874`), plus the standalone bug fix `319c8aba`. Four plan errors.**
+>
+> 1. **`rate01` does not exist in the repo.** Step 2 says "lifted verbatim from
+>    `AiHealthBlock.tsx:16-32`". There is no function by that name anywhere in `admin-web`; the
+>    sanitisation lives *inside* `pct()`, which also builds a label and picks a tone. The cited range
+>    also overshoots — `pct` is 16–25 and 27–32 is `TONE_COLOR`, a colour map unrelated to rates.
+>    The three sanitisation lines were extracted exactly; `pct()` left alone.
+> 2. **Step 4's "move `fmtAge` unchanged" contradicts this task's own central rule.** The original
+>    returns `''` for a missing input, not `null`, and renders **`"NaNd ago"`** for an unparseable
+>    one — a fabricated freshness age, the D5 class. Deviated on both, and **fixed the live chip in
+>    its own commit** (`319c8aba`) rather than folding a behavioural fix into a mechanical task.
+> 3. **Three of the eleven date citations are off by one:** `OpsLivePage.tsx:109 → 108`,
+>    `OpsLivePage.tsx:167 → 166`, `WorkerSummaryList.tsx:28 → 29`. Wrong in `b69e6fa7`, the commit
+>    that added this plan — plan error, not drift. All eleven format **strings** are correct.
+> 4. **`fmt.ratePct` added beyond the plan, and it closes a real trap.** Without it the natural call
+>    is `fmt.pct(rate01(x) * 100)` — and in JavaScript `null * 100` is **`0`**, resurrecting the
+>    exact fabricated zero this module exists to prevent.
+>
+> **Confirmed as stated:** A51's "14 files import date-fns with no shared module" — measured, exactly 14.
+>
+> **`DATE_FORMATS` covers 11 of the 22 `format(...)` call sites.** The other eleven are recharts
+> axis/tooltip formats this table never mentioned — `FarmerTimeline:90`, `SyncStateBlock:17`,
+> `WatchlistTable:26`, `WeeklyTrendChart:33,58`, `NorthStarPage:174,201`, `OpsVoicePage:114,135,172,189`.
+> Not added; they belong to **Tasks 19, 21 and 22**. Recorded here so they are not lost.
+>
+> **DECIDED 2026-08-31 — an out-of-range rate must render "not measured", not a clamped 0% / 100%.**
+> `rate01` today pulls an impossible value (`-0.2`, `1.4`) to the nearest bound, so a broken server
+> reading prints **"0%"** — which reads as *the AI failed every single time*. That is a fabricated
+> number, which `P4` forbids; a value outside the definition of the measure is not a noisy edge, it
+> is an unbelievable reading. **Task 23 makes this change** when it ports the AI-health panel: one
+> line plus one test, and the existing clamp test changes in the same commit. Preserved as-is until
+> then because changing it now would alter a live screen from outside any task.
+>
+> **Not ported, deliberately:** v3's `AS.fmt.duration` has **zero callers** across all thirteen
+> prototype HTML files — v3 renders latency as `withUnit(latencyMs,'ms')`, so `fmt.ms` follows that.
+> `dec` is subsumed by `num(v, decimals)`. `unit`/`withUnit` emit HTML strings; that is a component's
+> job in React.
+>
+> **No call site was re-pointed.** All 14 date-fns files still hold their own literals; `AiHealthBlock`
+> still has its own `pct()`. Tasks 14–26 move them screen by screen. The `DATE_FORMATS` test passes
+> if the literal is still inline **or** the file now imports `@/lib/format`, so it goes red only on
+> genuine drift.
 
 **Files:**
 - Create: `src/clients/admin-web/src/lib/format.ts`
@@ -572,7 +636,7 @@ Then replace the ad-hoc hex literals at `DwcScoreCard.tsx:28-145`, `AiHealthBloc
 - Produces fmt.num, fmt.pct, fmt.ms, fmt.money, fmt.acres, fmt.date, fmt.dateTime, fmt.time, fmt.age, rate01, and the per-surface format constants. Every one returns null for a null input.
 - Consumes date-fns, currently imported independently in 14 files with no shared module (A51).
 
-- [ ] **Step 1: Port the v3 AS.fmt contract — null in, null out**
+- [x] **Step 1: Port the v3 AS.fmt contract — null in, null out**
 
 ```ts
 /**
@@ -592,7 +656,7 @@ export const fmt = {
 };
 ```
 
-- [ ] **Step 2: Carry the AiHealth sanitisation rule into the module (A38)**
+- [x] **Step 2: Carry the AiHealth sanitisation rule into the module (A38)**
 
 ```ts
 /**
@@ -607,7 +671,7 @@ export function rate01(v: number | null | undefined): number | null {
 }
 ```
 
-- [ ] **Step 3: Encode the per-surface date choices explicitly — they are deliberate, not drift (A51)**
+- [x] **Step 3: Encode the per-surface date choices explicitly — they are deliberate, not drift (A51)**
 
 ```ts
 /**
@@ -617,8 +681,8 @@ export function rate01(v: number | null | undefined): number | null {
  */
 export const DATE_FORMATS = {
   opsErrorsRow:   'yyyy-MM-dd HH:mm:ss', // OpsErrorsPage.tsx:21
-  opsLiveRow:     'HH:mm:ss',            // OpsLivePage.tsx:109
-  opsLiveLastErr: 'HH:mm',               // OpsLivePage.tsx:167
+  opsLiveRow:     'HH:mm:ss',            // OpsLivePage.tsx:108
+  opsLiveLastErr: 'HH:mm',               // OpsLivePage.tsx:166
   farmsLastLog:   'dd MMM',              // FarmsListPage.tsx:90
   farmsCreated:   'dd MMM yy',           // FarmsListPage.tsx:91
   usersCreated:   'dd MMM yy',           // UsersPage.tsx:66
@@ -626,13 +690,13 @@ export const DATE_FORMATS = {
   churnLastLog:   'dd MMM yyyy',         // SilentChurnPage.tsx:41
   sufferLastErr:  'HH:mm, dd MMM',       // SufferingPage.tsx:42
   cohortRow:      'dd MMM, HH:mm',       // InterventionQueueTable.tsx:37
-  workerSince:    'dd MMM yyyy',         // WorkerSummaryList.tsx:28
+  workerSince:    'dd MMM yyyy',         // WorkerSummaryList.tsx:29
 } as const;
 ```
 
-- [ ] **Step 4: Port the 4-tier freshness age ramp (A24).** Move fmtAge out of `FreshnessChip.tsx:12-19` into format.ts unchanged: under 60s gives seconds, under 1h gives minutes, under 24h gives hours, otherwise days.
+- [x] **Step 4: Port the 4-tier freshness age ramp (A24).** Move fmtAge out of `FreshnessChip.tsx:12-19` into format.ts unchanged: under 60s gives seconds, under 1h gives minutes, under 24h gives hours, otherwise days.
 
-- [ ] **Step 5: Test every null path**
+- [x] **Step 5: Test every null path**
 
 ```ts
 it.each([null, undefined, NaN])('returns null for %s so nothing renders a fabricated zero', (v) => {
@@ -642,7 +706,7 @@ it.each([null, undefined, NaN])('returns null for %s so nothing renders a fabric
 it('groups Indian-style', () => expect(fmt.num(2477000)).toBe('24,77,000'));
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and was originally enforced
 almost nowhere. An invariant nothing checks is a hope. Before committing:
@@ -654,11 +718,37 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Run and commit** — `feat(admin-web): one formatter module, null in / null out`
+- [x] **Step 6: Run and commit** — `feat(admin-web): one formatter module, null in / null out`
 
 ---
 
 ### Task 5: The honest-state vocabulary — four causes, not one
+
+> **Executed 2026-08-31 (`e0fb322e`). The shim line above was INCOMPLETE and is now corrected.**
+> It listed three names; `FarmerHealthPage.tsx:14` also imports **`ScoringActiveBanner`** from that
+> path. Following it literally would have broken the build **in the same commit whose whole purpose
+> is to protect the build.** The shim re-exports four names. Ten importers confirmed by measurement
+> at `faecb7db` — the plan was right about the count.
+>
+> **Redaction turned out to be a FIFTH kind of absence, and it does not belong in the four.** The
+> four causes answer *"why is there no measurement"*. A hidden farmer name is a **fully-measured
+> value you are not permitted to see** — a permission fact, not a measurement fact. The four words
+> stay intact; masking got its own axis (`redaction.ts`, `Masked.tsx`).
+>
+> Also worth recording: **the prototype could only teach three of the four causes.** v3 does no
+> fetching, so *"the request broke"* has no design in it at all — and that is precisely the cause the
+> seven silent-failure screens are actually hitting.
+>
+> **Citation drift (a fourth and fifth instance):** `FarmerHealthDrilldown.tsx:52` is **:55**.
+> `app.js:341-350` is `AS.none` at **341–348**, and the `STATE_WORD` map it depends on is at
+> **333–338** — outside the cited range, so the plan cited the function without the vocabulary that
+> gives it its words. Both ported.
+>
+> **Task 5's text never mentions `KpiCard`**, but `KpiCard.tsx:19-38` (Task 3) declared the same four
+> state words locally with an explicit note to lift them here. Done — one word list, not two.
+>
+> **D9 is NOT closed by this task.** This builds the vocabulary; it does not apply it. The seven
+> screens still say *"No errors found. The system is healthy."* until Tasks 14–26 rewire them.
 
 > **🛑 SEQUENCING — read before moving any file.** `features/farmer-health/components/EmptyAndErrorStates.tsx`
 > has **ten importers**, and its consumers are not migrated until Tasks 22–23 — seventeen tasks
@@ -667,7 +757,7 @@ here rather than carrying it into the next task.
 > invariant outright.
 >
 > **Do this instead:** create the new module, and leave the old file in place as a thin re-export
-> (`export { EmptyState, LoadingState, ErrorState } from '<new path>'`). Delete the old file in
+> (`export { EmptyState, LoadingState, ErrorState, ScoringActiveBanner } from '<new path>'`). Delete the old file in
 > **Task 27**, once its last importer is migrated — and only after `npm run build` is clean.
 
 **Files:**
@@ -678,9 +768,9 @@ here rather than carrying it into the next task.
 - Consumes CONTRACT.md sections 6.1 to 6.4 and section 9, plus the existing EmptyAndErrorStates.tsx, which is the only place in the console that already does this properly.
 - Produces the vocabulary every panel on every screen uses. NotMeasured is the ONLY component allowed to print a missing value — the v3 AS.none rule (`app.js:341-350`).
 
-- [ ] **Step 1: Promote the three good primitives out of the feature folder (A41, A32).** Move EmptyState, LoadingState and ErrorState into components/state, KEEPING: the LoadingState role status plus aria-busy plus named aria-label plus sr-only label, so a screen-reader user is told WHICH block is loading; and the ErrorState working Retry wired to refetch() with its formatError unwrapping ladder (error, then string, then Error.message, then an object with a message, then a fallback).
+- [x] **Step 1: Promote the three good primitives out of the feature folder (A41, A32).** Move EmptyState, LoadingState and ErrorState into components/state, KEEPING: the LoadingState role status plus aria-busy plus named aria-label plus sr-only label, so a screen-reader user is told WHICH block is loading; and the ErrorState working Retry wired to refetch() with its formatError unwrapping ladder (error, then string, then Error.message, then an object with a message, then a fallback).
 
-- [ ] **Step 2: Build the four distinct empty causes (D9)**
+- [x] **Step 2: Build the four distinct empty causes (D9)**
 
 ```tsx
 /**
@@ -706,9 +796,9 @@ export function LoadFailed({ error, onRetry }: { error: unknown; onRetry: () => 
 }
 ```
 
-- [ ] **Step 3: Carry the mandatory copy byte-for-byte, with its red-line comments (A35).** ScoringActiveBanner keeps its exact string — "Scoring active from {date}; data accumulating." — and its role status with aria-live polite. Carry the source comment "MANDATORY copy per C5 — do not paraphrase" into the new file. The WorkerSummaryList disclaimer and its red-line comment travel with that component in T23.
+- [x] **Step 3: Carry the mandatory copy byte-for-byte, with its red-line comments (A35).** ScoringActiveBanner keeps its exact string — "Scoring active from {date}; data accumulating." — and its role status with aria-live polite. Carry the source comment "MANDATORY copy per C5 — do not paraphrase" into the new file. The WorkerSummaryList disclaimer and its red-line comment travel with that component in T23.
 
-- [ ] **Step 4: Keep the two-variant empty on the intervention queue (A36)**
+- [x] **Step 4: Keep the two-variant empty on the intervention queue (A36)**
 
 ```tsx
 /**
@@ -722,7 +812,7 @@ export function LoadFailed({ error, onRetry }: { error: unknown; onRetry: () => 
  */
 ```
 
-- [ ] **Step 5: Make a masked value a first-class state, not text (A14, B16)**
+- [x] **Step 5: Make a masked value a first-class state, not text (A14, B16)**
 
 ```tsx
 /**
@@ -737,7 +827,7 @@ export function isRedacted(v: string | null | undefined): boolean { return v ===
 export function Masked({ value, fallback }: { value: string | null; fallback?: string }) { /* … */ }
 ```
 
-- [ ] **Step 6: Test the honesty rules**
+- [x] **Step 6: Test the honesty rules**
 
 ```tsx
 it('never renders a zero for an unmeasured value', () => { /* em dash plus caption */ });
@@ -749,7 +839,7 @@ it('the scoring banner copy is byte-identical', () => {
 });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and was originally enforced
 almost nowhere. An invariant nothing checks is a hope. Before committing:
@@ -761,11 +851,44 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 7: Run and commit** — `feat(admin-web): four honest states, one vocabulary, mandatory copy preserved`
+- [x] **Step 7: Run and commit** — `feat(admin-web): four honest states, one vocabulary, mandatory copy preserved`
 
 ---
 
 ### Task 6: One name renderer — romanised search plus Devanagari font, in one place
+
+> **Executed 2026-08-31 (`7d493804`, plus a follow-up closing the spelling gaps).**
+>
+> **Step 3 was already done and the plan's claim about it was false.** It asserts *"index.html
+> currently loads Inter and JetBrains Mono only."* Untrue since Task 3: it loads DM Sans + Noto Sans
+> Devanagari + JetBrains Mono, and Inter is gone. The step needed **evidence, not an edit** — and the
+> evidence mattered: with the Devanagari face deleted from `index.html`, **20 of 23 tests still
+> passed**, including every test asserting the component requests the right font family. A component
+> asking for a face is not evidence the face exists. Three tests now assert the `<link>` and its
+> weights, read from disk with a length guard.
+>
+> **`fallback = '—'` in the Step 2 sketch was wrong** against Task 5's `Masked` as shipped. It would
+> have collapsed two different facts into one character: a name that is **absent** and a name you are
+> **not permitted to see**. The first is a data problem to chase; the second is not. Default removed.
+>
+> **The Files list is incomplete** — Step 4 contains two `render(...)` assertions, which cannot live
+> in a `.ts` file. `src/components/ui/__tests__/PersonName.test.tsx` added.
+>
+> **Citation drift (sixth instance):** `app.js:35-101` is **33–101**; line 35 lands mid-sentence in
+> the section comment. The four call-site citations were the **first six-for-six correct** set on this
+> branch.
+>
+> **DECIDED 2026-08-31 — index more spellings, not fewer.** Execution surfaced three gaps and the
+> same principle settles all three: *the cost of a wrong extra result is far lower than the cost of a
+> missing one.* (a) The prototype keeps the word-final inherent 'a', so a two-word search
+> `gaikwad patil` misses — an extra spelling drops it. (b) **कुलकर्णी was unfindable by its ordinary
+> English spelling** — one of the most common surnames in Maharashtra, so not an edge case. (c) **ज्ञ
+> is indexed as both `dny` and `gy`** — Marathi reads *Dnyaneshwar*, the same character in Hindi reads
+> *gyan*, and people type both; ञ, ङ, ऑ/ॉ and the dotted letters added in the same pass.
+> **This was the coordinator's call, not the founder's** — he speaks Marathi and may want `dny` alone.
+>
+> **`PersonName` has ZERO call sites on purpose**, and the four duplicated font checks are untouched.
+> They die with their screens in Tasks 22–23. `searchKey` has no consumers until Tasks 8 and 13.
 
 **Files:**
 - Create: `src/clients/admin-web/src/lib/searchKey.ts`
@@ -773,12 +896,12 @@ here rather than carrying it into the next task.
 - Create: `src/clients/admin-web/src/lib/__tests__/searchKey.test.ts`
 
 **Interfaces:**
-- Consumes v3 `app.js:35-101` (AS.roman, AS.searchKey).
+- Consumes v3 `app.js:33-101` (AS.roman at 57, AS.searchKey at 87).
 - Produces searchKey(s) and PersonName — used by the DataList search, the command palette index, and everywhere a person's name is rendered.
 
 **Why:** this is the prototype's single most valuable non-visual addition, and it also kills a live duplication. The Devanagari font check is copy-pasted at FOUR call sites today (A34).
 
-- [ ] **Step 1: Port the transliterator**
+- [x] **Step 1: Port the transliterator**
 
 ```ts
 /**
@@ -806,7 +929,7 @@ export function searchKey(s: string | null | undefined): string {
 }
 ```
 
-- [ ] **Step 2: Collapse four duplicates into one component (A34)**
+- [x] **Step 2: Collapse four duplicates into one component (A34)**
 
 ```tsx
 /**
@@ -833,9 +956,9 @@ export function PersonName({ name, fallback = '—', className }: PersonNameProp
 }
 ```
 
-- [ ] **Step 3: Load the Devanagari face.** index.html currently loads Inter and JetBrains Mono only. CONTRACT.md section 8 bans monospace anywhere; v3 uses IBM Plex Sans and IBM Plex Sans Devanagari. Whatever the chrome face becomes, Noto Sans Devanagari MUST be loaded or PersonName silently falls back to a Latin face.
+- [x] **Step 3: Load the Devanagari face.** index.html currently loads Inter and JetBrains Mono only. CONTRACT.md section 8 bans monospace anywhere; v3 uses IBM Plex Sans and IBM Plex Sans Devanagari. Whatever the chrome face becomes, Noto Sans Devanagari MUST be loaded or PersonName silently falls back to a Latin face.
 
-- [ ] **Step 4: Test the seven spellings**
+- [x] **Step 4: Test the seven spellings**
 
 ```ts
 it.each([
@@ -850,7 +973,7 @@ it('renders a Devanagari name in the Devanagari face', () => { /* … */ });
 it('renders a redacted name through Masked, never as the literal marker', () => { /* … */ });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -863,11 +986,50 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 5: Commit** — `feat(admin-web): romanised Devanagari search plus one PersonName renderer`
+- [x] **Step 5: Commit** — `feat(admin-web): romanised Devanagari search plus one PersonName renderer`
 
 ---
 
 ### Task 7: One URL-state hook — the easiest thing to get wrong in a rewrite
+
+> **Executed 2026-08-31 (`263a8f4c`). Three things this task discovered that outrank its own text.**
+>
+> **1. 🛑 The functional updater CANNOT preserve a param the router never saw — so this task does not
+> close the org hole on its own.** `ActiveOrgProvider.syncUrl` writes `?org=` with a raw
+> `window.history.replaceState` (`ActiveOrgProvider.tsx:102-108`), behind React Router's back. In
+> `react-router@7.15.1`, `setSearchParams` builds its `prev` from the router's `location.search`, so
+> after an OrgSwitcher selection **the router is one org behind the address bar**, and the next filter
+> write — even a perfectly correct functional one — strips `org` back out of the shareable URL.
+> **Task 12 Step 2 is what actually closes this.** Written into the hook's header so nobody reads that
+> file and concludes the hole is shut.
+>
+> **2. `setMany` is not ergonomics — it is the only correct way to write two keys.** `setSearchParams`
+> is a `useCallback` closing over the current render's `searchParams`, so **two `set()` calls in one
+> handler both build from the same pre-first-call snapshot and the second silently clobbers the
+> first.** The plan named `setMany` without saying why; the reason is measured and now cited in the
+> file.
+>
+> **3. Step 4 overstates v3's poverty, and the nuance belongs to Task 13.** v3 reads exactly one
+> param, `?q`, and the Ctrl+K palette *generates* those links (`app.js:726,729`). It is a one-way
+> contract — the palette writes a link, the page seeds its box once (`app.js:705-707`), and nothing
+> typed afterwards reaches the URL. `if (A.param('q')) opened = true;` is the prototype's **own**
+> summary-first open flag. The core claim (no writes, no history API — grepped, zero hits) stands.
+> **Task 13 has a deep-link shape to port, not to invent.**
+>
+> **Citation drift (seventh):** `OpsErrorsPage.tsx:82-85` is **81-86** — the cited range covers the
+> inner lines of two different functions and excludes both signatures.
+>
+> **DECIDED 2026-08-31, all three of execution's questions:**
+> - **Sort key, direction and the open flag DO go in the URL.** A link becomes reproducible and Back
+>   undoes a sort. Nothing that works today stops working. This is what every serious admin console
+>   does, and sort currently dies on every refresh.
+> - **Trim on all three search screens** (Task 14). Today API Errors trims and Farms/Users do not, so
+>   pasting a name with a trailing space into Farms returns "no results" for a farm that exists. A
+>   leading space is never a thing a person meant to search for.
+> - **The stale search box is fixed in Tasks 14/17/18, not here.** After Back or Clear the filter
+>   really clears but the box still shows the old text — the console stating something untrue about
+>   its own state, which is the defect class this redesign exists to remove. The naive fix steals
+>   focus on every Enter, so it belongs with the screens, not in a shared hook.
 
 **Files:**
 - Create: `src/clients/admin-web/src/lib/useListUrlState.ts`
@@ -879,14 +1041,14 @@ here rather than carrying it into the next task.
 
 **Why:** all six URL-writing pages today use the FUNCTIONAL updater form so that page, search, tier and org coexist (A20). The failure mode of getting this wrong — a filter change silently clearing the org — is invisible until someone reports wrong data.
 
-- [ ] **Step 1: Make the functional updater the only way to write**
+- [x] **Step 1: Make the functional updater the only way to write**
 
 ```ts
 /**
  * ALWAYS the functional form. Passing a plain object REPLACES the whole
  * query string and would silently drop the org param, which is how a filter
  * change turns into a cross-tenant data bug that no visual review can catch.
- * See FarmsListPage.tsx:26-28, UsersPage.tsx:22-23, OpsErrorsPage.tsx:82-85.
+ * See FarmsListPage.tsx:26-28, UsersPage.tsx:22-23, OpsErrorsPage.tsx:81-86.
  */
 function set(key: string, value: string | null, opts?: { resetPage?: boolean }) {
   setSearchParams((prev) => {
@@ -897,17 +1059,17 @@ function set(key: string, value: string | null, opts?: { resetPage?: boolean }) 
 }
 ```
 
-- [ ] **Step 2: Keep the reset-page-to-1 rule (A20).** Every filter change resets page to 1. Without it a user filters to 3 results, stays on page 5, and sees nothing.
+- [x] **Step 2: Keep the reset-page-to-1 rule (A20).** Every filter change resets page to 1. Without it a user filters to 3 results, stays on page 5, and sees nothing.
 
-- [ ] **Step 3: Support both commit contracts (A21).** Two DELIBERATE, OPPOSITE interaction contracts that look identical in a screenshot:
+- [x] **Step 3: Support both commit contracts (A21).** Two DELIBERATE, OPPOSITE interaction contracts that look identical in a screenshot:
   - **Draft plus explicit commit** (Farms, Users): local state, URL written only on Enter or the Search button. Live-syncing per keystroke floods browser history and refetches per character.
   - **Blur OR Enter, trimmed** (API Errors): an UNCONTROLLED input using defaultValue, committing on blur AND on Enter, with a trim, plus a Clear filter button that appears only when a filter is applied. Converting it to a controlled input silently changes WHEN a filter applies.
 
   Both must be reachable from this hook; neither is the default that the other collapses into.
 
-- [ ] **Step 4: Own the sort key too — this is an improvement over both sides.** v3 writes NO URL state at all (verified: no pushState, no replaceState, no history API anywhere in app.js), so in the prototype no filter, no sort column, no sort direction and no list-open state is shareable, bookmarkable or refresh-surviving, and the back button does not undo a filter. Live URL-syncs filters but keeps sort in component state (`InterventionQueueTable.tsx:44-45`), so sort dies on refresh. The port exceeds both: sort key, sort direction and the summary-first open flag all go in the URL.
+- [x] **Step 4: Own the sort key too — this is an improvement over both sides.** v3 writes NO URL state at all (verified: no pushState, no replaceState, no history API anywhere in app.js), so in the prototype no filter, no sort column, no sort direction and no list-open state is shareable, bookmarkable or refresh-surviving, and the back button does not undo a filter. Live URL-syncs filters but keeps sort in component state (`InterventionQueueTable.tsx:44-45`), so sort dies on refresh. The port exceeds both: sort key, sort direction and the summary-first open flag all go in the URL.
 
-- [ ] **Step 5: Test the preservation property directly**
+- [x] **Step 5: Test the preservation property directly**
 
 ```tsx
 it('preserves the org param when a filter changes', () => {
@@ -919,7 +1081,7 @@ it('commits the endpoint filter on blur as well as Enter', () => { /* … */ });
 it('round-trips sort key and direction through the URL', () => { /* … */ });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -932,11 +1094,36 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Commit** — `feat(admin-web): one URL-state hook; functional updater, page reset, both commit contracts`
+- [x] **Step 6: Commit** — `feat(admin-web): one URL-state hook; functional updater, page reset, both commit contracts`
 
 ---
 
 ### Task 8: ONE list component — the 2,775 duplicated lines that are not ported
+
+> **🛑 MEASURED CONSTRAINT from Task 6 (`c2b8cf28`) — read before designing the search.**
+>
+> `searchKey` generates up to **48 spellings / ~500 characters** for a three-word Marathi name.
+> Measured over **3,000 farms**, real names, jsdom, single run:
+>
+> | | |
+> |---|---|
+> | Build the index | **~60 ms one-time, ~355 KB in memory** |
+> | Scan the index | **~0.4 ms per keystroke** |
+>
+> **The search is instant. The build is not.** 0.4 ms per keystroke is imperceptible and the index
+> could grow tenfold and still be fine. But **60 ms is a dropped frame**, so the index MUST be
+> memoised on the row data and MUST NEVER be recomputed inside a keystroke handler. Doing that turns
+> a 0.4 ms search into a 60 ms one and the search will *feel broken* — which is worse than the
+> current no-search, because a slow box invites retyping.
+>
+> Ceilings are asserted in `searchKey.test.ts` (≤ 64 spellings, < 1 KB for a three-word name), so a
+> later change to the respelling rules cannot quietly make the build ten times worse.
+>
+> **Caveats stated, not buried:** jsdom, one machine, one run, 3,000 rows. **Not** measured in a real
+> browser, on a low-end device, or at 50,000 rows. If this task targets any of those, measure again.
+>
+> The haystack shape the numbers describe is `` `${raw} ${searchKey(raw)}`.toLowerCase() ``. Task 6
+> deliberately did **not** ship a `searchHaystack` helper — its shape is this task's call.
 
 **Files:**
 - Create: `src/clients/admin-web/src/components/data/DataList.tsx`
@@ -949,7 +1136,7 @@ here rather than carrying it into the next task.
 
 **This is the founder-approved consolidation task.** The live console hand-rolls table markup in sixteen places; the prototype duplicates 2,775 lines of filtering across five screens. Neither travels.
 
-- [ ] **Step 1: Define the configuration surface**
+- [x] **Step 1: Define the configuration surface**
 
 ```ts
 export interface DataListConfig<T> {
@@ -997,7 +1184,7 @@ export interface DataListConfig<T> {
 }
 ```
 
-- [ ] **Step 2: Implement the sorter with all four semantics that exist today**
+- [x] **Step 2: Implement the sorter with all four semantics that exist today**
 
 ```ts
 /**
@@ -1014,11 +1201,11 @@ export interface DataListConfig<T> {
  */
 ```
 
-- [ ] **Step 3: Implement summary-first opening.** Computed totals; per-option counts AND per-option acreage where the screen has acreage; three ways to open the list; a chip stating the applied filter IN WORDS whose close control returns to the SUMMARY, not to a longer list; Show all as a true three-state toggle with truthful aria-expanded.
+- [x] **Step 3: Implement summary-first opening.** Computed totals; per-option counts AND per-option acreage where the screen has acreage; three ways to open the list; a chip stating the applied filter IN WORDS whose close control returns to the SUMMARY, not to a longer list; Show all as a true three-state toggle with truthful aria-expanded.
 
   Cross-filtered counts are OPT-IN PER SCREEN, because v3 deliberately applies them on All Farms and Silent Churn but NOT on Users, Suffering and API Errors — where a count that moved would stop answering "how many are there". A zero-yield option keeps its position and shows 0.
 
-- [ ] **Step 4: Resolve the collision between summary-first and server pagination**
+- [x] **Step 4: Resolve the collision between summary-first and server pagination**
 
 > **This is the one real design conflict in the whole port.** The v3 summary-first pattern claims every filter option can state its exact count and exact acreage. That is only computable over a FULLY LOADED set — trivially true at n=16, false at real volumes. Server pagination (A17) means the client holds 40 rows, not all of them.
 >
@@ -1029,13 +1216,13 @@ export interface DataListConfig<T> {
 >
 > Build (2) now. Record (1) as the follow-up. Do not ship an unqualified count.
 
-- [ ] **Step 5: Implement expandable rows.** Generated prose plus a definition list of context, keyboard-operable on Enter AND Space, aria-expanded and aria-controls, auto-collapsing when a search hides the row, and the detail row moving WITH ITS PARENT AS A GROUP when the table sorts.
+- [x] **Step 5: Implement expandable rows.** Generated prose plus a definition list of context, keyboard-operable on Enter AND Space, aria-expanded and aria-controls, auto-collapsing when a search hides the row, and the detail row moving WITH ITS PARENT AS A GROUP when the table sorts.
 
-- [ ] **Step 6: Implement keepPreviousData behaviour and the Refreshing swap (A25, B13).** The row count is replaced by "Refreshing…" while isFetching and not isLoading — the stricter Farmer Health variant (`FarmerHealthPage.tsx:87`) becomes the shared rule, so a first load shows the skeleton and only a background poll shows the indicator. Without placeholderData keepPreviousData every page change flashes a skeleton; without the indicator a background 30s poll changes the table under the user with no explanation.
+- [x] **Step 6: Implement keepPreviousData behaviour and the Refreshing swap (A25, B13).** The row count is replaced by "Refreshing…" while isFetching and not isLoading — the stricter Farmer Health variant (`FarmerHealthPage.tsx:87`) becomes the shared rule, so a first load shows the skeleton and only a background poll shows the indicator. Without placeholderData keepPreviousData every page change flashes a skeleton; without the indicator a background 30s poll changes the table under the user with no explanation.
 
-- [ ] **Step 7: Implement the pager (A17, B4).** Prev, "Page N of M", Next; bounds-disabled; HIDDEN ENTIRELY when there is one page; driving the page param through useListUrlState. For the API Errors case back it with tanstack react-table manualPagination plus server-driven pageCount (A50), so the one screen that already has server pagination does not lose it to a client-side sorter.
+- [x] **Step 7: Implement the pager (A17, B4).** Prev, "Page N of M", Next; bounds-disabled; HIDDEN ENTIRELY when there is one page; driving the page param through useListUrlState. For the API Errors case back it with tanstack react-table manualPagination plus server-driven pageCount (A50), so the one screen that already has server pagination does not lose it to a client-side sorter.
 
-- [ ] **Step 8: Test the twelve behaviours a rewrite loses**
+- [x] **Step 8: Test the twelve behaviours a rewrite loses**
 
 ```tsx
 it('parks missing values at the bottom in both sort directions', () => {});
@@ -1052,7 +1239,7 @@ it('swaps the row count for Refreshing only on a background fetch', () => {});
 it('returns a filter chip close control to the summary, not to a longer list', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1065,7 +1252,55 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 9: Commit** — `feat(admin-web): one DataList — sixteen hand-rolled tables and 2,775 duplicated lines retired`
+- [x] **Step 9: Commit** — `feat(admin-web): one DataList — sixteen hand-rolled tables and 2,775 duplicated lines retired`
+
+---
+
+> **Executed 2026-08-31 (`1955f461`). 440 tests. Findings that outrank the plan's own text:**
+>
+> **The measurement disagrees with Task 6's, and the pessimistic number is the one to design against.**
+> Build the index **97–112 ms** (Task 6 said ~60), scan **0.73 ms/keystroke** (said ~0.4), memory
+> **3,458 KB** (said ~355). Not a contradiction — Task 8 indexed three fields of the most
+> respelling-rich surnames (85 spellings for one row) where Task 6 measured one field of ordinary
+> names. **Both agree on the shape: the build costs ~130× a scan, so it MUST be memoised.** Proved by
+> call count, not a clock: 6 keystrokes over 3,000 rows → `keys() 3000 -> 3000`, zero rebuilds.
+>
+> **🛑 A separate, larger performance problem was found and is NOT search.** At 3,000 rows a keystroke
+> costs ~70 ms, of which the search is 0.73 ms. The rest is React re-rendering 3,000 rows because the
+> draft text lives inside `DataList`. Irrelevant at 40–50 rows a page — **but Silent Churn (T15) and
+> Suffering (T16) fetch their WHOLE list today.** Those two tasks must paginate or virtualise; they
+> should not discover this.
+>
+> **The tiebreak's comment lies about its own code.** `InterventionQueueTable.tsx` comments
+> "Tiebreak score-asc"; the code is `if (sortKey === 'score')` and runs in **both** directions. The
+> code was carried, not the comment. It also returns `-1` when two timestamps are equal — the same
+> answer for `(a,b)` and `(b,a)`, an inconsistent comparator with **no defined result under V8**. Now
+> returns 0 and falls to a stable index. The only behaviour change in the task, and it had no defined
+> behaviour to preserve.
+>
+> **Citation drift (eighth):** `InterventionQueueTable.tsx:60-69` spans two separate facts, includes
+> four unrelated lines and cuts line 70. Correct: **60-62** (tiebreak) and **67-70** (per-column
+> default direction).
+>
+> **The 2,775 figure is right, with a caveat:** that counts `<script>` through `</script>`
+> inclusive. The JavaScript itself is **2,765**; the whole files are **3,555**.
+>
+> **Cross-filtering verified, not trusted:** `pass(` appears only in `all-farms.html:322` and
+> `silent-churn.html:322`. The other three bake counts into markup at build time. Opt-in, default OFF.
+>
+> **Three plan-sketch defects fixed:** the `search` server variant had no `placeholder` and no
+> `commit`, so it would have shipped an unlabelled input; `states.measuredZero` was optional and is
+> now **required**, so TypeScript forbids an empty list that does not say what it looked for and when;
+> and `tiebreak` hung off `defaultSort`, which would have silently stopped applying the moment a
+> reader clicked that column twice — it hangs off the column.
+>
+> **TanStack Table was NOT used for the pager** — arithmetic instead. The protected behaviour (server
+> decides the page count, client never slices) is preserved and tested. **If Task 18 also drops it,
+> register row A50 needs the founder's tick in the Deliberately-Dropped table.**
+>
+> **🛑 URL params are NOT namespaced.** Every screen in Tasks 14–18 has one list, so nothing collides.
+> **Ops Live (T20) has two tables (A52)** and needs namespaced params — a small addition to T7, not a
+> second list component.
 
 ---
 
@@ -1078,9 +1313,9 @@ here rather than carrying it into the next task.
 **Interfaces:**
 - Produces ChartShell, where `dataTable` is a REQUIRED prop.
 
-- [ ] **Step 1: Make the accessible data table impossible to omit (A32).** Five charts carry a details/summary "Show data table" today — `ScoreDistributionChart.tsx:71`, `EngagementTierBreakdown.tsx:95` (sr-only by construction, so invisible in any screenshot), `PillarHeatmap.tsx:77`, `WeeklyTrendChart.tsx:91`, `FarmerTimeline.tsx:138`. Making it a required prop of the shared shell is what stops a rewrite dropping it silently.
+- [x] **Step 1: Make the accessible data table impossible to omit (A32).** Five charts carry a details/summary "Show data table" today — `ScoreDistributionChart.tsx:71`, `EngagementTierBreakdown.tsx:95` (sr-only by construction, so invisible in any screenshot), `PillarHeatmap.tsx:77`, `WeeklyTrendChart.tsx:91`, `FarmerTimeline.tsx:138`. Making it a required prop of the shared shell is what stops a rewrite dropping it silently.
 
-- [ ] **Step 2: Carry the fixed-axis fill as a shell responsibility (A33)**
+- [x] **Step 2: Carry the fixed-axis fill as a shell responsibility (A33)**
 
 ```ts
 /**
@@ -1093,7 +1328,7 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 3: Add the v3 hatched gap — and reconcile it with the zero fill**
+- [x] **Step 3: Add the v3 hatched gap — and reconcile it with the zero fill**
 
 > **These two rules collide and the collision must be decided, not averaged.** Live zero-fills an absent bin to 0 so the axis cannot reshuffle. v3 requires a never-measured period to render as a HATCHED 45-degree full-height stub, never a zero-height bar, because a gap must not be readable as a bad day.
 >
@@ -1101,7 +1336,7 @@ here rather than carrying it into the next task.
 >
 > The recency-opacity ramp is deliberately NOT applied to a gap — an absence has no recency. The hatch is the only gradient in the v3 stylesheet and is documented there as data encoding, not decoration (CONTRACT.md section 8); do not add a second one.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1114,7 +1349,54 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 4: Commit** — `feat(admin-web): one chart shell — data table required, gaps are gaps not zeros`
+- [x] **Step 4: Commit** — `feat(admin-web): one chart shell — data table required, gaps are gaps not zeros`
+
+---
+
+> **Executed 2026-08-31 (`f398e414`). 492 tests. All eight citations correct — the first clean sweep.**
+>
+> **🛑 A defect the Preservation Register never carried: the live charts collapse gap and zero at
+> PANEL level, not merely at slot level.** `ScoreDistributionChart.tsx:36` reads `if (total === 0)` —
+> and because it zero-fills first, that is true both when the API returned **nothing** and when it
+> returned ten bins each genuinely measured at zero. Both print *"Not enough data yet — check back in
+> 7 days."* One of those is a broken pipeline; the other is a cohort of farms that all scored in one
+> place. Same defect at `EngagementTierBreakdown.tsx:34`. A33 only ever described the slot-level `?? 0`.
+>
+> **🛑 HAND-OFF for Tasks 21–23: recharts cannot draw this hatch through `<Bar>`.** A `Cell` takes a
+> `fill`, and a `repeating-linear-gradient` is not a paint server it accepts; a full-height stub over
+> a value axis is not something `<Bar>` expresses either. Whoever re-points `ScoreDistributionChart`
+> and `WeeklyTrendChart` must render gap slots through `GapBar`/`Sparkline` outside recharts, or
+> overlay them. Recorded now rather than discovered there.
+>
+> **`dataTable` is enforced at the TYPE level, not by a runtime test** — and the guard survives a
+> determined workaround: someone who made the prop optional *and* added `?.` at all five use sites is
+> still stopped by `TS2578` on the `@ts-expect-error` directive. The same device now guards
+> `states.measuredZero` on a chart, matching Task 8's list rule.
+>
+> **A plain `<table>` was chosen over `DataList` for the accessible table, and the deciding reason is
+> not cost: a chart's table MUST NOT be sortable.** Its order *is* the fixed axis — the exact property
+> A33 exists to protect. A reader who re-sorts it holds a second, disagreeing view of the same
+> numbers. (Also: `DataList` writes the un-namespaced `?sort`/`?dir`/`?open`, and Farmer Health draws
+> **four** charts on one page — the Ops Live collision arriving four times over.)
+>
+> **`dataTable` describes columns, never rows.** The rows *are* the chart's `slots`, and the gap cell
+> is rendered by the shell — so there is no code path by which the accessible table can print `0` for
+> a period nobody measured.
+>
+> **`theme.css` has TWO hatch frequencies**, 4px/8px (`:814`) and 5px/10px (`:838`); §8 names only the
+> latter as its exception. **One step carried deliberately** — two frequencies on one screen read as
+> two different states, which is the legend this console does not have.
+>
+> **A33's `PillarHeatmap.tsx:25,48` is imprecise:** 48 is the iteration; the `?? 0` fallbacks are at
+> **51** and **53**.
+>
+> **DECIDED:** a chart with nothing in it no longer says *"check back in 7 days"* — that is a fact
+> about the future with no source, and if the pipeline is broken it says it forever. It now states
+> the absence plainly. And a chart still draws when most slots are missing, with coverage stated in
+> words, rather than hiding the one real reading there is.
+>
+> **Pre-existing §8 violation found, not fixed:** `LoadingState.tsx:47` (Task 5) uses a Tailwind
+> gradient for a white-on-white shimmer. Decoration, not data encoding. **Task 29 or a founder call.**
 
 ---
 
@@ -1124,9 +1406,9 @@ here rather than carrying it into the next task.
 - Rewrite: `src/clients/admin-web/src/app/AdminShell.tsx`
 - Create: `src/clients/admin-web/src/app/ToastHost.tsx`
 
-- [ ] **Step 1: Rebuild the sidebar on the v3 layout, keeping all six groups and twelve items.** 236px at 1280 and above, 212px at 1024 to 1279, a horizontal strip below 1024. Groups stay Overview, Operations, Product, Farms, Schedules, Admin — CONTRACT.md Appendix 1 confirms six, not five, with WVFD alone in Product.
+- [x] **Step 1: Rebuild the sidebar on the v3 layout, keeping all six groups and twelve items.** 236px at 1280 and above, 212px at 1024 to 1279, a horizontal strip below 1024. Groups stay Overview, Operations, Product, Farms, Schedules, Admin — CONTRACT.md Appendix 1 confirms six, not five, with WVFD alone in Product.
 
-- [ ] **Step 2: Keep the nav badge slot (A53)**
+- [x] **Step 2: Keep the nav badge slot (A53)**
 
 ```tsx
 /**
@@ -1138,19 +1420,19 @@ here rather than carrying it into the next task.
 badge?: number;
 ```
 
-- [ ] **Step 3: Resolve the shortcut badges (D4).** The only global key handler binds Cmd-K and Escape. Either implement Cmd-1, Cmd-2 and Cmd-F or drop the three badges. Carrying the chips forward re-ships a lie, which is precisely what the v3 doctrine forbids. Recommendation: implement them in T13 — three lines in an existing handler is cheaper than explaining a removed affordance.
+- [x] **Step 3: Resolve the shortcut badges (D4).** The only global key handler binds Cmd-K and Escape. Either implement Cmd-1, Cmd-2 and Cmd-F or drop the three badges. Carrying the chips forward re-ships a lie, which is precisely what the v3 doctrine forbids. Recommendation: implement them in T13 — three lines in an existing handler is cheaper than explaining a removed affordance.
 
-- [ ] **Step 4: Put the active org in the top bar, on every screen (A39, B11).** Today the org name appears in exactly one subtitle, on one screen (`FarmerHealthPage.tsx:31-33,55-57`). With v3 having no org concept at all, that last visible trace of tenancy would disappear and every screen would show org-scoped numbers with nothing on screen saying which org. Do the opposite of dropping it: the active org name goes in the top bar on every screen, with a real switcher beside it. The v3 doctrine demands that a number states its scope.
+- [x] **Step 4: Put the active org in the top bar, on every screen (A39, B11).** Today the org name appears in exactly one subtitle, on one screen (`FarmerHealthPage.tsx:31-33,55-57`). With v3 having no org concept at all, that last visible trace of tenancy would disappear and every screen would show org-scoped numbers with nothing on screen saying which org. Do the opposite of dropping it: the active org name goes in the top bar on every screen, with a real switcher beside it. The v3 doctrine demands that a number states its scope.
 
-- [ ] **Step 5: Wire the avatar to the real user (D12).** initialsOf is called with literal nulls so every user sees AK, and useAdminAuth() is called and its result discarded (`AdminShell.tsx:53,77-79`). Either wire it to the resolved scope user or drop the avatar. Do not reproduce the constant.
+- [x] **Step 5: Wire the avatar to the real user (D12).** initialsOf is called with literal nulls so every user sees AK, and useAdminAuth() is called and its result discarded (`AdminShell.tsx:53,77-79`). Either wire it to the resolved scope user or drop the avatar. Do not reproduce the constant.
 
-- [ ] **Step 6: Add a sign-out control to the shell (A13, B3).** Today the ONLY sign-out in the entire app is on /403. Put a real one in the top bar. Keep the /403 one as well — a denied user still needs it.
+- [x] **Step 6: Add a sign-out control to the shell (A13, B3).** Today the ONLY sign-out in the entire app is on /403. Put a real one in the top bar. Keep the /403 one as well — a denied user still needs it.
 
-- [ ] **Step 7: Add a manual Refresh affordance (B14).** One control that invalidates the current route query keys, next to a dataUpdatedAt-driven freshness chip. v3 has no slot for this and needs one the moment real fetching returns.
+- [x] **Step 7: Add a manual Refresh affordance (B14).** One control that invalidates the current route query keys, next to a dataUpdatedAt-driven freshness chip. v3 has no slot for this and needs one the moment real fetching returns.
 
-- [ ] **Step 8: Add the toast host (B15 — slot only).** Mount it; register nothing. It exists so the first write surface has somewhere to land.
+- [x] **Step 8: Add the toast host (B15 — slot only).** Mount it; register nothing. It exists so the first write surface has somewhere to land.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1163,7 +1445,55 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 9: Commit** — `feat(admin-web): v3 shell — org named on every screen, real avatar, real sign-out, refresh`
+- [x] **Step 9: Commit** — `feat(admin-web): v3 shell — org named on every screen, real avatar, real sign-out, refresh`
+
+---
+
+> **Executed 2026-08-31 (`ba8f5a1c`). 523 tests. Six mutations, six kills.**
+>
+> **🛑 `decodeJwt` decoded one character per byte**, so a Marathi `display_name` arrived as mojibake —
+> the avatar would have been wrong before the font ever got a chance. Fixed in `lib/auth.ts`, a file
+> this task does not list. Display use only; **D15 (no client-side authorization) is intact** and
+> Task 2's characterisation of `decodeJwt` is unchanged and green.
+>
+> **A measurement changed the design.** Switching org was written as `removeQueries()` behind a
+> `setTimeout` with a comment about an effect-ordering race. Measured against a query keyed the way
+> this console keys them (no org in the key):
+>
+> | | refetches? | on screen during the refetch |
+> |---|---|---|
+> | `removeQueries()` | **never** | the previous org's rows, indefinitely |
+> | `invalidateQueries()` | yes | **the previous org's rows** |
+> | `resetQueries()` | yes | loading |
+>
+> `resetQueries()` shipped. **The `setTimeout` made no measurable difference and was deleted with its
+> explanation** — a defensive line with an unproven reason is the defect this repo keeps catching.
+>
+> **D3 was ALREADY DONE.** The envelope said Task 3 left the shader and its render site; both false —
+> `793c16f4` deleted `WheatWindShader.tsx`, its import and its render site. There was nothing to
+> delete. **Register A45's note "(110 is `<WheatWindShader />`)" is now dead.**
+>
+> **Every `AdminShell.tsx` citation was stale** (Task 3 edited the file): shortcut fields **32,33,37**
+> not 35,36,40; badge render **99–103** not 111–115; `useAdminAuth()` **49** not 53;
+> `initialsOf(null,null)` at **66** with the helper at **134–141**, not 77–79. A53's **25 / 104–108**,
+> not 28 / 116–120.
+>
+> **🛑 B11 is assigned to T12, but Step 4 required it and it was built HERE.** T12 must **not** build a
+> second switcher. Its remaining share: Step 2 (`?org=` through the router), Step 3 (org in every data
+> key), Step 5 (`clear()` on NotInOrg), and the full-page `OrgSwitcher`.
+>
+> **Five per-item nav icon colours dropped** (`#d60000`, `#f59e0b`, `#dc2626`, `#ea580c`, `#7c3aed`).
+> They encode nothing, and §7.7 is explicit: *"if you cannot say what a colour means, remove it."*
+>
+> **DECIDED 2026-08-31:** Live Health **stays under Operations** — the incumbent wins; nav order is
+> muscle memory and is not moved to match a mockup. The top-bar chip is **relabelled "Fetched Nm ago"**
+> (lands in T27 with the chip's own migration): the shell chip means *your browser received this*,
+> while the in-screen chips mean *the server calculated this* — **two different facts wearing one
+> label** is the defect class this redesign exists to remove. The two no-org sentences stand as written.
+>
+> **⚠️ Worktrees carry no `.env.local`** (gitignored), so `npm run dev` silently calls the dead
+> fallback port 5001 (`api.ts:5`, A54) and every screen shows 403. Created locally, uncommitted.
+> **The code-level fix to that fallback is T11's.**
 
 ---
 
@@ -1175,7 +1505,7 @@ here rather than carrying it into the next task.
 - Modify: `src/clients/admin-web/src/pages/LoginPage.tsx`
 - Modify: `src/clients/admin-web/src/pages/ForbiddenPage.tsx`
 
-- [ ] **Step 1: Reproduce the provider tree in the exact order, with the reason in a comment (A45)**
+- [x] **Step 1: Reproduce the provider tree in the exact order, with the reason in a comment (A45)**
 
 ```tsx
 /**
@@ -1189,11 +1519,11 @@ here rather than carrying it into the next task.
 
 Keep the fail-fast throw in useAdminAuth, useActiveOrg and useTheme when used outside their provider.
 
-- [ ] **Step 2: Keep route-level code splitting (A42).** All 12 pages stay lazy behind one Suspense. v3 is thirteen separate HTML files, which gives the same effect for free and therefore never prompts the question. The recharts-heavy Farmer Health chunk in particular must stay out of the initial payload — and lighthouse.yml asserts a 0.7 perf floor on that route.
+- [x] **Step 2: Keep route-level code splitting (A42).** All 12 pages stay lazy behind one Suspense. v3 is thirteen separate HTML files, which gives the same effect for free and therefore never prompts the question. The recharts-heavy Farmer Health chunk in particular must stay out of the initial payload — and lighthouse.yml asserts a 0.7 perf floor on that route.
 
-- [ ] **Step 3: Rebuild RequireScope with all four branches (A2).** Three of the four outcomes have no URL of their own and appear in no screenshot. Reproduce: isLoading gives the fallback; isError goes to /403; Unauthorized goes to /403; Ambiguous renders the full-page OrgSwitcher headlined "Choose your active organization"; NotInOrg renders the full-page OrgSwitcher headlined "That organization is not in your memberships". It is not a screen in the design; it is a gate above every screen.
+- [x] **Step 3: Rebuild RequireScope with all four branches (A2).** Three of the four outcomes have no URL of their own and appear in no screenshot. Reproduce: isLoading gives the fallback; isError goes to /403; Unauthorized goes to /403; Ambiguous renders the full-page OrgSwitcher headlined "Choose your active organization"; NotInOrg renders the full-page OrgSwitcher headlined "That organization is not in your memberships". It is not a screen in the design; it is a gate above every screen.
 
-- [ ] **Step 4: Reproduce the guard map — including the three deliberate gaps (A3, A4).** Carry both explanatory comments verbatim:
+- [x] **Step 4: Reproduce the guard map — including the three deliberate gaps (A3, A4).** Carry both explanatory comments verbatim:
 
 ```tsx
 {/* HomePage is a KPI collage — individual cards can 403 independently without
@@ -1205,13 +1535,13 @@ Keep the fail-fast throw in useAdminAuth, useActiveOrg and useTheme when used ou
 
 A tidy-minded port adds guards everywhere for consistency and locks every user out of Schedules and Settings, because NO ModuleKey exists for them. Adding a guard to Home, Templates or Settings is a behavioural regression, not a cleanup. The Task 2 ROUTE_GUARDS test enforces this.
 
-- [ ] **Step 5: Keep the guard loading semantics and its access levels (A6, A8).** Render null while loading — not a spinner, not a redirect. Keep the read/write/export levels even though no call site uses write or export yet: canExport is wired end-to-end (server flag, hook, guard) and used by no screen, so a rewrite that reimplements permissions from the design will not know it exists. v3 adds no write surfaces; the founder's brief adds features that will.
+- [x] **Step 5: Keep the guard loading semantics and its access levels (A6, A8).** Render null while loading — not a spinner, not a redirect. Keep the read/write/export levels even though no call site uses write or export yet: canExport is wired end-to-end (server flag, hook, guard) and used by no screen, so a rewrite that reimplements permissions from the design will not know it exists. v3 adds no write surfaces; the founder's brief adds features that will.
 
-- [ ] **Step 6: Fix the deep-link gap while restoring returnTo (A9, B2).** RequireAuth currently stores only location.pathname, dropping the query string — which is where page, search, tier, weeks, days and org all live. Store the full location (pathname plus search) and navigate back to it on success. The v3 login submit handler is literally a redirect to index.html; the whole capability is invisible in a mockup and would be rebuilt as "redirect to home".
+- [x] **Step 6: Fix the deep-link gap while restoring returnTo (A9, B2).** RequireAuth currently stores only location.pathname, dropping the query string — which is where page, search, tier, weeks, days and org all live. Store the full location (pathname plus search) and navigate back to it on success. The v3 login submit handler is literally a redirect to index.html; the whole capability is invisible in a mockup and would be rebuilt as "redirect to home".
 
   Keep everything `LoginPage.tsx:25-50` already does right: the real POST to /user/auth/login, session storage, the server's own error message surfaced, and the "Signing in…" disabled state.
 
-- [ ] **Step 7: Make the 401 interceptor stop destroying the deep link (A11)**
+- [x] **Step 7: Make the 401 interceptor stop destroying the deep link (A11)**
 
 ```ts
 /**
@@ -1223,11 +1553,11 @@ A tidy-minded port adds guards everywhere for consistency and locks every user o
  */
 ```
 
-- [ ] **Step 8: Restore /403 and branch on the typed errors (A12, A13, B1).** /403 stays OUTSIDE RequireScope so a broken scope cannot loop. Keep both message variants (module-specific and no-membership) and both actions. Then do what the console does not do today: CATCH AdminScopeAmbiguousError and AdminModuleForbiddenError at the surfaces that can act on them. They have zero catch sites right now, so a port can observe that nothing uses them and delete them — discarding the backend's deliberate distinction between admin_module_forbidden, admin_platform_only, admin_not_in_org and admin_no_membership permanently. This is the natural home for the v3 honest-state discipline applied to permissions.
+- [x] **Step 8: Restore /403 and branch on the typed errors (A12, A13, B1).** /403 stays OUTSIDE RequireScope so a broken scope cannot loop. Keep both message variants (module-specific and no-membership) and both actions. Then do what the console does not do today: CATCH AdminScopeAmbiguousError and AdminModuleForbiddenError at the surfaces that can act on them. They have zero catch sites right now, so a port can observe that nothing uses them and delete them — discarding the backend's deliberate distinction between admin_module_forbidden, admin_platform_only, admin_not_in_org and admin_no_membership permanently. This is the natural home for the v3 honest-state discipline applied to permissions.
 
-- [ ] **Step 9: Run the Task 2 characterisation suite.** Run: `npm run test`. Expected: PASS, unchanged. If routes.contract.test.ts goes red, a guard moved — that is the regression this task exists to prevent.
+- [x] **Step 9: Run the Task 2 characterisation suite.** Run: `npm run test`. Expected: PASS, unchanged. If routes.contract.test.ts goes red, a guard moved — that is the regression this task exists to prevent.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1240,7 +1570,52 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 10: Commit** — `feat(admin-web): auth plus four-outcome scope gate plus typed denials, deep links preserved`
+- [x] **Step 10: Commit** — `feat(admin-web): auth plus four-outcome scope gate plus typed denials, deep links preserved`
+
+---
+
+> **Executed 2026-08-31 (`0736bd1d`, plus the copy fix `22dd9536`). 582 tests. Eight mutations, eight kills.**
+>
+> **Step 8 asked for a branch with no producer, and the executor deleted its own work rather than
+> ship it.** `/403` has no path that carries a typed error — `EntitlementGuard` sends a `module`,
+> `RequireScope` sends outcomes. The branch was built, then **removed before committing**, and the
+> catch put where the errors actually arrive: `formatError` (which reaches every `LoadFailed` panel)
+> and the query cache. Shipping the dead code Step 8 itself warns about would have been the defect.
+>
+> **🛑 `admin_no_membership` is a 401, not a 403** (`AdminScopeHelper.cs:59-64`), and the 401 branch
+> returns before the 403 mapping — so **that arm of the four-code map is unreachable against this
+> backend.** An authenticated non-admin is signed **out**, not shown `/403`. Left as-is (Task 2 pins
+> it) but recorded: the map documents a server behaviour that does not occur.
+>
+> **`/admin/me/scope` never returns 401/428/403** (`AdminEndpoints.cs:36-40`) — always 200 with an
+> `outcome`. That is *why* `RequireScope` is the wrong place to catch typed errors.
+>
+> **Two mutations proved a Task 2 test would NOT have caught the regression**, which is the useful
+> half: restoring the hard `window.location.assign('/login')` left `api.contract.test.ts` green in
+> both directions. The characterisation suite is necessary and not sufficient.
+>
+> **`/403` no longer says "Access denied" when the check itself failed.** A server outage used to
+> tell an operator their access was revoked — the most alarming way to be wrong. Now: *"We could not
+> check your access… Nothing about your account has changed."*
+>
+> **A revoked permission now bites within one request instead of up to 60s.** The first refusal is
+> treated as proof the cached scope is stale. Safe direction; costs one extra small request.
+>
+> **The API base-URL fallback pointed at dead port 5001** (A54), so any developer without a local
+> env file saw every screen 403 — a setup mistake wearing a permissions bug's clothes. Now defaults
+> to 5048 with a loud warning. **The build-time refusal is NOT added** — `lighthouse.yml` builds this
+> console with no API address on purpose, so closing it needs a matching `.github/` change.
+> **DECIDED: add both in Task 28.**
+>
+> **A self-contradiction fixed after the fact (`22dd9536`):** `adminErrors.ts` states *"never show an
+> operator a machine code"* and then printed `Your admin access does not include ops.live.` Those 36
+> keys have **no human label anywhere** — `moduleKeys.ts` mirrors the C# enum. The key is not deleted
+> (it is what a support person relays to get the grant made); it moves to a separate copyable
+> `detail` line, **following the pattern the founder already chose for the support loop.**
+>
+> **Step 1's provider chain is stale** — it lists five led by `ThemeProvider`, deleted in Task 3 with
+> D1. The chain is four. **Step 2 says "all 12 pages"; there are 15 `lazy()` imports.** A3/A4 line
+> citations drifted ~6 lines; A12's `lib/api.ts:30-53` moved to `lib/adminErrors.ts`.
 
 ---
 
@@ -1253,7 +1628,7 @@ here rather than carrying it into the next task.
 
 **Port this before any screen.** Nothing about tenancy is on screen: a grep of the entire prototype returns ZERO hits for org, tenant or scope (verified). v3 is implicitly single-tenant, so a design-led port produces a console where every list silently returns the wrong org's rows or 428s.
 
-- [ ] **Step 1: Keep the module-scoped snapshot bridge and the exact header name (A1)**
+- [x] **Step 1: Keep the module-scoped snapshot bridge and the exact header name (A1)**
 
 ```ts
 /**
@@ -1264,11 +1639,11 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 2: Move the org param into router-managed search params (A15).** syncUrl currently uses window.history.replaceState (`ActiveOrgProvider.tsx:102-108`), which React Router DOES NOT SEE — so the next setSearchParams on any page strips the org straight back out of the shareable URL. Use useSearchParams with the functional updater from T7. Keep the UUID validation on BOTH the URL read and the storage read, and keep the precedence: URL, then localStorage, then null.
+- [x] **Step 2: Move the org param into router-managed search params (A15).** syncUrl currently uses window.history.replaceState (`ActiveOrgProvider.tsx:102-108`), which React Router DOES NOT SEE — so the next setSearchParams on any page strips the org straight back out of the shareable URL. Use useSearchParams with the functional updater from T7. Keep the UUID validation on BOTH the URL read and the storage read, and keep the precedence: URL, then localStorage, then null.
 
   The org param is the ONLY way a multi-org admin can switch org mid-session today, because the promised topbar switcher does not exist. It also makes an org-scoped view shareable. v3 reads only a q param and writes no URL state at all.
 
-- [ ] **Step 3: Put the org in every DATA query key — and then delete the reload (A7, D17).** The scope key already includes the org (`useAdminScope.ts:72`). EVERY DATA KEY OMITS IT, which is the only reason the OrgSwitcher window.location.reload() exists: without a full reload, switching orgs serves cached rows from the previous tenant.
+- [x] **Step 3: Put the org in every DATA query key — and then delete the reload (A7, D17).** The scope key already includes the org (`useAdminScope.ts:72`). EVERY DATA KEY OMITS IT, which is the only reason the OrgSwitcher window.location.reload() exists: without a full reload, switching orgs serves cached rows from the previous tenant.
 
 ```ts
 // Before: queryKey: ['farms', 'list', page, pageSize, search, tier]
@@ -1277,11 +1652,11 @@ here rather than carrying it into the next task.
 
   Apply to useFarmsList, useSilentChurn, useSuffering, useUsersList, useOpsErrors, useOpsHealth, useOpsVoice, useWvfd, useCohortPatterns, useFarmerHealth and useScheduleTemplates. Then replace the reload with setActiveOrgId plus invalidateQueries.
 
-- [ ] **Step 4: Build the topbar switcher (B11).** `App.tsx:84` already tells the user "you can switch later from the topbar" and `OrgSwitcher.tsx:24-26` documents a compact popover variant. Neither exists. Build it: the compact non-full-page variant in the top bar, next to the org name from T10.
+- [x] **Step 4: Build the topbar switcher (B11).** `App.tsx:84` already tells the user "you can switch later from the topbar" and `OrgSwitcher.tsx:24-26` documents a compact popover variant. Neither exists. Build it: the compact non-full-page variant in the top bar, next to the org name from T10.
 
-- [ ] **Step 5: Make the NotInOrg sentence true (D16).** clear() is declared and never called, so "The previous selection has been cleared" is false — the bad org id stays in localStorage AND in the URL. Call clear() when the resolver returns NotInOrg. Either call it or drop the sentence; do not port the false claim.
+- [x] **Step 5: Make the NotInOrg sentence true (D16).** clear() is declared and never called, so "The previous selection has been cleared" is false — the bad org id stays in localStorage AND in the URL. Call clear() when the resolver returns NotInOrg. Either call it or drop the sentence; do not port the false claim.
 
-- [ ] **Step 6: Test the cross-tenant property**
+- [x] **Step 6: Test the cross-tenant property**
 
 ```tsx
 it('sends the active-org header on every admin request', () => {});
@@ -1294,7 +1669,7 @@ it('rejects a non-UUID org param and a non-UUID stored value', () => {});
 it('clears the stored org when the resolver says NotInOrg', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1307,7 +1682,52 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 7: Commit** — `feat(admin-web): org in the URL, the top bar and every query key; reload removed`
+- [x] **Step 7: Commit** — `feat(admin-web): org in the URL, the top bar and every query key; reload removed`
+
+---
+
+> **Executed 2026-08-31 (`ae8460ef`). 636 tests. Five mutations, five kills.**
+>
+> **🛑 THE KEY ALONE WAS NOT ENOUGH — there is a SECOND leak this plan never described.** Farms, Users
+> and API Errors carry `placeholderData: keepPreviousData` (A25). Its job is to hold the **previous
+> key's** rows on screen while the next key loads. Put the org in the key and it holds the previous
+> **ORGANISATION's** rows — one tenant's farmer names and phone numbers rendered under another
+> tenant's name, with *"Refreshing…"* beside them. `lib/orgQuery.ts` narrows it: keep across a page
+> change, **never** across an org change. Both halves pinned separately so neither can be deleted as
+> "covered by the other".
+>
+> **The count is TWELVE, not eleven.** `useScheduleTemplates` **does not exist** — it is an inline
+> `useQuery` in `ScheduleTemplatesPage.tsx` (T24 extracts it). And `useOpsHealthWrapped` is a twelfth
+> data key the plan never names — dead, zero callers, deleted in T20 — **which got the org anyway,
+> because an org-less key in a file the next hook gets copied from is how the defect returns.**
+>
+> **Step 4 was ALREADY DELIVERED by Task 10.** No second switcher was built; `OrgSwitcher.tsx`'s
+> header, which promised a topbar variant that did not exist, was corrected in place.
+>
+> **`resetQueries()` is NOT redundant — its job changed, measured not assumed.** The *key* stops the
+> previous org's rows being **shown**; `resetQueries()` stops them being **held** in this tab's memory
+> for `gcTime` after a switch. Same property, same reason, as `qc.clear()` on sign-out. Both kept,
+> pinned as separate tests.
+>
+> **Task 11's `returnTo` loop is now genuinely redundant and was deleted.** A grep of `src/` outside
+> tests finds **no `history.replaceState` or `pushState` anywhere** — every URL write goes through the
+> router, so the loop was reconciling a value with itself.
+>
+> **Five Task 2 characterisation tests changed, all in the same commit with reasons** — each because
+> its *premise* moved (the org is now set through the router), never its property. **Task 1's
+> `renderWithProviders` warning was rewritten, not left**: a stale warning teaches the next author to
+> reach for `replaceState`, which now sets an org nothing reads.
+>
+> **🛑 PRE-EXISTING BUG FOR T24: Schedule Templates calls an endpoint that does not exist.** The
+> console requests `/shramsafal/reference-data/crop-schedule-templates`; the backend publishes
+> `/shramsafal/reference/schedule-templates` (`ReferenceDataEndpoints.cs:14,16`). **Both** the group
+> and the route name differ, so that screen has always 404'd against a live API.
+>
+> **Baselines moved:** tests **636 / 28 files**; lint **14 problems (0 errors, 14 warnings)** — the two
+> new ones are the same advisory `set-state-in-effect` class as four already in the tree.
+> `vitest.config.ts` `testTimeout` 5s → 20s, measured: two or three tests hit the 5s ceiling on every
+> other run, and `deepLink.contract.test.tsx` waited 5s inside a 5s test so it could never report what
+> it was waiting for. Every failure was the clock, never an assertion.
 
 ---
 
@@ -1316,9 +1736,9 @@ here rather than carrying it into the next task.
 **Files:**
 - Rewrite: `src/clients/admin-web/src/app/CommandPalette.tsx`
 
-- [ ] **Step 1: Index entities, not just pages.** v3 indexes 12 nav destinations PLUS 16 farms (sub-line = owner) and 19 users (sub-line = phone) against the romanised haystack from T6, and deep-links via a q param into the destination screen's search box, FORCING ITS LIST OPEN so the jump lands on the person, not the summary. The live palette is 11 hardcoded nav commands and is missing Farmer Health entirely (`CommandPalette.tsx:7-19` — verified, no farmer-health entry).
+- [x] **Step 1: Index entities, not just pages.** v3 indexes 12 nav destinations PLUS 16 farms (sub-line = owner) and 19 users (sub-line = phone) against the romanised haystack from T6, and deep-links via a q param into the destination screen's search box, FORCING ITS LIST OPEN so the jump lands on the person, not the summary. The live palette is 11 hardcoded nav commands and is missing Farmer Health entirely (`CommandPalette.tsx:7-19` — verified, no farmer-health entry).
 
-- [ ] **Step 2: Move it behind RequireAuth and filter by canRead (A46, B16)**
+- [x] **Step 2: Move it behind RequireAuth and filter by canRead (A46, B16)**
 
 ```tsx
 /**
@@ -1337,11 +1757,11 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 3: Add the missing destination.** Farmer Health is absent from the palette today. Add it, and the per-farm drilldown.
+- [x] **Step 3: Add the missing destination.** Farmer Health is absent from the palette today. Add it, and the per-farm drilldown.
 
-- [ ] **Step 4: Resolve D4 here.** If the founder chose implement, bind Cmd-1 to /, Cmd-2 to /ops/live and Cmd-F to /farms in the same handler that owns Cmd-K and Escape. If drop, remove the badges in T10.
+- [x] **Step 4: Resolve D4 here.** If the founder chose implement, bind Cmd-1 to /, Cmd-2 to /ops/live and Cmd-F to /farms in the same handler that owns Cmd-K and Escape. If drop, remove the badges in T10.
 
-- [ ] **Step 5: Test**
+- [x] **Step 5: Test**
 
 ```tsx
 it('is not mounted for an anonymous user', () => { /* PII must not be reachable pre-auth */ });
@@ -1350,7 +1770,7 @@ it('finds a Marathi surname when the user types its Latin spelling', () => {});
 it('deep-links via the q param and forces the destination list open', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1363,7 +1783,49 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Commit** — `feat(admin-web): entity-aware palette behind auth, filtered by scope`
+- [x] **Step 6: Commit** — `feat(admin-web): entity-aware palette behind auth, filtered by scope`
+
+---
+
+> **Task 13 executed 2026-08-31 (`856de09a`), plus a follow-up on the URL question.**
+>
+> **🛑 Step 1's `?q` deep link would have shipped a DEAD LINK.** Nothing anywhere in `admin-web` reads
+> `q` — `DataList` reads `search?.paramKey ?? 'search'` and `useListUrlState` defaults `draftKey` to
+> `'search'`. A palette emitting v3's `?q=` would have reviewed perfectly and done **nothing**, in
+> today's console *and* the ported one. The palette emits **`?search=`**, which is live in both:
+> `FarmsListPage.tsx:17` and `UsersPage.tsx:14` already read it and seed their input from it.
+> **No `?open=1` either** — `DataList` already treats a typed search as one of the three ways a
+> summary-first list opens, so writing the flag would be the duplicate mechanism Task 8 warned against.
+>
+> **`App.tsx:111` (Step 2 and register A46) is wrong — the mount was at line 242.** Tasks 2, 11 and 12
+> grew the file. **Task 7's `app.js:726,729` is off by three** — the generated links are at 723 and 726.
+> **`users.html:684` is mis-located**: 684 is the seed, not an open flag; that file opens its list at
+> **573**. So "the prototype's own summary-first open flag" is textually true for two of four files,
+> effect-true for a third, and points at the wrong line in the fourth.
+>
+> **Task 13's Files list is incomplete** — it names only `CommandPalette.tsx`, but the mount move *is*
+> Step 2, the security decision the task exists for, and it lives in `App.tsx`.
+>
+> **The pre-auth mutation was made to print the leak, not merely fail.** Moving the palette back
+> outside `RequireAuth` produces a red naming a farmer: `found <span … कांबळे …`. The stubbed server is
+> deliberately **hostile** — it serves a scope and farm rows to anyone who asks — so the test models a
+> stale token rather than trusting the server to be the last line of defence. It also asserts the
+> anonymous keystroke fired **zero** requests.
+>
+> **The route→module map is checked against the real route tree in `App.tsx`, not against
+> `ROUTE_GUARDS`** — importing that would have made both tests tautological.
+>
+> **DECIDED 2026-09-01 — a farm row prefers the id-only drilldown route whenever the reader can open
+> it**, falling back to `?search=<name>` only without `farmer.health`. A name in a URL lands in browser
+> history, a pasted message, a screenshot and a server access log — none covered by the permission
+> filter. The palette must not *manufacture* such links. This also collapses the doubled list.
+> **Settled without change:** people stay searchable by name and phone (that is the founder's own
+> support-loop design — a farmer calls and someone must find him in seconds); the scope-stating footer
+> wording stands; unreadable destinations are **hidden**, not greyed out.
+>
+> **D4 resolved by removal** — `Cmd-1`/`Cmd-2`/`Cmd-F` bind nothing, asserted over six presses in both
+> modifier flavours. **Baselines: 679 tests / 29 files; lint 13** (one *fewer* than baseline — the old
+> palette's `setState`-in-effect went with the rewrite).
 
 ---
 
@@ -1385,13 +1847,61 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useFarmsList(page, 40, search, tier) against `/shramsafal/admin/farms`, envelope, keepPreviousData.
 **Register rows:** A17, A18, A20, A21, A24, A25, A34, A51; B4, B9, B12, B13, B16; D11.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep server pagination at 40 per page.** v3 renders all 16 farms at once and its Show all button is a promise it can only keep at n=16. At real volumes a client-side port either loads everything (fatal on a 2-vCPU box, measured ceiling about 32 concurrent requests) or quietly drops the ability to reach page 2.
-- [ ] **Step 3: Keep the tier A/B/C/D filter (B9).** The v3 facets are crop, village, plan and land-record, and tier is a column only; the live tier filter is a working server-side capability with a UI control (`FarmsListPage.tsx:46-54`). Keep both — the v3 facets are additive.
-- [ ] **Step 4: Fix the Owner column (v3 Appendix 6).** Today the header reads Owner and the cell renders the owner's phone (`FarmsListPage.tsx:80`). The v3 version — name with the phone as a sub-line — makes the header true. Render the name through PersonName and the phone through Masked.
-- [ ] **Step 5: Resolve the dead row-click (D11).** The onClick navigates to an unregistered route, so every click falls through the catch-all and bounces to Home while the whole table is styled cursor-pointer. Replace with the v3 expandable row. Do NOT port the silent bounce, and do not leave a pointer cursor on a row that does nothing.
-- [ ] **Step 6: Keep the draft-not-URL-synced search (A21)** and the Refreshing swap (A25).
-- [ ] **Step 7: Commit** — `feat(admin-web): All Farms on DataList`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep server pagination at 40 per page.** v3 renders all 16 farms at once and its Show all button is a promise it can only keep at n=16. At real volumes a client-side port either loads everything (fatal on a 2-vCPU box, measured ceiling about 32 concurrent requests) or quietly drops the ability to reach page 2.
+- [x] **Step 3: Keep the tier A/B/C/D filter (B9).** The v3 facets are crop, village, plan and land-record, and tier is a column only; the live tier filter is a working server-side capability with a UI control (`FarmsListPage.tsx:46-54`). Keep both — the v3 facets are additive.
+- [x] **Step 4: Fix the Owner column (v3 Appendix 6).** Today the header reads Owner and the cell renders the owner's phone (`FarmsListPage.tsx:80`). The v3 version — name with the phone as a sub-line — makes the header true. Render the name through PersonName and the phone through Masked.
+- [x] **Step 5: Resolve the dead row-click (D11).** The onClick navigates to an unregistered route, so every click falls through the catch-all and bounces to Home while the whole table is styled cursor-pointer. Replace with the v3 expandable row. Do NOT port the silent bounce, and do not leave a pointer cursor on a row that does nothing.
+- [x] **Step 6: Keep the draft-not-URL-synced search (A21)** and the Refreshing swap (A25).
+- [x] **Step 7: Commit** — `feat(admin-web): All Farms on DataList`
+
+---
+
+> **Task 14 executed 2026-09-01 (`d51c1477`). 702 tests. Five mutations, five kills. Every Task 14
+> citation was CORRECT — the first screen task with no line drift.** But four of its *premises* are
+> false, all verified in backend code:
+>
+> **🔴 B16 IS NOT SATISFIED, AND NO FRONTEND CHANGE CAN SATISFY IT.** `/shramsafal/admin/farms`
+> returns **full, unmasked phone numbers to every admin who can open the screen.**
+> `GetFarmsListHandler.cs` never calls `IResponseRedactor` — independently confirmed: the redactor
+> exists (`ShramSafal.Infrastructure/Admin/ResponseRedactor.cs`) and `GetFarmerHealthHandler` and
+> `GetCohortPatternsHandler` both use it. **The farms list does not.** This contradicts the founder's
+> standing rule that farmer-sensitive information is not for general internal eyes. **Backend task,
+> outside this plan. Do NOT tick B16.** The frontend half is done: a `98******10` renders partly
+> hidden, a `**redacted**` renders the farm id, and neither can leak as literal text the day the
+> server switches masking on.
+>
+> **🛑 Step 4's premise is FALSE — the owner's name is not in the data.** `FarmsAdminDto.cs:9-18` has
+> no owner-name field and `AdminMisRepository.cs:105-118` selects `u.phone` and no other column from
+> `public.users`. v3's name-over-phone cell **is not buildable**, and CONTRACT.md Appendix 6 makes the
+> same wrong assumption. The header now reads **"Owner phone"** — exactly as informative as before,
+> and it stops implying otherwise. Showing a name needs a backend change.
+>
+> **🛑 Step 3's "v3's facets are additive" does not hold.** Crop, village and land-record area are not
+> on this endpoint at all, and `plan` is the SQL **literal `'trial'`** on every row
+> (`AdminMisRepository.cs:108`) — a plan filter would offer one button that selects everything. Only
+> the tier filter ships, with a standing note naming what the feed does not carry.
+>
+> **🛑 v3's own search copy is false for this endpoint.** §6.1 claims *"Search runs over farm name,
+> owner and phone."* The query is `LOWER(f.name) LIKE LOWER(@s)` and nothing else
+> (`AdminMisRepository.cs:95,103`). **Live consequence:** Task 13's palette deep-links
+> `/farms?search=<phone>` when a farm's name is withheld (`CommandPalette.tsx:371`) — **that jump has
+> always landed on nothing**, and now at least says why.
+>
+> **The v3 "Show all" gate was deliberately dropped on THIS screen only** — with no facets to read
+> first, it would hide the table for no reason and add a click to every visit. Silent Churn (T15)
+> genuinely needs it and keeps it.
+>
+> **🛑 FORWARD RISK for T29 — the suite is approaching a timing cliff, measured not guessed.** Adding
+> the first screen-test file made an unrelated whole-console test go intermittently red (3 failures
+> in 12 runs); it waits up to **15 s** and a 30th parallel file on 11 workers pushes it past that.
+> Fixed here by merging three tests that shared one fixture — no assertion removed. **Twelve more
+> screen-test files are coming, one worker each.** Either the two whole-console files get faster or
+> the ceiling/parallelism is tuned. **Route to Task 29.**
+>
+> **Baselines: 702 tests / 30 files; lint 11 (0 errors)** — two warnings left with the rewrite.
+> The trim went into `useListUrlState`, not the screen, so **Task 17 gets it for free.**
+> Rows satisfied: A17, A18, A20, A21, A24, A25, A34, A51, B4, B9, B12, B13, D11. **B16: half only.**
 
 ---
 
@@ -1400,12 +1910,68 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useSilentChurn() against `/shramsafal/admin/farms/silent-churn`, envelope, staleTime 300s, NO refetchInterval.
 **Register rows:** A24, A34; B12, B16; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Replace "No farms in silent churn" (D9).** An unqualified empty on this screen reads as good news whether the list is genuinely empty or the request 500'd. Four causes.
-- [ ] **Step 3: Add the v3 "Too new to judge" hold-out panel.** Farms with no last log to count back from are held OUT of the watchlist and shown separately with an unmeasured state — that is neither a long silence nor zero weeks. The live screen has no such concept; it renders a formatted date or the literal word Never (`SilentChurnPage.tsx:41`), which calls "never logged" the same thing as "logged and stopped".
-- [ ] **Step 4: Add the v3 "Outreach is not measured" note.** Every expanded row reads "Last contacted — not measured". A new true statement about the product; do not soften it.
-- [ ] **Step 5: Cross-filtered facet counts ON** (v3 applies them here and on All Farms).
-- [ ] **Step 6: Commit** — `feat(admin-web): Silent Churn on DataList, with the too-new hold-out`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Replace "No farms in silent churn" (D9).** An unqualified empty on this screen reads as good news whether the list is genuinely empty or the request 500'd. Four causes.
+- [x] **Step 3: Add the v3 "Too new to judge" hold-out panel.** Farms with no last log to count back from are held OUT of the watchlist and shown separately with an unmeasured state — that is neither a long silence nor zero weeks. The live screen has no such concept; it renders a formatted date or the literal word Never (`SilentChurnPage.tsx:41`), which calls "never logged" the same thing as "logged and stopped".
+- [x] **Step 4: Add the v3 "Outreach is not measured" note.** Every expanded row reads "Last contacted — not measured". A new true statement about the product; do not soften it.
+- [x] **Step 5: Cross-filtered facet counts ON** (v3 applies them here and on All Farms).
+- [x] **Step 6: Commit** — `feat(admin-web): Silent Churn on DataList, with the too-new hold-out`
+
+---
+
+> **Task 15 executed 2026-09-01 (`e7563bd1`, `f7646a60`). 719 tests. Seven mutations, seven kills.**
+> **Five false premises, all verified in backend code.**
+>
+> **🛑 Step 3 was wrong in the OPPOSITE direction, and the correction is the finding.** Never-logged
+> farms are **not** in the watchlist and never have been. `mis.silent_churn_watchlist` does
+> `FROM sf JOIN last_log ll ... WHERE ll.last_log_at < NOW() - INTERVAL '14 days'` — an INNER JOIN
+> plus a comparison against NULL, so **a farm with no log is dropped before the list is built.**
+> `SilentChurnPage.tsx:41`'s `'Never'` branch was **unreachable dead code documenting a conflation the
+> feed cannot produce.** The hold-out ships as a guard plus an honest panel that **never prints a
+> count** — "0 farms are too new to judge" would be a measurement this console has never taken.
+>
+> **🔴 PRODUCT GAP: the never-activated farmers are computed nightly and NOTHING reads them.**
+> `mis.zero_engagement_farms` is created by `20260502010000_AddSubscriptionFarmsAndChurnMatviews` and
+> refreshed by `MisRefreshJob` — independently confirmed, its **only** repo references are two
+> migrations, the refresh job and a migration test. **No repository method, no endpoint, no hook, no
+> screen.** These are farms on a paid or trial plan that signed up and **never recorded anything** —
+> arguably the most urgent list in the product, and it is invisible.
+>
+> **🔴 A SECOND endpoint does not redact. Do NOT tick B16.** `GetSilentChurnHandler` never takes or
+> calls `IResponseRedactor`. Repo-wide only `GetFarmerHealthHandler` and `GetCohortPatternsHandler`
+> do. So `/admin/farms` **and** `/admin/farms/silent-churn` both return full unmasked phone numbers.
+>
+> **🛑 A57's subtitle was false in THREE of four clauses.** *"Paid farms with WVFD = 0 for 2+
+> consecutive weeks."* The matview takes status `IN (1,2,3)` = Trialing/Active/PastDue — **a trial is
+> not a payment**; the signal is a **missing `log.created` event, never WVFD**; the threshold is **14
+> days**. A57 records this as the only place the rule is stated on screen, so it is preserved —
+> restated true, and now naming the `LIMIT 50` cap the old screen never mentioned.
+>
+> **`plan` IS a real column here**, unlike `/admin/farms`: `COALESCE(s.plan_code,'trial')` from
+> `accounts.subscriptions` (`AdminMisRepository.cs:197`) vs the hardcoded `'trial'` at `:108`. So this
+> screen ships **two** real facets — silence band and plan — where Task 14 could ship none.
+>
+> **A backend doc-comment contradicts its own SQL:** `AdminMisRepository.cs:192` says weeks are
+> *"ceil(days/7)"*; the SQL is `GREATEST(1, (days/7))` — integer division, i.e. **floor**. 20 days
+> reads "2w", not 3. The screen says "N **full** weeks", which is what floor supports.
+>
+> **🛑 TWO `DataList` BUGS FOUND HERE, both inherited by Tasks 16–17 if unfixed.** (1) Every summary
+> figure is computed from `rows`, and `rows` is `[]` when the request breaks — so a 500 rendered a
+> collapsed watchlist headlined **"0 farms"** while the block naming the 500 sat inside a `hidden`
+> container. On this screen "0 farms silent" is the **best possible news**, which makes it the worst
+> possible thing to print over a broken endpoint. (2) A genuinely empty watchlist sealed its own
+> `MeasuredZero` block — the only thing naming the window — behind a *"Show all 0 farms"* button.
+> Both fixed; the first kills a mutation with a named message. **All Farms could not reach either,
+> because it is not summary-first.**
+>
+> **Row cap is 50** — a hard `LIMIT 50` in the SQL (`:206`), two orders of magnitude below Task 8's
+> 3,000-row cliff. No virtualisation needed; none built.
+>
+> **The timing cliff is PRE-EXISTING, measured on both sides:** 3 failures in 24 runs with the new
+> file, **1 in 10 with it moved aside**. It fires without it. **Task 29 owns it.**
+>
+> **Baselines: 719 tests / 31 files; lint 11 (0 errors).** Rows satisfied: A24, A34, A57 (half — T16
+> owns the Suffering twin), B12, D9. **B16: NO.**
 
 ---
 
@@ -1414,11 +1980,68 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useSuffering() against `/shramsafal/admin/farms/suffering`, envelope, staleTime 60s plus refetchInterval 60s.
 **Register rows:** A24, A34; B12; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Replace "No farms with repeated errors — great!" (D9).** The single worst silent-failure string in the console: it renders a 500 as a celebration.
-- [ ] **Step 3: Add the v3 "nothing marks an error resolved" note.** True statement about the product; the write surface that would change it is B15, a separate plan.
-- [ ] **Step 4: Cross-filtered facet counts OFF** — v3 deliberately does not cross-filter here, because a count that moved would stop answering "how many are there".
-- [ ] **Step 5: Commit** — `feat(admin-web): Suffering on DataList`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Replace "No farms with repeated errors — great!" (D9).** The single worst silent-failure string in the console: it renders a 500 as a celebration.
+- [x] **Step 3: Add the v3 "nothing marks an error resolved" note.** True statement about the product; the write surface that would change it is B15, a separate plan.
+- [x] **Step 4: Cross-filtered facet counts OFF** — v3 deliberately does not cross-filter here, because a count that moved would stop answering "how many are there".
+- [x] **Step 5: Commit** — `feat(admin-web): Suffering on DataList`
+
+---
+
+> **Task 16 executed 2026-09-01 (`a8cb811d`, plus the scope-copy fix `74da3d3b`). 732 tests.**
+> **Ten mutations, nine kills — and the tenth survivor is documented rather than faked.**
+>
+> **🔴 THE HEADLINE NUMBER ON THIS SCREEN COUNTS SUCCESSES, AND THE LIST IS RANKED BY IT.**
+> Independently confirmed in `20260502000000_AnalyticsRewrite.cs:400`: `error_count` is a bare
+> `COUNT(*)` over `WHERE event_type IN ('api.error','client.error','ai.invocation')` with **no outcome
+> filter**. Only the `HAVING` filters to failures. All three AI handlers emit on the happy path
+> (`ParseVoiceInputHandler.cs:484`, `ExtractReceiptHandler.cs:113`, `ExtractPattiImageHandler.cs:111`),
+> so **every successful voice parse inflates a farm's number on a screen headed "suffering"** — and
+> `ORDER BY error_count DESC` ranks by it. **Our heaviest users float to the top of the call list.**
+> `last_error_at` is `MAX()` over the same unfiltered group, so "last error" can be a successful parse.
+> Renamed on screen to **Events counted** / **Last event**; the fix is one word in the matview.
+>
+> **🔴 A DATABASE FAILURE IS ANSWERED AS A MEASURED ZERO, WITH HTTP 200.**
+> `AdminMisRepository.cs:245` is `catch { return []; }`, and `:219` (Silent Churn) is identical. A
+> dropped connection, a missing matview or a permission failure on `mis` reaches the client as an
+> empty list. **So the four causes are the four THIS CLIENT can see** — the server can turn its own
+> blindness into good news before the client is told. **T15's screen has this too and its report did
+> not name it.**
+>
+> **🔴 NONE OF THE THREE MIS ENDPOINTS FILTERS BY ORGANISATION.** Confirmed in
+> `IAdminMisRepository.cs:10-13`: `GetSilentChurnAsync(ct)`, `GetSufferingAsync(ct)` and
+> `GetFarmsListAsync(page,pageSize,search,tier,ct)` take **no org parameter**, and matviews are not
+> subject to RLS. **Task 12 put the org in every query KEY — that separates the client cache; it does
+> not scope the data,** because the server has no parameter to receive it. Three sentences on two
+> screens claimed *"in this organisation"*; **all three corrected in `74da3d3b`.** Whether these feeds
+> *should* be org-scoped turns on who may hold `farms.suffering` — an entitlement question for the
+> founder. **And `CacheOutput` does not vary by header (`Program.cs:131`, 30s), so the day the query
+> IS scoped, that cache becomes a cross-tenant leak.**
+>
+> **🛑 Six more false premises.** The window is **7 days, not 24h** — and three separate places say
+> 24h, including the API's own envelope (`GetSufferingHandler.cs:16`). The entry condition is **3+**
+> and was never on screen. They are **not "API errors"**: `client.error` and failed `ai.invocation`
+> qualify — two of three are about the farmer's own device and voice. Sync/Logs/Voice are **filters,
+> not a breakdown**; v3 states verbatim that they sum to the total, and they cannot, because an
+> `ai.invocation` carries `operation`, not `endpoint`. v3's search copy promises six fields; **one
+> exists.**
+>
+> **`client_errors` is computed nightly and has ZERO readers** — confirmed repo-wide. The one channel
+> that would explain part of the sum gap is measured and thrown away. Same shape as T15's
+> `mis.zero_engagement_farms`.
+>
+> **`meta.lastRefreshed` is `DateTime.UtcNow` at request time** over a nightly matview, behind a 30s
+> cache — so the chip reads *"Live · 1s ago"* over data that can be a day old. **The D5 defect,
+> produced server-side.** The chip reports exactly what the server sent (inventing a better timestamp
+> is the same defect reversed) and the real age is stated in words.
+>
+> **Integrity note, self-reported:** the executor's first commit used `-c core.hooksPath=.githooks`
+> when the real path is `.husky` — `--no-verify` by another name. It reset and re-committed properly,
+> and the real `commit-msg` hook then rejected it for a missing `spec:` line.
+>
+> **Baselines: 732 tests / 32 files; lint 11 (0 errors).** Rows satisfied: A24, A34, **A57 complete**
+> (T15 held the other half), B12, D9. **B16: NO — third endpoint, though this one carries no phone to
+> leak.**
 
 ---
 
@@ -1427,12 +2050,53 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useUsersList(page, 50, search) against `/shramsafal/admin/users`, envelope, keepPreviousData.
 **Register rows:** A17, A18, A20, A21, A24, A25, A51; B4, B12, B13, B16; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep server pagination at 50 per page** and the draft-commit search contract.
-- [ ] **Step 3: Mask the phone (B16).** v3 prints full phone numbers on every user row. The phone IS the account, so the column stays — but it renders through Masked and respects whatever the server sends.
-- [ ] **Step 4: Show absences as absences.** The bare em dashes at `UsersPage.tsx:61-62` carry no reason. Route them through NotMeasured so they say WHY. Same for lastLoginAt — "never signed in" is a fact, not a blank.
-- [ ] **Step 5: Cross-filtered facet counts OFF.**
-- [ ] **Step 6: Commit** — `feat(admin-web): Users on DataList, absences named`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep server pagination at 50 per page** and the draft-commit search contract.
+- [x] **Step 3: Mask the phone (B16).** v3 prints full phone numbers on every user row. The phone IS the account, so the column stays — but it renders through Masked and respects whatever the server sends.
+- [x] **Step 4: Show absences as absences.** The bare em dashes at `UsersPage.tsx:61-62` carry no reason. Route them through NotMeasured so they say WHY. Same for lastLoginAt — "never signed in" is a fact, not a blank.
+- [x] **Step 5: Cross-filtered facet counts OFF.**
+- [x] **Step 6: Commit** — `feat(admin-web): Users on DataList, absences named`
+
+---
+
+> **Task 17 executed 2026-09-01 (`1cd48808`). 747 tests. Ten mutations, nine kills; the tenth
+> exposed inert configuration, deleted rather than kept.**
+>
+> **🔴 `/shramsafal/admin/users` CANNOT RETURN A ROW, AND NEVER HAS.**
+> `AdminMisRepository.cs:250-288` selects `u.user_id`, `u.email`, `u.created_at`, `u.last_login_at`
+> from `public.users`, which defines **none** of them — independently confirmed: the table has `Id`,
+> `phone`, `display_name`, `password_hash`, `credential_created_at_utc`, `created_at_utc`,
+> `is_active`, and no later migration adds the others. Raises `42703`; `:287` is
+> `catch { return empty; }` — **HTTP 200, empty, every request, every environment.** Two sibling
+> queries address the same table correctly, so it is one query's mistake. **No backend test covers
+> it.** The count query above it succeeds and its result is discarded with the exception.
+> **Third swallow in that file.**
+>
+> **🛑 Step 4's second half is false. "Never signed in" is not readable from a null** — there
+> is no last-login column, so a null is the **absence of a record, not a record of absence**, and
+> printing "never" over it would invent a finding about a person. Both readings ship, render
+> differently, and a named constant emits only the honest one.
+>
+> **🛑 Step 5 is moot — ZERO facets are buildable.** v3's role / app-band / last-active groups
+> rest on a role that belongs to a **membership** not a person, an `apps` array that is the literal
+> `[]` at `:283` (grants live in `public.memberships`, never joined), and the missing column.
+> **`email` is not a nullable field — it is not a field**; auth is phone + OTP. Email and Apps dropped
+> as columns and stated once in words: *a column that can only ever show one value is a sentence.*
+>
+> **🔴 A FIFTH CAUSE was added to the vocabulary.** `MeasuredZero` closes *"This is a measured
+> zero, not a missing feed"* — **provably false here.** `DataList` gained one opt-in field,
+> `states.measuredZero.unproven`, rendering a `NotMeasuredPanel` in the same slot. Silence keeps prior
+> behaviour, so Tasks 15-16 are untouched.
+>
+> **🔴 THE ENVELOPE KEY WAS INVERTED IN THE SHARED TYPE** — found here, fixed at `7a742b05`.
+> Every freshness chip on every screen was reading a key the server never sends.
+>
+> **A surviving mutation revealed a toothless assertion:** removing `.trim()` from the name sort
+> survived because the assertion read the whole **row**, and every row contains "not measured" in its
+> sign-in cell. Narrowed to the cell, it kills.
+>
+> **Baselines after T17: 747 tests / 33 files; lint 10 — one FEWER.** Rows satisfied: A17, A18, A20,
+> A21, A24, A25, A34, A51, B4, B12, B13, D9. **B16: NO — fourth endpoint, fourth with no redactor.**
 
 ---
 
@@ -1441,9 +2105,9 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsErrors with page, pageSize 50, endpoint and since, against `/shramsafal/admin/ops/errors`; envelope; staleTime 25s plus refetchInterval 30s; keepPreviousData.
 **Register rows:** A16, A17, A18, A20, A21, A24, A25, A50, A51; B4, B12, B13; D9.
 
-- [ ] **Step 1: S1 to S6, using the server-paginated DataList mode** backed by tanstack react-table manualPagination (A50). This is the one screen that already has server pagination; a port that unifies on the v3 client-side sorter loses it.
+- [x] **Step 1: S1 to S6, using the server-paginated DataList mode** backed by tanstack react-table manualPagination (A50). This is the one screen that already has server pagination; a port that unifies on the v3 client-side sorter loses it.
 
-- [ ] **Step 2: Keep the since param — and finally give it a control (A16)**
+- [x] **Step 2: Keep the since param — and finally give it a control (A16)**
 
 ```tsx
 /**
@@ -1458,17 +2122,74 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Keep the blur-OR-Enter endpoint filter exactly (A21)** — uncontrolled defaultValue, a trim, and the conditional Clear filter button. It looks identical to the Farms search in a screenshot and behaves differently on purpose.
+- [x] **Step 3: Keep the blur-OR-Enter endpoint filter exactly (A21)** — uncontrolled defaultValue, a trim, and the conditional Clear filter button. It looks identical to the Farms search in a screenshot and behaves differently on purpose.
 
-- [ ] **Step 4: Replace "No errors found. The system is healthy." (D9)** with the v3 measured zero: "No errors in the last 2 hours. The window was checked at 11:41. This is a measured zero, not a missing feed."
+- [x] **Step 4: Replace "No errors found. The system is healthy." (D9)** with the v3 measured zero: "No errors in the last 2 hours. The window was checked at 11:41. This is a measured zero, not a missing feed."
 
-- [ ] **Step 5 — BLOCKED on the error-capture plan Task 8** ("Carry it to the admin API" — NOT its Task 6, which widens the vocabulary)**:** add the errorCode and Meaning columns.
+- [x] **Step 5 — BLOCKED on the error-capture plan Task 8** ("Carry it to the admin API" — NOT its Task 6, which widens the vocabulary)**:** add the errorCode and Meaning columns.
 
-- [ ] **Step 6 — BLOCKED:** the expandable row showing what the server actually said (Message), which app build the farmer was on (AppVersion), and whether the farmer's work survived (WorkKept — kept, lost or unknown, rendered as three distinct states, never defaulted).
+- [x] **Step 6 — BLOCKED:** the expandable row showing what the server actually said (Message), which app build the farmer was on (AppVersion), and whether the farmer's work survived (WorkKept — kept, lost or unknown, rendered as three distinct states, never defaulted).
 
-- [ ] **Step 7 — BLOCKED for the roll-up, NOT blocked for attribution:** the v3 "Where the errors landed" endpoint roll-up (endpoint, errors, worst status, share) with a computed section dot. Rows that cannot be attributed render "— not attributable" rather than guessing a farm; that part is NOT blocked, because farmId is already nullable in OpsErrorEvent (`useOpsHealth.ts:9`).
+- [x] **Step 7 — BLOCKED for the roll-up, NOT blocked for attribution:** the v3 "Where the errors landed" endpoint roll-up (endpoint, errors, worst status, share) with a computed section dot. Rows that cannot be attributed render "— not attributable" rather than guessing a farm; that part is NOT blocked, because farmId is already nullable in OpsErrorEvent (`useOpsHealth.ts:9`).
 
-- [ ] **Step 8: Commit** — `feat(admin-web): API Errors on DataList; the since filter gets a control`
+- [x] **Step 8: Commit** — `feat(admin-web): API Errors on DataList; the since filter gets a control`
+
+---
+
+> **Task 18 executed 2026-09-01 (`4cba59e6`). 763 tests / 35 files; lint 8 — two FEWER.**
+> **Eleven mutations, eleven kills. Steps 5-7 BLOCKED as the rule requires; nothing stubbed.**
+>
+> **🔴 ALMOST NO ROW CAN NAME A FARM — attribution is the normal case, not the edge.** The
+> middleware takes the farm from a `farm_id` **claim** (`RequestObservabilityMiddleware.cs:161-162`)
+> and **no token this platform issues carries one**: `JwtTokenIssuer` is the only issuer
+> (`DependencyInjection.cs:86`), neither `GenerateTokens` (`:26-40`) nor `GenerateIdentityTokens`
+> (`:75-79`) stamps it, and `Claim("farm...` appears **nowhere** in the repo.
+> `/telemetry/client-error` reads the same absent claim (`Program.cs:684`). Only the mobile outbox can
+> attribute a row, because `/analytics/ingest` lifts `props.farmId` from the body.
+>
+> **🔴 A FOURTH EVENT TYPE IS EMITTED AND THIS FEED CANNOT SHOW IT.** RG5 added
+> `sync.mutation_rejected` for a 200 that refused work inside it — **a farmer's mutation dropped by
+> `POST /sync/push`.** It is deliberately not `api.error` (`AnalyticsEventType.cs:61-62`: overloading
+> that string would fire `mis.alert_r9_api_error_spike`), and this query's
+> `event_type IN ('api.error','api.slow','client.error')` excludes it. **The failure shape the
+> observability rulebook added last month is invisible on the screen built to show failures.**
+>
+> **🔴 NO `event_id` IS PROJECTED.** The column exists — `RequestObservabilityMiddleware.cs:121`
+> writes `Guid.NewGuid()` — and the SELECT omits it (`AdminOpsRepository.cs:222-229`). **No row on
+> this screen can be pointed at in a ticket;** the row key is a page position.
+>
+> **🔴 A FOURTH SWALLOW SITE:** `GetErrorsPagedAsync` ends `catch { return empty; }`
+> (`AdminOpsRepository.cs:253`), beside `AdminMisRepository.cs:219/:245/:287`.
+> `measuredZero.unproven` supplied — but note the difference from Users: there the query is *provably
+> broken*, here nothing is known to be wrong, so the copy claims the weaker true thing.
+>
+> **🛑 Step 4 names the wrong window.** It asks for *"the last 2 hours"*; this endpoint's
+> default is **24 hours** (`AdminOpsRepository.cs:204-205`, and the handler's envelope says
+> `last 24h`). The 2-hour figure belongs to `GetRecentErrorsAsync`, the `/ops/health` snapshot — a
+> different method on the same class.
+>
+> **🛑 "The one screen that already has server pagination" is wrong.** A17 registers it on
+> three screens, and by now the other two are already on `DataList`'s pager. What was unique here is
+> the **library**, which is what A50 registers. **TanStack Table is dropped; `@tanstack/react-table`
+> now has ZERO importers** (Task 27 removes it from `package.json`). Lint had reported
+> `react-hooks/incompatible-library` on it — the React Compiler was **skipping this whole component**
+> — and what the API contributed over a paginated list was one division. **Ledger D4 is now live.**
+>
+> **`?since` writes an ABSOLUTE instant, never a relative token.** `AdminEndpoints.cs:123` is
+> `DateTime.TryParse(...) ? dt : null` and anything unparseable **falls silently back to 24 hours** —
+> a relative token would put a window in the URL the answer does not honour.
+>
+> **The `COALESCE(props->>'endpoint','unknown')` sentinel is an absence, not an endpoint.** A
+> `client.error` carries no endpoint prop, so it prints `unknown` — and can never match the endpoint
+> filter either, because that filter matches the same missing property.
+>
+> **Confirmed as stated:** no org parameter (fifth endpoint, fifth platform-wide), and
+> `props->>'statusCode'` is the live key — three SQL readers and the emitter agree while
+> `EventVocabulary.cs:76` documents `status`, which nothing has ever emitted. Not touched.
+>
+> **Timing cliff, measured again and worse under load:** 34 files gave 1 failure in 4 runs *before*
+> this task; a 9-mount version of the new file gave **4 in 5**; merging to 7 mounts — **no assertion
+> dropped** — returned it to **5 green of 5**. `vitest.config.ts` untouched. **Task 29.**
 
 ---
 
@@ -1477,11 +2198,11 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsVoice(days) against `/shramsafal/admin/ops/voice?days=`, envelope, 5-minute cadence.
 **Register rows:** A18, A19, A24; B5.
 
-- [ ] **Step 1: S1 to S6, using ChartShell.**
-- [ ] **Step 2: Keep the days 7/14/30 selector, end to end (A19, B5).** v3 hardcodes 14 days in data.js, so the control is simply absent from the design. The value must flow into ALL FOUR places it flows today: the hook argument, the query key (so 7, 14 and 30 are three cache entries, `useOpsVoice.ts:17`), the API query string, and the interpolated card title "Voice Success Rate — last N days" (`OpsVoicePage.tsx:97`).
-- [ ] **Step 3: Add the v3 by-provider breakdown,** with a null average latency given a full-size note rather than a footnote. The v3 data.js self-checks that provider rows sum to the daily totals; the React port asserts the same in a test rather than a console warning.
-- [ ] **Step 4: Hatched gaps for never-measured days (T9 Step 3).** A day with no numbers is a hatched hole, never a zero-height bar.
-- [ ] **Step 5: Commit** — `feat(admin-web): Voice Pipeline with a real day-window selector`
+- [x] **Step 1: S1 to S6, using ChartShell.**
+- [x] **Step 2: Keep the days 7/14/30 selector, end to end (A19, B5).** v3 hardcodes 14 days in data.js, so the control is simply absent from the design. The value must flow into ALL FOUR places it flows today: the hook argument, the query key (so 7, 14 and 30 are three cache entries, `useOpsVoice.ts:17`), the API query string, and the interpolated card title "Voice Success Rate — last N days" (`OpsVoicePage.tsx:97`).
+- [x] **Step 3: Add the v3 by-provider breakdown,** with a null average latency given a full-size note rather than a footnote. The v3 data.js self-checks that provider rows sum to the daily totals; the React port asserts the same in a test rather than a console warning.
+- [x] **Step 4: Hatched gaps for never-measured days (T9 Step 3).** A day with no numbers is a hatched hole, never a zero-height bar.
+- [x] **Step 5: Commit** — `feat(admin-web): Voice Pipeline with a real day-window selector`
 
 ---
 
@@ -1490,8 +2211,8 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsHealth() against `/shramsafal/admin/ops/health`. NO ENVELOPE (A27), 30-second cadence.
 **Register rows:** A24, A27, A51, A52; B10; D7, D8, D10.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep the unwrapped response type (A27)**
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep the unwrapped response type (A27)**
 
 ```ts
 /**
@@ -1504,19 +2225,65 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Delete useOpsHealthWrapped (D10).** Zero callers; wiring it beside useOpsHealth would poll the same endpoint twice every 30 seconds on a 2-vCPU box.
-- [ ] **Step 4: Ship the v3 R1-R8 fix (D8).** Keep the three-state alert badge — BREACH, CLEAR, N/A (v3 Appendix 8) — and render R1 to R8 as a grey NOT CHECKED rule. `HomePage.tsx:34` claims "all R1-R10 clear" while this page evaluates only R9 and R10; the redesign is where that self-contradiction dies.
-- [ ] **Step 5: Add the v3 "Evaluated, but never delivered" note.** A breach writes one line to the API host log, sends no email, no SMS, no push, no page, and has never reached a person on its own. That is a true and important statement about the alerting system.
-- [ ] **Step 6: Replace the dev-machine error banner (D7).** "Backend unreachable. Start the .NET API on port 5001." is rendered to a production operator at admin.shramsafal.in. Use FeedDown, which names when the feed stopped and never shows the last good number as current.
-- [ ] **Step 7: Decide the second suffering panel explicitly (A52, B10).**
+- [x] **Step 3: Delete useOpsHealthWrapped (D10).** Zero callers; wiring it beside useOpsHealth would poll the same endpoint twice every 30 seconds on a 2-vCPU box.
+- [x] **Step 4: Ship the v3 R1-R8 fix (D8).** Keep the three-state alert badge — BREACH, CLEAR, N/A (v3 Appendix 8) — and render R1 to R8 as a grey NOT CHECKED rule. `HomePage.tsx:34` claims "all R1-R10 clear" while this page evaluates only R9 and R10; the redesign is where that self-contradiction dies.
+- [x] **Step 5: Add the v3 "Evaluated, but never delivered" note.** A breach writes one line to the API host log, sends no email, no SMS, no push, no page, and has never reached a person on its own. That is a true and important statement about the alerting system.
+- [x] **Step 6: Replace the dev-machine error banner (D7).** "Backend unreachable. Start the .NET API on port 5001." is rendered to a production operator at admin.shramsafal.in. Use FeedDown, which names when the feed stopped and never shows the last good number as current.
+- [x] **Step 7: Decide the second suffering panel explicitly (A52, B10).**
 
 > This looks like a duplicate of /farms/suffering and a redesign de-duplicates it. IT IS NOT A DUPLICATE: different endpoint (/ops/health vs /farms/suffering), different shape (farmId only, no farm name — `OpsLivePage.tsx:150`), different window (24h inside a live health poll). The v3 live-health.html puts a service-health table in that slot instead.
 >
 > **Decision: keep both.** The service-health table is additive and goes below. If the founder cuts the suffering panel, /farms/suffering must first be confirmed to cover the operational need — see the founder questions.
 
-- [ ] **Step 8: Add the v3 service-health table.** API, each voice provider, the dead collector, the nightly rebuild. Its "what it feeds" list is DERIVED by scanning freshness metadata for a nightly source, not typed by hand.
-- [ ] **Step 9: Keep the two deliberate time formats (A51)** — seconds precision on the recent-errors rows, minutes on last-error.
-- [ ] **Step 10: Commit** — `feat(admin-web): Live Health tells the truth about R1-R8`
+- [x] **Step 8: Add the v3 service-health table.** API, each voice provider, the dead collector, the nightly rebuild. Its "what it feeds" list is DERIVED by scanning freshness metadata for a nightly source, not typed by hand.
+- [x] **Step 9: Keep the two deliberate time formats (A51)** — seconds precision on the recent-errors rows, minutes on last-error.
+- [x] **Step 10: Commit** — `feat(admin-web): Live Health tells the truth about R1-R8`
+
+---
+
+> **Tasks 19 and 20 executed 2026-09-01 (`42926035`, `ed088aed`). 777 tests / 37 files; lint 8.**
+>
+> **T19 — the by-provider breakdown (Step 3) is NOT BUILDABLE.** `OpsVoiceTrendDto` has no provider
+> field, and `/admin/ai-health` (which does carry providers) counts **attempts, not calls**, over a
+> fixed 24h window — so it could never sum to these totals. Shipped without it, with the gap named.
+> **The screen is also not only voice:** the query is `event_type = 'ai.invocation'` with **no
+> `operation` filter**, so receipt and patti extractions are inside every figure.
+> **The 90% "target" line was fabricated** — the only real rule is **R10: failure rate > 20% in 6
+> hours**. Deleted. **`?days` was never validated:** `?days=x` sent the literal `NaN` to a
+> non-nullable `int`, and `?days=3` was silently clamped to 7 by the server.
+> **Latency sentinel:** the SQL does `COALESCE(ROUND(AVG(latencyMs)), 0)`, so a date with no recorded
+> duration reports **0 ms** — a fabricated reading, rescued client-side as *not measured*.
+>
+> **T20 — v3's rule numbers are FICTION.** `data.js` says R9 breaches at 50 in 24h and R10 under 96%.
+> The SQL says **R9 = >30 API errors in 1 hour** and **R10 = >20% failures in 6 hours**
+> (`20260502000000_AnalyticsRewrite.cs:424-456`). R10 is now quoted in the same words on both ops
+> screens. **v3's claim that nothing evaluates R1–R8 is also false** — eight views exist and
+> `AlertDispatcherJob` reads all ten daily; the true, narrower claim shipped: *this endpoint* reads two.
+>
+> **🛑 The two-list collision Task 8 predicted landed here, and it is three lists, not two.**
+> `useListUrlState` gained a `urlNamespace` covering `page`/`sort`/`dir`/`open` only; an un-namespaced
+> list is byte-for-byte unchanged, so A17/A18's shipped links keep working. One list component, as
+> required. Proved by removing the namespaces: sorting the events table silently reordered the
+> watchlist.
+>
+> **🔴 The swallow-site list is short by FIVE.** Beyond the five already catalogued, this one endpoint
+> holds `AdminOpsRepository.cs:81` (voice → `(0,0,0,0,0)`), `:120`, `:161`, `:172`, `:181`.
+> **Ten sites now.** And **D18 understates it**: the server substitutes all five voice figures on
+> failure and `COALESCE(...,0)` fabricates the rate and both latencies independently — hence the
+> screen's rule that all-five-zero means *no reading*.
+>
+> **🛑 A24 cannot be ticked for Live Health as written.** It registers `meta.source`/`meta.lastRefreshed`
+> driving the chip; **this endpoint has no `meta` at all** (A27). The chip is driven by
+> `computedAtUtc`, which the page used to fetch and then discard in favour of the browser's own fetch
+> time — *a chip must state the server's age, not ours.*
+>
+> **Backend bug found, not fixed:** `voice_errors` is
+> `endpoint LIKE '%voice%' OR event_type='ai.invocation' AND outcome='failure'` — `AND` binds tighter
+> and the outer `WHERE` already excludes `ai.invocation`, so **the second branch is dead**.
+> Sync/Logs/Voice are overlapping `LIKE` matches that do not sum to the total. Both stated on screen.
+>
+> **🛑 `HomePage.tsx:34` still claims "all R1–R10 clear" over a hardcoded `value={0}`.** Live Health
+> fixed its half of D8; **Home is Task 26.**
 
 ---
 
@@ -1525,11 +2292,45 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useWvfd(weeks) against `/shramsafal/admin/metrics/wvfd?weeks=`, envelope, 5-minute cadence.
 **Register rows:** A18, A19, A24; B5.
 
-- [ ] **Step 1: S1 to S6, using ChartShell.**
-- [ ] **Step 2: Keep the weeks 8/12/24 selector end to end (A19, B5)** — hook argument, query key, query string, and the interpolated title "WVFD — last N weeks" (`NorthStarPage.tsx:153`).
-- [ ] **Step 3: Never-computed weeks are gaps, not zeros.** v3 has two such weeks in its sample; the live chart would draw them as a trough.
-- [ ] **Step 4: Keep the goal bar, the delta and the tier chips,** but route currentWvfd, priorWvfd and goalWvfd through fmt so a null renders through NotMeasured rather than the current hardcoded fallbacks at `NorthStarPage.tsx:83,96,124-125`, which print a fabricated number when the API returns nothing.
-- [ ] **Step 5: Commit** — `feat(admin-web): WVFD with a real week-window selector and honest gaps`
+- [x] **Step 1: S1 to S6, using ChartShell.**
+- [x] **Step 2: Keep the weeks 8/12/24 selector end to end (A19, B5)** — hook argument, query key, query string, and the interpolated title "WVFD — last N weeks" (`NorthStarPage.tsx:153`).
+- [x] **Step 3: Never-computed weeks are gaps, not zeros.** v3 has two such weeks in its sample; the live chart would draw them as a trough.
+- [x] **Step 4: Keep the goal bar, the delta and the tier chips,** but route currentWvfd, priorWvfd and goalWvfd through fmt so a null renders through NotMeasured rather than the current hardcoded fallbacks at `NorthStarPage.tsx:83,96,124-125`, which print a fabricated number when the API returns nothing.
+- [x] **Step 5: Commit** — `feat(admin-web): WVFD with a real week-window selector and honest gaps`
+
+---
+
+> **Task 21 executed 2026-09-01 (`5fc45e50`). 785 tests / 38 files; lint 8. Four mutations, four kills.**
+>
+> **🔴 THE NORTH STAR METRIC RISES WHEN FARMS CHURN.** `farm_week` is grouped out of `ssf.daily_logs`,
+> so **a farm with no log that week has no row at all** and is absent from `AVG(wvfd)` — while a farm
+> that logged and had nothing confirmed is in it as a 0. **The number the product is steered by goes
+> UP when the least-engaged farms leave.** Same class as Task 16's counted-successes and Task 19's
+> measures-more-than-its-name, on the metric that matters most. Stated in the page subtitle in bold.
+>
+> **🛑 The headline week is ALWAYS partial.** `week_start` is an IST Monday and the matview rebuilds
+> nightly at 02:00 UTC — on a Tuesday no farm can score above 1. The hero figure and the delta carry a
+> **weekly sawtooth that is calendar, not business.**
+>
+> **🔴 TWELVE swallow sites, not ten — and this one is the worst.** `AdminMisRepository.cs:78` is
+> `catch { return new WvfdHistoryDto(0m, null, 4.5m, [], []); }`. Every other site returns *empty*;
+> **this one returns a complete set of numbers with HTTP 200.** `:145` (Farms) is a twelfth,
+> also uncatalogued.
+>
+> **`priorWvfd` is the previous ROW, not the previous WEEK** (`:69`) — the old *"vs last week"* label
+> named a comparison that was not made. **`currentWvfd` is a sentinel** when there are no weeks
+> (`:68`). **`topFarms` is `LIMIT 50` ordered `wvfd DESC`**, so the old tier chips presented a
+> truncated, *best-first* prefix as the whole distribution.
+>
+> **The 4.5 goal is a C# literal** (`:74`) — declared, unlike Task 19's fabricated 90%, but the only
+> other record of it (`FarmWeekMisDto.cs:9`) defines it on a **rolling seven days** while every figure
+> here is a **calendar week**. Kept and sourced on screen; never printed from client code.
+>
+> **Step 4's citations were off** (`:84`, `:97`, `:125`, `:126`, not `:83,96,124-125`) **and missed a
+> fifth fabrication** — a hardcoded `ReferenceLine y={4.5}` at `:186-190`.
+> **`WvfdFarmRowDto.ActiveFarms` is hardcoded `0`** (`:65`); not rendered, documented so it stays that way.
+> Seventh endpoint, seventh with no org parameter. `?weeks=x` sent the literal `NaN` to a non-nullable
+> `int`; `?weeks=2` was silently clamped to 4.
 
 ---
 
@@ -1538,17 +2339,67 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useCohortPatterns() against `/admin/farmer-health/cohort` — DIFFERENT PREFIX (A26), 5-minute cadence, AbortSignal threaded.
 **Register rows:** A14, A24, A25, A26, A28, A29, A30, A31, A32, A33, A34, A35, A36, A39, A41; B7, B8.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep the endpoint prefix distinct, with a comment (A26).** A port that centralises the admin prefix as a tidy-up 404s both farmer-health screens. Nothing on screen hints at it.
-- [ ] **Step 3: Port FarmerSearchBox intact (A29, B7).** v3 has no farmer search at all. Preserve every subtlety: the 300ms debounce gating ONLY the button (not the query), the query firing on EXPLICIT SUBMIT via enabled, acceptance of a farmId OR a userId OR a phone, probe-first so a bad id never lands on a broken page, navigation to the SERVER-RESOLVED farmId rather than the typed string, encodeURIComponent on the path segment, the non-blocking inline miss message ("Couldn t find that farmer in your scope." — carry the real apostrophe from the source), and the onResolved extension point.
-- [ ] **Step 4: Keep retry 0 and enabled-gating on useFarmerHealth (A28).** Deliberate: a 404 must fail fast and become not-found UX. A rewrite inheriting the global retry 1 breaks the search box not-found path with a two-attempt hang.
-- [ ] **Step 5: Move the sorters into DataList options, not away (A30, A31).**
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep the endpoint prefix distinct, with a comment (A26).** A port that centralises the admin prefix as a tidy-up 404s both farmer-health screens. Nothing on screen hints at it.
+- [x] **Step 3: Port FarmerSearchBox intact (A29, B7).** v3 has no farmer search at all. Preserve every subtlety: the 300ms debounce gating ONLY the button (not the query), the query firing on EXPLICIT SUBMIT via enabled, acceptance of a farmId OR a userId OR a phone, probe-first so a bad id never lands on a broken page, navigation to the SERVER-RESOLVED farmId rather than the typed string, encodeURIComponent on the path segment, the non-blocking inline miss message ("Couldn t find that farmer in your scope." — carry the real apostrophe from the source), and the onResolved extension point.
+- [x] **Step 4: Keep retry 0 and enabled-gating on useFarmerHealth (A28).** Deliberate: a 404 must fail fast and become not-found UX. A rewrite inheriting the global retry 1 breaks the search box not-found path with a two-attempt hang.
+- [x] **Step 5: Move the sorters into DataList options, not away (A30, A31).**
   - Intervention queue: 4 sortable columns, live aria-sort, per-column default direction, default score ASC with the lastActiveAt DESC tiebreak. v3 sorts everything with DIFFERENT semantics (state-parks-last, stable, no tiebreak rule), so a reviewer sees parity where there is none. URL-SYNC THE SORT STATE — today it is component-local and dies on refresh.
   - Watchlist: collapsed by default, aria-expanded and aria-controls, ordering FIXED at weeklyDelta ascending (biggest drop first) and deliberately NOT user-sortable. v3 makes every table sortable, which would silently convert a product decision into a user preference. Carry the in-code note.
-- [ ] **Step 6: Render the two charts v3 never draws (B8).** scoreDistribution and engagementTiers exist in the data and appear on no v3 screen. Keep the fixed axes (A33) and the data tables (A32) — including the sr-only one under the donut.
-- [ ] **Step 7: Keep the cross-surface emptiness computation (A35, A36).** The ScoringActiveBanner fires only when interventionQueue length plus watchlist length plus the summed scoreDistribution equals zero (`FarmerHealthPage.tsx:38-42`). That sum is what distinguishes "first deploy, nothing scored yet" from "scored, and nothing needs intervention" — which is exactly the understated-versus-normal empty split (A36).
-- [ ] **Step 8: The org name moves to the top bar (A39, T10 Step 4)** — but this page keeps its subtitle, because it is the page where scope matters most.
-- [ ] **Step 9: Commit** — `feat(admin-web): Farmer Health landing, charts v3 never drew`
+- [x] **Step 6: Render the two charts v3 never draws (B8).** scoreDistribution and engagementTiers exist in the data and appear on no v3 screen. Keep the fixed axes (A33) and the data tables (A32) — including the sr-only one under the donut.
+- [x] **Step 7: Keep the cross-surface emptiness computation (A35, A36).** The ScoringActiveBanner fires only when interventionQueue length plus watchlist length plus the summed scoreDistribution equals zero (`FarmerHealthPage.tsx:38-42`). That sum is what distinguishes "first deploy, nothing scored yet" from "scored, and nothing needs intervention" — which is exactly the understated-versus-normal empty split (A36).
+- [x] **Step 8: The org name moves to the top bar (A39, T10 Step 4)** — but this page keeps its subtitle, because it is the page where scope matters most.
+- [x] **Step 9: Commit** — `feat(admin-web): Farmer Health landing, charts v3 never drew`
+
+---
+
+> **Task 22 executed 2026-09-01 (`0edb68eb`). 796 tests / 39 files; lint 8. Twelve mutations, twelve
+> kills** — one survived first (`userEvent.type` finishes long before 300ms, so the assertion measured
+> the clock, not the contract), was strengthened, and re-killed. **The agent's connection dropped
+> mid-task and it resumed from its own uncommitted diff; the report names which half was interrupted.**
+>
+> **🔴 THE SCREEN WAS BLANK OVER A HEALTHY 200.** `GetCohortPatternsHandler.cs:34` returns
+> `Result<CohortPatternsDto>` — **no envelope**. The old page read `data.data`, got `undefined`, and
+> rendered an empty queue, an empty watchlist and four *"not enough data yet"* charts. **A27's "the ONE
+> endpoint returning no envelope" is wrong — there are THREE, and the other two are both
+> farmer-health.** No envelope also means **no server clock**, so no freshness chip is possible and
+> `MeasuredZero`'s "checked at" cannot be written — every block uses `unproven`.
+>
+> **🔴 `mis.dwc_score_per_farm_week` HAS NEVER BEEN POPULATED IN PRODUCTION** — stated in the repo at
+> `20260817150453_WvfdWeekBoundaryToIst.cs:95-110`, with prod's own `0A000` error quoted and D3
+> recorded NOT LIVE. So *"Scoring active; data accumulating"* is very probably **not** the true reason
+> for an empty screen.
+>
+> **🔴 THE INVESTMENT PILLAR HAS NEVER BEEN COMPUTED.** Its CTE is a documented placeholder returning
+> `0.0` for every farm, and the old heatmap drew that as `0.0 / 10` plus *"N failing"*. **The reachable
+> maximum is 90, not 100 — and the 40/60 thresholds were never adjusted.**
+>
+> **🛑 A farm that did nothing is SCORED, not absent** (`matrix` cross-joins farms × weeks, every
+> pillar `COALESCE(...,0)`), and a **30-point suspicion penalty** decides the band — so the
+> intervention queue mixes struggling, absent and gaming farms. `insufficient_data` exists in the
+> scorer and is **not in the DTO**. **Three of six pillars join without a week**, so the weekly line
+> can only move on Trigger fit, Proof and Reward. **`lastActiveAt` is fabricated when absent**
+> (`COALESCE(la.last_active, NOW() - INTERVAL '30 days')`) — **and it is the tiebreak key.**
+>
+> **🔴 THE REDACTOR IS A STRUCTURAL NO-OP HERE.** `ResponseRedactor` does not recurse into
+> collections, and `RedactionMatrix` never names `farmerName`. The literal `**redacted**` exists
+> nowhere in the C# outside one doc comment. **Do not tick B16.** Client-side tolerance kept anyway.
+>
+> **🔴 Seven more swallow sites** in `AdminCohortPatternsRepository.cs`, two returning a **complete set
+> of zeros** rather than an empty result — the histogram builds ten zero bins outside its own `try`,
+> and the pillar loop falls through to `(name, 0m, 0)`. **Nineteen sites now.**
+>
+> **Step 8 / A39 re-verified: this IS the first org-scoped admin endpoint** (ninth checked) — *except*
+> for a platform admin, where `ScopeJoin` returns an empty fragment. The subtitle branches; a fourth
+> `74da3d3b`-class false-scope sentence avoided.
+>
+> **The apostrophe (Step 3):** the plan quotes a typographic `’`; the source is `&apos;` = U+0027.
+> **The repo is truth** — kept straight and asserted byte-for-byte.
+>
+> **recharts is gone from this screen** — histogram and trend on `Sparkline`/`GapBar`, the tier donut
+> replaced by a proportion bar with the same fixed A–D axis. Chunk **399 kB → 24 kB**, and
+> `recharts` now has **zero importers** (Task 27). Reason: recharts cannot draw the hatch, so a
+> never-measured tier would be drawn at zero.
 
 ---
 
@@ -1559,14 +2410,14 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 **This is the biggest single feature loss in the design, and it will not appear in any screenshot diff — the flat v3 farmer-health.html looks complete.** It is also the only working row drilldown in the console.
 
-- [ ] **Step 1: Port the route and all five bands.**
+- [x] **Step 1: Port the route and all five bands.**
   - **Band 1** — back link, name (through PersonName, falling back to the farmId when the name is redacted), farm id, bucket badge, suspicious-flag alert.
   - **Band 2** — DwcScoreCard: the 64px total with the six-pillar expandable accordion at their UNEQUAL maxes summing to 100 (Trigger fit 10, Action simplicity 20, Proof 25, Reward 10, Investment 10, Repeat 25).
   - **Band 3** — FarmerTimeline: the 14-day by 6-event heat grid with PER-ROW normalisation.
   - **Band 4** — WorkerSummaryList: capped at 5, with its mandatory disclaimer.
   - **Band 5** — SyncStateBlock plus AiHealthBlock, gated.
 
-- [ ] **Step 2: Keep the in-page ops:read gate and its honest denial panel (A5)**
+- [x] **Step 2: Keep the in-page ops:read gate and its honest denial panel (A5)**
 
 ```tsx
 /**
@@ -1585,12 +2436,56 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Keep Band 1 outside the state branches (A40).** Error, loading, empty and data are four separate branches and the header renders in ALL FOUR, so context is never lost. A port collapses this into one loading skeleton over the whole page. Keep "Farm not found in your scope." as a distinct empty state — it is a scope statement, not a 404 — and keep the retryable ErrorState.
-- [ ] **Step 4: Keep the worker-list red line (A35).** Carry the disclaimer byte-for-byte — "(captured automatically from voice logs; reputation tracking not yet built)" — and carry the source comment into the new component file: "DO NOT add fields here without a new task. No reputation, no dispute, no payout, no skill, no score." A redesign treats copy as copy and enriches a thin-looking list.
-- [ ] **Step 5: Keep C7 and C8 as tokens, not hexes (A37).** They read as styling; they are product constraints. A healthy pillar tops out at teal deliberately; the slate inset edge is how an admin tells privileged ops data from the core farmer profile.
-- [ ] **Step 6: Extend the null-returning formatter contract to every drilldown figure (A38).** Ironically v3 has the STRONGER version of this rule — but only if the port applies it to a screen v3 does not contain. Includes the sync-state em-dash fallback on an unparseable timestamp.
-- [ ] **Step 7: Keep per-band LoadingStates sized to real content with their explicit labels (A32)** — "Loading DWC score", "Loading 14-day timeline", "Loading worker summary" — rather than one generic spinner. Those labels are what tell a screen-reader user WHICH block is loading.
-- [ ] **Step 8: Commit** — `feat(admin-web): Farmer Health drilldown, all five bands, gate intact`
+- [x] **Step 3: Keep Band 1 outside the state branches (A40).** Error, loading, empty and data are four separate branches and the header renders in ALL FOUR, so context is never lost. A port collapses this into one loading skeleton over the whole page. Keep "Farm not found in your scope." as a distinct empty state — it is a scope statement, not a 404 — and keep the retryable ErrorState.
+- [x] **Step 4: Keep the worker-list red line (A35).** Carry the disclaimer byte-for-byte — "(captured automatically from voice logs; reputation tracking not yet built)" — and carry the source comment into the new component file: "DO NOT add fields here without a new task. No reputation, no dispute, no payout, no skill, no score." A redesign treats copy as copy and enriches a thin-looking list.
+- [x] **Step 5: Keep C7 and C8 as tokens, not hexes (A37).** They read as styling; they are product constraints. A healthy pillar tops out at teal deliberately; the slate inset edge is how an admin tells privileged ops data from the core farmer profile.
+- [x] **Step 6: Extend the null-returning formatter contract to every drilldown figure (A38).** Ironically v3 has the STRONGER version of this rule — but only if the port applies it to a screen v3 does not contain. Includes the sync-state em-dash fallback on an unparseable timestamp.
+- [x] **Step 7: Keep per-band LoadingStates sized to real content with their explicit labels (A32)** — "Loading DWC score", "Loading 14-day timeline", "Loading worker summary" — rather than one generic spinner. Those labels are what tell a screen-reader user WHICH block is loading.
+- [x] **Step 8: Commit** — `feat(admin-web): Farmer Health drilldown, all five bands, gate intact`
+
+---
+
+> **Task 23 executed 2026-09-01 (`06c93b0f`). 835 tests / 40 files; lint 8. Thirteen mutations,
+> thirteen kills.**
+>
+> **🔴 A5's GATE KEY IS WRONG IN THE PLAN, AND THE WRONG KEY CAUSED THE EXACT FAILURE A5 EXISTS TO
+> PREVENT.** The plan says *"keep `canRead(ModuleKeys.OpsLive)`"*. `AdminFarmerHealthRepository.cs:80-85`
+> fills the two sub-blocks **independently** — `OpsErrors` for sync, `OpsVoice` for AI. A single
+> `ops.live` gate was wrong in both directions: an admin with `ops.live` but **not** `ops.errors` saw
+> `SyncStateBlock` render over a server-nulled block, printing *"No sync activity recorded."* at
+> someone who had been **denied** it. Now gated per block on the server's own keys, with the verbatim
+> denial kept for the both-denied path (which is also the scope-loading path). **A deliberate
+> deviation from a literal instruction, on repo-is-truth grounds.**
+>
+> **🔴 A38 POINTS AT THE WRONG FABRICATION.** The registered rule is *"never a fabricated 0%"*; the
+> live code ships a fabricated **100%** — `GetAiHealthAsync` returns `(1m, 1m, 0)` from its `catch`
+> and COALESCEs both ratios to `1.0` on a zero denominator. Both rules now enforced.
+>
+> **🔴 TWENTY-NINE swallow sites.** Ten more in `AdminFarmerHealthRepository.cs`, **four of which
+> fabricate complete, well-formed answers**: `EmptyScore()` (a whole score row including a week
+> boundary of *today*), the 14-day zero backfill built **outside** its `try`, `(1m,1m,0)` AI health,
+> and `FarmIdentity("—","—")`. Plus `IsFarmInScopeAsync`'s `catch { return false; }` — **a database
+> failure becomes "not in your scope."**
+>
+> **🛑 The DTO's own XML doc is wrong.** `FarmerHealthDto.cs:15-19` claims `FarmerName`/`Phone` are
+> redacted to `**redacted**` and the ops blocks nulled *by the redactor*. `RedactionMatrix` names six
+> fields and **none of those three is among them**; the ops nulling is the **repository's**.
+> **Do not tick B16** — confirmed independently for this endpoint.
+>
+> **🛑 Four of six pillar explanations described formulas the matview does not run** — Trigger fit is
+> schedule compliance, not reminders; Proof is a 60/40 blend, not an 80% attach rate; Repeat counts
+> *distinct* days, not a consecutive streak; and Action simplicity **printed the literal placeholder
+> `"N seconds"` at the reader.** Corrected from the SQL.
+>
+> **Band 2 will read "This farm has not been scored." for every farm in production today** — the score
+> matview has never been populated (D3, found by Task 22). That is the honest reading and it will look
+> like a broken screen. Drawing `0/100 · Intervention` would be the fabrication.
+>
+> **A41: `LoadFailed` used, not `ErrorState`** — `ErrorState`'s own header said its last two call sites
+> *"do not migrate until Task 23"*. Both A41 properties live in `LoadFailed`, which also makes retry
+> mandatory. **`ErrorState` now has zero call sites; `EmptyState` has one** — Task 27 inputs.
+> **A34 is complete: `PersonName` is 4/4**, the last two duplicated Devanagari checks are dead.
+> **The `**redacted**` page-title bug (flagged and correctly deferred by Tasks 5, 6 and 13) is fixed.**
 
 ---
 
@@ -1599,12 +2494,12 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useScheduleTemplates() — NEW, extracted from the inline useQuery at `ScheduleTemplatesPage.tsx:13-20`, against `/shramsafal/reference-data/crop-schedule-templates`. RAW ARRAY, no envelope, no meta (A26).
 **Register rows:** A4, A26; D13.
 
-- [ ] **Step 1: S1 to S6.** Templates render as CARDS, NOT A TABLE (v3 Appendix 12) — this is the one screen DataList does not own; it uses the same config for search, sort and state but a card renderer.
-- [ ] **Step 2: Extract the hook** so no page holds an inline useQuery, and comment the missing envelope so the next reader does not "fix" it.
-- [ ] **Step 3: Delete the unprovable freshness chip (D13).** A FreshnessChip with a materialized source and no lastRefreshed (`ScheduleTemplatesPage.tsx:29`) renders a permanent "Nightly recent" over an endpoint that returns no timestamp at all. CONTRACT.md section 9.1: every number states its source AND its age. There is no age here, so there is no chip — say "reference data, no timestamp available" instead.
-- [ ] **Step 4: Keep the route ungated (A4).**
-- [ ] **Step 5: Add the v3 unauthored-draft state.** A draft with no task list is a name and nothing else; a taskCount of 0 must not read as "zero tasks planned".
-- [ ] **Step 6: Commit** — `feat(admin-web): Schedule Templates, honest about having no timestamp`
+- [x] **Step 1: S1 to S6.** Templates render as CARDS, NOT A TABLE (v3 Appendix 12) — this is the one screen DataList does not own; it uses the same config for search, sort and state but a card renderer.
+- [x] **Step 2: Extract the hook** so no page holds an inline useQuery, and comment the missing envelope so the next reader does not "fix" it.
+- [x] **Step 3: Delete the unprovable freshness chip (D13).** A FreshnessChip with a materialized source and no lastRefreshed (`ScheduleTemplatesPage.tsx:29`) renders a permanent "Nightly recent" over an endpoint that returns no timestamp at all. CONTRACT.md section 9.1: every number states its source AND its age. There is no age here, so there is no chip — say "reference data, no timestamp available" instead.
+- [x] **Step 4: Keep the route ungated (A4).**
+- [x] **Step 5: Add the v3 unauthored-draft state.** A draft with no task list is a name and nothing else; a taskCount of 0 must not read as "zero tasks planned".
+- [x] **Step 6: Commit** — `feat(admin-web): Schedule Templates, honest about having no timestamp`
 
 ---
 
@@ -1613,11 +2508,63 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** NONE — there is no endpoint.
 **Register rows:** A4; D9.
 
-- [ ] **Step 1: Remove the hardcoded SEEDED_ADMINS array** (`SettingsAdminsPage.tsx:4-6`). A constant rendered inside a table with a green Active pill is data-shaped, and it is not data. It is a copy of what the config allow-list contained at the time the file was written.
-- [ ] **Step 2: Ship the honest v3 version.** The console is showing ONE SOURCE OF TWO: the config allow-list is what is read; ssf.admin_users has never been read because its migration has not been run. State that. Also state the v3 all-or-nothing explanation: on the allow-list means every farmer phone and every farm log; off it means a 403; there is nothing in between.
-- [ ] **Step 3: Replace the "Phase 6" scaffolding copy** (`SettingsAdminsPage.tsx:23-27`) with the same statement written for an operator, not for a developer reading a plan.
-- [ ] **Step 4: Keep the route ungated (A4)** — there is still no ModuleKey for admin management.
-- [ ] **Step 5: Commit** — `feat(admin-web): Settings states its source instead of hardcoding a row`
+- [x] **Step 1: Remove the hardcoded SEEDED_ADMINS array** (`SettingsAdminsPage.tsx:4-6`). A constant rendered inside a table with a green Active pill is data-shaped, and it is not data. It is a copy of what the config allow-list contained at the time the file was written.
+- [x] **Step 2: Ship the honest v3 version.** The console is showing ONE SOURCE OF TWO: the config allow-list is what is read; ssf.admin_users has never been read because its migration has not been run. State that. Also state the v3 all-or-nothing explanation: on the allow-list means every farmer phone and every farm log; off it means a 403; there is nothing in between.
+- [x] **Step 3: Replace the "Phase 6" scaffolding copy** (`SettingsAdminsPage.tsx:23-27`) with the same statement written for an operator, not for a developer reading a plan.
+- [x] **Step 4: Keep the route ungated (A4)** — there is still no ModuleKey for admin management.
+- [x] **Step 5: Commit** — `feat(admin-web): Settings states its source instead of hardcoding a row`
+
+---
+
+> **Tasks 24 and 25 executed 2026-09-01 (`d9235ff4`, `c1619632`). 850 tests / 42 files; lint 8.**
+> **Nineteen mutations, nineteen kills.**
+>
+> **🔴 THE SAME DEAD PATH BREAKS THE FARMER APP.** `ScheduleResource.ts:18` calls
+> `/shramsafal/reference-data/crop-schedule-templates`; the backend publishes
+> `/shramsafal/reference/schedule-templates` (`ReferenceDataEndpoints.cs:14` + `:16`) — **both the
+> group and the route differ**, and `crop-schedule-templates` appears in **zero** `.cs` files.
+> `SchedulePickerModal.tsx:42` renders that 404 to the farmer as
+> **"टेम्पलेट लोड होऊ शकले नाही. पुन्हा प्रयत्न करा."** — *asking him to retry a request that can never
+> succeed.* The console side is fixed; **the farmer side is untouched and needs its own spec.**
+>
+> **🔴 AND FIXING THE PATH IS NOT SUFFICIENT.** Task 24's card shape was wrong in **five of seven
+> fields**: `templateId`, `version`, `isPublished`, `taskCount`, `estimatedDurationDays` **do not
+> exist** on `ScheduleTemplateDto`. Repointing the URL alone would have swapped a 404 for a card of
+> `undefined`s — and because `isPublished` would be undefined on every row, **a console stating that
+> no template is visible to any farmer.** *A wrong answer at HTTP 200 is worse than no answer.*
+>
+> **🔴 This screen lists the WRONG template table.** Those five names describe
+> `ssf.crop_schedule_templates` — the table a farmer actually adopts, gated on `IsPublished` by
+> `AdoptScheduleHandler.cs:70-79`. **No endpoint lists it.**
+> `GetCropScheduleTemplatesForCropAsync` exists on the port with **no caller outside test doubles**.
+>
+> **🛑 The endpoint cannot return an empty array** — `GetScheduleTemplatesHandler.cs:31-34`
+> **substitutes four templates hardcoded in C#** when the table is empty. **`totalDays` is a property
+> of the CROP with a 60-day floor**, so two templates of one crop always report the same number.
+> **`cropType` is derived by splitting the name on its first hyphen.** **`versionHash` is one hash for
+> the whole payload**, stamped on every row.
+>
+> **🛑 "Cards, not a table (v3 Appendix 12)" — v3's own `templates.html` IS a table**, seven sortable
+> columns including two fields the API does not send. Appendix 12 describes the *live* console. Cards
+> shipped as instructed; `DataList` gained one optional `renderCard`, so no `column.render` goes inert.
+>
+> **🔴 Task 25: "the config allow-list is what is read" is FALSE since W0-B.**
+> `JwtTokenIssuer.cs:44-48` says *"That path is removed"*; `EntitlementResolver.cs:38-47` reads
+> `ssf.organization_memberships` **per request**. **And `ssf.admin_users` and `IAdminResolver` do not
+> exist anywhere in the repo** — *"its migration has not been run"* implies a migration exists; **there
+> is none.** **The hardcoded row was not even a faithful copy**: `appsettings.Development.json:110-113`
+> lists **two** ids, the table showed one; `appsettings.json` and `appsettings.Production.json` have
+> **no `Admins` section at all.** **"Off the list means a 403" — it is a 401.**
+>
+> **🛑 "There is nothing in between" is true of PLATFORM membership and false of the product** —
+> `EntitlementMatrix` gives FPO/FPC/consulting/lab memberships a graduated per-module set.
+>
+> **🛑 The no-envelope count has been wrong twice.** A27 said one; Task 22 corrected to three; A26 had
+> already registered this one, which neither count included. **Four.**
+>
+> **🛑 Gate items 12 and 14 no longer match what ships** and need rewording before the walkthrough.
+> **D13 is closed at the component:** `lastRefreshed` is now a **required** prop, so a chip with no
+> timestamp is a compile error, and the absence reads *"age not reported"*.
 
 ---
 
@@ -1628,9 +2575,9 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 **Home is done last** because every tile is a reading of a screen already ported, and because it is the only screen whose tiles must 403 independently — which is why it is ungated (A4).
 
-- [ ] **Step 1: Delete all three lies at once (D5, D6, D8).** The fabricated now and lastNightly timestamps, the Phase 2 / Phase 3 scaffolding copy, and the "all R1-R10 clear" claim.
+- [x] **Step 1: Delete all three lies at once (D5, D6, D8).** The fabricated now and lastNightly timestamps, the Phase 2 / Phase 3 scaffolding copy, and the "all R1-R10 clear" claim.
 
-- [ ] **Step 2: Wire the eight tiles to real hooks, and be honest about the four that have no source.**
+- [x] **Step 2: Wire the eight tiles to real hooks, and be honest about the four that have no source.**
 
 | Tile | Source | If there is none |
 |---|---|---|
@@ -1645,12 +2592,55 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 Four of eight tiles have no source. That is the truth and the screen must show it. The KpiCard forced-grey rule from T3 Step 4 makes it structural: a tile whose state is not ok cannot be painted green.
 
-- [ ] **Step 3: Build the v3 "Farms a person should call today".** A union over suffering, silentChurn and silentChurnExcluded; one row per farm carrying EVERY reason it was flagged as coloured pills; sorted errors-descending then weeks-descending. This is the most useful thing v3 adds and it needs no new endpoint — useSuffering and useSilentChurn already exist.
-- [ ] **Step 4: Enforce cross-screen consistency.** Re-derive the Voice Success tile tone from rule R10 rather than from its own field, so Ops Now cannot paint green the exact figure the Active Alerts tile beside it counts as a breach.
-- [ ] **Step 5: Add computed section-head state dots,** each with a screen-reader WORD beside it (a coloured dot alone is undecodable), explicit worst-state-wins ordering, and NO DOT AT ALL when a section has nothing to report.
-- [ ] **Step 6: Populate the nav badge (A53)** from the "should call today" count — the slot has been styled and empty since it was written.
-- [ ] **Step 7: Add the page-level boot-failure state.** The v3 Home inlines its own SVG precisely because the shared script may be the thing that failed to load; the React equivalent is an error boundary around the shell that does not itself depend on a lazy-loaded chunk.
-- [ ] **Step 8: Commit** — `feat(admin-web): Home wired to real hooks, four honest non-values, no fabricated freshness`
+- [x] **Step 3: Build the v3 "Farms a person should call today".** A union over suffering, silentChurn and silentChurnExcluded; one row per farm carrying EVERY reason it was flagged as coloured pills; sorted errors-descending then weeks-descending. This is the most useful thing v3 adds and it needs no new endpoint — useSuffering and useSilentChurn already exist.
+- [x] **Step 4: Enforce cross-screen consistency.** Re-derive the Voice Success tile tone from rule R10 rather than from its own field, so Ops Now cannot paint green the exact figure the Active Alerts tile beside it counts as a breach.
+- [x] **Step 5: Add computed section-head state dots,** each with a screen-reader WORD beside it (a coloured dot alone is undecodable), explicit worst-state-wins ordering, and NO DOT AT ALL when a section has nothing to report.
+- [x] **Step 6: Populate the nav badge (A53)** from the "should call today" count — the slot has been styled and empty since it was written.
+- [x] **Step 7: Add the page-level boot-failure state.** The v3 Home inlines its own SVG precisely because the shared script may be the thing that failed to load; the React equivalent is an error boundary around the shell that does not itself depend on a lazy-loaded chunk.
+- [x] **Step 8: Commit** — `feat(admin-web): Home wired to real hooks, four honest non-values, no fabricated freshness`
+
+---
+
+> **Task 26 executed 2026-09-01 (`0e2a46c1`). 873 tests / 45 files; lint 7 — one FEWER.**
+> **Twenty-one mutations, twenty-one kills. ALL THIRTEEN SCREENS ARE NOW PORTED.**
+>
+> **🔴 MRR IS NOT MERELY UNBUILT — IT IS NOT COMPUTABLE.**
+> `Accounts.Domain.Subscriptions.Subscription` carries a plan code, a status and two dates.
+> **No amount. No currency.** A revenue tile cannot be built from this data at all.
+>
+> **🔴 `ModuleKey.MetricsRetention` EXISTS AND GATES NOTHING.** Repo-wide it appears in exactly two
+> files: its C# declaration and the TS mirror. **The entitlement for D30 retention was declared; the
+> metric was never built.**
+>
+> **🛑 There is no 24-hour API-error count on `/ops/health`.** `GetRecentErrorsAsync` is
+> `… >= NOW() - INTERVAL '2 hours' … LIMIT 50`. The plan's tile specified a window the endpoint does
+> not serve; it ships as **"API errors · last 2 hours"**, counting `api.error` alone.
+> **So the plan says "four of eight tiles have no source" and its own table marks three** — the fourth
+> is real but different: the *specified* API-errors tile had no source either.
+>
+> **🛑 `totalCount` is not "Active Farms".** `SELECT COUNT(DISTINCT f.farm_id) FROM ssf.farms f` — no
+> activity, status or org filter. Relabelled **"Farms on record"**.
+>
+> **🔴 A name sentinel Task 15 missed:** `COALESCE(s.farm_name, 'Unknown')`
+> (`AdminMisRepository.cs:195`) makes Silent Churn print the literal word **Unknown** as a farm's
+> name. Home handles it; **`SilentChurnPage.tsx` still does not** — that needs its own assertions,
+> not a drive-by edit.
+>
+> **🛑 Home is the ONE ungated screen and it mounts FIVE separately-gated endpoints.** Without
+> `enabled` gates an unentitled admin fires five denials, **each invalidating the cached scope, which
+> re-renders Home.** The plan does not mention it; every hook now fails closed at the request.
+>
+> **The call list is NOT ranked by severity** — it is ranked by how many watchlists flagged the farm,
+> then longest silence. **There is no honest severity number on these feeds:** Task 16 established
+> that the suffering figure counts successful AI calls, so sorting by it would put the heaviest,
+> happiest users at the top of a call list. Home does not undo that honesty.
+>
+> **R9/R10 now live in `src/lib/alertRules.ts`**, read byte-identically by Home and Live Health — a
+> threshold sentence rendered by two screens is one fact, not two strings.
+>
+> **A tenth instance of the `558b6a9d` missing-timeout shape** was found and fixed
+> (`FarmsListPage.test.tsx:125`, a bare `findByRole`). The `deepLink` residual is **not** that shape —
+> it already waits 15 s under a 20 s ceiling. **Task 29.**
 
 ---
 
@@ -1660,17 +2650,17 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 - Delete: `src/pages/PlaceholderPage.tsx`, `src/assets/hero.png`, `src/assets/vite.svg`, `public/icons.svg`, the Vite-template `README.md`, and useOpsHealthWrapped from `src/hooks/useOpsHealth.ts`
 - Modify: `src/App.tsx`
 
-- [ ] **Step 1: Delete the six dead artefacts (D10, D14).** All verified: PlaceholderPage has zero importers; useOpsHealthWrapped has zero callers; hero.png, vite.svg and icons.svg have zero references anywhere in src or index.html. Write a real README for admin-web in their place.
+- [x] **Step 1: Delete the six dead artefacts (D10, D14).** All verified: PlaceholderPage has zero importers; useOpsHealthWrapped has zero callers; hero.png, vite.svg and icons.svg have zero references anywhere in src or index.html. Write a real README for admin-web in their place.
 
-- [ ] **Step 2: Decide the catch-all explicitly (A43).**
+- [x] **Step 2: Decide the catch-all explicitly (A43).**
 
 > `App.tsx:165` silently redirects every unknown path to `/` with replace. v3 is a set of files with no router, so unknown-path behaviour is undefined in the design and whatever the new router does by default would become the answer. The silent redirect is also what has been MASKING the broken /farms/:farmId link (D11) for its whole life.
 >
 > **Decision: introduce a real 404** now that D11 is fixed. A silent bounce to Home is indistinguishable from a broken link, which is how D11 survived. If the founder prefers the redirect, keep it — but keep it DELIBERATELY, with the comment saying so.
 
-- [ ] **Step 3: Decide the farm-detail route (D11).** Either register /farms/:farmId or remove the row-click affordance and the cursor-pointer styling. T14 Step 5 chose the expandable row; this step is where the dead navigate() call is actually deleted.
-- [ ] **Step 4: Run the full suite.** `npm run test && npm run build && npm run lint`
-- [ ] **Step 5: Commit** — `chore(admin-web): delete dead scaffolding; 404 and farm-detail decided`
+- [x] **Step 3: Decide the farm-detail route (D11).** Either register /farms/:farmId or remove the row-click affordance and the cursor-pointer styling. T14 Step 5 chose the expandable row; this step is where the dead navigate() call is actually deleted.
+- [x] **Step 4: Run the full suite.** `npm run test && npm run build && npm run lint`
+- [x] **Step 5: Commit** — `chore(admin-web): delete dead scaffolding; 404 and farm-detail decided`
 
 ---
 
@@ -1681,7 +2671,7 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 - Create: `src/clients/admin-web/scripts/deploy-s3.sh`
 - Verify: `vite.config.ts`, `tsconfig.app.json`, `eslint.config.js`, `package.json`
 
-- [ ] **Step 1: Find and commit the history fallback (A44).**
+- [x] **Step 1: Find and commit the history fallback (A44).**
 
 > **This is the one failure mode that is invisible until deployment.** Every shareable URL — /farms with a tier and a page, /farmer-health with a farmId, /ops/errors with a since — works perfectly in vite dev and 404s in prod if the host does not rewrite unknown paths to index.html. There is no _redirects, no vercel.json, no netlify.toml and no nginx conf anywhere in admin-web — verified.
 >
@@ -1689,25 +2679,73 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 >
 > **Corollary, taken from the mobile-web tracker rows:** on a distribution with a 404-to-index rule at 200, ANY MISSING OBJECT RETURNS HTTP 200 WITH text/html. A status-code-only smoke check produces false greens. Every prod proof in the Deployment Plan below therefore asserts Content-Type, not just status.
 
-- [ ] **Step 2: Verify the alias is declared in both places (A49).** `vite.config.ts:8-12` AND `tsconfig.app.json`. Missing one half gives a build that type-checks but will not bundle. It is now declared in three places, counting vitest.config.ts.
-- [ ] **Step 3: Keep port 4001 strictPort.** Local tooling, CORS allowlists and the founder bookmarks assume it.
-- [ ] **Step 4: Keep the build and lint config.** `eslint.config.js:8-41` deliberately demotes rules to warn with a 9999 warning ceiling so admin-web participates in the gate without a shell OR-true. Inheriting stricter defaults fails CI on day one.
-- [ ] **Step 5: Write the deploy script that does not exist.**
+- [x] **Step 2: Verify the alias is declared in both places (A49).** `vite.config.ts:8-12` AND `tsconfig.app.json`. Missing one half gives a build that type-checks but will not bundle. It is now declared in three places, counting vitest.config.ts.
+- [x] **Step 3: Keep port 4001 strictPort.** Local tooling, CORS allowlists and the founder bookmarks assume it.
+- [x] **Step 4: Keep the build and lint config.** `eslint.config.js:8-41` deliberately demotes rules to warn with a 9999 warning ceiling so admin-web participates in the gate without a shell OR-true. Inheriting stricter defaults fails CI on day one.
+- [x] **Step 5: Write the deploy script that does not exist.**
 
 > `src/clients/mobile-web/scripts/deploy-s3.sh` exists and self-verifies from the edge. `src/clients/admin-web` HAS NO scripts DIRECTORY AT ALL — verified. The tracker root-cause note on the 2026-07-17 cache incident says it plainly: "No script owns the S3 sync; every deploy re-types it freehand, so the method silently drifts. This will recur until the sync, with cache headers baked in, lives in a script." Create `src/clients/admin-web/scripts/deploy-s3.sh` modelled on the mobile-web one: explicit cache-control per class, index.html no-cache, hashed assets one-year immutable, ZERO objects immutable without a content hash, and an edge-side self-verification pass.
 
-- [ ] **Step 6: Commit** — `chore(admin-web): commit the SPA fallback and a codified S3 sync`
+- [x] **Step 6: Commit** — `chore(admin-web): commit the SPA fallback and a codified S3 sync`
+
+---
+
+> **Tasks 27 and 28 executed 2026-09-01/02 (`8a11c5ed`, `578168d6`). 893 tests / 47 files; lint 7.**
+>
+> **🛑 THE `deepLink` FLAKE IS NOT CONTENTION — IT FAILS IN ISOLATION.** Five tasks blamed
+> parallelism. Run alone with nothing competing:
+> `npx vitest run src/__tests__/deepLink.contract.test.tsx` → **2 failed / 9 passed** on the first of
+> three isolated runs. Contention raises the rate; it does not cause it. **Task 29 owns a real
+> defect, not a tuning problem** — and `558b6a9d`'s missing-timeout fix, correct as it was, is not
+> the whole story.
+>
+> **🔴 A TEST THAT COULD NOT FAIL, FOUND IN THE SEQUENCING GUARD ITSELF.** The `§B` guard used
+> `(glass|glass-panel|…)`. **A hyphen is a non-word character, so `glass` matches inside
+> `glass-panel`** — an "is it gone?" assertion built on that passes **while the class is still
+> there.** Replaced with an explicit `(?<![A-Za-z0-9_-])…(?![A-Za-z0-9_-])` boundary.
+>
+> **🛑 The `§B` deletion is NOT DOABLE AS WRITTEN, and the remainder is a live §8 violation.** Task 3
+> made it conditional on the last consumer moving; **the last consumers belong to no screen task**, so
+> they never moved. `.glass`, `.glass-kpi`, `.glass-sidebar`, `.nav-active` were at zero and are gone.
+> **Four survive:** `.glass-panel` → `ForbiddenPage.tsx:48` (**glassmorphism *and* a gradient, both
+> banned**) and `.chip-fresh`/`-live`/`-mat` → `FreshnessChip.tsx`. **Founder decision — Task 30.**
+>
+> **`font-mono` is 6 files / 18 uses, not 27/92** as its own comment claimed. Every one is a port-era
+> choice on a value read character by character — the OTP field, error timestamps, status codes.
+> §8 bans monospace. **Sweep, or amend §8? Founder decision — Task 30.**
+>
+> **🛑 `CONTRACT.md` DOES NOT EXIST IN THIS REPO.** It lives at `G:/VALIDATION/ADMIN_ REDESIGN/v3/`.
+> **Every `CONTRACT.md §N` citation in the code and in this plan points outside the repo.**
+>
+> **`useOpsHealthWrapped` was already deleted by Task 20**, yet still listed among Task 27's six.
+> **`Card`'s "ten importers, none ported" is wrong twice over** — the real count is **two**.
+> **The plan's Task 27 file list omitted** the shim, the two `package.json` dependencies, the `§B`
+> block, and the print/reduced-motion rules naming deleted classes.
+>
+> **Both libraries are gone** from `package.json`, `package-lock.json` **and `node_modules`** — no
+> recharts chunk and no react-table chunk exist. Farmer Health is **22.81 kB** (was 399 kB).
+> **A50 can no longer be ticked as preserved and needs the founder's Deliberately-Dropped signature.**
+>
+> **🛑 The committed CloudFront config has NOT been diffed against the live distribution** — prod is
+> hibernated, no AWS call was made. It is the *intended* state, and the file says so in its own
+> header. **And the corollary is load-bearing:** with 404→index at 200, **any missing object returns
+> HTTP 200 with `text/html`**, so every prod proof asserts **Content-Type**, not status. Pinned by
+> test, and the Content-Type check runs *before* the Cache-Control comparison so a missing file
+> reports as missing rather than as a header bug.
+>
+> **`src/clients/mobile-web/scripts/deploy-s3.sh` is committed mode `100644`, not `100755`** — on a
+> fresh Linux clone `./deploy-s3.sh` fails with Permission denied. admin-web's is `100755`.
 
 ---
 
 ### Task 29: Accessibility, responsiveness and the performance budget
 
-- [ ] **Step 1: Keyboard sweep.** Every expandable row responds to Enter AND Space; focus is visible everywhere at 2px indigo with 2px offset; no outline is removed; the palette traps focus and returns it.
-- [ ] **Step 2: Screen-reader sweep.** Every chart has its data table (A32); every loading block has a named aria-label; every aria-sort is live; every state dot has a word beside it; every aria-expanded is truthful.
-- [ ] **Step 3: Responsive sweep** at 1280, 1279 and 1023, with the sidebar collapsing to a horizontal strip. The viewport lock was removed in T3 Step 6.
-- [ ] **Step 4: prefers-reduced-motion and print** both honoured (T3 Step 5).
-- [ ] **Step 5: Run the existing Lighthouse budget.** `.github/workflows/lighthouse.yml:55-95` builds admin-web and asserts perf 0.7 and a11y 0.9 on /farmer-health from a static dist. It must still pass. Note the job's own comment: unauthenticated, it actually scores /login, so a11y regressions on GATED routes will NOT be caught by it — Step 2 manual sweep is not optional.
-- [ ] **Step 6: Commit** — `fix(admin-web): a11y and responsive sweep across all 13 routes`
+- [x] **Step 1: Keyboard sweep.** Every expandable row responds to Enter AND Space; focus is visible everywhere at 2px indigo with 2px offset; no outline is removed; the palette traps focus and returns it.
+- [x] **Step 2: Screen-reader sweep.** Every chart has its data table (A32); every loading block has a named aria-label; every aria-sort is live; every state dot has a word beside it; every aria-expanded is truthful.
+- [x] **Step 3: Responsive sweep** at 1280, 1279 and 1023, with the sidebar collapsing to a horizontal strip. The viewport lock was removed in T3 Step 6.
+- [x] **Step 4: prefers-reduced-motion and print** both honoured (T3 Step 5).
+- [x] **Step 5: Run the existing Lighthouse budget.** `.github/workflows/lighthouse.yml:55-95` builds admin-web and asserts perf 0.7 and a11y 0.9 on /farmer-health from a static dist. It must still pass. Note the job's own comment: unauthenticated, it actually scores /login, so a11y regressions on GATED routes will NOT be caught by it — Step 2 manual sweep is not optional.
+- [x] **Step 6: Commit** — `fix(admin-web): a11y and responsive sweep across all 13 routes`
 
 ---
 
@@ -1716,7 +2754,7 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 **Files:**
 - Create: `src/clients/admin-web/src/__tests__/preservation.register.test.ts`
 
-- [ ] **Step 1: Encode the register as a test.**
+- [x] **Step 1: Encode the register as a test.**
 
 ```ts
 /**
@@ -1752,16 +2790,113 @@ const MECHANICAL = [
 
 ```
 
-- [ ] **Step 2: Walk every route with the harness** and assert each one renders, is guarded exactly as ROUTE_GUARDS says, and survives a hard refresh with its full query string intact.
-- [ ] **Step 3: Tick every register row** in this document. A row that cannot be ticked either gets a task, or moves — WITH THE FOUNDER SIGNATURE — into the Deliberately Dropped table. There is no third option.
-- [ ] **Step 4: Run everything.**
+- [x] **Step 2: Walk every route with the harness** and assert each one renders, is guarded exactly as ROUTE_GUARDS says, and survives a hard refresh with its full query string intact.
+- [x] **Step 3: Tick every register row** in this document. A row that cannot be ticked either gets a task, or moves — WITH THE FOUNDER SIGNATURE — into the Deliberately Dropped table. There is no third option.
+- [x] **Step 4: Run everything.**
 
 ```bash
 cd "src/clients/admin-web" && npm run test && npm run build && npm run lint
 cd - && dotnet test src/tests/AgriSync.ArchitectureTests/
 ```
 
-- [ ] **Step 5: Commit** — `test(admin-web): preservation register sweep — nothing lost`
+- [x] **Step 5: Commit** — `test(admin-web): preservation register sweep — nothing lost`
+
+---
+
+> **Tasks 29 and 30 executed 2026-09-02 (`a2434e8e`, `a9c23b56`). ALL 30 TASKS COMPLETE.**
+> **987 tests / 50 files, three consecutive green full runs verified independently; lint 7, 0 errors;
+> build exit 0.**
+>
+> **🔴 THE FLAKE WAS A REAL DEFECT, AND THE MECHANISM IS WORTH READING.** Five tasks blamed
+> parallelism; Task 28 disproved that; Task 29 found the cause. **The test suite was reaching the
+> real API.** `installAdapter().restore()` puts back **axios's own XHR adapter**, so between one test
+> restoring and the next installing, `adminApi` was wired to the live network. React Query does not
+> cancel a fetch when its last observer unmounts, so a whole-console test that ended the moment its
+> heading appeared left `GET /admin/me/scope` **in flight** — instrumented and counted: **seven
+> distinct leaks across three runs.** The .NET API is listening on `127.0.0.1:5048` on this machine
+> and answered **401** to the fixture token. The interceptor is a module singleton, so the 401 ran for
+> real: `authStore.clear()` wiped the session the *current* test had written in its first line, and
+> `redirectToLogin()` hard-assigned `/login`. `AdminAuthProvider` reads the store once, on mount — so
+> a 401 landing between `authStore.set()` and `render(<App/>)` **mounted the console anonymous.**
+> That is exactly the failure DOM: *"Unable to find … Ops Now"* over a rendered sign-in form.
+> **Fixed at the transport, not with a timeout:** unstubbed requests now fail with an error carrying
+> **no HTTP response**, so no status branch is reachable. **3 failures in 5 runs before; 0 in 11 after.**
+>
+> **🛑 A second problem, genuinely environmental, reported not papered over:** a timeline probe caught
+> `tenancyRouting` exceeding the 20 s ceiling **while making steady progress** — org switched at
+> +17.2 s, filter applied at +19.9 s, with multi-second event-loop stalls between. Contention, not a
+> hang. **No timeout was raised; `vitest.config.ts` untouched.**
+>
+> **🔴 THE COMMAND PALETTE'S FOCUS TRAP DID NOT EXIST.** `aria-modal="true"` promised a screen-reader
+> user that nothing outside was reachable, and **Tab walked into the shell underneath**; Escape
+> dropped focus to `<body>`. Now traps and restores.
+>
+> **🔴 The Lighthouse budget is broken AND has never run on a PR.** It targets
+> `http://localhost/farmer-health` over a static dist **without `--collect.isSinglePageApplication`**,
+> so lhci never falls back to `index.html`: reproduced verbatim, *"Lighthouse was unable to reliably
+> load the page you requested. (Status code: 404)"*. It does **not** "actually score `/login`" as its
+> own comment claims — **it errors.** And it is `on: workflow_dispatch` only. **One-flag fix, in
+> `.github/`, outside the executor's allowlist.**
+>
+> **A contrast failure fixed:** LoginPage's footer was `text-gray-400` on white = **2.60:1** at 12px
+> against AA's 4.5:1. Now **6.17:1**. Lighthouse accessibility **0.91 → 1.00**; performance 0.90–0.91.
+>
+> **Four `outline-none` utilities deleted as INERT** — `:focus-visible` is unlayered and outranks
+> every `@layer utilities` rule, so the ring was already winning and the utility described a behaviour
+> the stylesheet was overriding. **No pixel changed.**
+>
+> ## The Preservation Register roll-call — 59 rows, four verdicts, exhaustive by construction
+>
+> `preservation.register.test.ts`, 69 tests. **41 kept · 16 changed · 1 manual (A56) · 1 unsigned
+> (A50).** One test asserts the keys are exactly `A1…A59` with no gap or duplicate; another pins the
+> tally; another proves every named proof file still exists. **Falsifiability proved by five
+> mutations, each naming its row.**
+>
+> **The sixteen that cannot be ticked as written** — A3 (10 of 13 routes, 36 keys, not 9/12/33) ·
+> A5 (per-block on `ops.errors`/`ops.voice`) · A13 · A16 · A17 (three screens, not one) ·
+> A24 & A27 (**four** unwrapped endpoints, not one) · A33 · A38 (the live code shipped a fabricated
+> **100%**, not 0%) · A41 (`ErrorState` has zero call sites, kept only because this row names it) ·
+> A43 · A46 · A47 · A53 · A54 · **A55 (needs the founder's eye: recharts is gone, so the fixed
+> `[0,7]` domain and `ReferenceLine` went with it — the series is now relatively scaled, the exact
+> floating axis A55 warned about, mitigated by stating the scaling in words and a separate fixed goal
+> bar).**
+> **B16 is NOT satisfied and is NOT ticked.**
+
+---
+
+## 🛑 Prerequisite for the Founder Acceptance Gate — MEASURED 2026-08-31, NOT YET SOLVED
+
+**The founder cannot walk a single one of the sixteen routes on this machine today.** Measured, not
+inferred:
+
+```
+POST /user/auth/login  {8888888888 / Testuser@123}  -> 200, token issued (476 chars)
+GET  /shramsafal/admin/me/scope                     -> {"outcome":"Unauthorized",
+                                                        "scope":null,"memberships":[]}
+```
+
+**The console is behaving correctly.** `Unauthorized` with zero memberships is the fail-closed
+property `useAdminScope.ts:97-99` guarantees and Task 2 pinned — `canRead`/`canWrite`/`canExport`
+return false when scope is unresolved. `/403` is the right answer to that scope. **This is not a
+migration defect and must not be "fixed" by loosening a guard.**
+
+The cause is that the only seeded local user is a **farmer**. `PurveshDemoSeeder` creates no admin
+membership, and per this plan's own Task 25 note, `ssf.admin_users` **has never been read because its
+migration has not been run**. So there is no local path to an admin scope at all.
+
+**This blocks the acceptance gate, not the build.** Tasks 12–30 continue unaffected; every screen is
+verified by test. But the gate requires walking sixteen routes by hand, and that is impossible until
+an admin membership exists locally.
+
+**Options, to be decided before the gate — not at it:**
+1. **Seed an admin membership locally** for the existing test user. Smallest change; touches seed
+   data only; no schema, no guard, no production surface.
+2. **Run the `ssf.admin_users` migration locally only.** This plan scopes that migration OUT (Task
+   25) because running it in prod is a DB change — running it against a local database is not.
+3. **Verify against production** `admin.shramsafal.in`, where the founder already is an admin. But
+   prod is hibernated, and this branch is not deployed, so this proves the OLD console, not the new one.
+
+**Option 1 is the recommendation** — it is the only one that changes nothing outside local seed data.
 
 ---
 

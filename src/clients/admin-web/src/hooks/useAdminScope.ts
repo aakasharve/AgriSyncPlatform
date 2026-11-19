@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
-import { useActiveOrg } from '@/app/ActiveOrgProvider';
+import { useOrgKey } from '@/lib/orgQuery';
 
 /** Server contract — mirrors the AdminScope projection returned by /admin/me/scope. */
 export interface AdminScopeView {
@@ -66,10 +66,12 @@ export interface UseAdminScopeResult {
  *   - OrgSwitcher to drive selection UI
  */
 export function useAdminScope(): UseAdminScopeResult {
-  const { activeOrgId } = useActiveOrg();
+  // The same helper every DATA key uses, so the scope key and the data keys
+  // cannot drift apart on how they spell "no organisation selected".
+  const org = useOrgKey();
 
   const q = useQuery<MeScopeResponse>({
-    queryKey: ['admin', 'me', 'scope', activeOrgId ?? 'none'],
+    queryKey: ['admin', 'me', 'scope', org],
     queryFn: async () => {
       const res = await adminApi.get<MeScopeResponse>('/shramsafal/admin/me/scope');
       return res.data;

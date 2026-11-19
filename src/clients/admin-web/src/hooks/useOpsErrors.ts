@@ -1,5 +1,6 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { adminApi, type AdminResponse } from '@/lib/api';
+import { keepPreviousDataWithinOrg, useOrgKey } from '@/lib/orgQuery';
 import type { OpsErrorEvent } from './useOpsHealth';
 export type { OpsErrorEvent };
 
@@ -17,9 +18,12 @@ export interface OpsErrorsParams {
   since?: string;
 }
 
+/** Org in the key, and `keepPreviousData` stopped at the org boundary (A7, A25,
+ *  T12 S3) — see the notes in `useFarms.ts` and `lib/orgQuery.ts`. */
 export function useOpsErrors(params: OpsErrorsParams) {
+  const org = useOrgKey();
   return useQuery<AdminResponse<OpsErrorsPage>>({
-    queryKey: ['ops', 'errors', params],
+    queryKey: ['ops', 'errors', org, params],
     queryFn: async () => {
       const sp = new URLSearchParams({
         page: String(params.page),
@@ -34,6 +38,6 @@ export function useOpsErrors(params: OpsErrorsParams) {
     },
     staleTime: 25_000,
     refetchInterval: 30_000,
-    placeholderData: keepPreviousData,
+    placeholderData: keepPreviousDataWithinOrg<AdminResponse<OpsErrorsPage>>(org),
   });
 }

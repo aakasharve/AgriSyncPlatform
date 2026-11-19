@@ -1,169 +1,173 @@
+import { ChevronLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, HeartPulse, Lock } from 'lucide-react';
-import { useAdminScope } from '@/hooks/useAdminScope';
-import { ModuleKeys } from '@/lib/moduleKeys';
-import type { Bucket } from './farmer-health.types';
-import { useFarmerHealth } from './hooks/useFarmerHealth';
-import { EmptyState, ErrorState, LoadingState } from './components/EmptyAndErrorStates';
-import { DwcScoreCard } from './components/DwcScoreCard';
+import {
+  LoadFailed,
+  LoadingState,
+  MetricLines,
+  NotBuiltYet,
+  NotMeasured,
+  NotMeasuredPanel,
+} from '@/components/state';
+import { describeAdminDenial } from '@/lib/adminErrors';
+import { DATE_FORMATS, fmt } from '@/lib/format';
 import { FarmerTimeline } from './components/FarmerTimeline';
-import { WorkerSummaryList } from './components/WorkerSummaryList';
-import { SyncStateBlock } from './components/SyncStateBlock';
-import { AiHealthBlock } from './components/AiHealthBlock';
+import { FarmerIdentity } from './components/FarmerIdentity';
+import { FarmWorkers } from './components/FarmWorkers';
+import { ReadingBlock } from './components/ReadingBlock';
+import { VerificationCounts } from './components/VerificationCounts';
+import type { FarmerHealthLastSyncDto } from './farmer-health.types';
+import { useFarmerHealth } from './hooks/useFarmerHealth';
 
 /**
- * Mode A — per-farmer drilldown (DWC v2 §4.5; UI brief §4 — five bands).
+ * THE ONE-FARM PAGE (`/farmer-health/:farmId`), Platform owners only.
  *
- *   Band 1 — Drilldown header (back link + name + farmId + bucket badge,
- *            suspicious-flag banner if score.flag === 'suspicious')
- *   Band 2 — DwcScoreCard (big total + 6 pillar bars)
- *   Band 3 — FarmerTimeline (14-day × 6-event heatmap)
- *   Band 4 — WorkerSummaryList (WTL v0 — name + count + first seen)
- *   Band 5 — Ops sections (gated by canRead(OpsLive); placeholder if not)
+ * Real: the owner's name and phone (P1), the 14-day timeline with its checked
+ * and error rows (P3, P4, P5), the last entry reached the server (P8), the
+ * checks on entries (P6), the workers (P7) and voice and photo reading (P10,
+ * P11). Still "Not built yet", with no number: the farm score (P2) and refused
+ * uploads (P9).
  *
- * `ops:read` claim → mapped to `ModuleKeys.OpsLive` per the admin-web
- * scope model (see useAdminScope.ts + moduleKeys.ts). Scope still loading
- * is treated as "no access" so we never render server-redacted nulls
- * pretending to be data.
+ * The header renders in every branch: the farm id in the address is the only
+ * thing saying which farm failed, and the back link must survive an error.
+ * A 403 shows the console's own no-access wording, a 404 says the farm was not
+ * found, anything else says it could not load. The hook never polls: each load
+ * writes an audit row.
  */
 
-const HAS_DEVANAGARI = /[ऀ-ॿ]/;
-
-function fontFor(name: string): string {
-  return HAS_DEVANAGARI.test(name)
-    ? "'Noto Sans Devanagari', sans-serif"
-    : "'DM Sans', sans-serif";
+/** A 404 is not a failure to load — it is an answer. */
+function isNotFound(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
+  return status === 404;
 }
 
-const BUCKET_TONE: Record<Bucket, { bg: string; fg: string; label: string }> = {
-  intervention: { bg: 'rgba(220,38,38,0.14)',  fg: '#dc2626', label: 'Intervention' },
-  watchlist:    { bg: 'rgba(245,158,11,0.18)', fg: '#b45309', label: 'Watchlist' },
-  healthy:      { bg: 'rgba(82,192,190,0.16)', fg: '#0e7d7b', label: 'Healthy' },
-};
+/** P8. When the farm's latest entry reached the server. */
+function LastEntry({ state }: { state: FarmerHealthLastSyncDto | null | undefined }) {
+  const at = fmt.dateTime(state?.lastSyncAt, DATE_FORMATS.drilldownSyncRow);
+  return (
+    <section
+      data-metric="fh-last-activity"
+      aria-label="Last entry reached the server"
+      className="glass-panel rounded-panel p-5"
+    >
+      <h3 className="text-h3 font-semibold text-text-1">Last entry reached the server</h3>
+      <p className="mt-2 text-h2 font-bold tabular-nums text-text-1">
+        {at ?? (
+          <NotMeasured
+            state={state ? 'never' : 'unmeasured'}
+            why={
+              state
+                ? 'No entry from this farm has reached the server yet.'
+                : 'The server sent no sync record for this farm.'
+            }
+          />
+        )}
+      </p>
+      <MetricLines metric="fh-last-activity" className="mt-2" />
+    </section>
+  );
+}
 
 export default function FarmerHealthDrilldown() {
   const { farmId } = useParams<{ farmId: string }>();
   const { data, isLoading, error, refetch } = useFarmerHealth(farmId);
-  const { canRead } = useAdminScope();
-  const hasOpsRead = canRead(ModuleKeys.OpsLive);
 
-  // Band 1 always renders — preserves context across loading/error/empty.
   const farmer = data?.data;
-  const farmerName = farmer?.farmerName?.trim() || (farmId ?? 'Farmer Health');
-  const tone = farmer ? BUCKET_TONE[farmer.score.bucket] : null;
-  const isSuspicious = farmer?.score.flag === 'suspicious';
+
+  const notFound = isNotFound(error);
+  const denial = describeAdminDenial(error);
+  const failed = error != null && !notFound && !denial;
+  const missing = !isLoading && !failed && (notFound || !farmer) && !denial;
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ── Band 1 — Drilldown header ─────────────────────────────────── */}
-      <div className="px-1">
+    <div className="flex flex-col gap-6">
+      {/* ══ the header — outside every branch (A40) ═════════════════════ */}
+      <div data-band="header" className="flex flex-col gap-2">
         <Link
           to="/farmer-health"
-          className="inline-flex items-center gap-1 rounded-sm text-[12px] font-bold text-text-muted hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          className="inline-flex w-fit items-center gap-1 rounded-chip text-caption font-semibold text-text-2 hover:text-text-1"
         >
-          <ChevronLeft size={14} /> All farmers
+          <ChevronLeft size={14} aria-hidden="true" /> All farmers
         </Link>
+
+        <h1 className="min-w-0 text-h1 font-bold text-text-1">Farm health</h1>
+
+        <p className="text-caption text-text-3">
+          Farm ID <span className="tabular-nums text-text-2">{farmId}</span>
+        </p>
       </div>
 
-      <div className="flex items-center gap-3 px-1">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#52c0be] text-white shadow-[0_4px_12px_rgba(124,58,237,0.4)]">
-          <HeartPulse size={18} strokeWidth={2.5} />
-        </span>
-        <div className="min-w-0">
-          <h1
-            className="truncate text-2xl font-extrabold tracking-tight text-text-primary"
-            style={{ fontFamily: fontFor(farmerName) }}
-          >
-            {farmerName}
-          </h1>
-          <div className="flex flex-wrap items-center gap-2 text-[12px] text-text-muted">
-            <span>
-              Farm ID: <span className="font-mono tabular-nums text-text-secondary">{farmId}</span>
-            </span>
-            {tone && (
-              <>
-                <span aria-hidden>·</span>
-                <span>Bucket:</span>
-                <span
-                  className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em]"
-                  style={{ background: tone.bg, color: tone.fg }}
-                >
-                  {tone.label}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isSuspicious && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-[color:rgba(220,38,38,0.4)] bg-[color:rgba(220,38,38,0.08)] px-4 py-3 text-[13px] text-text-primary"
-        >
-          <AlertTriangle size={16} className="mt-0.5 text-danger" aria-hidden />
-          <div>
-            <div className="font-extrabold text-danger">This farm shows gaming signals.</div>
-            <div className="mt-0.5 text-[12px] text-text-secondary">
-              Review before drawing conclusions — closure cadence, proof rate, or worker overlap is unusual.
-            </div>
-          </div>
-        </div>
+      {/* ══ no access: the console's own wording ═══════════════════════ */}
+      {denial && (
+        <NotMeasuredPanel
+          title={denial.message}
+          why={
+            <>
+              <p>{denial.remedy}</p>
+              {denial.detail ? <p className="mt-2">{denial.detail}</p> : null}
+            </>
+          }
+        />
       )}
 
-      {/* ── Page-level state branches ─────────────────────────────────── */}
-      {error && <ErrorState error={error} onRetry={() => { void refetch(); }} />}
+      {/* ══ the request broke ═══════════════════════════════════════════ */}
+      {failed && (
+        <LoadFailed
+          error={error}
+          what="this farmer's health record"
+          onRetry={() => {
+            void refetch();
+          }}
+        />
+      )}
 
+      {/* ══ still loading ═══════════════════════════════════════════════ */}
       {isLoading && (
         <>
-          <LoadingState label="Loading DWC score" height={220} />
           <LoadingState label="Loading 14-day timeline" height={260} />
-          <LoadingState label="Loading worker summary" height={180} />
+          <LoadingState label="Loading last entry" height={120} />
         </>
       )}
 
-      {!isLoading && !error && !farmer && (
-        <EmptyState message="Farm not found in your scope." />
+      {/* ══ the farm is not there, for one of two reasons ═══════════════ */}
+      {missing && (
+        <NotMeasuredPanel
+          title="Farm not found in your scope."
+          why="The server has no farm with this id. Check the id in the address."
+        />
       )}
 
-      {/* ── Bands 2–5 — only when we have data ────────────────────────── */}
-      {!isLoading && !error && farmer && (
+      {/* ══ the data ═════════════════════════════════════════════════════ */}
+      {!isLoading && !failed && !denial && farmer && (
         <>
-          {/* Band 2 */}
-          <DwcScoreCard score={farmer.score} />
+          <FarmerIdentity
+            farmerName={farmer.farmerName}
+            farmName={farmer.farmName}
+            phone={farmer.phone}
+          />
+          <NotBuiltYet metric="fh-score" />
+          <FarmerTimeline timeline={farmer.timeline ?? []} />
+          <LastEntry state={farmer.syncState} />
 
-          {/* Band 3 */}
-          <FarmerTimeline timeline={farmer.timeline} />
+          <div className="grid gap-4 md:grid-cols-2">
+            {farmer.verifications ? (
+              <VerificationCounts counts={farmer.verifications} />
+            ) : (
+              <NotMeasuredPanel
+                title="Checks on entries"
+                why="The server did not send the check counts for this farm, so none are shown rather than a made-up zero."
+              />
+            )}
+            <FarmWorkers workers={farmer.workerSummary ?? []} />
+            <NotBuiltYet metric="fh-failed-uploads" />
+          </div>
 
-          {/* Band 4 */}
-          <WorkerSummaryList workers={farmer.workerSummary} />
-
-          {/* Band 5 — gated by ops:read (mapped to ModuleKeys.OpsLive). */}
-          {hasOpsRead ? (
-            <>
-              <SyncStateBlock state={farmer.syncState} />
-              <AiHealthBlock health={farmer.aiHealth} />
-            </>
+          {farmer.aiHealth ? (
+            <ReadingBlock reading={farmer.aiHealth} />
           ) : (
-            <section
-              className="glass-panel p-5"
-              style={{ boxShadow: 'inset 4px 0 0 0 rgba(100, 116, 139, 0.55)' }}
-              aria-label="Ops data hidden"
-            >
-              <div className="flex items-start gap-2.5">
-                <span className="grid h-7 w-7 place-items-center rounded-md bg-surface-sidebar text-text-muted">
-                  <Lock size={14} strokeWidth={2.4} aria-hidden />
-                </span>
-                <div>
-                  <div className="text-sm font-extrabold text-text-primary">
-                    Ops data hidden — requires <span className="font-mono">ops:read</span> permission.
-                  </div>
-                  <div className="mt-0.5 text-[12px] text-text-muted">
-                    Sync posture and AI invocation health for this farm exist but are not visible at your role.
-                  </div>
-                </div>
-              </div>
-            </section>
+            <NotMeasuredPanel
+              title="Voice and photo reading"
+              why="The server did not send the reading figures for this farm, so none are shown rather than a made-up zero."
+            />
           )}
         </>
       )}

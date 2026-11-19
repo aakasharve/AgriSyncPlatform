@@ -75,17 +75,57 @@ export interface FarmerHealthWorkerSummaryDto {
   firstSeenUtc: string;
 }
 
-/** Mode A response: GET /admin/farmer-health/{farmId}. */
+/** P8: the only sync fact the one-farm page carries. */
+export interface FarmerHealthLastSyncDto {
+  lastSyncAt: string | null;
+}
+
+export type NotMeasuredReason = 'denominator_zero' | 'saved_not_recorded';
+
+/** One reading kind (voice, receipt photo or patti photo) over the last 14 India days. */
+export interface FarmerHealthReadingDto {
+  finishedJobs14d: number;
+  savedJobs14d: number | null;
+  /** 0..100, one decimal; null exactly when notMeasuredReason is set. */
+  savedPct14d: number | null;
+  notMeasuredReason: NotMeasuredReason | null;
+}
+
+export interface FarmerHealthReadingsDto {
+  voice: FarmerHealthReadingDto;
+  receipt: FarmerHealthReadingDto;
+  patti: FarmerHealthReadingDto;
+}
+
+export interface FarmerHealthChecksDto {
+  confirmed: number;
+  verified: number;
+  disputed: number;
+  /** Waiting for a check. */
+  pending: number;
+  /** Checked only by the person who saved the entry. */
+  selfChecked: number;
+}
+
+export interface FarmerHealthWorkerDto {
+  workerId: string;
+  name: string;
+  assignmentCount: number;
+  firstSeenUtc: string;
+}
+
+/** Mode A response: GET /admin/farmer-health/{farmId} (Platform owners only). */
 export interface FarmerHealthDto {
   farmId: string;
-  farmerName: string;        // may be "**redacted**" if actor lacks pii:read
-  phone: string;             // may be masked "98******12" or "**redacted**"
-  score: FarmerHealthScoreBreakdownDto;
-  timeline: FarmerHealthTimelineDayDto[];   // last 14 days, fixed-length grid
-  syncState?: FarmerHealthSyncStateDto | null; // present only with ops:read
-  aiHealth?: FarmerHealthAiHealthDto | null;   // present only with ops:read
-  verifications: FarmerHealthVerificationCountsDto;
-  workerSummary: FarmerHealthWorkerSummaryDto[];  // top 5
+  farmerName: string | null;  // the owner's name; null = not recorded
+  farmName: string;
+  phone: string | null;
+  score: null;                // P2 stays "Not built yet"
+  timeline: FarmerHealthTimelineDayDto[];   // 14 India days, oldest first
+  syncState: FarmerHealthLastSyncDto | null;
+  aiHealth: FarmerHealthReadingsDto | null;
+  verifications: FarmerHealthChecksDto | null;
+  workerSummary: FarmerHealthWorkerDto[];   // up to 5
 }
 
 // ── Cohort (Mode B) ─────────────────────────────────────────────────────────

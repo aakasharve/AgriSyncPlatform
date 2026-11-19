@@ -1,107 +1,480 @@
-import { useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Wheat, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
-import { useFarmsList } from '@/hooks/useFarms';
+import { metaRefreshedAt } from '@/lib/api';
+import { Wheat } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { DataList } from '@/components/data';
+import type { DataListColumn } from '@/components/data';
+import { Masked, MetricLines, NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
-import { Button } from '@/components/ui/Button';
+import { PersonName } from '@/components/ui/PersonName';
+import { DATE_FORMATS, fmt } from '@/lib/format';
+import { useListUrlState } from '@/lib/useListUrlState';
+import { isTierFilterNotMeasured, isTierFilterTooManyFarms, useFarmsList } from '@/hooks/useFarms';
+import type { FarmSummary } from '@/hooks/useFarms';
 
-const TIER_COLORS: Record<string, string> = { A:'#00c853', B:'#52c0be', C:'#f59e0b', D:'#dc2626' };
-const TIERS = ['A','B','C','D'];
+/**
+ * ALL FARMS — the first screen to move onto `DataList`.
+ *
+ * Thirteen tasks built primitives and deliberately re-pointed no screen, so a
+ * mechanical change could never hide a behavioural one. This is where that
+ * debt is paid: the hand-rolled table, the hand-rolled pager, the hand-rolled
+ * `setSearchParams` calls and the four direct `date-fns` calls are all gone,
+ * and nothing below re-implements anything the shared layer already owns.
+ *
+ * ── WHAT SURVIVES EXACTLY ────────────────────────────────────────────────
+ *  A17  server pagination at 40 per page, `?page` in the URL, `totalPages`
+ *       derived from the SERVER's totalCount. The client never slices.
+ *  A18  `?search` and `?tier` URL-synced.
+ *  A20  the functional updater (never the object form, which drops `?org=`)
+ *       and page reset to 1 on every filter change.
+ *  A21  the search draft is NOT URL-synced until Enter or the Search button.
+ *  A24  the AdminResponse envelope and `meta.lastRefreshed` behind the chip.
+ *  A25  `keepPreviousData` (narrowed to the org in `lib/orgQuery.ts`) plus
+ *       the "Refreshing…" swap that replaces the row count.
+ *  A34  a Devanagari farm name renders in Noto Sans Devanagari — through
+ *       `PersonName`, not a fifth copy of the script check.
+ *  A51  the two per-surface date formats, now named in `DATE_FORMATS`
+ *       instead of being loose literals here.
+ *  B4   the pager, hidden when there is one page.
+ *  B9   the tier A/B/C/D filter — a working SERVER-side capability with a UI
+ *       control, which v3 does not have (its facets are crop, village, plan
+ *       and land record, and tier is a column only).
+ *  B12  a skeleton shaped like this table: 8 rows by 7 cells.
+ *  B13  the background-fetch indicator.
+ *  B16  every name through `PersonName` and every phone through `Masked`.
+ *
+ * ── THE FOUR DEFECTS THIS SCREEN CARRIED ─────────────────────────────────
+ *  D11  THE DEAD ROW-CLICK. The old line 77 navigated to `/farms/:farmId`,
+ *       which is NOT a registered route (`App.tsx:293-299` declares `/farms`,
+ *       `/farms/silent-churn` and `/farms/suffering` and nothing else), so
+ *       every click fell through the catch-all (`App.tsx`, `<Navigate to="/"
+ *       replace/>`) and bounced silently to Home — under a table styled
+ *       `cursor-pointer` on every row. Replaced by `DataList`'s expandable
+ *       row: the pointer now belongs to something that happens.
+ *
+ *  THE OWNER COLUMN. Header "Owner", cell `{f.ownerPhone}` — see the note on
+ *  `OWNER_COLUMN` below. There is no owner NAME to render, so the header is
+ *  what changed.
+ *
+ *  THE REDACTION MARKER. `{f.name}` and `{f.ownerPhone}` were rendered raw,
+ *  so a withheld value would have printed the literal `**redacted**` into a
+ *  cell. Both now go through the components that treat a withheld value as a
+ *  permission fact rather than as a string.
+ *
+ *  THE UNTRIMMED SEARCH. Fixed in `useListUrlState` (T7) so it lands on every
+ *  screen that uses the draft contract, rather than here for one of them.
+ *
+ * ── ONE MORE, NOT IN THE PLAN ────────────────────────────────────────────
+ * `{f.errors24h||'—'}` printed an em dash for a MEASURED ZERO — the D18
+ * defect pointing the other way. Zero errors in the last 24 hours is a
+ * reading, and it now says 0.
+ */
+
+/**
+ * WHAT THIS FEED ACTUALLY CARRIES, measured in the repo on 2026-09-01 —
+ * `FarmSummaryDto` (`FarmsAdminDto.cs:9-18`) and the SQL behind it
+ * (`AdminMisRepository.cs:100-138`).
+ *
+ * It matters because v3's four filter rows are crop, village, plan and land
+ * record, and THREE OF THOSE FIELDS DO NOT EXIST on this endpoint. The
+ * fourth, `plan`, is the SQL literal `'trial'` on every row
+ * (`AdminMisRepository.cs:108`), so a "By plan" filter would offer one option
+ * holding 100% of the rows — a control that filters nothing.
+ *
+ * So this screen ships NO `facets`. Building them would mean either inventing
+ * the data or shipping four buttons that do nothing, and the second is the
+ * exact class of lie the redesign exists to remove. The gap is stated on
+ * screen (`WHAT_IS_MISSING` below) rather than left for a reader to discover
+ * by looking for a filter that is not there.
+ */
+
+/** 40 per page. The server's ceiling is 200 and its floor is 10
+ *  (`AdminEndpoints.cs:187`, `Math.Clamp(pageSize, 10, 200)`). */
 const PAGE_SIZE = 40;
 
-export default function FarmsListPage() {
-  const [sp, setSp] = useSearchParams();
-  const navigate = useNavigate();
-  const page = Number(sp.get('page') ?? 1);
-  const search = sp.get('search') ?? undefined;
-  const tier = sp.get('tier') ?? undefined;
-  const [draft, setDraft] = useState(search ?? '');
+const TIERS = ['A', 'B', 'C', 'D'] as const;
 
-  const { data, isLoading, isFetching } = useFarmsList(page, PAGE_SIZE, search, tier);
-  const items = data?.data?.items ?? [];
-  const total = data?.data?.totalCount ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+/**
+ * The owner phone, or the ABSENCE it stands for.
+ *
+ * The query COALESCEs a missing owner phone to the literal em dash
+ * (`AdminMisRepository.cs:107`, `COALESCE(u.phone, '—')`) and the reader does
+ * it a second time for a null column (`:136`, `r.IsDBNull(2) ? "—"`). A bare
+ * dash is the one thing `NotMeasured` exists to forbid — the reader supplies
+ * the reason, and the reason they supply is usually "zero". Turning the
+ * sentinel back into `null` here is what lets `Masked` say "— not measured"
+ * instead of printing a character that means nothing on its own.
+ */
+const NO_PHONE_SENTINEL = '—';
+function ownerPhoneOf(farm: FarmSummary): string | null {
+  const value = farm.ownerPhone?.trim();
+  return !value || value === NO_PHONE_SENTINEL ? null : value;
+}
 
-  function applySearch() { setSp(p => { draft ? p.set('search', draft) : p.delete('search'); p.set('page','1'); return p; }); }
-  function setTier(t: string) { setSp(p => { t===tier ? p.delete('tier') : p.set('tier', t); p.set('page','1'); return p; }); }
-  function setPage(p: number) { setSp(prev => { prev.set('page', String(p)); return prev; }); }
+const NO_ENTRY_LAST_WEEK = 'No entry last week';
+const NOT_MEASURED_WORDS = 'Not measured';
+const TEST_ACCOUNT_WORDS = 'Test account, not counted';
+
+/** The words for a farm whose days were not counted, or null when they were. */
+function notCountedWords(f: FarmSummary): string | null {
+  if (!f.confirmedDaysNotMeasuredReason) return null;
+  return f.confirmedDaysNotMeasuredReason === 'test_account' ? TEST_ACCOUNT_WORDS : NOT_MEASURED_WORDS;
+}
+
+/** Checked days, with self-confirmed days beside them (never summed). Null means no counted entry last week. */
+function checkedDaysWords(f: FarmSummary): string {
+  const notCounted = notCountedWords(f);
+  if (notCounted) return notCounted;
+  if (f.wvfd7d === null || f.wvfd7d === undefined) return NO_ENTRY_LAST_WEEK;
+  const checked = `${f.wvfd7d} checked`;
+  return typeof f.selfOnlyDays7d === 'number' ? `${checked}, ${f.selfOnlyDays7d} self-confirmed` : checked;
+}
+
+const NEVER_LOGGED = 'No log has been recorded on this farm.';
+
+/**
+ * THE OWNER COLUMN — and the one place this task could not do what the plan
+ * asked.
+ *
+ * The plan (Task 14 Step 4) and CONTRACT.md Appendix 6 both say the header
+ * reads "Owner" while the cell renders the owner's phone, and both say the
+ * fix is v3's version: the owner's NAME, with the phone as a sub-line.
+ *
+ * THE NAME IS NOT IN THE PAYLOAD. `FarmSummaryDto` carries `Name` (the
+ * FARM's name) and `OwnerPhone`, and the query selects `u.phone` and no other
+ * column from `public.users` (`AdminMisRepository.cs:105-118`). There is
+ * nothing to route through `PersonName` in this cell.
+ *
+ * Two ways to stop a header claiming something the cell does not deliver:
+ * change the cell, or change the header. Only the second is available without
+ * widening a DTO, and widening a DTO is a backend change this plan explicitly
+ * does not make ("Change Surface — Backend: no backend changes").
+ *
+ * So the header says "Owner phone". It is one word longer and it is true.
+ * Restoring v3's name-over-phone cell needs `FarmSummaryDto` to gain the
+ * owner's display name; that is a separate plan with its own spec, and it is
+ * recorded rather than quietly dropped.
+ *
+ * `PersonName` is not unused on this screen: a farm in this product is named
+ * for its farmer and is very often written in Devanagari, which is why the
+ * command palette already renders `farm.name` through it
+ * (`CommandPalette.tsx:365`). The Farm column does the same.
+ */
+const COLUMNS: DataListColumn<FarmSummary>[] = [
+  {
+    key: 'farm',
+    label: 'Farm',
+    render: (f) => <PersonName name={f.name} fallback={f.farmId} />,
+    sortType: 'text',
+    /* A withheld name sorts as ABSENT rather than under `*`. Clustering every
+       redacted farm together at the top of an A-Z sort would be an ordering
+       derived from the permission, not from the data. */
+    sortValue: (f) => (f.name === '**redacted**' ? null : f.name),
+    defaultDir: 'asc',
+  },
+  {
+    key: 'owner',
+    label: 'Owner phone',
+    render: (f) => <Masked value={ownerPhoneOf(f)} />,
+    sortType: 'text',
+    sortValue: (f) => ownerPhoneOf(f),
+    defaultDir: 'asc',
+  },
+  {
+    /* F4: the A to D group from checked days last week; a farm with no counted entry that week has none. */
+    key: 'tier',
+    label: 'Tier',
+    render: (f) =>
+      notCountedWords(f) ?? f.engagementTier ?? NO_ENTRY_LAST_WEEK,
+    sortType: 'text',
+    sortValue: (f) => f.engagementTier,
+    defaultDir: 'asc',
+  },
+  {
+    /* F5: checked days last week, with self-confirmed days shown apart in the same cell, never added in. */
+    key: 'wvfd7d',
+    label: 'Checked days last week',
+    align: 'right',
+    render: (f) => checkedDaysWords(f),
+    sortType: 'num',
+    sortValue: (f) => f.wvfd7d,
+    defaultDir: 'desc',
+  },
+  {
+    /* F6: a real count of problems in the last 24 hours on requests that named this farm; its two lines sit under the table. */
+    key: 'errors24h',
+    label: 'Errors 24h',
+    align: 'right',
+    render: (f) => fmt.num(f.errors24h) ?? <NotMeasured />,
+    sortType: 'num',
+    sortValue: (f) => f.errors24h,
+    defaultDir: 'desc',
+  },
+  {
+    key: 'lastLog',
+    label: 'Last Log',
+    /* A51: day + month here, two-digit year on Created, and they differ on
+       purpose. Both now come from `DATE_FORMATS` rather than from two loose
+       `format()` literals in this file. */
+    render: (f) =>
+      fmt.date(f.lastLogAt, DATE_FORMATS.farmsLastLog) ?? (
+        <NotMeasured state="never" why={NEVER_LOGGED} />
+      ),
+    sortType: 'date',
+    sortValue: (f) => f.lastLogAt,
+    state: (f) => (f.lastLogAt ? null : 'never'),
+    defaultDir: 'desc',
+  },
+  {
+    key: 'created',
+    label: 'Created',
+    render: (f) => fmt.date(f.createdAt, DATE_FORMATS.farmsCreated) ?? <NotMeasured />,
+    sortType: 'date',
+    sortValue: (f) => f.createdAt,
+    defaultDir: 'desc',
+  },
+];
+
+/** The expandable-row detail (D11's replacement). Every sentence is derived
+ *  from a field on the row — nothing here is typed prose about a farm. */
+function farmDetail(farm: FarmSummary) {
+  const lastLog = fmt.date(farm.lastLogAt, DATE_FORMATS.churnLastLog);
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between px-1">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-text-primary">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-green to-brand-leaf text-white shadow-[0_4px_12px_rgba(50,145,40,0.4)]"><Wheat size={18} strokeWidth={2.5}/></span>
-          All Farms
-        </h1>
-        <FreshnessChip source="live-aggregated" lastRefreshed={data?.meta?.lastRefreshed} />
+    <div className="flex flex-col gap-3">
+      <p>{lastLog ? `Last log ${lastLog}.` : NEVER_LOGGED}</p>
+      <Link
+        to={`/farmer-health/${encodeURIComponent(farm.farmId)}`}
+        className="w-fit text-body font-semibold text-text-1 underline"
+      >
+        Open this farm&rsquo;s page
+      </Link>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
+        <dt className="text-text-3">Farm id</dt>
+        {/* The identifier an operator files a ticket with, and the only value
+            on the row that names no person. */}
+        <dd className="tabular-nums text-text-2">{farm.farmId}</dd>
+        <dt className="text-text-3">Owner phone</dt>
+        <dd className="text-text-2">
+          <Masked value={ownerPhoneOf(farm)} />
+        </dd>
+      </dl>
+    </div>
+  );
+}
+
+export default function FarmsListPage() {
+  /**
+   * The screen's OWN url state — `?page` and `?tier`. `DataList` runs its own
+   * instance of this hook for `?search`, `?sort`, `?dir`; both read the same
+   * router params and both write through the same functional updater, which
+   * is the only reason two instances are safe.
+   *
+   * `?tier` cannot be a `DataList` facet. A facet is a CLIENT-side predicate
+   * over the rows in hand; tier is a SERVER-side filter that changes the
+   * query, the row set AND `totalCount` (`AdminMisRepository.cs:104`). Making
+   * it a facet would filter forty rows and call the answer a total.
+   */
+  const url = useListUrlState();
+  const page = url.page;
+  const search = url.get('search') ?? undefined;
+  const rawTier = url.get('tier');
+  const tier = TIERS.find((t) => t === rawTier);
+
+  const { data, isLoading, isFetching, isError, error, refetch } = useFarmsList(
+    page,
+    PAGE_SIZE,
+    search,
+    tier,
+  );
+  const tierTooMany = isError && isTierFilterTooManyFarms(error);
+  const tierNotMeasured = isError && isTierFilterNotMeasured(error);
+
+  const items = data?.data?.items ?? [];
+  const totalCount = data?.data?.totalCount ?? 0;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
+
+  /**
+   * NEVER `new Date()`. The checked-at time is the server's own
+   * `meta.lastRefreshed`; computing one here is exactly the fabricated
+   * freshness D5 records (`HomePage.tsx:18-19`). When the server sends none
+   * we say so rather than filling the gap.
+   */
+  const checkedAt =
+    fmt.dateTime(lastRefreshed, DATE_FORMATS.usersLastLogin) ??
+    'a time the server did not report';
+
+  /** True when the client is holding one page of a larger set. */
+  const pageScoped = totalCount > items.length;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
+            <Wheat size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
+            All Farms
+          </h1>
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Every farm on the platform, with the few things we actually measure about each
+            one. Where a figure is <b>grey with a dash</b>, it means we have not measured it
+            &mdash; not that the answer is zero.
+          </p>
+        </div>
+        <FreshnessChip source="live-aggregated" lastRefreshed={lastRefreshed} />
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <input type="text" value={draft} onChange={e=>setDraft(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&applySearch()}
-          placeholder="Search by name…"
-          className="w-64 rounded-md border-2 border-surface-border bg-surface-kpi px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-brand-teal" />
-        <Button variant="outline" size="sm" onClick={applySearch}>Search</Button>
-        <div className="flex gap-1.5">
-          {TIERS.map(t => (
-            <button key={t} onClick={()=>setTier(t)}
-              className={`rounded-full px-3 py-1.5 text-xs font-bold border transition-colors ${tier===t ? 'text-white border-transparent' : 'border-surface-border text-text-muted hover:bg-surface-sidebar'}`}
-              style={tier===t ? {background: TIER_COLORS[t]} : {}}>
+      {/* The tier filter (F4): live. It is sent to the server, which counts every farm's tier before it pages. */}
+      <div
+        role="group"
+        aria-label="Filter by tier"
+        className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-4"
+      >
+        <span className="w-24 flex-none text-caption font-semibold text-text-2">By tier</span>
+        <div className="flex flex-wrap gap-2">
+          {TIERS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={tier === t}
+              onClick={() => url.set('tier', tier === t ? null : t)}
+              className={`glass-quiet rounded-full border border-control-edge px-3.5 py-2 text-body ${tier === t ? 'font-semibold text-text-1' : 'text-text-2'}`}
+            >
               Tier {t}
             </button>
           ))}
         </div>
-        <span className="ml-auto self-center text-sm text-text-muted">
-          {isFetching?'Refreshing…':`${total.toLocaleString()} farms`}
+        <span className="text-caption text-text-3">
+          A: 5 or more checked days, B: 3-4, C: 1-2, D: none. A farm with no entry last week has no tier.
         </span>
       </div>
 
-      <div className="glass-panel overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-row-divider text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-text-muted">
-              {['Farm','Owner','Tier','WVFD 7d','Errors 24h','Last Log','Created'].map(h=><th key={h} className="py-3 pr-4 first:pl-4">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && Array.from({length:8}).map((_,i)=>(
-              <tr key={i} className="border-b border-row-divider">
-                {Array.from({length:7}).map((_,j)=>(<td key={j} className="py-2.5 pr-4 first:pl-4"><div className="h-4 animate-pulse rounded bg-surface-sidebar"/></td>))}
-              </tr>
-            ))}
-            {!isLoading&&!items.length&&(
-              <tr><td colSpan={7} className="py-16 text-center text-sm text-text-muted">No farms found</td></tr>
-            )}
-            {items.map(f=>(
-              <tr key={f.farmId} onClick={()=>navigate(`/farms/${f.farmId}`)}
-                className="cursor-pointer border-b border-row-divider last:border-0 hover:bg-surface-sidebar">
-                <td className="py-2.5 pl-4 pr-4 font-semibold text-text-primary">{f.name}</td>
-                <td className="py-2.5 pr-4 font-mono text-[12px] text-text-muted">{f.ownerPhone}</td>
-                <td className="py-2.5 pr-4">
-                  {f.engagementTier ? (
-                    <span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{background: TIER_COLORS[f.engagementTier]??'#888'}}>
-                      {f.engagementTier}
-                    </span>
-                  ) : <span className="text-text-muted">—</span>}
-                </td>
-                <td className="py-2.5 pr-4 font-mono text-[13px] font-bold text-text-primary">{f.wvfd7d?.toFixed(1) ?? '—'}</td>
-                <td className={`py-2.5 pr-4 font-mono text-[13px] font-bold ${f.errors24h>0?'text-danger':'text-text-muted'}`}>{f.errors24h||'—'}</td>
-                <td className="py-2.5 pr-4 font-mono text-[11px] text-text-muted">{f.lastLogAt?format(new Date(f.lastLogAt),'dd MMM'):'—'}</td>
-                <td className="py-2.5 pr-4 font-mono text-[11px] text-text-muted">{format(new Date(f.createdAt),'dd MMM yy')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="farms-list" />
+        <MetricLines metric="farms-total" />
+        <MetricLines metric="farms-last-log" />
       </div>
 
-      {totalPages>1&&(
-        <div className="flex items-center justify-between px-1">
-          <Button variant="outline" size="sm" disabled={page<=1} onClick={()=>setPage(page-1)}><ChevronLeft size={14}/> Prev</Button>
-          <span className="text-sm font-semibold text-text-muted">Page {page} of {totalPages}</span>
-          <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={()=>setPage(page+1)}>Next <ChevronRight size={14}/></Button>
-        </div>
+      {pageScoped && (
+        /* The scope of the SORT, said once. Over a server-paginated list a
+           column sort orders the rows in hand; the total above it comes from
+           the server and is exact. Saying neither would leave a reader to
+           assume the first row is the worst farm on the platform. */
+        <p className="text-caption text-text-3">
+          Sorting a column orders the {fmt.num(items.length)} farms on this page, not all{' '}
+          {fmt.num(totalCount)}.
+        </p>
       )}
+
+      {tierNotMeasured ? (
+        <p
+          role="status"
+          data-state="tier-filter-not-measured"
+          className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2"
+        >
+          The tier filter could not count every farm, so no farms are listed for it. Clear the tier to see
+          all farms.
+        </p>
+      ) : tierTooMany ? (
+        <p
+          role="status"
+          data-state="tier-filter-too-many"
+          className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2"
+        >
+          The tier filter cannot count that many farms live, so no farms are listed for it. Clear the
+          tier to see all farms.
+        </p>
+      ) : (
+      <DataList<FarmSummary>
+        id="farms"
+        label="All farms"
+        caption="Every farm with its owner phone, most recent log and creation date. Select a row to open its detail."
+        noun={{ one: 'farm', many: 'farms' }}
+        rows={items}
+        rowKey={(f) => f.farmId}
+        columns={COLUMNS}
+        /* A17 / B4 — the page count comes from the SERVER's totalCount. The
+           client holds forty rows and never slices a full set; loading every
+           farm to filter it here would be a self-inflicted outage on a 2-vCPU
+           box with a measured ceiling of about 32 concurrent requests. */
+        pagination={{
+          mode: 'server',
+          page,
+          pageSize: PAGE_SIZE,
+          totalCount,
+          onPage: url.setPage,
+        }}
+        search={{
+          mode: 'server',
+          /* A21 — draft state; the URL is written on Enter or the Search
+             button and at no other moment. */
+          commit: 'submit',
+          paramKey: 'search',
+          placeholder: 'Search by farm name…',
+          label: 'Search farms',
+          /* The truth about the box, from the query behind it: the WHERE
+             clause is `LOWER(f.name) LIKE LOWER(@s)` and nothing else
+             (`AdminMisRepository.cs:95,103`). v3's copy promises owner and
+             phone as well; this endpoint does not search either, and the
+             command palette's phone deep link lands here (`/farms?search=
+             <phone>`, `CommandPalette.tsx:371`) and finds nothing for exactly
+             that reason. */
+          searchesOver:
+            'The server matches the farm name only — the owner and the phone number are not searched.',
+        }}
+        expand={(f) => farmDetail(f)}
+        states={{
+          isLoading,
+          isFetching,
+          /* D9 — a 500, a timeout and a 403 used to render as "No farms
+             found". `isError` appears in three files in the whole console;
+             this screen was not one of them. */
+          error: isError ? error : null,
+          onRetry: () => void refetch(),
+          measuredZero: {
+            what: 'No farms returned by this feed',
+            checkedAt,
+          },
+        }}
+        /* B12 — shaped like the real thing: 8 rows by 7 cells, which is what
+           this table is. */
+        skeleton={{ rows: 8, cells: 7 }}
+      />
+      )}
+
+      <div className="flex flex-col gap-2">
+        <MetricLines metric="farms-tier" />
+        <MetricLines metric="farms-wvfd7d" />
+        <MetricLines metric="farms-errors24h" />
+      </div>
+
+      <StandingNote
+        title="What this list does not carry"
+        summary="Seven things per farm, and no village, crop, plot or acreage — so there is nothing to filter them by."
+        why={
+          <>
+            <p>
+              The server sends <b>seven things</b> about each farm and nothing else: the farm name,
+              the owner&rsquo;s phone number, its A to D group and checked days for the
+              last week, how many errors it hit in the last 24 hours, when it last recorded
+              anything, and when it was created.
+            </p>
+            <p>
+              Village, crop, plots and land area are <b>not</b> among them. That is why you cannot
+              filter or search this screen by any of those &mdash; the information never arrives, so
+              there is nothing here to filter.
+            </p>
+            <p>
+              There is a &ldquo;plan&rdquo; field, but every farm comes back with the same value in
+              it, so it would sort every farm into one pile. It is not shown, and there is no plan
+              filter.
+            </p>
+            <p>
+              The owner&rsquo;s <b>name</b> is not sent either. That is why the Owner column is
+              headed by a phone number rather than a person.
+            </p>
+          </>
+        }
+      />
     </div>
   );
 }

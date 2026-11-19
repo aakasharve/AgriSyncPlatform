@@ -1,0 +1,1144 @@
+[
+  {
+    "page": "MIS Overview",
+    "key": "overview.activeFarms",
+    "label": "Active farms",
+    "status": "real",
+    "what": "Farms that saved at least one entry in the 7 days ending on the last day chosen.",
+    "why": "Shows how many farms really use the app each week, not just how many signed up."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.installs",
+    "label": "Installs",
+    "status": "not-measured",
+    "what": "People who installed the app from Google Play in the chosen days.",
+    "why": "Shows how many people the marketing reaches before they ever sign up."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.signUps",
+    "label": "Sign-ups",
+    "status": "real",
+    "what": "People who verified their phone number with the SMS code in the chosen days.",
+    "why": "Shows how many new people actually start using the app, day by day."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.dau",
+    "label": "Daily active people",
+    "status": "real",
+    "what": "People who saved at least one entry on the last day chosen.",
+    "why": "Shows for how many people the app is part of their working day."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.wau",
+    "label": "Weekly active people",
+    "status": "real",
+    "what": "People who saved at least one entry in the last 7 days.",
+    "why": "Shows the steady base of people using the app every week."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.mau",
+    "label": "Monthly active people",
+    "status": "real",
+    "what": "People who saved at least one entry in the last 30 days.",
+    "why": "Shows the widest group still using the app, the base for every habit figure."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.stickiness",
+    "label": "Stickiness",
+    "status": "real",
+    "what": "Daily active people as a share of monthly active people.",
+    "why": "Shows whether people active in the month come back daily; higher means a real daily habit."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.logsRecorded",
+    "label": "Entries saved",
+    "status": "real",
+    "what": "Every diary entry saved on the server in the chosen days.",
+    "why": "Shows the total work being recorded, the plainest sign the app is used."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.voiceShare",
+    "label": "Saved by voice",
+    "status": "real",
+    "what": "Share of saved entries that came from a voice recording the app understood and checked.",
+    "why": "Shows whether speaking, the app's main promise, is really how farmers record their work."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.understanding",
+    "label": "मला किती समजलं",
+    "status": "not-measured",
+    "what": "The middle score, out of 10, for how well the app understood a farm's day.",
+    "why": "Shows whether farmers' words are understood well enough to trust the record."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.crashFree",
+    "label": "Crash-free sessions",
+    "status": "not-measured",
+    "what": "Share of app openings that ended without the app crashing.",
+    "why": "Shows whether the app is stable enough on farmers' phones to rely on."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.installsAndSignUps",
+    "label": "Installs and sign-ups",
+    "status": "not-measured",
+    "what": "Installs and sign-ups for each day, drawn as two lines.",
+    "why": "Shows how many installers go on to verify their phone, and on which days."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.logsByWeek",
+    "label": "Entries saved, voice and typed",
+    "status": "real",
+    "what": "Entries saved each week, split into voice entries and typed entries.",
+    "why": "Shows whether voice use is growing or shrinking week by week."
+  },
+  {
+    "page": "MIS Overview",
+    "key": "overview.headline",
+    "label": "Headline",
+    "status": "real",
+    "what": "One sentence joining active farms, voice share and entries saved.",
+    "why": "Gives the state of the company in one line before reading any tile."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.installed",
+    "label": "Installed the app",
+    "status": "not-measured",
+    "what": "People who installed the app, the first step before signing up.",
+    "why": "Starting point for seeing how many installers become real users."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.verified",
+    "label": "Verified phone by OTP",
+    "status": "real",
+    "what": "People who verified their phone with the SMS code in the chosen days.",
+    "why": "Second step: shows how many people who arrive actually sign up."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.hasFarm",
+    "label": "Set up or joined a farm",
+    "status": "real",
+    "what": "Of those sign-ups, people who created a farm or joined someone's farm.",
+    "why": "Shows whether new people get past setup, where many apps lose people."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.firstLog",
+    "label": "Saved a first entry",
+    "status": "real",
+    "what": "Of those sign-ups, people who saved at least one entry.",
+    "why": "Shows whether new people do the one thing the app is for."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.habit",
+    "label": "Saved entries on 3 of their first 7 days",
+    "status": "real",
+    "what": "Sign-ups old enough to judge who saved entries on 3 of their first 7 days.",
+    "why": "Shows whether new people form a habit early, the best sign they will stay."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.installsPerDay",
+    "label": "Installs per day",
+    "status": "not-measured",
+    "what": "Installs from Google Play counted for each day.",
+    "why": "Shows which days campaigns or demos brought people in."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.installsByChannel",
+    "label": "Installs by channel",
+    "status": "not-measured",
+    "what": "Installs split by where they came from, such as Google Play search, WhatsApp, producer organisation or demo.",
+    "why": "Shows which way of reaching farmers brings the most people, so effort goes there."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.channelVerify",
+    "label": "Phone verified, by channel",
+    "status": "not-measured",
+    "what": "For each source of installs, the share who verified their phone.",
+    "why": "Shows which source brings people who actually sign up, not just install."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.channelHabit",
+    "label": "Habit, by channel",
+    "status": "not-measured",
+    "what": "For each source of installs, the share who saved entries on 3 of their first 7 days.",
+    "why": "Shows which source brings farmers who keep using the app."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.installsByDistrict",
+    "label": "Installs by district",
+    "status": "not-measured",
+    "what": "Installs counted by the district where the phone was.",
+    "why": "Shows where the app is spreading and where field effort is needed."
+  },
+  {
+    "page": "MIS Acquisition",
+    "key": "acquisition.headline",
+    "label": "Headline",
+    "status": "not-measured",
+    "what": "One sentence joining sign-ups, the early habit share, installs and channels.",
+    "why": "Gives the state of new-farmer growth in one line."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.logsByType",
+    "label": "Entries by type",
+    "status": "not-measured",
+    "what": "Saved entries split by kind: field work, labour, inputs, water and other.",
+    "why": "Shows what farmers use the app for, and which kinds of work go unrecorded."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.logsPerFarm",
+    "label": "Entries per active farm, per week",
+    "status": "real",
+    "what": "Entries saved in the last 7 days divided by farms active in those 7 days.",
+    "why": "Shows how deeply an active farm uses the app, not just whether it does."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.whenLogged",
+    "label": "When farmers log",
+    "status": "real",
+    "what": "Entries by hour of day and day of week, India time, when they reached the server.",
+    "why": "Shows when farmers work with the app, to time reminders, support and updates."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.featureUse",
+    "label": "Feature use",
+    "status": "not-measured",
+    "what": "Share of active people who used each part of the app, such as costs or attendance.",
+    "why": "Shows which features earn their place and which nobody uses."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.roleMix",
+    "label": "Monthly active people by role",
+    "status": "real",
+    "what": "People who saved an entry in the last 30 days, split by their role on the farm.",
+    "why": "Shows whether only owners use the app, or their workers and supervisors too."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.featureByRole",
+    "label": "Feature use by role",
+    "status": "not-measured",
+    "what": "Use of each part of the app, split by the person's role on the farm.",
+    "why": "Shows which features matter to owners and which to workers or supervisors."
+  },
+  {
+    "page": "MIS Engagement",
+    "key": "engagement.headline",
+    "label": "Headline",
+    "status": "real",
+    "what": "One sentence joining entries per active farm and the busiest hour.",
+    "why": "Gives in one line how deeply farms use the app."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.d1",
+    "label": "Came back next day",
+    "status": "real",
+    "what": "Share of new sign-ups who saved an entry on the day after they signed up.",
+    "why": "Shows whether the first day convinced people to return."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.d30",
+    "label": "Active on day 30",
+    "status": "real",
+    "what": "Share of sign-ups who saved an entry on the thirtieth day after signing up.",
+    "why": "Shows whether the app becomes a lasting habit, not a one-time try."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.quiet",
+    "label": "Silent 7–29 days",
+    "status": "real",
+    "what": "Farms whose last entry was 7 to 29 days ago.",
+    "why": "These farms can still be won back with a call; it sizes today's call list."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.silent30",
+    "label": "Silent 30+ days",
+    "status": "real",
+    "what": "Farms whose last entry was 30 or more days ago.",
+    "why": "Shows how many farms have stopped; a rising number means the app is losing farmers."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.cohorts",
+    "label": "Return by sign-up week",
+    "status": "real",
+    "what": "For each week's sign-ups, the share who saved an entry on day 1, 7, 14 and 30.",
+    "why": "Shows whether newer groups of farmers stay longer than older ones after each change."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.curve",
+    "label": "Return curve",
+    "status": "real",
+    "what": "Share of sign-ups who saved an entry on each day after signing up, up to day 30.",
+    "why": "Shows on which day people drop off, and whether that is getting better."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.bands",
+    "label": "Where every registered farm stands",
+    "status": "real",
+    "what": "Every registered farm placed by days since its last entry, including farms that never saved one.",
+    "why": "Shows the whole farm base at a glance: active, going quiet, stopped, never started."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.quietByDistrict",
+    "label": "Where farms are going quiet",
+    "status": "not-measured",
+    "what": "Farms silent 7 to 29 days, counted by district.",
+    "why": "Shows which areas need a field visit or a local partner's help."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.winBack",
+    "label": "Farms that can still be won back",
+    "status": "real",
+    "what": "Farms silent 7 to 29 days, counted for each day of the range.",
+    "why": "Shows whether the call list is growing or shrinking over time."
+  },
+  {
+    "page": "MIS Retention",
+    "key": "retention.headline",
+    "label": "Headline",
+    "status": "real",
+    "what": "One sentence joining next-day return, day-30 return and farms going quiet.",
+    "why": "Gives in one line whether farmers stay."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.voiceSaved",
+    "label": "Voice recordings saved",
+    "status": "real",
+    "what": "Share of voice recordings that became a saved entry.",
+    "why": "Shows whether speaking actually ends in a saved record or gets lost."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.transcriptionAvg",
+    "label": "Speech service time",
+    "status": "real",
+    "what": "Average time the speech service took to turn a recording into words.",
+    "why": "Shows whether farmers are kept waiting after they speak."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.transcriptionP95",
+    "label": "Slowest 5%",
+    "status": "real",
+    "what": "The longest wait for 95 of every 100 recordings; only the slowest 5 waited longer.",
+    "why": "Shows the worst waits farmers commonly face, which an average hides."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.corrected",
+    "label": "Entries corrected",
+    "status": "real",
+    "what": "Share of saved entries changed by the farmer after saving.",
+    "why": "Shows how often the first saved record was wrong and needed fixing."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.syncFailTile",
+    "label": "Sync failures",
+    "status": "not-measured",
+    "what": "Share of uploads from phones to the server that were refused or had to retry.",
+    "why": "Shows whether farmers' entries reach the server reliably or get stuck on the phone."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.crashFree",
+    "label": "Crash-free sessions",
+    "status": "not-measured",
+    "what": "Share of app openings that ended without a crash.",
+    "why": "Shows app stability, a top reason people give up on an app."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.scoreSpread",
+    "label": "मला किती समजलं, score spread",
+    "status": "not-measured",
+    "what": "How farm days spread across understanding scores from 0 to 10.",
+    "why": "Shows whether poor understanding is rare or common, beyond the middle score."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.syncFailChart",
+    "label": "Sync failures",
+    "status": "not-measured",
+    "what": "Refused or retried uploads from phones to the server, day by day.",
+    "why": "Shows when upload problems started, to link them to a release or outage."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.crashByVersion",
+    "label": "Crashes by app version",
+    "status": "not-measured",
+    "what": "Crashes counted for each version of the app.",
+    "why": "Shows whether a new release made the app less stable."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.versionAdoption",
+    "label": "App version adoption",
+    "status": "not-measured",
+    "what": "Share of people or entries on each version of the app.",
+    "why": "Shows how many farmers still run an old version that lacks fixes."
+  },
+  {
+    "page": "MIS Quality",
+    "key": "quality.headline",
+    "label": "Headline",
+    "status": "real",
+    "what": "One sentence joining voice recordings saved and entries corrected.",
+    "why": "Gives in one line whether voice recording works for farmers."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.activeFarms",
+    "label": "Active farms",
+    "status": "real",
+    "what": "Farms that saved at least one entry in the last 7 days.",
+    "why": "Shows the real size of the business: the farms that use it weekly."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.registered",
+    "label": "Farms registered",
+    "status": "real",
+    "what": "All farms set up in the app by the last day chosen.",
+    "why": "Shows total reach; next to active farms it shows how many went unused."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.acres",
+    "label": "Acres covered",
+    "status": "real",
+    "what": "Acres of plots on farms that saved an entry in the last 7 days.",
+    "why": "Shows how much farmland the app really covers, a figure partners and funders ask for."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.inFpo",
+    "label": "Farms in a producer organisation",
+    "status": "real",
+    "what": "Share of active farms that belong to a farmer producer organisation.",
+    "why": "Shows how much growth comes through producer organisations rather than one farmer at a time."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.byDistrict",
+    "label": "Active farms by district",
+    "status": "not-measured",
+    "what": "Active farms counted by district and taluka.",
+    "why": "Shows where the app is used, to plan field teams and partners."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.crops",
+    "label": "Crops on active farms",
+    "status": "not-measured",
+    "what": "Main crops grown on active farms, with their acres.",
+    "why": "Shows which crops the app serves, to shape schedules and partnerships."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.perFpo",
+    "label": "Farms per producer organisation",
+    "status": "real",
+    "what": "Farms counted under each farmer producer organisation.",
+    "why": "Shows which organisations bring the most farms and which need support."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.acresChart",
+    "label": "Acres covered",
+    "status": "real",
+    "what": "Acres under active farms, measured each week across the range.",
+    "why": "Shows whether the land covered is growing or shrinking."
+  },
+  {
+    "page": "MIS Farms & geography",
+    "key": "farms.headline",
+    "label": "Headline",
+    "status": "not-measured",
+    "what": "One sentence joining active farms, acres covered and the top district.",
+    "why": "Gives the farm footprint in one line."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.otpDelivered",
+    "label": "OTP delivered",
+    "status": "not-measured",
+    "what": "Share of sign-in SMS codes that actually reached the phone.",
+    "why": "Shows whether farmers can sign in at all; a code that never arrives loses a farmer."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.otpTime",
+    "label": "OTP arrival time",
+    "status": "not-measured",
+    "what": "Average seconds for a sign-in SMS code to reach the phone.",
+    "why": "Shows whether farmers wait too long at sign-in and give up."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.otpChart",
+    "label": "OTP texts delivered",
+    "status": "not-measured",
+    "what": "Sign-in SMS codes sent and delivered, day by day.",
+    "why": "Shows when SMS delivery broke, to raise it with the SMS provider."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.otpFailReasons",
+    "label": "Why OTP texts failed",
+    "status": "not-measured",
+    "what": "Sign-in SMS codes that failed, grouped by the reason the SMS provider gave.",
+    "why": "Shows what to fix with the SMS provider, such as blocked numbers or network faults."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.ticketsOpened",
+    "label": "Tickets opened",
+    "status": "not-measured",
+    "what": "New help requests from farmers in the chosen days.",
+    "why": "Shows how much trouble farmers run into."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.ticketsClosed",
+    "label": "Tickets closed",
+    "status": "not-measured",
+    "what": "Help requests solved in the chosen days.",
+    "why": "Shows whether the support team keeps up with requests."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.ticketsOpen",
+    "label": "Open tickets",
+    "status": "not-measured",
+    "what": "Help requests still waiting on the last day chosen.",
+    "why": "Shows the backlog of farmers waiting for help."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.timeToClose",
+    "label": "Time to close",
+    "status": "not-measured",
+    "what": "Average hours from a help request to its solution.",
+    "why": "Shows how long a stuck farmer waits for help."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.ticketsChart",
+    "label": "Support tickets opened and closed",
+    "status": "not-measured",
+    "what": "Help requests opened and closed, day by day.",
+    "why": "Shows whether support is falling behind, and when."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.topIssues",
+    "label": "Top issues farmers raised",
+    "status": "not-measured",
+    "what": "The most common problems farmers raised in help requests.",
+    "why": "Shows what to fix first in the app or in training."
+  },
+  {
+    "page": "MIS Operations",
+    "key": "operations.headline",
+    "label": "Headline",
+    "status": "not-measured",
+    "what": "One sentence on sign-in SMS delivery and farmer help requests.",
+    "why": "Gives in one line whether farmers can sign in and get help."
+  },
+  {
+    "page": "Live Health",
+    "key": "live-alert-rules",
+    "label": "Alert rules",
+    "status": "real",
+    "what": "Two automatic checks: over 30 server errors in an hour, and voice failing over 20% in six hours.",
+    "why": "Raises a flag when something breaks for many farmers at once.",
+    "buildId": "L1"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-recent-events",
+    "label": "Recent events",
+    "status": "real",
+    "what": "Every server error, slow save and phone-reported problem in the last two hours.",
+    "why": "Shows what is breaking right now, before farmers call to complain.",
+    "buildId": "L6"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-service-health",
+    "label": "Feeds this console depends on",
+    "status": "real",
+    "what": "Whether each data source behind this screen answered, and when it was last heard.",
+    "why": "Tells you whether the numbers on the screen can be trusted right now.",
+    "buildId": "L8"
+  },
+  {
+    "page": "API Errors",
+    "key": "errors-list",
+    "label": "API errors",
+    "status": "real",
+    "what": "Each server error, slow save and phone-reported problem, with its time, place and status.",
+    "why": "Lets you see exactly what failed and when, so it gets fixed.",
+    "buildId": "E1"
+  },
+  {
+    "page": "API Errors",
+    "key": "errors-total",
+    "label": "Errors in the chosen window",
+    "status": "real",
+    "what": "Number of errors, slow saves and phone-reported problems in the chosen time window.",
+    "why": "Shows whether problems are rising or falling across hours and days.",
+    "buildId": "E2"
+  },
+  {
+    "page": "API Errors",
+    "key": "errors-farm",
+    "label": "Farm",
+    "status": "real",
+    "what": "The farm each error belongs to, when the request named a farm.",
+    "why": "Shows which farmers were hit by a problem, so someone can call them.",
+    "buildId": "E3"
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-average",
+    "label": "Checked farm-days per farm",
+    "status": "real",
+    "what": "Average days per farm last week with an entry checked by a person within 48 hours.",
+    "why": "Shows whether farms record confirmed work most days, the old main company target.",
+    "buildId": "W1"
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-change",
+    "label": "Change from the week before",
+    "status": "real",
+    "what": "Change in that average from the week before.",
+    "why": "Shows whether confirmed daily use is improving or slipping.",
+    "buildId": "W2"
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-farms",
+    "label": "Farms with a row that week",
+    "status": "real",
+    "what": "Farms that saved at least one entry in that week.",
+    "why": "Shows how many farms the weekly average is worked out over.",
+    "buildId": "W3"
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-tiers",
+    "label": "Tiers among the farms this feed returns",
+    "status": "real",
+    "what": "Farms grouped A to D by how many checked days they had last week.",
+    "why": "Shows how many farms are steady users and how many barely use the app.",
+    "buildId": "W6"
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-farm-list",
+    "label": "Every farm's contribution",
+    "status": "real",
+    "what": "Each farm's checked days last week, with self-confirmed days shown apart.",
+    "why": "Shows which farms lead and which need attention.",
+    "buildId": "W7"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-list",
+    "label": "All farms",
+    "status": "real",
+    "what": "Every farm with its name, the owner's phone and the date it was set up.",
+    "why": "Lets you find and call any farm directly.",
+    "buildId": "F1"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-total",
+    "label": "Total farms",
+    "status": "real",
+    "what": "Number of farms set up in the app, with no activity filter.",
+    "why": "Shows how many farms you can reach from this list.",
+    "buildId": "F2"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-last-log",
+    "label": "Last Log",
+    "status": "real",
+    "what": "When each farm's latest entry reached the server.",
+    "why": "Shows which farms have gone quiet, so someone can call them.",
+    "buildId": "F3"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-tier",
+    "label": "Tier",
+    "status": "real",
+    "what": "Each farm's A to D group by checked days last week.",
+    "why": "Lets you sort farms into steady, light and absent users.",
+    "buildId": "F4"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-wvfd7d",
+    "label": "Checked days last week",
+    "status": "real",
+    "what": "Each farm's days last week with an entry checked by a person.",
+    "why": "Shows how regularly each farm records its work.",
+    "buildId": "F5"
+  },
+  {
+    "page": "All Farms",
+    "key": "farms-errors24h",
+    "label": "Errors 24h",
+    "status": "real",
+    "what": "Problems in the last 24 hours on requests that named this farm.",
+    "why": "Shows which farmers are struggling with the app today.",
+    "buildId": "F6"
+  },
+  {
+    "page": "Suffering",
+    "key": "suffering-watchlist",
+    "label": "Farmer suffering watchlist",
+    "status": "real",
+    "what": "Farms with three or more problems in 7 days on requests that named the farm.",
+    "why": "Names the farmers most likely to give up, so someone helps them first.",
+    "buildId": "U1"
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-timeline",
+    "label": "14-day timeline (started, finished, proof, summary viewed)",
+    "status": "real",
+    "what": "For one farm, each day's day-closings started and finished, proof photos added and summaries viewed.",
+    "why": "Shows how one farm really uses the app, day by day, before you call.",
+    "buildId": "P3"
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-timeline-errors",
+    "label": "Errors",
+    "status": "real",
+    "what": "Problems on requests that named this farm, on each of the last 14 days.",
+    "why": "Shows whether a farm went quiet after a run of failures.",
+    "buildId": "P5"
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-last-activity",
+    "label": "Last entry reached the server",
+    "status": "real",
+    "what": "When this farm's latest entry reached the server.",
+    "why": "Shows how long this farm has been quiet.",
+    "buildId": "P8"
+  },
+  {
+    "page": "Users",
+    "key": "users-list",
+    "label": "Accounts",
+    "status": "real",
+    "what": "Every person with an account: phone, name and the date they joined.",
+    "why": "Lets you find any person and check their account.",
+    "buildId": "R1"
+  },
+  {
+    "page": "Users",
+    "key": "users-total",
+    "label": "Total accounts",
+    "status": "real",
+    "what": "Number of accounts, test accounts included.",
+    "why": "Shows how many people have ever signed up, before test accounts are taken out.",
+    "buildId": "R2"
+  },
+  {
+    "page": "Users",
+    "key": "users-last-signin",
+    "label": "Last sign-in",
+    "status": "real",
+    "what": "When each person last signed in, or the app last renewed their sign-in.",
+    "why": "Shows whether a person still opens the app, even without saving entries.",
+    "buildId": "R3"
+  },
+  {
+    "page": "Schedule Templates",
+    "key": "templates-list",
+    "label": "Schedule templates",
+    "status": "real",
+    "what": "The ready-made crop schedules farmers can pick, with crop, tasks and timing.",
+    "why": "Shows which crops have a schedule ready and which still need one.",
+    "buildId": "R4"
+  },
+  {
+    "page": "Home",
+    "key": "home-mrr",
+    "label": "Monthly revenue",
+    "status": "idea",
+    "buildId": "H8",
+    "what": "Money that paying farms bring in each month.",
+    "why": "Shows whether paying farms cover the cost of running ShramSafal each month."
+  },
+  {
+    "page": "Home",
+    "key": "home-call-list",
+    "label": "Farms a person should call today",
+    "status": "real",
+    "buildId": "H9",
+    "what": "Farms gone quiet or hitting repeated problems, named with the owner's phone number.",
+    "why": "Gives the team a short list of farmers to call before they give up."
+  },
+  {
+    "page": "Live Health",
+    "key": "live-suffering-24h",
+    "label": "Farms with repeated problems, last 24 hours",
+    "status": "real",
+    "buildId": "L7",
+    "what": "Farms with two or more problems in the last day on requests that named the farm.",
+    "why": "Lets the team call a farmer the same day things go wrong."
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-weeks",
+    "label": "Weeks with a row",
+    "status": "real",
+    "buildId": "W4",
+    "what": "Weeks in the chosen time with at least one farm saving an entry.",
+    "why": "Tells you how much history the averages above are built on."
+  },
+  {
+    "page": "WVFD",
+    "key": "wvfd-goal",
+    "label": "Goal",
+    "status": "idea",
+    "buildId": "W5",
+    "what": "The weekly confirmed farm-days per farm the company aims for.",
+    "why": "A target turns the number into a plain yes or no for each week."
+  },
+  {
+    "page": "Silent Churn",
+    "key": "silent-watchlist",
+    "label": "Farms gone silent",
+    "status": "real",
+    "buildId": "S1",
+    "what": "Farms with no entry for a week or more, with owner phone and last entry.",
+    "why": "Names the farms to call back before they stop using the app for good."
+  },
+  {
+    "page": "Silent Churn",
+    "key": "silent-plan",
+    "label": "Plan",
+    "status": "real",
+    "buildId": "S2",
+    "what": "Whether the farm's owner is on the free plan, a trial or a paid plan.",
+    "why": "Helps decide who to call first when a paying farm goes quiet."
+  },
+  {
+    "page": "Silent Churn",
+    "key": "silent-groups",
+    "label": "By silence and by plan",
+    "status": "real",
+    "buildId": "S3",
+    "what": "Counts of silent farms grouped by days silent and by plan.",
+    "why": "Shows at a glance whether quiet farms are new trials or paying farms."
+  },
+  {
+    "page": "Suffering",
+    "key": "suffering-areas",
+    "label": "Syncing, entries and voice columns",
+    "status": "real",
+    "buildId": "U2",
+    "what": "Splits each farm's problems into syncing, saving entries, voice recording and other.",
+    "why": "Tells the team which part of the app to look at before calling."
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-queue",
+    "label": "Farms to help first",
+    "status": "idea",
+    "buildId": "FH1",
+    "what": "Farms whose health score dropped the most, with the score and last active day.",
+    "why": "Points the team to farms slipping before they go silent."
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-distribution",
+    "label": "Score spread",
+    "status": "idea",
+    "buildId": "FH2",
+    "what": "How many farms fall in each band of the farm health score.",
+    "why": "Shows whether most farms are doing well or struggling overall."
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-pillars",
+    "label": "Where farms lose points",
+    "status": "idea",
+    "buildId": "FH4",
+    "what": "Which of the six parts of the health score pulls farms down the most.",
+    "why": "Tells the product team what to improve first for most farms."
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-cohort-avg",
+    "label": "Average score by week",
+    "status": "idea",
+    "buildId": "FH5",
+    "what": "The average farm health score across all farms, week by week.",
+    "why": "Shows whether farms are getting healthier over time or slipping."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-name-phone",
+    "label": "Farmer name and phone",
+    "status": "real",
+    "buildId": "P1",
+    "what": "The farm owner's name and phone number.",
+    "why": "So the team can call the right person straight from this page."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-score",
+    "label": "Farm score and its six parts",
+    "status": "idea",
+    "buildId": "P2",
+    "what": "This farm's health score and the six parts it is made of.",
+    "why": "Shows what this one farm does well and where it needs help."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-timeline-verifies",
+    "label": "Checked",
+    "status": "real",
+    "buildId": "P4",
+    "what": "Entries on this farm checked by a person on purpose, counted once per entry each day.",
+    "why": "Shows whether the farm's records are trusted, not only typed in."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-verification-counts",
+    "label": "Checks on entries",
+    "status": "real",
+    "buildId": "P6",
+    "what": "Entries confirmed, verified, disputed, waiting, or checked only by the person who saved them.",
+    "why": "A pile of waiting or disputed entries is a reason to call."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-workers",
+    "label": "Workers",
+    "status": "real",
+    "buildId": "P7",
+    "what": "The five workers named most often in this farm's entries.",
+    "why": "Shows who actually does the work, so a call can mention them."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-failed-uploads",
+    "label": "Refused uploads",
+    "status": "idea",
+    "buildId": "P9",
+    "what": "Times the server refused entries sent from this farm's phone in the last 7 days.",
+    "why": "Refused uploads mean the farmer's work may not have reached us."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-reading-rates",
+    "label": "Voice and photo reading",
+    "status": "real",
+    "buildId": "P10",
+    "what": "Share of this farm's voice recordings read and saved; photos are counted, not yet scored.",
+    "why": "If reading fails often, the farmer stops trusting voice and photos."
+  },
+  {
+    "page": "Farmer Health drilldown",
+    "key": "fh-reading-count",
+    "label": "Recordings and photos read",
+    "status": "real",
+    "buildId": "P11",
+    "what": "How many voice recordings and photos from this farm finished reading in 14 days, saved or not.",
+    "why": "Shows how much this farm relies on voice and photos to keep records."
+  },
+  {
+    "page": "Home",
+    "key": "home-active-alerts",
+    "label": "Active alerts",
+    "status": "double",
+    "buildId": "H1",
+    "keeper": "Live Health: Alert rules"
+  },
+  {
+    "page": "Home",
+    "key": "home-api-errors-2h",
+    "label": "API errors, last 2 hours",
+    "status": "double",
+    "buildId": "H2",
+    "keeper": "Live Health: Recent events"
+  },
+  {
+    "page": "Home",
+    "key": "home-ai-success",
+    "label": "AI call success, 24 h",
+    "status": "double",
+    "buildId": "H3",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Home",
+    "key": "home-logs-today",
+    "label": "Logs today",
+    "status": "double",
+    "buildId": "H4",
+    "keeper": "Company MIS, Overview: Entries saved (range set to today)"
+  },
+  {
+    "page": "Home",
+    "key": "home-wvfd",
+    "label": "WVFD",
+    "status": "double",
+    "buildId": "H5",
+    "keeper": "WVFD page: Verified farm-days per farm"
+  },
+  {
+    "page": "Home",
+    "key": "home-farms",
+    "label": "Farms on record",
+    "status": "double",
+    "buildId": "H6",
+    "keeper": "Company MIS, Farms: Farms registered"
+  },
+  {
+    "page": "Home",
+    "key": "home-d30",
+    "label": "D30 retention",
+    "status": "double",
+    "buildId": "H7",
+    "keeper": "Company MIS, Retention: Active on day 30"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-ai-calls",
+    "label": "AI pipeline: calls",
+    "status": "double",
+    "buildId": "L2",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-ai-failed",
+    "label": "AI pipeline: failed calls",
+    "status": "double",
+    "buildId": "L3",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-ai-failure-rate",
+    "label": "AI pipeline: failure rate",
+    "status": "double",
+    "buildId": "L4",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Live Health",
+    "key": "live-ai-p95",
+    "label": "AI pipeline: P95 latency",
+    "status": "double",
+    "buildId": "L5",
+    "keeper": "Company MIS, Quality: Slowest 5%"
+  },
+  {
+    "page": "Voice Pipeline",
+    "key": "voice-calls",
+    "label": "Calls",
+    "status": "double",
+    "buildId": "V1",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Voice Pipeline",
+    "key": "voice-failed",
+    "label": "Failed calls",
+    "status": "double",
+    "buildId": "V2",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Voice Pipeline",
+    "key": "voice-success",
+    "label": "Success rate",
+    "status": "double",
+    "buildId": "V3",
+    "keeper": "Company MIS, Quality: Voice recordings saved"
+  },
+  {
+    "page": "Voice Pipeline",
+    "key": "voice-latency",
+    "label": "Average latency",
+    "status": "double",
+    "buildId": "V4",
+    "keeper": "Company MIS, Quality: Speech service time, average"
+  },
+  {
+    "page": "Voice Pipeline",
+    "key": "voice-daily",
+    "label": "Day-by-day table",
+    "status": "double",
+    "buildId": "V5",
+    "keeper": "Company MIS, Quality: the day-by-day lines of the three voice numbers"
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-tiers",
+    "label": "Engagement tiers",
+    "status": "double",
+    "buildId": "FH3",
+    "keeper": "WVFD page: Tiers A to D"
+  },
+  {
+    "page": "Farmer Health",
+    "key": "fh-watchlist",
+    "label": "Watchlist (errors, 7 days)",
+    "status": "double",
+    "buildId": "FH6",
+    "keeper": "Suffering page: the watchlist"
+  }
+]
