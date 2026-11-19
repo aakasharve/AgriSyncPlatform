@@ -1,11 +1,29 @@
+using System.Text.Json.Serialization;
+
 namespace ShramSafal.Application.Contracts.Dtos;
 
 public sealed record FarmsListDto(
     IReadOnlyList<FarmSummaryDto> Items,
     int TotalCount,
     int Page,
-    int PageSize);
+    int PageSize)
+{
+    /// <summary>
+    /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32). Server-side only, never sent: set by the
+    /// repository when the list could not be built as asked, with <see cref="Items"/> empty. Today the one value is
+    /// <c>GetFarmsListHandler.TierFilterTooManyFarmsCode</c> (the tier filter needs every farm's checked days and the
+    /// platform is above the live-count ceiling); the handler answers it as a 409 refusal, never as an empty list.
+    /// </summary>
+    [JsonIgnore]
+    public string? RefusalCode { get; init; }
+}
 
+/// <summary>
+/// One farm on All Farms. <see cref="Wvfd7d"/> is the farm's checked days in the last complete India week (at most 7),
+/// <see cref="SelfOnlyDays7d"/> its self-only days that week (shown apart, never added in), and
+/// <see cref="EngagementTier"/> its tier by checked days, all by <c>ConfirmedFarmDays</c> (plan CR-2e, C32). All three
+/// are null when the farm saved no counted entry that week ("No entry last week", never tier D, never 0).
+/// </summary>
 public sealed record FarmSummaryDto(
     Guid FarmId,
     string Name,
@@ -13,6 +31,7 @@ public sealed record FarmSummaryDto(
     // spec: company-mis-real-numbers-2026-11-15 — always null: the farm list no longer sends a made-up plan.
     string? Plan,
     decimal? Wvfd7d,
+    int? SelfOnlyDays7d,
     string? EngagementTier,
     int Errors24h,
     DateTime? LastLogAt,

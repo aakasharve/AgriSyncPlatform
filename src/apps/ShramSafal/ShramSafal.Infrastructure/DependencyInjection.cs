@@ -523,6 +523,10 @@ public static class DependencyInjection
         // The company MIS rows: farm keys through the admin factory, every counted row per farm under
         // row-level security on the scoped context.
         services.AddScoped<ICompanyMisReader, CompanyMisReader>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6, C32) — confirmed farm-days rows: farm keys
+        // through the admin factory (or from the caller's own open), every farm's entries and checks under
+        // row-level security on the scoped context.
+        services.AddScoped<IConfirmedFarmDaysReader, ConfirmedFarmDaysReader>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 
         // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.

@@ -211,6 +211,11 @@ public static class AdminEndpoints
         .WithName("GetAdminOpsVoice")
         .CacheOutput("AdminLive");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6 as replaced by C32; C12) — confirmed
+        // farm-days, counted live on request (the nightly view mis.wvfd_weekly is no longer read). Platform owners
+        // only: it reads every farm and opens the audited cross-farm factory once per call. Deliberately has no
+        // CacheOutput: each call is an honest live count and writes one cross-farm audit row. Failures are not
+        // caught: a read failure answers 500, never zeros or a made-up goal.
         group.MapGet("/admin/metrics/wvfd", async (
             HttpContext http,
             IEntitlementResolver resolver,
@@ -221,13 +226,24 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.MetricsNsm)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
-            var result = await handler.HandleAsync(
-                new GetWvfdHistoryQuery(Math.Clamp(weeks, 4, 52), http.User.GetUserIdOrEmpty()), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+            var r = await handler.HandleAsync(new GetWvfdHistoryQuery(
+                Math.Clamp(weeks, 4, 52), http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
         })
-        .WithName("GetAdminWvfd")
-        .CacheOutput("AdminMaterialized");
+        .WithName("GetAdminWvfd");
 
         group.MapGet("/admin/farms", async (
             HttpContext http,
@@ -249,7 +265,20 @@ public static class AdminEndpoints
             var r = await h.HandleAsync(new GetFarmsListQuery(
                 Math.Max(1, page), Math.Clamp(pageSize, 10, 200), search, tier,
                 http.User.GetUserIdOrEmpty()), ct);
-            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32) — the tier filter counts every farm
+                // before paging; above the live-count ceiling it is refused, never applied to part of the farms.
+                AgriSync.BuildingBlocks.Results.ErrorKind.Conflict => Results.Json(new
+                {
+                    code = "tier_filter_too_many_farms",
+                    message = r.Error.Description
+                }, statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Problem()
+            };
         })
         .WithName("GetAdminFarms")
         .CacheOutput("AdminLive");

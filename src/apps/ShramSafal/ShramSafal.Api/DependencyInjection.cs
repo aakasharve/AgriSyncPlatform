@@ -802,6 +802,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly.GetAiSpendMonthlyHandler>();
 
         // Admin MIS — Phase 3+ (WVFD, Farms, Users)
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6, C32) — confirmed farm-days counted live.
+        // Needs IConfirmedFarmDaysReader and CompanyMisExclusions (Infrastructure) and TimeProvider.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones by id.

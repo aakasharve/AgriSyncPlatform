@@ -140,6 +140,7 @@ public abstract class AdminErrorEventsRealPostgresHarness(Xunit.Abstractions.ITe
     protected static AdminMisRepository MisRepository(
         IServiceProvider sp, IAdminDbContextFactory<ShramSafalDbContext>? factory = null) =>
         new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<CompanyMisExclusions>(),
+            sp.GetRequiredService<ShramSafal.Application.Ports.IConfirmedFarmDaysReader>(),
             factory ?? sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     protected static DateTime AsUtc(DateTime value) => value.Kind switch

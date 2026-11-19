@@ -5,19 +5,20 @@ using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
+using ShramSafal.Application.UseCases.Admin.GetFarmsList;
+using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Reads mis.wvfd_weekly (and related materialized views) for the admin
-/// metrics endpoints. All queries are read-only.
+/// Reads the admin farms and users lists, the suffering list and the farm contacts. All queries are read-only.
 ///
 /// <para>
-/// The WVFD read and the silent-churn read (no longer on any read path, plan CR-2e, Task 4) keep their older
-/// graceful empty-return.
-/// The farms and users lists, the suffering list and the farm contacts do NOT
-/// (spec company-mis-real-numbers-2026-11-15): a failed read escapes and
-/// answers 500.
+/// The silent-churn read (no longer on any read path, plan CR-2e, Task 4) keeps its older graceful empty-return.
+/// Nothing else here does (spec company-mis-real-numbers-2026-11-15): a failed read escapes and answers 500.
+/// Confirmed farm-days are no longer read from the nightly view <c>mis.wvfd_weekly</c> (plan CR-2e, Task 6, C32):
+/// the route counts them live (<c>GetWvfdHistoryHandler</c>), and All Farms counts them here through
+/// <paramref name="confirmedFarmDays"/> and <see cref="ConfirmedFarmDays"/>.
 /// </para>
 ///
 /// <para>
@@ -30,90 +31,33 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 ///
 /// <para>
 /// <paramref name="exclusions"/> (plan CR-2e, C16) is the test-account list
-/// (<c>CompanyMis:ExcludedUserIds</c>) the problem counts leave out. It is
+/// (<c>CompanyMis:ExcludedUserIds</c>) the problem counts and the confirmed farm-days leave out. It is
 /// required, so a repository built by hand cannot count test accounts by
 /// forgetting it: pass <see cref="CompanyMisExclusions.None"/> to leave
 /// nothing out.
+/// </para>
+///
+/// <para>
+/// <paramref name="clock"/> fixes the counting instant of All Farms' checked days (the last complete India week);
+/// the system clock when not given.
 /// </para>
 /// </summary>
 public sealed class AdminMisRepository(
     AnalyticsDbContext analyticsContext,
     CompanyMisExclusions exclusions,
-    IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminMisRepository
+    IConfirmedFarmDaysReader confirmedFarmDays,
+    IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null,
+    TimeProvider? clock = null) : IAdminMisRepository
 {
-    public async Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default)
-    {
-        var conn = analyticsContext.Database.GetDbConnection();
-        var wasOpen = conn.State == System.Data.ConnectionState.Open;
-        if (!wasOpen) await conn.OpenAsync(ct);
-
-        try
-        {
-            // 1. Weekly aggregated WVFD trend (avg across all farms per week)
-            var weekRows = new List<WvfdWeekDto>();
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $"""
-                    SELECT
-                        week_start::date,
-                        ROUND(AVG(wvfd)::numeric, 2) AS avg_wvfd,
-                        COUNT(DISTINCT farm_id)      AS active_farms
-                    FROM mis.wvfd_weekly
-                    WHERE week_start >= CURRENT_DATE - INTERVAL '{weeks * 7} days'
-                    GROUP BY week_start
-                    ORDER BY week_start ASC
-                    """;
-                using var r = await cmd.ExecuteReaderAsync(ct);
-                while (await r.ReadAsync(ct))
-                    weekRows.Add(new WvfdWeekDto(
-                        DateOnly.FromDateTime(r.GetDateTime(0)),
-                        r.GetDecimal(1),
-                        (int)r.GetInt64(2)));
-            }
-
-            // 2. Per-farm breakdown (most recent week)
-            var farmRows = new List<WvfdFarmRowDto>();
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = """
-                    SELECT
-                        w.farm_id,
-                        ROUND(w.wvfd::numeric, 2)  AS wvfd,
-                        COALESCE(w.engagement_tier, 'D') AS tier
-                    FROM mis.wvfd_weekly w
-                    WHERE w.week_start = (SELECT MAX(week_start) FROM mis.wvfd_weekly)
-                    ORDER BY w.wvfd DESC
-                    LIMIT 50
-                    """;
-                using var r = await cmd.ExecuteReaderAsync(ct);
-                while (await r.ReadAsync(ct))
-                    farmRows.Add(new WvfdFarmRowDto(
-                        FarmId: r.GetGuid(0),
-                        Wvfd: r.GetDecimal(1),
-                        EngagementTier: r.GetString(2),
-                        ActiveFarms: 0));
-            }
-
-            decimal current = weekRows.Count > 0 ? weekRows[^1].AvgWvfd : 0m;
-            decimal? prior = weekRows.Count > 1 ? weekRows[^2].AvgWvfd : null;
-
-            return new WvfdHistoryDto(
-                CurrentWvfd: current,
-                PriorWvfd: prior,
-                GoalWvfd: 4.5m,
-                Weeks: weekRows,
-                TopFarms: farmRows);
-        }
-        catch { return new WvfdHistoryDto(0m, null, 4.5m, [], []); }
-        finally { if (!wasOpen) await conn.CloseAsync(); }
-    }
-
     // ── Phase 4: Farms ──────────────────────────────────────────────────────
-    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a, Task 4). ssf.farms and ssf.daily_logs are under
-    // FORCED row-level security, so the farm rows are read through the audited cross-farm factory (one
-    // admin_cross_tenant audit row naming the admin per page load). Phones, the weekly score and the error count
-    // come from the analytics connection (no row-level security on those). Nothing is caught: a failed read
-    // answers 500, never an empty list. Plan is always null (no made-up "trial").
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a, Task 4; plan CR-2e, Task 6 as replaced by C32).
+    // ssf.farms and ssf.daily_logs are under FORCED row-level security, so the farm rows are read through the
+    // audited cross-farm factory, opened ONCE per page load (one admin_cross_tenant audit row naming the admin).
+    // Checked days, self-only days and the tier come from ConfirmedFarmDays over each farm's own rows, read as the
+    // app login under row-level security with the keys of that same open (never a second open). Phones and the
+    // error count come from the analytics connection (no row-level security on those). Nothing is caught: a failed
+    // read answers 500, never an empty list; a farm whose rows cannot be read answers 500, never "No entry last
+    // week". Plan is always null (no made-up "trial").
     public async Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default)
     {
@@ -127,17 +71,49 @@ public sealed class AdminMisRepository(
         var hasSearch = !string.IsNullOrWhiteSpace(search);
         var hasTier = !string.IsNullOrWhiteSpace(tier);
 
-        // The tier filter is applied to the farm query BEFORE paging.
-        List<FarmId>? tierFarmIds = null;
-        if (hasTier)
-        {
-            tierFarmIds = (await ReadFarmIdsOfTierAsync(tier!, ct)).Select(id => new FarmId(id)).ToList();
-        }
+        var countedAtUtc = DateTime.SpecifyKind((clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, DateTimeKind.Utc);
+        var sinceUtc = GetCompanyMisHandler.IstDayStartUtc(ConfirmedFarmDays.LastCompleteWeekStart(countedAtUtc));
 
         await using var ssf = await adminDbFactory.CreateAsync(
             reason: $"{nameof(AdminMisRepository)}.farms-list",
             actorUserId: adminUserId,
             ct: ct);
+
+        // The tier filter (C32): the tier of EVERY farm, counted from keys read through this same open, BEFORE
+        // paging. Above the live-count ceiling it is refused (409), never applied to part of the farms.
+        IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek>? lastWeekOfEveryFarm = null;
+        List<FarmId>? tierFarmIds = null;
+        if (hasTier)
+        {
+            var keys = await ssf.Farms
+                .AsNoTracking()
+                .Select(f => new ConfirmedFarmKey((Guid)f.Id, (Guid)f.OwnerAccountId))
+                .ToListAsync(ct);
+
+            if (keys.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "The admin context can see no farm at all. ssf.farms is under forced row-level security, "
+                    + "which returns zero rows without an error to a connection that is not privileged; "
+                    + "refusing to answer that no farm is in this tier.");
+            }
+
+            var rows = await confirmedFarmDays.ReadFarmsAsync(keys, sinceUtc, countedAtUtc, ct);
+            if (rows.LiveCountSkipped)
+            {
+                return new FarmsListDto([], 0, page, pageSize)
+                {
+                    RefusalCode = GetFarmsListHandler.TierFilterTooManyFarmsCode,
+                };
+            }
+
+            lastWeekOfEveryFarm = LastCompleteWeek(rows, countedAtUtc, "the tier filter would leave it out");
+            var wanted = tier!.Trim();
+            tierFarmIds = lastWeekOfEveryFarm.Values
+                .Where(w => string.Equals(w.EngagementTier, wanted, StringComparison.Ordinal))
+                .Select(w => new FarmId(w.FarmId))
+                .ToList();
+        }
 
         // Forced row-level security hides every row WITHOUT an error when the connection is not privileged.
         // With no filter, "this context sees no farm at all" is treated as that failure, not as "no farms".
@@ -174,6 +150,7 @@ public sealed class AdminMisRepository(
                 FarmId = (Guid)f.Id,
                 f.Name,
                 OwnerUserId = (Guid)f.OwnerUserId,
+                OwnerAccountId = (Guid)f.OwnerAccountId,
                 f.CreatedAtUtc,
                 LastLogAt = ssf.DailyLogs.Where(l => l.FarmId == f.Id).Max(l => (DateTime?)l.CreatedAtUtc),
             })
@@ -184,45 +161,69 @@ public sealed class AdminMisRepository(
             return new FarmsListDto([], total, page, pageSize);
         }
 
+        // With the tier filter every farm was already counted; otherwise only the farms on this page are read, with
+        // the keys this same open returned.
+        var lastWeek = lastWeekOfEveryFarm ?? await ReadLastCompleteWeekAsync(
+            farms.Select(f => new ConfirmedFarmKey(f.FarmId, f.OwnerAccountId)).ToList(), sinceUtc, countedAtUtc, ct);
+
         var farmIds = farms.Select(f => f.FarmId).ToArray();
         var phones = await ReadPhonesAsync(farms.Select(f => f.OwnerUserId).Distinct().ToArray(), ct);
-        var scores = await ReadLatestWvfdAsync(farmIds, ct);
         var errors = await ReadErrors24hAsync(farmIds, ct);
 
         var items = farms
-            .Select(f => new FarmSummaryDto(
-                FarmId: f.FarmId,
-                Name: f.Name,
-                OwnerPhone: phones.TryGetValue(f.OwnerUserId, out var phone) && !string.IsNullOrEmpty(phone) ? phone : "—",
-                Plan: null,
-                Wvfd7d: scores.TryGetValue(f.FarmId, out var score) ? score.Wvfd : null,
-                EngagementTier: scores.TryGetValue(f.FarmId, out var tierRow) ? tierRow.Tier : null,
-                Errors24h: errors.GetValueOrDefault(f.FarmId),
-                LastLogAt: f.LastLogAt,
-                CreatedAt: f.CreatedAtUtc))
+            .Select(f =>
+            {
+                var week = lastWeek.GetValueOrDefault(f.FarmId);
+                return new FarmSummaryDto(
+                    FarmId: f.FarmId,
+                    Name: f.Name,
+                    OwnerPhone: phones.TryGetValue(f.OwnerUserId, out var phone) && !string.IsNullOrEmpty(phone) ? phone : "—",
+                    Plan: null,
+                    Wvfd7d: week?.Wvfd,
+                    SelfOnlyDays7d: week?.SelfOnlyDays,
+                    EngagementTier: week?.EngagementTier,
+                    Errors24h: errors.GetValueOrDefault(f.FarmId),
+                    LastLogAt: f.LastLogAt,
+                    CreatedAt: f.CreatedAtUtc);
+            })
             .ToList();
 
         return new FarmsListDto(items, total, page, pageSize);
     }
 
-    /// <summary>Farm ids of the given engagement tier in the latest mis.wvfd_weekly week.</summary>
-    private async Task<List<Guid>> ReadFarmIdsOfTierAsync(string tier, CancellationToken ct)
+    /// <summary>The page's farms, read as the app login one by one (C32); never more than one page.</summary>
+    private async Task<IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek>> ReadLastCompleteWeekAsync(
+        IReadOnlyCollection<ConfirmedFarmKey> keys, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
     {
-        var ids = new List<Guid>();
-        await WithAnalyticsConnectionAsync(async conn =>
+        var rows = await confirmedFarmDays.ReadFarmsAsync(keys, sinceUtc, countedAtUtc, ct);
+        if (rows.LiveCountSkipped)
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT w.farm_id
-                FROM mis.wvfd_weekly w
-                WHERE w.week_start = (SELECT MAX(week_start) FROM mis.wvfd_weekly)
-                  AND w.engagement_tier = @tier
-                """;
-            AddParam(cmd, "@tier", tier.Trim());
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) ids.Add(r.GetGuid(0));
-        }, ct);
-        return ids;
+            throw new InvalidOperationException(
+                $"The page asks for {keys.Count} farms, more than the live-count ceiling; refusing to send "
+                + "\"No entry last week\" for farms whose entries were not read.");
+        }
+
+        return LastCompleteWeek(rows, countedAtUtc, "it would read \"No entry last week\"");
+    }
+
+    /// <summary>
+    /// Each farm's last complete India week by <see cref="ConfirmedFarmDays"/>. A farm with no owner account, or whose
+    /// rows did not come back under its own row-level security, throws: a missing farm would otherwise read as "no
+    /// counted entry".
+    /// </summary>
+    private IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek> LastCompleteWeek(
+        ConfirmedFarmDaysRows rows, DateTime countedAtUtc, string consequence)
+    {
+        if (rows.FarmsNotReadable > 0)
+        {
+            throw new InvalidOperationException(
+                $"{rows.FarmsNotReadable} of {rows.FarmsListed} farms could not be read through row-level security "
+                + $"(no owner account, or the farm row did not come back under its own scope); {consequence}, "
+                + "so the list is refused.");
+        }
+
+        // Throws itself for rows that cannot be counted (ConfirmedFarmDays.NotMeasuredReason).
+        return ConfirmedFarmDays.LastCompleteWeek(rows, exclusions.UserIds, countedAtUtc);
     }
 
     private async Task<Dictionary<Guid, string?>> ReadPhonesAsync(Guid[] userIds, CancellationToken ct)
@@ -242,27 +243,6 @@ public sealed class AdminMisRepository(
             while (await r.ReadAsync(ct)) phones[r.GetGuid(0)] = r.IsDBNull(1) ? null : r.GetString(1);
         }, ct);
         return phones;
-    }
-
-    /// <summary>The latest week's score and tier per farm; a farm with no row there gets nulls.</summary>
-    private async Task<Dictionary<Guid, (decimal? Wvfd, string? Tier)>> ReadLatestWvfdAsync(Guid[] farmIds, CancellationToken ct)
-    {
-        var scores = new Dictionary<Guid, (decimal? Wvfd, string? Tier)>();
-        await WithAnalyticsConnectionAsync(async conn =>
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT w.farm_id, ROUND(w.wvfd::numeric, 2), w.engagement_tier
-                FROM mis.wvfd_weekly w
-                WHERE w.week_start = (SELECT MAX(week_start) FROM mis.wvfd_weekly)
-                  AND w.farm_id = ANY(@ids)
-                """;
-            AddParam(cmd, "@ids", farmIds);
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-                scores[r.GetGuid(0)] = (r.IsDBNull(1) ? null : r.GetDecimal(1), r.IsDBNull(2) ? null : r.GetString(2));
-        }, ct);
-        return scores;
     }
 
     /// <summary>

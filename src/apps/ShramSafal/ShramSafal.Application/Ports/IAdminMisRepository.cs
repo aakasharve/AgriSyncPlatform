@@ -4,9 +4,13 @@ namespace ShramSafal.Application.Ports;
 
 public interface IAdminMisRepository
 {
-    Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default);
+    // Confirmed farm-days are no longer read here: the nightly view mis.wvfd_weekly left the read path in plan
+    // CR-2e, Task 6 (C32); the route counts live through IConfirmedFarmDaysReader and ConfirmedFarmDays.
 
     // Phase 4 — Farms. adminUserId is named in the cross-farm audit row (spec company-mis-real-numbers-2026-11-15).
+    // Checked days, self-only days and the tier come from ConfirmedFarmDays for the farms on the page, read with the
+    // keys of this same audited open (C32). The tier filter counts every farm before paging; above the live-count
+    // ceiling the answer carries FarmsListDto.RefusalCode instead of a list.
     Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default);
 

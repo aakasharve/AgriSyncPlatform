@@ -276,6 +276,7 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
 
     private static AdminMisRepository Repository(IServiceProvider sp) =>
         new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<CompanyMisExclusions>(),
+            sp.GetRequiredService<ShramSafal.Application.Ports.IConfirmedFarmDaysReader>(),
             sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     private static async Task<FarmsListDto> FarmsAsync(ServiceProvider provider, int page, int pageSize, string? search)

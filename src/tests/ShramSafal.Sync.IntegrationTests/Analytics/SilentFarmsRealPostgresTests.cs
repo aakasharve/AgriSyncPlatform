@@ -455,6 +455,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
 
     private static AdminMisRepository MisRepository(IServiceProvider sp) =>
         new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<CompanyMisExclusions>(),
+            sp.GetRequiredService<IConfirmedFarmDaysReader>(),
             sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     /// <summary>The handler wired as in production: scoped reader, contacts, plan reader and the same scoped context.</summary>
@@ -512,9 +513,6 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
             var all = await inner.GetFarmContactsAsync(adminUserId, farmIds, ct);
             return all.Where(c => c.FarmId != missing).ToList();
         }
-
-        public Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default) =>
-            inner.GetWvfdHistoryAsync(weeks, ct);
 
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>

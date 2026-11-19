@@ -6,6 +6,7 @@ using ShramSafal.Application.Admin;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
+using ShramSafal.Application.UseCases.Admin.Shared;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
@@ -60,23 +61,7 @@ public sealed class AdminFarmerHealthRepository(
     /// <summary>Workers listed (P7).</summary>
     public const int TopWorkers = 5;
 
-    // Reasons that mark an event as NOT a person's deliberate check (C24). Constants only, never copied strings.
-    private static readonly string?[] NotADeliberateCheckReasons =
-    [
-        DailyLog.SelfAttestationReason,
-        DailyLog.BackfilledAttestationReason,
-        DailyLog.EnRouteConfirmReason,
-        DailyLog.SpeakerOwnMarkReason,
-        DailyLog.NoConfirmAuthorityMarkReason,
-    ];
-
-    // Of those, the markers meaning "checked only by the person who saved it" (C24, P6).
-    private static readonly string?[] SelfCheckReasons =
-    [
-        DailyLog.SelfAttestationReason,
-        DailyLog.BackfilledAttestationReason,
-        DailyLog.SpeakerOwnMarkReason,
-    ];
+    // The C24 marker lists live in ONE place, DeliberateCheck (C32), shared with confirmed farm-days.
 
     public async Task<FarmerHealthDto?> GetAsync(
         Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default)
@@ -261,14 +246,14 @@ public sealed class AdminFarmerHealthRepository(
         // saver at creation: counted as selfChecked, never as confirmed or verified.
         var hasOtherCheck = entryEvents
             .Where(v => (v.Status == VerificationStatus.Confirmed || v.Status == VerificationStatus.Verified)
-                        && !NotADeliberateCheckReasons.Contains(v.Reason)
+                        && !DeliberateCheck.NotADeliberateCheckReasons.Contains(v.Reason)
                         && !excludedUsers.Contains(v.VerifiedByUserId))
             .Select(v => v.DailyLogId)
             .ToHashSet();
 
         // Entries with no deliberate check that carry a self marker on any event: checked only by the saver.
         var hasSelfMarker = entryEvents
-            .Where(v => SelfCheckReasons.Contains(v.Reason))
+            .Where(v => DeliberateCheck.SelfCheckReasons.Contains(v.Reason))
             .Select(v => v.DailyLogId)
             .ToHashSet();
 
@@ -311,7 +296,7 @@ public sealed class AdminFarmerHealthRepository(
             .ToListAsync(ct);
 
         var checksByDay = checkEvents
-            .Where(e => !NotADeliberateCheckReasons.Contains(e.Reason))
+            .Where(e => !DeliberateCheck.NotADeliberateCheckReasons.Contains(e.Reason))
             .GroupBy(e => GetCompanyMisHandler.IstDay(DateTime.SpecifyKind(e.OccurredAtUtc, DateTimeKind.Utc)))
             .ToDictionary(g => g.Key, g => g.Select(e => e.DailyLogId).Distinct().Count());
 
