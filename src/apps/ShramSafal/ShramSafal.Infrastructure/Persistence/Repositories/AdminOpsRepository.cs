@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
@@ -42,10 +43,16 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// by forgetting it: pass <see cref="CompanyMisExclusions.None"/> to leave
 /// nothing out.
 /// </para>
+///
+/// <para>
+/// <paramref name="logger"/> is used only by <see cref="GetRecordedAsync"/>,
+/// to say how many recorded rows had props it could not read (plan CR-1a).
+/// </para>
 /// </summary>
 public sealed class AdminOpsRepository(
     AnalyticsDbContext analyticsContext,
     CompanyMisExclusions exclusions,
+    ILogger<AdminOpsRepository> logger,
     IAdminDbContextFactory<ShramSafalDbContext>? adminDbFactory = null) : IAdminOpsRepository
 {
     /// <summary>

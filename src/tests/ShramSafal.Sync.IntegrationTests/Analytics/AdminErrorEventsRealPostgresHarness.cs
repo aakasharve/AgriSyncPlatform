@@ -9,6 +9,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Infrastructure.Persistence;
@@ -135,6 +136,7 @@ public abstract class AdminErrorEventsRealPostgresHarness(Xunit.Abstractions.ITe
     protected static AdminOpsRepository OpsRepository(
         IServiceProvider sp, IAdminDbContextFactory<ShramSafalDbContext>? factory = null) =>
         new(sp.GetRequiredService<AnalyticsDbContext>(), sp.GetRequiredService<CompanyMisExclusions>(),
+            sp.GetRequiredService<ILogger<AdminOpsRepository>>(),
             factory ?? sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     protected static AdminMisRepository MisRepository(

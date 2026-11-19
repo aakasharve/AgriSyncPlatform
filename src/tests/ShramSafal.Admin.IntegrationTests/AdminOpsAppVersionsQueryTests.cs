@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Analytics;   // AnalyticsDbContext lives here
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
 using ShramSafal.Application.Ports;
@@ -401,7 +402,8 @@ public sealed class AdminOpsAppVersionsQueryTests(AdminTestFixture fixture) : IA
 
         IAdminOpsRepository repository = new AdminOpsRepository(
             scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>(),
-            CompanyMisExclusions.None);
+            CompanyMisExclusions.None,
+            scope.ServiceProvider.GetRequiredService<ILogger<AdminOpsRepository>>());
 
         return await question(repository);
     }

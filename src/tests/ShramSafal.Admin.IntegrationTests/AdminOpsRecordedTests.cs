@@ -6,6 +6,7 @@ using Npgsql;
 using NpgsqlTypes;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 
 namespace ShramSafal.Admin.IntegrationTests;
@@ -1456,6 +1457,7 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
 
         IAdminOpsRepository repository = new AdminOpsRepository(
             scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>(),
+            CompanyMisExclusions.None,
             scope.ServiceProvider.GetRequiredService<ILogger<AdminOpsRepository>>());
 
         return await repository.GetRecordedAsync(sinceUtc);
