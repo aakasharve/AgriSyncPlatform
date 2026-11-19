@@ -211,7 +211,8 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                             it (reward = clarity + one question, never points). Decision 3B: NO
                             fact/insight fallback in v1; on a no-question day this line stands
                             alone (the question self-gates on its own flags + content gate). */}
-                        {FEATURE_FLAGS.dailyLoop && (
+                        {/* H1 (HONESTY-1, P4): drawn only when the count stands on a real plan (never a stand-in or an unchecked default). */}
+                        {FEATURE_FLAGS.dailyLoop && todayDayState.planIsReal === true && (
                             <DailyLoopClarity
                                 done={todayDayState.completedCount}
                                 left={todayDayState.pendingCount}

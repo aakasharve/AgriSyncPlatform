@@ -42,6 +42,11 @@ export interface DayStateSnapshot {
      * "has this day begun?" from the ONE fact computeDayState decided it with.
      */
     hasStarted: boolean;
+    /**
+     * spec: plr-d10 lane HONESTY-1 (H1; P4) - the "{done} पूर्ण, {left} बाकी" line is drawn only when this is exactly TRUE. FALSE =
+     * some planned item counted came from the app's stand-in or an unchecked sample. A snapshot that does not say draws no line.
+     */
+    planIsReal?: boolean;
     completedCount: number;
     plannedCount: number;
     pendingCount: number;
