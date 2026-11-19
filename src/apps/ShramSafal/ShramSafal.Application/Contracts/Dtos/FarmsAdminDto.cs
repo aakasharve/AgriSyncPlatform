@@ -28,7 +28,9 @@ public sealed record FarmsListDto(
 /// <see cref="ConfirmedDaysNotMeasuredReason"/> is null. When the farm's rows could not be read (no owner account, or
 /// its row did not come back under its own row-level security) all three are null and
 /// <see cref="ConfirmedDaysNotMeasuredReason"/> is <c>"farm_unreadable"</c> ("not measured", never "No entry last
-/// week"); the rest of the page answers normally (C33).
+/// week"); the rest of the page answers normally (C33). When the farm is owned by a test account
+/// (<c>CompanyMis:ExcludedUserIds</c>) all three are null and the reason is <c>"test_account"</c> ("Test account, not
+/// counted", C35 1).
 /// </summary>
 public sealed record FarmSummaryDto(
     Guid FarmId,

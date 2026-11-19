@@ -182,11 +182,18 @@ public sealed class AdminMisRepository(
         var phones = await ReadPhonesAsync(farms.Select(f => f.OwnerUserId).Distinct().ToArray(), ct);
         var errors = await ReadErrors24hAsync(farmIds, ct);
 
-        // A farm present in lastWeek was read (null = no counted entry last week); an absent farm was not read.
+        // A farm owned by a test account is never counted (C35 1): its row says so, never "no entry". Otherwise a farm
+        // present in lastWeek was read (null = no counted entry last week); an absent farm was not read (C33).
         var items = farms
             .Select(f =>
             {
+                var testAccount = exclusions.UserIds.Contains(f.OwnerUserId);
                 var read = lastWeek.TryGetValue(f.FarmId, out var week);
+                if (testAccount)
+                {
+                    week = null;
+                }
+
                 return new FarmSummaryDto(
                     FarmId: f.FarmId,
                     Name: f.Name,
@@ -195,7 +202,9 @@ public sealed class AdminMisRepository(
                     Wvfd7d: week?.Wvfd,
                     SelfOnlyDays7d: week?.SelfOnlyDays,
                     EngagementTier: week?.EngagementTier,
-                    ConfirmedDaysNotMeasuredReason: read ? null : GetFarmsListHandler.FarmUnreadable,
+                    ConfirmedDaysNotMeasuredReason: testAccount
+                        ? GetFarmsListHandler.TestAccount
+                        : read ? null : GetFarmsListHandler.FarmUnreadable,
                     Errors24h: errors.GetValueOrDefault(f.FarmId),
                     LastLogAt: f.LastLogAt,
                     CreatedAt: f.CreatedAtUtc);

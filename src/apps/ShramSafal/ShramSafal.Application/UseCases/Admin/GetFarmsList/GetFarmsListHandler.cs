@@ -31,6 +31,13 @@ public sealed class GetFarmsListHandler(IAdminMisRepository misRepo)
     /// </summary>
     public const string FarmUnreadable = "farm_unreadable";
 
+    /// <summary>
+    /// C35 (1): <see cref="FarmSummaryDto.ConfirmedDaysNotMeasuredReason"/> of a farm owned by a test account
+    /// (<c>CompanyMis:ExcludedUserIds</c>): never counted, so its three counts are null and it never reads as "no
+    /// entry".
+    /// </summary>
+    public const string TestAccount = "test_account";
+
     public async Task<Result<AdminResponseDto<FarmsListDto>>> HandleAsync(
         GetFarmsListQuery q, CancellationToken ct = default)
     {
