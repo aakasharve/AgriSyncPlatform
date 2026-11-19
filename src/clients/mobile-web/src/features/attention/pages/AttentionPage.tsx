@@ -78,6 +78,8 @@ export interface AttentionPageProps {
      * The founder's D-22: planning authority starts with the primary owner; nothing here widens it.
      */
     canReschedule?: boolean;
+    /** "शेड्यूलमध्ये बघा" on a step past its postpone limit (lane POSTPONE-B): the schedule tab. Omit → the sheet draws no such button (P5). */
+    onOpenSchedule?: (step: ScheduledWorkItem) => void;
 }
 
 const GROUPS: readonly { key: AttentionGroupKey; title: string; tone: string }[] = [
@@ -88,7 +90,7 @@ const GROUPS: readonly { key: AttentionGroupKey; title: string; tone: string }[]
     { key: 'decide', title: 'निर्णय घ्यायचा', tone: 'text-stone-800' },
 ];
 
-const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews, tasks, crops, onUpdateTask, onOpenTodos, onRecordWork, canReschedule }) => {
+const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews, tasks, crops, onUpdateTask, onOpenTodos, onRecordWork, canReschedule, onOpenSchedule }) => {
     const model = useAttentionModel(tasks, crops);
     const { board, todayKey } = model;
     // Lane REM-1 (D-79): the same chips as करायची कामे, over this page's reminders (and the schedule's steps under शेड्यूलमधून). The
@@ -138,7 +140,7 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
         }
         if (item.kind === 'step') {
             return <StepRow key={item.id} step={item.step} label={item.label} dueText={item.dueText} tone={item.group} why={item.why}
-                onRecord={onRecordWork} onMove={canReschedule ? moveStep : undefined} />;
+                onRecord={onRecordWork} onMove={canReschedule ? moveStep : undefined} onOpenSchedule={onOpenSchedule} />;
         }
         const target = attentionTargetFor(item.card, hiddenViews);
         const canGo = target !== null && (target.kind === 'sync' || Boolean(onGo));
