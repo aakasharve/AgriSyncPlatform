@@ -23,7 +23,7 @@ export type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 
 
 export type DayRiskStatus = 'stable' | 'risk_rising';
 
-/** Days since the last spray / irrigation after which `computeDayState` raises a risk signal (one rule, read by the शेड्यूल page too). */
+/** Days since the last spray / irrigation after which `computeDayState` raises a risk signal. HONESTY-1 (H10): the शेड्यूल page no longer reads them - it shows the last-spray / last-water facts without a verdict. */
 export const SPRAY_RISK_DAYS = 10;
 export const IRRIGATION_RISK_DAYS = 3;
 

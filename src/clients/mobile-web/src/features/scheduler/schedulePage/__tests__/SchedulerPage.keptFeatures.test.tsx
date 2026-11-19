@@ -7,7 +7,7 @@
  *
  * Every feature of the old English शेड्यूल page is still reachable from the new one, in Marathi, and does
  * what it says: crop / plot pick (and switching recomputes the page; lane UI-8: on the picture map), the 'N days behind' banner, last spray /
- * last water, the risk card, today's spend → MoneyLens, Close Day, the library (+ its three steps, + the shortest-first
+ * last water, the open-work lines (HONESTY-1 H10: the amber "काम मागे पडतंय" risk card is gone), today's spend → MoneyLens, Close Day, the library (+ its three steps, + the shortest-first
  * order), the schedule editor (REAL, not mocked: its choice takes effect on the page) and the day grid.
  * Plus the honest states: a schedule nobody chose, a schedule that has ended.
  */
@@ -181,7 +181,7 @@ describe('the risk card counts what the page shows (V2-01)', () => {
         mount();
         const open = within(screen.getByTestId('today-parts')).getAllByTestId(/^item-/);
         expect(open.map(e => e.textContent)).toEqual(['ठिबक सिंचनअपेक्षित']);
-        expect(text('risk-card')).toContain('आज 1 कामं बाकी');
+        expect(text('open-work')).toContain('आज 1 कामं बाकी');
         expect(tools()).not.toContain('आज 2 कामं बाकी');
     });
 
@@ -192,7 +192,7 @@ describe('the risk card counts what the page shows (V2-01)', () => {
         mount([crop([p], { name: 'Tomato', activeScheduleId: null })]);
         expect(text('sched-no-schedule')).toContain('या पिकासाठी अजून शेड्यूल नाही');
         expect(tools()).not.toContain('कामं बाकी');
-        expect(text('risk-card')).toContain('पाणी देऊन 5 दिवस झाले'); // the log facts stay
+        expect(text('last-water')).toBe('5 दिवसांपूर्वी'); // the log facts stay (as the tile; HONESTY-1 H10: no amber verdict beside it)
     });
 
     it('an ended schedule: "आज यात काही नाही" and no "कामं बाकी" beside it', () => {
@@ -218,8 +218,8 @@ describe('the risk card counts what the page shows (V2-01)', () => {
             task('t4', { dueDate: k(12) }),             // not due yet
             task('t5', { plotId: 'plot-9' }),           // another plot
         ]);
-        expect(text('risk-card')).toContain('करायच्या यादीत 2 कामं बाकी');
-        expect(text('risk-card')).toContain('आज 1 कामं बाकी'); // the schedule's own line is separate
+        expect(text('open-work')).toContain('करायच्या यादीत 2 कामं बाकी');
+        expect(text('open-work')).toContain('आज 1 कामं बाकी'); // the schedule's own line is separate
     });
 });
 
@@ -228,7 +228,6 @@ describe('today\'s tools', () => {
         const p = mount();
         expect(text('last-spray')).toBe('अजून नोंद नाही');
         expect(text('last-water')).toBe('5 दिवसांपूर्वी');
-        expect(text('risk-card')).toContain('पाणी देऊन 5 दिवस झाले');
         expect(text('today-spend-amount')).toBe('₹ 250');
         fireEvent.click(screen.getByTestId('today-spend'));
         expect(screen.getByTestId('money-lens')).toBeInTheDocument();

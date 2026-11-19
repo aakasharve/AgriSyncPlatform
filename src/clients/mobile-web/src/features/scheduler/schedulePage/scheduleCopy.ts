@@ -101,12 +101,9 @@ export const SC = {
     noRecordYet: 'अजून नोंद नाही', // PROPOSED (Marathi)
     daysAgo: (n: number) => (n === 0 ? 'आज' : n === 1 ? 'काल' : `${n} दिवसांपूर्वी`), // PROPOSED (Marathi)
     todaySpend: 'आजचा खर्च', // PROPOSED (Marathi)
-    riskTitle: 'काम मागे पडतंय', // PROPOSED (Marathi)
     pendingToday: (n: number) => `आज ${n} कामं बाकी`, // existing app line ("आज N कामं बाकी", oneAllClearSurface)
     // The farmer's own to-do tasks still open (the to-do page is "करायची कामे", reflect/todoModel).
     tasksOpen: (n: number) => `करायच्या यादीत ${n} कामं बाकी`, // PROPOSED (Marathi)
-    sprayGap: (n: number) => `फवारणी करून ${n} दिवस झाले`, // PROPOSED (Marathi)
-    waterGap: (n: number) => `पाणी देऊन ${n} दिवस झाले`, // PROPOSED (Marathi)
     // Shortened from the app's own close-day line "दिवस पूर्ण करण्यासाठी क्लिक करा" (dfesTranslations clickToClose).
     closeDay: 'दिवस पूर्ण करा', // PROPOSED (Marathi)
     // spec: plr-d10 lane L8b-2 - said only when a choice could not be sent to the server yet (the plot's crop season has not
