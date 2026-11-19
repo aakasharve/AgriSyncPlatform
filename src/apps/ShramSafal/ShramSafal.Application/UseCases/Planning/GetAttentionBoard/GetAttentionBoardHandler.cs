@@ -144,7 +144,9 @@ public sealed class GetAttentionBoardHandler(
                     // stored days (a moved step on its moved day) plus the season's LOCALLY ADDED rows. The rows a template generated are NOT
                     // read (the schedule asks the same steps: no double count).
                     var local = planned.Where(p => p.IsLocallyAdded).ToList();
-                    if (plotSchedules.Any(sch => sch.Steps.Any(st => st.Step.PlannedDate <= today)) || local.Any(p => p.PlannedDate <= today))
+                    // spec: plr-d10 lane POSTPONE-B - a step whose ORIGINAL day has come is looked at even when it was postponed to a later day
+                    // (its reminder day is then in the future): the plot's late count and health are judged on the schedule's own days.
+                    if (plotSchedules.Any(sch => sch.Steps.Any(st => st.Step.PlannedDate <= today || st.OriginalDate <= today)) || local.Any(p => p.PlannedDate <= today))
                     {
                         var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
                         var recorded = ToRecordedWork(executed, logFacts);
@@ -164,14 +166,30 @@ public sealed class GetAttentionBoardHandler(
                             .ToList();
                         var localStatuses = ScheduledWorkMatcher.Match(local, recorded, today);
 
+                        // spec: plr-d10 lane POSTPONE-B (founder pick B: "the original date still counts as late for the plot") - the plot's health
+                        // and late count are read on each step's ORIGINAL day (the day its schedule asks it), never on the day a person postponed
+                        // it to; otherwise every postpone made the plot look healthier. When nothing was postponed this is the very same read.
+                        // Only the LIST (what to remind today) keeps the moved day, as before.
+                        var judged = plotSchedules.Any(sch => sch.AnyMoved)
+                            ? plotSchedules
+                                .Select(sch => sch.OnOriginalDays())
+                                .Select(sch => (Schedule: sch, Statuses: ScheduledWorkMatcher.Match(sch.Steps.Select(st => st.Step), recorded, today)))
+                                .ToList()
+                            : perSchedule;
+
                         health = HealthOfDueSteps(
-                            perSchedule.SelectMany(p => p.Statuses.Select(s => (s.Step.ActivityName, s.State)))
+                            judged.SelectMany(p => p.Statuses.Select(s => (s.Step.ActivityName, s.State)))
                                 .Concat(localStatuses.Select(s => (s.Planned.ActivityName, s.State))));
 
-                        foreach (var item in MergeOpenSteps(perSchedule, farmId, plot.Id, plot.Name, latestCycle.Id, visibleRecorded, today))
+                        // the merged item counts once; a step due today is not overdue
+                        var openItems = MergeOpenSteps(perSchedule, farmId, plot.Id, plot.Name, latestCycle.Id, visibleRecorded, today);
+                        var judgedItems = ReferenceEquals(judged, perSchedule)
+                            ? openItems
+                            : MergeOpenSteps(judged, farmId, plot.Id, plot.Name, latestCycle.Id, visibleRecorded, today);
+                        overdueCount += judgedItems.Count(item => item.ReasonKey != ScheduledReasonKey.DueToday);
+
+                        foreach (var item in openItems)
                         {
-                            // the merged item counts once; a step due today is not overdue
-                            if (item.ReasonKey != ScheduledReasonKey.DueToday) overdueCount++;
                             if (!mayListScheduleSteps) continue;
                             scheduledWork.Add(item);
                         }
@@ -399,7 +417,9 @@ public sealed class GetAttentionBoardHandler(
                     ReasonKey: ScheduledReasonKey.Of(g.Status.DaysLate, missed),
                     ActivityId: g.Primary.ActivityId,
                     OriginalDate: g.Primary.OriginalDate,
-                    ScheduleDay: g.Primary.ScheduleDay);
+                    ScheduleDay: g.Primary.ScheduleDay,
+                    // spec: plr-d10 lane POSTPONE-B - null (not 0) for a step never postponed: its wire shape is what it was.
+                    PostponeCount: g.Primary.PostponeCount > 0 ? g.Primary.PostponeCount : null);
             })
             .ToList();
     }
