@@ -8,9 +8,9 @@ import { useOrgKey } from '@/lib/orgQuery';
  * COMPANY MIS — WHAT `GET /shramsafal/admin/mis/company` RETURNS.
  *
  * The shape is the server's `CompanyMisDto` (CR-2a, `CompanyMisDto.cs`, with
- * its amendments A9 to A12), camelCase. Every number is a `MisValue`: a value,
- * or `null` with the server's reason code. `null` is never a zero and the
- * pages never print it as one.
+ * its amendments A9 to A12, and the CR-2c additions), camelCase. Every number
+ * is a `MisValue`: a value, or `null` with the server's reason code. `null` is
+ * never a zero and the pages never print it as one.
  *
  * Every `*Pct` field is ALREADY a percentage (42.5 means 42.5%). Format it
  * with `fmtPctPoints`, never with a ratio formatter.
@@ -29,6 +29,7 @@ export type MisReasonCode =
   | 'no_complete_window'
   | 'farm_list_unreadable'
   | 'no_samples'
+  | 'not_recorded'
   | 'too_many_farms_for_live_count';
 
 /** `notMeasuredReason` is typed as a string so an unknown code fails closed. */
@@ -104,6 +105,55 @@ export interface MisAcresPoint {
   acres: number;
 }
 
+/**
+ * CR-2c: a served list. `notMeasuredReason` set = the list was not counted
+ * (its items are then not shown); null with no items = counted, and none.
+ */
+export interface MisList<T> {
+  items: T[];
+  notMeasuredReason: string | null;
+}
+
+/** Farm-days that got this understanding score (0..10) in the period. */
+export interface MisScoreBucket {
+  score: number;
+  farmDays: number;
+}
+
+/** `platform` is the server's word ("android" = the Android app); `sharePct` is already a percentage. */
+export interface MisVersionShare {
+  version: string;
+  platform: string;
+  people: number;
+  sharePct: number;
+}
+
+/** `people` and `sharePct` are null when the feature is not measured, with the reason code. */
+export interface MisFeatureUse {
+  feature: string;
+  people: number | null;
+  sharePct: number | null;
+  notMeasuredReason: string | null;
+}
+
+/** `role` is the server's role name, as in `MisRoleCount`. */
+export interface MisFeatureRole {
+  feature: string;
+  role: string;
+  people: number;
+}
+
+export interface MisKindCount {
+  kind: string;
+  entries: number;
+}
+
+export interface MisCropRow {
+  cropName: string;
+  farms: number;
+  acres: number;
+}
+
 export interface CompanyMis {
   countedAtUtc: string;
   timeZone: string;
@@ -122,6 +172,9 @@ export interface CompanyMis {
     logsRecorded: MisNumber;
     voiceLogs: MisNumber;
     voiceSharePct: MisNumber;
+    /** CR-2c: median understanding score of scored farm-days, out of 10. */
+    understandingMedian: MisNumber;
+    understandingScoredDays: MisNumber;
     signUpsByDay: MisDayPoint[];
     activePeopleByDay: MisDayPoint[];
     logsByWeek: MisWeekSplit[];
@@ -138,6 +191,9 @@ export interface CompanyMis {
     whenLogged: MisHeatCell[];
     whenLoggedClock: string;
     roleMixOfMau: MisRoleCount[];
+    featureUse: MisList<MisFeatureUse>;
+    featureUseByRole: MisList<MisFeatureRole>;
+    logsByKind: MisList<MisKindCount>;
   };
   retention: {
     d1Pct: MisNumber;
@@ -160,6 +216,14 @@ export interface CompanyMis {
     transcriptionP95Ms: MisNumber;
     logsCorrected: MisNumber;
     logsCorrectedPct: MisNumber;
+    understandingSpread: MisList<MisScoreBucket>;
+    /** Refused attempts (one change can be refused many times) and accepted changes; every upload. */
+    syncRefusedChanges: MisNumber;
+    syncAcceptedChanges: MisNumber;
+    syncRefusedPct: MisNumber;
+    appVersions: MisList<MisVersionShare>;
+    /** yyyy-MM-dd India day of the first app-seen record; null = none yet. */
+    appVersionsSeenSince: string | null;
   };
   farms: {
     activeFarms: MisNumber;
@@ -169,6 +233,7 @@ export interface CompanyMis {
     farmsPerFpo: MisFpoRow[];
     acresByWeek: MisAcresPoint[];
     activeFarmsInFpoPct: MisNumber;
+    cropsOnActiveFarms: MisList<MisCropRow>;
   };
 }
 

@@ -3,16 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Company MIS — Quality: does voice work (recordings saved, speech service time,
- * corrections). Sync failures, crashes, the मला किती समजलं spread and version
- * adoption are not counted yet and say why.
+ * corrections), how the मला किती समजलं scores spread, how many changes from
+ * phones the server refused, and which app versions people are on. Crashes are
+ * not counted yet and say why.
  */
 import React from 'react';
 import { LineChart } from './MisLineChart';
+import { ColumnChart } from './MisColumnChart';
+import { BarTable, type BarRow } from './MisSmallCharts';
 import { ChartBody, ChartCard, ItemLines, KpiStrip, NotMeasuredYet, Row, compareLegend, seriesTable, withPrevious, type MisSectionProps } from './MisUi';
 import { SERIES } from './misTheme';
 import { itemByKey } from './misItems';
-import { fmtDec, fmtMs, fmtPctPoints } from './misFormat';
-import type { QualityView } from './misView';
+import { fmtCompact, fmtDec, fmtInt, fmtMs, fmtPctPoints } from './misFormat';
+import { SYNC_EVERY_UPLOAD, SYNC_REFUSED_AGAIN, type QualityView } from './misView';
 
 const why = (key: string) => itemByKey(key).why ?? '';
 const pts = (v: number) => fmtPctPoints(v);
@@ -23,6 +26,11 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
     const corrected = view.corrected;
     const corrPrev = compare && corrected.kind === 'chart' && corrected.data.previous !== null;
     const latency = view.latency;
+    const spread = view.spread;
+    const sync = view.sync;
+    const syncNote = [SYNC_REFUSED_AGAIN, SYNC_EVERY_UPLOAD, sync.kind === 'chart' && sync.data.refusedWhy !== null ? `Refused changes are not measured: ${sync.data.refusedWhy}` : null]
+        .filter((x): x is string => x !== null)
+        .join(' ');
     return (
         <div className="space-y-5">
             <KpiStrip tiles={view.tiles} compare={compare} />
@@ -92,9 +100,23 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
                     item="quality.scoreSpread"
                     className="col-span-12 xl:col-span-6"
                     title="मला किती समजलं, score spread"
-                    subtitle="How much of each voice entry the app understood, share of entries per band"
+                    subtitle="Farm-days at each score in this period"
+                    table={spread.kind === 'chart'
+                        ? seriesTable('Score', spread.data.labels, [{ name: 'Farm-days', values: spread.data.values, fmt: fmtInt }])
+                        : undefined}
                 >
-                    <NotMeasuredYet why={why('quality.scoreSpread')} />
+                    <ChartBody chart={spread} checkedAt={checkedAt}>
+                        {(s) => (
+                            <ColumnChart
+                                labels={s.labels}
+                                titles={s.titles}
+                                ariaLabel="Farm-days at each understanding score"
+                                yFormat={fmtCompact}
+                                valueFormat={fmtInt}
+                                series={[{ key: 'farmDays', label: 'Farm-days', color: SERIES.s1, values: s.values }]}
+                            />
+                        )}
+                    </ChartBody>
                 </ChartCard>
                 <ChartCard
                     item="quality.corrected"
@@ -127,27 +149,71 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
             <Row>
                 <ChartCard
                     item="quality.syncFailChart"
-                    className="col-span-12 lg:col-span-6 xl:col-span-4"
+                    className="col-span-12 xl:col-span-8"
                     title="Sync failures"
-                    subtitle="Uploads that had to retry"
+                    subtitle="Changes from phones, refused and accepted, each day"
+                    legend={sync.kind === 'chart' ? [{ label: 'Refused', color: SERIES.s1, shape: 'line' }, { label: 'Accepted', color: SERIES.s2, shape: 'line' }] : undefined}
+                    table={sync.kind === 'chart'
+                        ? seriesTable('Day', sync.data.titles, [
+                            { name: 'Refused', values: sync.data.refused, fmt: fmtInt, empty: 'not measured' },
+                            { name: 'Accepted', values: sync.data.accepted, fmt: fmtInt, empty: 'not measured' },
+                        ])
+                        : undefined}
+                    footnote={syncNote}
                 >
-                    <NotMeasuredYet why={why('quality.syncFailChart')} />
+                    <ChartBody chart={sync} checkedAt={checkedAt}>
+                        {(s) => (
+                            <LineChart
+                                labels={s.labels}
+                                ariaLabel="Changes from phones refused and accepted by the server, per day"
+                                yFormat={fmtCompact}
+                                yMin={0}
+                                titleAt={(i) => s.titles[i]}
+                                series={[
+                                    { key: 'refused', label: 'Refused', color: SERIES.s1, values: s.refused },
+                                    { key: 'accepted', label: 'Accepted', color: SERIES.s2, values: s.accepted },
+                                ]}
+                            />
+                        )}
+                    </ChartBody>
                 </ChartCard>
                 <ChartCard
                     item="quality.crashByVersion"
-                    className="col-span-12 lg:col-span-6 xl:col-span-4"
+                    className="col-span-12 xl:col-span-4"
                     title="Crashes by app version"
                     subtitle="Crashes per thousand sessions in this range"
                 >
                     <NotMeasuredYet why={why('quality.crashByVersion')} />
                 </ChartCard>
+            </Row>
+            <Row>
                 <ChartCard
                     item="quality.versionAdoption"
-                    className="col-span-12 xl:col-span-4"
+                    className="col-span-12"
                     title="App version adoption"
-                    subtitle="Share of sessions on each version"
+                    subtitle="People seen in this period, by the newest version each used"
+                    footnote={view.versionsKnownSince ?? undefined}
                 >
-                    <NotMeasuredYet why={why('quality.versionAdoption')} />
+                    <ChartBody chart={view.versions} checkedAt={checkedAt}>
+                        {(v) => (
+                            <BarTable
+                                rows={v.rows.map((r): BarRow => ({
+                                    key: r.key,
+                                    label: r.version,
+                                    value: r.share,
+                                    display: r.shareText,
+                                    extra: [r.seenOn, fmtInt(r.people)],
+                                    color: SERIES.s1,
+                                }))}
+                                caption="People on each app version, the Android app and other ways apart"
+                                labelHeader="Version"
+                                valueHeader="Share"
+                                extraHeaders={['Seen on', 'People']}
+                                compare={false}
+                                max={100}
+                            />
+                        )}
+                    </ChartBody>
                 </ChartCard>
             </Row>
         </div>

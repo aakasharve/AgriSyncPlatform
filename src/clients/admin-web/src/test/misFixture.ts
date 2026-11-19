@@ -16,6 +16,11 @@ import type { CompanyMis, MisNumber, MisDayPoint } from '@/hooks/useCompanyMis';
  * quality day lists at index 5 are null (a day with nothing to divide / no
  * sample), never 0.
  *
+ * CR-2c additions (the plan's "answer additions"): the understanding median
+ * 6.5 rests on 684 scored farm-days, the spread's eleven buckets add up to
+ * 684 and split 342 / 342 around 6 and 7; sync 118 refused of 3,482 sent
+ * (3.4%); app versions known since 24 Oct 2026, after the range's first day.
+ *
  * Range: 17 Oct – 15 Nov 2026 (30 India days); previous: 17 Sep – 16 Oct 2026.
  * Counted at 2026-11-15T09:02:00Z = 15 Nov 2026, 2:32 pm India time.
  *
@@ -130,6 +135,8 @@ export function baseFixture(): CompanyMis {
       logsRecorded: num(913, 864, spread(913), spread(864)),
       voiceLogs: num(388, 349, spread(388), spread(349)),
       voiceSharePct: num(42.5, 40.4, ramp(42.5, 0.05, 30, 2), ramp(40.4, 0.05, 30, 2)),
+      understandingMedian: num(6.5, 5.5, ramp(6.5, 0.05, 30, 2), ramp(5.5, 0.05, 30, 2)),
+      understandingScoredDays: num(684, 618, spread(684), spread(618)),
       signUpsByDay: dayPoints(FROM, signUpsDays),
       activePeopleByDay: dayPoints(FROM, ramp(143)),
       logsByWeek: [
@@ -158,6 +165,45 @@ export function baseFixture(): CompanyMis {
         { role: 'Worker', people: 158 },
         { role: 'Unknown', people: 45 },
       ],
+      featureUse: {
+        items: [
+          { feature: 'entries', people: 512, sharePct: 88.3, notMeasuredReason: null },
+          { feature: 'voice', people: 301, sharePct: 51.9, notMeasuredReason: null },
+          { feature: 'costs', people: 177, sharePct: 30.5, notMeasuredReason: null },
+          { feature: 'attendance', people: 133, sharePct: 22.9, notMeasuredReason: null },
+          { feature: 'photos', people: 208, sharePct: 35.9, notMeasuredReason: null },
+          { feature: 'job_cards', people: 77, sharePct: 13.3, notMeasuredReason: null },
+          { feature: 'compare', people: null, sharePct: null, notMeasuredReason: 'not_recorded' },
+        ],
+        notMeasuredReason: null,
+      },
+      // Only the (feature, role) pairs counted; e.g. no Worker made a job card.
+      featureUseByRole: {
+        items: [
+          { feature: 'entries', role: 'PrimaryOwner', people: 263 },
+          { feature: 'entries', role: 'Worker', people: 194 },
+          { feature: 'entries', role: 'Mukadam', people: 55 },
+          { feature: 'voice', role: 'PrimaryOwner', people: 217 },
+          { feature: 'voice', role: 'Worker', people: 84 },
+          { feature: 'costs', role: 'PrimaryOwner', people: 166 },
+          { feature: 'attendance', role: 'Mukadam', people: 98 },
+          { feature: 'attendance', role: 'PrimaryOwner', people: 36 },
+          { feature: 'photos', role: 'PrimaryOwner', people: 154 },
+          { feature: 'job_cards', role: 'Mukadam', people: 42 },
+        ],
+        notMeasuredReason: null,
+      },
+      logsByKind: {
+        items: [
+          { kind: 'water', entries: 347 },
+          { kind: 'nutrition', entries: 229 },
+          { kind: 'spray', entries: 193 },
+          { kind: 'other_work', entries: 438 },
+          { kind: 'labour', entries: 276 },
+          { kind: 'not_recognised', entries: 119 },
+        ],
+        notMeasuredReason: null,
+      },
     },
     retention: {
       d1Pct: num(38.6, 35.2),
@@ -186,6 +232,35 @@ export function baseFixture(): CompanyMis {
       transcriptionP95Ms: num(6870, 7420, withNull(ramp(6870, 20), 5), ramp(7420, 20)),
       logsCorrected: num(79, 68, spread(79), spread(68)),
       logsCorrectedPct: num(8.7, 7.9, ramp(8.7, 0.1, 30, 1), ramp(7.9, 0.1, 30, 1)),
+      understandingSpread: {
+        items: [
+          { score: 0, farmDays: 35 },
+          { score: 1, farmDays: 37 },
+          { score: 2, farmDays: 39 },
+          { score: 3, farmDays: 43 },
+          { score: 4, farmDays: 47 },
+          { score: 5, farmDays: 51 },
+          { score: 6, farmDays: 90 },
+          { score: 7, farmDays: 71 },
+          { score: 8, farmDays: 82 },
+          { score: 9, farmDays: 127 },
+          { score: 10, farmDays: 62 },
+        ],
+        notMeasuredReason: null,
+      },
+      syncRefusedChanges: num(118, 103, spread(118), spread(103)),
+      syncAcceptedChanges: num(3364, 2987, spread(3364), spread(2987)),
+      syncRefusedPct: num(3.4, 3.3, ramp(3.4, 0.01, 30, 2), ramp(3.3, 0.01, 30, 2)),
+      // Invented version numbers; one version seen both on the Android app and elsewhere.
+      appVersions: {
+        items: [
+          { version: '1.0.18', platform: 'android', people: 341, sharePct: 65.1 },
+          { version: '0.9.0', platform: 'android', people: 142, sharePct: 27.1 },
+          { version: '1.0.18', platform: 'web', people: 41, sharePct: 7.8 },
+        ],
+        notMeasuredReason: null,
+      },
+      appVersionsSeenSince: '2026-10-24',
     },
     farms: {
       activeFarms: num(415, 379, ramp(415), ramp(379)),
@@ -204,6 +279,15 @@ export function baseFixture(): CompanyMis {
         { day: '2026-11-15', acres: 963.4 },
       ],
       activeFarmsInFpoPct: num(31.8, 29.6, ramp(31.8, 0.1, 30, 1), ramp(29.6, 0.1, 30, 1)),
+      cropsOnActiveFarms: {
+        items: [
+          { cropName: 'Grapes', farms: 211, acres: 538.6 },
+          { cropName: 'Pomegranate', farms: 117, acres: 286.4 },
+          { cropName: 'Onion', farms: 88, acres: 164.7 },
+          { cropName: 'Soybean', farms: 63, acres: 157.3 },
+        ],
+        notMeasuredReason: null,
+      },
     },
   };
 }
@@ -263,6 +347,7 @@ export function misEnvelope(data: CompanyMis = misFixture()) {
 export const FARM_DERIVED_NUMBERS: readonly string[] = [
   'overview.activeFarms', 'overview.dau', 'overview.wau', 'overview.mau', 'overview.stickinessPct',
   'overview.logsRecorded', 'overview.voiceLogs', 'overview.voiceSharePct',
+  'overview.understandingMedian', 'overview.understandingScoredDays',
   'acquisition.hasFarm', 'acquisition.firstLog', 'acquisition.habit', 'acquisition.habitEligible',
   'engagement.logsPerActiveFarmPerWeek',
   'retention.d1Pct', 'retention.d30Pct', 'retention.activeFarms0To6', 'retention.quietFarms7To29',
@@ -272,7 +357,11 @@ export const FARM_DERIVED_NUMBERS: readonly string[] = [
   'farms.activeFarms', 'farms.farmsRegistered', 'farms.acresCovered', 'farms.farmsInFpo', 'farms.activeFarmsInFpoPct',
 ];
 
-/** The answer when the farm list could not be read (CR-2a "response contract" + A6). */
+/**
+ * The answer when the farm list could not be read (CR-2a "response contract" + A6).
+ * CR-2c: the block reaches every farm-derived list too (#10, #49, #26, #29, #31,
+ * #59), never app versions or sync (#52, #47, #50), which are not read per farm.
+ */
 export function farmsBlockedFixture(code = 'farm_list_unreadable'): CompanyMis {
   const d = baseFixture();
   for (const path of FARM_DERIVED_NUMBERS) {
@@ -290,6 +379,11 @@ export function farmsBlockedFixture(code = 'farm_list_unreadable'): CompanyMis {
   d.retention.winBackByDay = [];
   d.farms.farmsPerFpo = [];
   d.farms.acresByWeek = [];
+  d.engagement.featureUse = { items: [], notMeasuredReason: code };
+  d.engagement.featureUseByRole = { items: [], notMeasuredReason: code };
+  d.engagement.logsByKind = { items: [], notMeasuredReason: code };
+  d.quality.understandingSpread = { items: [], notMeasuredReason: code };
+  d.farms.cropsOnActiveFarms = { items: [], notMeasuredReason: code };
   return d;
 }
 
@@ -304,5 +398,10 @@ export function allNotMeasuredFixture(): CompanyMis {
   d.overview.signUps = notMeasured('no_complete_window');
   d.acquisition.verified = notMeasured('no_complete_window');
   d.overview.signUpsByDay = [];
+  d.quality.syncRefusedChanges = notMeasured('denominator_zero');
+  d.quality.syncAcceptedChanges = notMeasured('denominator_zero');
+  d.quality.syncRefusedPct = notMeasured('denominator_zero');
+  d.quality.appVersions = { items: [], notMeasuredReason: null };
+  d.quality.appVersionsSeenSince = null;
   return d;
 }

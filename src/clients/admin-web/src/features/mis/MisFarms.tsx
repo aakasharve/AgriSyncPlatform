@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Company MIS — Farms & geography: active and registered farms, the land they
- * cover and the producer organisations they belong to. Districts, talukas and
- * crops are not counted yet and say why.
+ * cover, the crops on them and the producer organisations they belong to.
+ * Districts and talukas are not counted yet and say what blocks them.
  */
 import React from 'react';
 import { LineChart } from './MisLineChart';
@@ -35,9 +35,27 @@ export const FarmsSection: React.FC<MisSectionProps<FarmsView>> = ({ view, compa
                 item="farms.crops"
                 className="col-span-12 xl:col-span-5"
                 title="Crops on active farms"
-                subtitle="Main crop of each farm, with the land it covers"
+                subtitle="Every crop being grown on an active farm, by the name entered"
             >
-                <NotMeasuredYet why={why('farms.crops')} />
+                <ChartBody chart={view.crops} checkedAt={checkedAt}>
+                    {(c) => (
+                        <BarTable
+                            rows={c.rows.map((r): BarRow => ({
+                                key: r.key,
+                                label: r.label,
+                                value: r.farms,
+                                display: fmtInt(r.farms),
+                                extra: [acresFmt(r.acres)],
+                                color: SERIES.s1,
+                            }))}
+                            caption="Crops on active farms, with their farms and plot acres"
+                            labelHeader="Crop"
+                            valueHeader="Farms"
+                            extraHeaders={['Acres']}
+                            compare={false}
+                        />
+                    )}
+                </ChartBody>
             </ChartCard>
         </Row>
         <Row>
