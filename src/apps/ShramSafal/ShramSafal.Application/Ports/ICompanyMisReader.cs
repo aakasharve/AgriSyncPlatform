@@ -107,9 +107,21 @@ public sealed record CompanyMisRows(
 public sealed record MisFarmRow(
     Guid FarmId, Guid OwnerUserId, DateTime CreatedAtUtc, DateTime? LastEntryUtc, DateTime? FirstEntryUtc);
 
-/// <summary>One ssf.daily_logs row. CreatedAtUtc is server arrival time.</summary>
+/// <summary>
+/// One ssf.daily_logs row. CreatedAtUtc is server arrival time. Plan CR-2c (#26), read only by
+/// <c>ReadForCompanyMisAsync</c> (folded into the same entries query, amendment E6): ActivityTypes = the entry's
+/// <c>log_tasks.activity_type</c> values (empty: no task line; null: not read); CaptureScope = <c>capture_scope</c>
+/// (<c>labour</c> at the हजेरी door; null for every other save and for entries saved before lane F1).
+/// </summary>
 public sealed record MisEntryRow(
-    Guid FarmId, Guid OperatorUserId, DateTime CreatedAtUtc, bool IsVoice, int ContentVersion, Guid? SourceAiJobId);
+    Guid FarmId,
+    Guid OperatorUserId,
+    DateTime CreatedAtUtc,
+    bool IsVoice,
+    int ContentVersion,
+    Guid? SourceAiJobId,
+    IReadOnlyList<string>? ActivityTypes = null,
+    string? CaptureScope = null);
 
 /// <summary>Role is an AppRole name; Status is the MembershipStatus number (3 = Active).</summary>
 public sealed record MisMembershipRow(Guid FarmId, Guid UserId, string Role, int Status);

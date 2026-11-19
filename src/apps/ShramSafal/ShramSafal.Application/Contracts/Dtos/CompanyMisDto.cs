@@ -76,7 +76,8 @@ public sealed record MisAcquisitionDto(
 /// <summary>
 /// WhenLogged always has 168 cells; WhenLoggedClock is always "server-arrival". Plan CR-2c (#29, #31), the current
 /// period only: FeatureUse has one item per feature key (entries, voice, costs, attendance, photos, job_cards,
-/// compare); FeatureUseByRole one item per (feature, role) somebody used it in.
+/// compare); FeatureUseByRole one item per (feature, role) somebody used it in; LogsByKind (#26) one item per kind
+/// (water, nutrition, spray, other_work, labour, not_recognised), zeros real.
 /// </summary>
 public sealed record MisEngagementDto(
     MisNumberDto LogsPerActiveFarmPerWeek,
@@ -84,7 +85,8 @@ public sealed record MisEngagementDto(
     string WhenLoggedClock,
     IReadOnlyList<MisRoleCountDto> RoleMixOfMau,
     MisListDto<MisFeatureUseDto> FeatureUse,
-    MisListDto<MisFeatureRoleDto> FeatureUseByRole);
+    MisListDto<MisFeatureRoleDto> FeatureUseByRole,
+    MisListDto<MisKindCountDto> LogsByKind);
 
 public sealed record MisRetentionDto(
     MisNumberDto D1Pct,
@@ -192,5 +194,12 @@ public sealed record MisFeatureRoleDto(string Feature, string Role, int People);
 /// under such cycles (a plot with two crops counts for both).
 /// </summary>
 public sealed record MisCropRowDto(string CropName, int Farms, decimal Acres);
+
+/// <summary>
+/// #26: Entries = entries saved in the period that have this kind. An entry's kinds are its task lines read by the
+/// app's own work-word list (the one Compare uses), plus "labour" when saved at the हजेरी door; it counts once per
+/// distinct kind, so one entry can count under two kinds.
+/// </summary>
+public sealed record MisKindCountDto(string Kind, int Entries);
 
 public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

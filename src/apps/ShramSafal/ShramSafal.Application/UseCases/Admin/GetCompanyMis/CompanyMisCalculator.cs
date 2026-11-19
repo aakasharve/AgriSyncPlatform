@@ -3,7 +3,9 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
 using ShramSafal.Application.UseCases.Dfes;
+using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
@@ -72,6 +74,36 @@ public static class CompanyMisCalculator
     [
         FeatureEntries, FeatureVoice, FeatureCosts, FeatureAttendance, FeaturePhotos, FeatureJobCards, FeatureCompare,
     ];
+
+    // Plan CR-2c, #26: the kind keys, in answer order.
+    public const string KindWater = "water";
+    public const string KindNutrition = "nutrition";
+    public const string KindSpray = "spray";
+    public const string KindOtherWork = "other_work";
+    public const string KindLabour = "labour";
+    public const string KindNotRecognised = "not_recognised";
+
+    public static readonly IReadOnlyList<string> KindKeys =
+    [
+        KindWater, KindNutrition, KindSpray, KindOtherWork, KindLabour, KindNotRecognised,
+    ];
+
+    /// <summary>
+    /// Plan CR-2c, #26: the kind of one task line, read by the app's own work-word list
+    /// (<see cref="WorkRecogniser.Recognise"/>, the reading Compare uses; no list is invented here): Irrigation is
+    /// water, Nutrition nutrition, Spray spray, Work other work; words it does not recognise are not recognised.
+    /// </summary>
+    public static string KindOfActivity(string? activityType) =>
+        string.IsNullOrWhiteSpace(activityType)
+            ? KindNotRecognised
+            : WorkRecogniser.Recognise(activityType)?.Part switch
+            {
+                WorkPart.Irrigation => KindWater,
+                WorkPart.Nutrition => KindNutrition,
+                WorkPart.Spray => KindSpray,
+                WorkPart.Work => KindOtherWork,
+                _ => KindNotRecognised,
+            };
 
     /// <summary>Amendment A11: the cohort grid's days after day 0.</summary>
     private static readonly int[] CohortGridDays = [1, 7, 14, 30];
@@ -212,7 +244,9 @@ public static class CompanyMisCalculator
             RoleMixOfMau: Series(() => RoleMixOfMau(data, current)),
             // CR-2c #29, #31.
             FeatureUse: FarmList(() => FeatureUse(data, current)),
-            FeatureUseByRole: FarmList(() => FeatureUseByRole(data, current)));
+            FeatureUseByRole: FarmList(() => FeatureUseByRole(data, current)),
+            // CR-2c #26.
+            LogsByKind: FarmList(() => LogsByKind(data, current)));
 
         MisNumberDto Band(int minAge, int maxAge) =>
             Farm(p => Count(data.FarmsInAgeBand(p.To, minAge, maxAge)), DayForm.AsOf);
@@ -723,6 +757,28 @@ public static class CompanyMisCalculator
         return new MisListDto<MisCropRowDto>(items, null);
     }
 
+    /// <summary>
+    /// #26: entries saved in the period (test accounts left out) per kind. An entry's kinds are the distinct kinds of
+    /// its task lines (<see cref="KindOfActivity"/>), plus <see cref="KindLabour"/> when it was saved at the हजेरी
+    /// door (<c>capture_scope = labour</c>; entries saved before lane F1 carry none and are not labour by this rule).
+    /// An entry with no kind at all (no task line, not labour) counts under <see cref="KindNotRecognised"/>. Each
+    /// entry counts once per distinct kind. All six kinds are listed; zeros are real.
+    /// </summary>
+    private static MisListDto<MisKindCountDto> LogsByKind(Data data, Period p)
+    {
+        var counts = KindKeys.ToDictionary(k => k, _ => 0, StringComparer.Ordinal);
+        foreach (var entry in data.EntriesIn(p.From, p.To))
+        {
+            foreach (var kind in data.KindsOf(entry))
+            {
+                counts[kind]++;
+            }
+        }
+
+        return new MisListDto<MisKindCountDto>(
+            KindKeys.Select(k => new MisKindCountDto(k, counts[k])).ToList(), null);
+    }
+
     /// <summary>#47, #50: refusals were recorded in production on every day of the period.</summary>
     private static bool SyncRefusalsRecordedFor(Period p) =>
         SyncRefusalsRecordedSince is { } since && p.From >= since;
@@ -789,7 +845,14 @@ public static class CompanyMisCalculator
     }
 
     private sealed record Entry(
-        Guid FarmId, Guid OperatorUserId, DateTime CreatedAtUtc, DateOnly Day, bool IsVoice, int ContentVersion);
+        Guid FarmId,
+        Guid OperatorUserId,
+        DateTime CreatedAtUtc,
+        DateOnly Day,
+        bool IsVoice,
+        int ContentVersion,
+        IReadOnlyList<string> ActivityTypes,
+        bool IsLabour);
 
     private sealed record CohortUser(Guid UserId, DateOnly Day0);
 
@@ -882,7 +945,10 @@ public static class CompanyMisCalculator
                 .Where(e => !excludedFarms.Contains(e.FarmId)
                             && !excludedUsers.Contains(e.OperatorUserId)
                             && e.CreatedAtUtc < countedAtUtc)
-                .Select(e => new Entry(e.FarmId, e.OperatorUserId, e.CreatedAtUtc, IstDay(e.CreatedAtUtc), e.IsVoice, e.ContentVersion))
+                .Select(e => new Entry(
+                    e.FarmId, e.OperatorUserId, e.CreatedAtUtc, IstDay(e.CreatedAtUtc), e.IsVoice, e.ContentVersion,
+                    e.ActivityTypes ?? [],
+                    string.Equals(e.CaptureScope, DailyLog.CaptureScopeLabour, StringComparison.Ordinal)))
                 .ToList();
 
             var referencedJobIds = rows.Entries
@@ -978,6 +1044,38 @@ public static class CompanyMisCalculator
         }
 
         private static readonly string DeclaredNoWorkDay = nameof(DayClassification.DeclaredNoWorkDay);
+
+        // CR-2c #26: each distinct activity text is read by the work-word list once per answer.
+        private readonly Dictionary<string, string> _kindByActivity = new(StringComparer.Ordinal);
+
+        /// <summary>CR-2c #26: the distinct kinds of one entry (see <see cref="LogsByKind"/>).</summary>
+        public HashSet<string> KindsOf(Entry entry)
+        {
+            var kinds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var activity in entry.ActivityTypes)
+            {
+                var key = activity ?? string.Empty;
+                if (!_kindByActivity.TryGetValue(key, out var kind))
+                {
+                    kind = KindOfActivity(key);
+                    _kindByActivity[key] = kind;
+                }
+
+                kinds.Add(kind);
+            }
+
+            if (entry.IsLabour)
+            {
+                kinds.Add(KindLabour);
+            }
+
+            if (kinds.Count == 0)
+            {
+                kinds.Add(KindNotRecognised);
+            }
+
+            return kinds;
+        }
 
         /// <summary>CR-2c #29, #31: every feature use with India day in the period.</summary>
         public List<FeatureUseRow> UsesIn(Period p)

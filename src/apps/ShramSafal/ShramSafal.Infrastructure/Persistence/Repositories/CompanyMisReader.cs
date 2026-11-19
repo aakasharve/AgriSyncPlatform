@@ -234,18 +234,46 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var firstEntryUtc = await counted.MinAsync(l => (DateTime?)l.CreatedAtUtc, ct);
         var lastEntryUtc = await counted.MaxAsync(l => (DateTime?)l.CreatedAtUtc, ct);
 
-        var entries = await _db.DailyLogs
+        var loaded = _db.DailyLogs
             .AsNoTracking()
-            .Where(l => l.FarmId == farmId && l.CreatedAtUtc >= sinceUtc && l.CreatedAtUtc < countedAtUtc)
-            .Select(l => new
-            {
-                OperatorUserId = (Guid)l.OperatorUserId,
-                l.CreatedAtUtc,
-                IsVoice = l.Provenance.Source == Source.Voice,
-                l.ContentVersion,
-                l.SourceAiJobId,
-            })
-            .ToListAsync(ct);
+            .Where(l => l.FarmId == farmId && l.CreatedAtUtc >= sinceUtc && l.CreatedAtUtc < countedAtUtc);
+
+        List<MisEntryRow> entries;
+        if (additionsSinceUtc is null)
+        {
+            var rows = await loaded
+                .Select(l => new
+                {
+                    OperatorUserId = (Guid)l.OperatorUserId,
+                    l.CreatedAtUtc,
+                    IsVoice = l.Provenance.Source == Source.Voice,
+                    l.ContentVersion,
+                    l.SourceAiJobId,
+                })
+                .ToListAsync(ct);
+            entries = rows.Select(e => new MisEntryRow(
+                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId)).ToList();
+        }
+        else
+        {
+            // CR-2c #26 (amendment E6): the task lines' activity types and the capture scope are folded into this same
+            // entries query (log_tasks is gated through daily_logs), on the Company MIS path only.
+            var rows = await loaded
+                .Select(l => new
+                {
+                    OperatorUserId = (Guid)l.OperatorUserId,
+                    l.CreatedAtUtc,
+                    IsVoice = l.Provenance.Source == Source.Voice,
+                    l.ContentVersion,
+                    l.SourceAiJobId,
+                    l.CaptureScope,
+                    ActivityTypes = l.Tasks.Select(t => t.ActivityType).ToList(),
+                })
+                .ToListAsync(ct);
+            entries = rows.Select(e => new MisEntryRow(
+                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId,
+                e.ActivityTypes, e.CaptureScope)).ToList();
+        }
 
         var memberships = await _db.FarmMemberships
             .AsNoTracking()
@@ -291,8 +319,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
 
         return new FarmRows(
             new MisFarmRow(farmGuid, farm.OwnerUserId, farm.CreatedAtUtc, lastEntryUtc, firstEntryUtc),
-            entries.Select(e => new MisEntryRow(
-                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId)).ToList(),
+            entries,
             memberships.Select(m => new MisMembershipRow(farmGuid, m.UserId, m.Role.ToString(), (int)m.Status)).ToList(),
             plots.Select(a => new MisPlotRow(farmGuid, a)).ToList(),
             jobs.Select(j => new MisVoiceJobRow(
