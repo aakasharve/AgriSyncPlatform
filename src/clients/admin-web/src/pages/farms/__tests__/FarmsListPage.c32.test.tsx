@@ -99,8 +99,10 @@ describe('All_farms_shows_tier_and_checked_days_and_no_entry (F4, F5)', () => {
     // The two lines of each, verbatim from the plan, sit under the table.
     const f4 = document.querySelector('[data-metric="farms-tier"]')!;
     expect(f4.textContent).toContain("Each farm's A to D group by checked days last week.");
+    expect(f4.textContent).toContain('Lets you sort farms into steady, light and absent users.');
     const f5 = document.querySelector('[data-metric="farms-wvfd7d"]')!;
     expect(f5.textContent).toContain("Each farm's days last week with an entry checked by a person.");
+    expect(f5.textContent).toContain('Shows how regularly each farm records its work.');
   });
 });
 
@@ -131,6 +133,23 @@ describe('A_farm_row_not_measured_says_so (C33 1)', () => {
     // One unreadable farm does not turn the page into a failure.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(/could not load/i)).toBeNull();
+  });
+});
+
+describe('A_test_account_row_says_so (C35 1)', () => {
+  it('A_test_account_row_says_so', async () => {
+    serve([
+      farm(1, 'Bhosale Mala'),
+      farm(2, 'Pawar Shet', { wvfd7d: null, selfOnlyDays7d: null, engagementTier: null, confirmedDaysNotMeasuredReason: 'test_account' }),
+    ]);
+    renderFarms();
+    const t = await table();
+    await screen.findByText('Pawar Shet', undefined, SETTLE);
+    for (const col of ['Tier', 'Checked days last week']) {
+      expect(cell(t, 'Pawar Shet', col), col).toBe('Test account, not counted');
+      expect(cell(t, 'Pawar Shet', col), col).not.toMatch(/No entry last week/i);
+    }
+    expect(cell(t, 'Bhosale Mala', 'Tier')).toBe('B');
   });
 });
 

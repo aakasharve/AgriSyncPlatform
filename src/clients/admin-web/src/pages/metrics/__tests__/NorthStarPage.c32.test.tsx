@@ -232,6 +232,13 @@ describe('Goal_says_not_set_yet', () => {
     expect(document.body.textContent).not.toMatch(/of goal|% of|percent/i);
   });
 
+  it('farm_list_unreadable says the C35 sentence, and that it is not a zero', async () => {
+    serve(answer({ currentWvfd: null, currentSelfOnlyDays: null, priorWvfd: null, weeks: [], farms: [], notMeasuredReason: 'farm_list_unreadable' }));
+    render();
+    await screen.findByText(/At least one farm could not be read/i, undefined, SETTLE);
+    expect(document.body.textContent).toContain('At least one farm could not be read, so these numbers were not counted. This is not a zero.');
+  });
+
   it('says it also when the days could not be counted', async () => {
     serve(answer({
       currentWvfd: null, currentSelfOnlyDays: null, priorWvfd: null, weeks: [], farms: [],
