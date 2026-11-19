@@ -76,7 +76,8 @@ public sealed class SetAndRemovePictureHandlerTests
         audit.ActorUserId.Value.Should().Be(Owner);
         audit.Payload.Should().Contain(row.Sha256).And.Contain("PERSON");
         audit.Payload.Should().NotContain(Convert.ToBase64String(bytes), "the audit row never carries the image");
-        _repo.Saves.Should().Be(1);
+        _store.Saves.Should().Be(1, "the first picture of a subject saves through the store (it can tell a lost first-upload race)");
+        _repo.Saves.Should().Be(0);
     }
 
     [Fact]

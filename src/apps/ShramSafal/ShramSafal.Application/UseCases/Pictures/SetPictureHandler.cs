@@ -100,25 +100,13 @@ public sealed class SetPictureHandler(
             await storage.SaveAsync(key, copy, contentType, ct);
         }
 
-        string? previousKey = null;
-        Picture picture;
-        if (existing is null)
-        {
-            picture = Picture.Create(Guid.NewGuid(), command.Kind, subjectId, contentType, bytes.Length, sha256, new UserId(command.CallerUserId), nowUtc);
-            store.Stage(picture);
-        }
-        else
-        {
-            picture = existing;
-            previousKey = existing.StorageKey;
-            picture.Replace(contentType, bytes.Length, sha256, new UserId(command.CallerUserId), nowUtc);
-        }
+        var setBy = new UserId(command.CallerUserId);
 
         // Provenance as the attachment upload carries it. The payload names the kind, the subject, the size and the hash: never the image.
-        await repository.AddAuditEventAsync(
+        Task StageAuditAsync(Picture row, bool replaced) => repository.AddAuditEventAsync(
             AuditEventFactory.Create(
                 entityType: "Picture",
-                entityId: picture.Id,
+                entityId: row.Id,
                 action: "PictureSet",
                 actorUserId: command.CallerUserId,
                 actorRole: actorRole,
@@ -128,7 +116,7 @@ public sealed class SetPictureHandler(
                     subjectId,
                     bytes = bytes.Length,
                     sha256,
-                    replaced = previousKey is not null,
+                    replaced,
                 },
                 farmId: null,
                 clientCommandId: null,
@@ -140,6 +128,44 @@ public sealed class SetPictureHandler(
                 sourceAiJobId: null),
             ct);
 
+        if (existing is null)
+        {
+            var created = Picture.Create(Guid.NewGuid(), command.Kind, subjectId, contentType, bytes.Length, sha256, setBy, nowUtc);
+            store.Stage(created);
+            await StageAuditAsync(created, replaced: false);
+            if (await store.TrySaveNewAsync(ct))
+            {
+                return Result.Success(PictureDto.Of(created));
+            }
+
+            // Lost the first-upload race: another request made this subject's first picture while this one wrote its file. The store has
+            // discarded what this request staged (the row and its audit row). Re-read the winner and carry on as an ordinary replace.
+            existing = await store.GetAsync(command.Kind, subjectId, ct);
+            if (existing is not null && existing.Sha256 == sha256)
+            {
+                // The same bytes: the key is the hash's, so the file this request wrote IS the winner's file (kept, not orphaned). Nothing to
+                // change and no audit row, as for the same file sent twice.
+                return Result.Success(PictureDto.Of(existing));
+            }
+        }
+
+        string? previousKey = null;
+        Picture picture;
+        if (existing is null)
+        {
+            // The winner was removed again before it could be re-read: a first save once more. A second lost race here is a real fault
+            // (the unique violation is thrown, not hidden).
+            picture = Picture.Create(Guid.NewGuid(), command.Kind, subjectId, contentType, bytes.Length, sha256, setBy, nowUtc);
+            store.Stage(picture);
+        }
+        else
+        {
+            picture = existing;
+            previousKey = existing.StorageKey;
+            picture.Replace(contentType, bytes.Length, sha256, setBy, nowUtc);
+        }
+
+        await StageAuditAsync(picture, replaced: previousKey is not null);
         await repository.SaveChangesAsync(ct);
 
         // The replaced file goes after the row that no longer names it. A failure to delete leaves an unreferenced file (never a row

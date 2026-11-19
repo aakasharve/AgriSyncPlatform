@@ -28,4 +28,13 @@ public interface IPictureStore
 
     /// <summary>Stages the deletion of a row; the caller saves.</summary>
     void Remove(Picture picture);
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-ID-S2 - saves the unit of work (a newly staged row and its audit row) for the FIRST picture of a subject.
+    /// Returns <c>true</c> when saved. Returns <c>false</c> ONLY when another request made the first picture of the same (kind, subject)
+    /// while this one was running (the one-row-per-subject unique index refused the insert): everything staged in this unit has then been
+    /// discarded and the failed statements undone, so the caller can re-read the winner and apply the normal replace rules. Any other
+    /// failure is thrown as it always was.
+    /// </summary>
+    Task<bool> TrySaveNewAsync(CancellationToken ct = default);
 }
