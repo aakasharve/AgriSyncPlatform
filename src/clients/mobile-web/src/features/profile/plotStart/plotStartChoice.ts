@@ -61,6 +61,16 @@ export function plantingWordKey(referenceType: string | null | undefined): Plant
     return referenceType === 'PRUNING' || referenceType === 'SOWING' || referenceType === 'TRANSPLANTING' ? referenceType : 'PLANTING';
 }
 
+/**
+ * What the wizard hands on with the new plot besides the plot itself: the schedule it follows by itself (`null` for a crop with no checked
+ * schedule - then NO adopt is made) and the day that schedule counts from, which is also the plot's own start date.
+ */
+export interface NewPlotStart {
+    scheduleTemplateId: string | null;
+    /** YYYY-MM-DD */
+    referenceDate: string;
+}
+
 export interface CheckedScheduleForCrop {
     templateId: string;
     /** The schedule's own name as the catalog holds it (shown in Marathi through `scheduleNameMr`). */
