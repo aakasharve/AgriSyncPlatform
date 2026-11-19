@@ -709,6 +709,35 @@ public static class ErrorExplanations
             + "Team schedule row exists, which is a data question, not something the farmer "
             + "did. Shipped phones may also still hold older parked rows carrying it."),
 
+        // Moving one step of a followed schedule to another day (plan CR-2d D13: written in plain words; where
+        // each is raised is cited in the commit that added them).
+        ["ShramSafal.ScheduleStepMoveInactive.InvalidCommand"] = new(
+            "A step of a schedule could not be moved to another day because that schedule is no longer followed on this plot.",
+            "The farm stopped following the schedule on that plot, switched it for another, or the schedule "
+            + "ran to its end, while the step was still showing on someone's phone. Nothing was moved."),
+
+        ["ShramSafal.ScheduleStepNotInSchedule.InvalidCommand"] = new(
+            "The step named is not one this schedule asks for on that day, so it could not be moved.",
+            "The schedule's days are worked out again from its start day every time. If the start day or the "
+            + "schedule itself changed after the screen was loaded, the step is no longer on the day the phone "
+            + "named. The same answer is given when the person cannot read that schedule at all. Nothing was moved."),
+
+        ["ShramSafal.ScheduleStepMoveDate.InvalidCommand"] = new(
+            "A step was being moved to a day that has already passed.",
+            "The new day is earlier than today on the farm's calendar, as the server counts it. Usually a "
+            + "screen left open past midnight, or a phone whose date is behind the real date. Nothing was moved."),
+
+        ["ShramSafal.ScheduleStepMoveTooFar.InvalidCommand"] = new(
+            "A step was being moved too far ahead: more than 90 days past today, or past the step's own day when that is later.",
+            "The limit is there so a step cannot be pushed away for ever. Usually a day picked by mistake, "
+            + "such as the wrong month or year. Nothing was moved."),
+
+        ["ShramSafal.ScheduleStepPostponeLimit.InvalidCommand"] = new(
+            "This step has already been postponed twice, and a third postponement is not allowed.",
+            "The count is the step's own earlier moves. After two, the farmer is asked to record the work or "
+            + "look at it in the schedule instead. A third attempt usually comes from an older app, or from a "
+            + "second phone that had not caught up with the earlier moves. Nothing was moved."),
+
         // ── ShramSafal — Planned work and reminders ──────────────────────────
         ["ShramSafal.PlannedWorkNotFound"] = new(
             "The planned work this request names is not one this person can act on in this farm.",
@@ -774,6 +803,63 @@ public static class ErrorExplanations
             + "one of the named plots has no record on it. A record that is on another farm or "
             + "hidden from the sender answers ShramSafal.DailyLogNotFound instead. Check that the "
             + "day's record was saved on the same plots the work names."),
+
+        // The owner's reminder settings (plan CR-2d D13: written in plain words; where each is raised is cited in
+        // the commit that added them).
+        ["ShramSafal.ReminderSettings.Forbidden"] = new(
+            "This person may not see or change the farm's reminder settings.",
+            "Only the farm's primary owner, or a member he has given the right to arrange reminders, may open "
+            + "them. A worker, a member with other rights only, or a member whose place on the farm is paused "
+            + "is refused. Usually the right was never given, or was taken away after the screen was loaded."),
+
+        ["ShramSafal.ReminderSettings.InvalidCommand"] = new(
+            "A reminder setting was sent with nothing chosen, or with a choice that kind of reminder does not offer.",
+            "Each kind of reminder (from records, from the farm's own planning, from a schedule) has its own "
+            + "list of choices. Usually the app and the server disagree on that list, for example when they "
+            + "are on different versions, or the setting was sent from outside the app. Marking a person "
+            + "without naming one gets the same answer. Nothing was changed."),
+
+        ["ShramSafal.ReminderAlwaysShowNotMember.InvalidCommand"] = new(
+            "The person being marked, so that everyone on the plot sees his reminders, is not an active member of this farm.",
+            "Usually he left the farm, or was removed from it, after the list of people was loaded on the "
+            + "phone. A person from another farm is refused the same way. Nothing was changed."),
+
+        ["ShramSafal.ReminderSettingsState.InvalidCommand"] = new(
+            "The reminder settings were changed by someone else at the same moment, so this change was not kept.",
+            "Two people, or one person on two phones, changed the reminder settings or marked the same person "
+            + "at the same time. The first change stands and nothing of the second was kept. Load the "
+            + "settings again and repeat the change if it is still wanted."),
+
+        // ── ShramSafal — Pictures (a person's own, a schedule's, a logo) ─────
+        // Plan CR-2d D13: written in plain words; where each is raised is cited in the commit that added them.
+        ["ShramSafal.PictureNotFound"] = new(
+            "The picture asked for could not be shown to this person.",
+            "A picture this person may not see gets exactly the same answer as one that does not exist, so "
+            + "nobody can find out whose pictures exist. Otherwise the picture was removed, or its stored "
+            + "file could not be opened."),
+
+        ["ShramSafal.Picture.Empty"] = new(
+            "A picture was sent with no file in it, so nothing was saved.",
+            "The upload arrived empty. The app's picture chooser sends the picture it has just made smaller, "
+            + "so this usually points to an upload that did not come from the app."),
+
+        ["ShramSafal.Picture.TooLarge"] = new(
+            "The picture is larger than 512 KB, so it was not saved.",
+            "The app's picture chooser makes a picture smaller, to at most 512 KB, before sending it, so this "
+            + "usually means the file did not come through it."),
+
+        ["ShramSafal.Picture.UnsupportedType"] = new(
+            "The file is not a JPEG, PNG or WebP picture, judged from the file itself and not from its name, so it was not saved.",
+            "The app's picture chooser sends every picture as a JPEG it has just made, so this usually means "
+            + "a different kind of file, or a damaged one, was sent from outside the app."),
+
+        ["ShramSafal.Picture.Forbidden"] = new(
+            "This person may not set or remove this picture.",
+            "A schedule's picture may be set only by the person the schedule belongs to: a co-owner, a "
+            + "mukadam, or a worker who typed a version of it is refused, and no one may set one on an outside "
+            + "schedule. The logo of an outside schedule may be set only by ShramSafal staff who check "
+            + "schedules, and only on its first version. A person's own picture is always his own, so this "
+            + "is not seen there."),
 
         // ── ShramSafal — Who may see one record (record audience) ────────────
         ["ShramSafal.RecordAudience.Forbidden"] = new(
