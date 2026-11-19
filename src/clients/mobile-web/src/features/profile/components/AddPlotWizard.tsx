@@ -467,7 +467,9 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             {t('profile.back')}
                         </button>
                     )}
-                    {step < 4 ? (
+                    {/* The wizard has THREE steps (the header says N/3). The test was `step < 4`, so step 3 offered "next" and led to a blank step 4
+                        before "finish" (found 2026-11-19 reading how a schedule is chosen). Step 3 now ends with the finish button. */}
+                    {step < 3 ? (
                         <Button onClick={nextStep} className="flex-1 py-3 text-sm" disabled={!plotName}>
                             {t('profile.nextStep')} <ArrowRight size={16} className="ml-2" />
                         </Button>
