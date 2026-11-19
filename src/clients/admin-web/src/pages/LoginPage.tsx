@@ -484,15 +484,15 @@ export default function LoginPage() {
             Every signal your farm operation needs.
           </h1>
           <p className="mb-10 max-w-[42ch] text-body text-nav-text">
-            Live health, WVFD trends, farmer suffering watchlist, voice pipeline metrics — all in
+            Company numbers, the farms to call today, live server health and checked farm-days, in
             one place.
           </p>
 
           <div className="flex flex-col gap-3">
             {[
-              { Icon: BarChart3, label: 'WVFD & retention analytics' },
-              { Icon: Wheat, label: 'Farm browser with tier breakdown' },
-              { Icon: Shield, label: 'Live API health · auto-refresh 30s' },
+              { Icon: BarChart3, label: 'Company numbers on real data' },
+              { Icon: Wheat, label: 'Every farm, with its tier and checked days' },
+              { Icon: Shield, label: 'Live server health and its alert checks' },
             ].map(({ Icon, label }) => (
               <div key={label} className="flex items-center gap-3">
                 <span className="grid h-11 w-11 flex-none place-items-center rounded-chip bg-nav-raise text-nav-overview">
