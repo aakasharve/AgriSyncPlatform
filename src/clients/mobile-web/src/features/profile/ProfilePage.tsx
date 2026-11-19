@@ -456,10 +456,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     return (
                         <div>
                             <PageBar title="बिलिंग" onBack={() => setActiveExtra(null)} />
+                            {/* lane HONESTY-2 (H5): no `onManageBilling` — there is no billing portal yet, and the English
+                                "coming soon" alert it used to fire sat behind every button on the card (P5). */}
                             <SubscriptionCard
                                 subscription={billingFarm?.subscription}
                                 role={billingFarm?.role ?? ''}
-                                onManageBilling={() => window.alert('Billing portal coming soon. Contact support@shramsafal.in.')}
                             />
                         </div>
                     );
