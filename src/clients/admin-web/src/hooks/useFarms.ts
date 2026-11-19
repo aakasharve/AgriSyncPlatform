@@ -4,8 +4,18 @@ import { keepPreviousDataWithinOrg, useOrgKey } from '@/lib/orgQuery';
 
 export interface FarmSummary {
   farmId: string; name: string; ownerPhone: string; plan: string;
-  wvfd7d: number | null; engagementTier: string | null;
+  /** Checked days last complete India week; null when the farm saved no counted entry that week. */
+  wvfd7d: number | null;
+  /** Days last week confirmed only by the person who saved them; null with wvfd7d. */
+  selfOnlyDays7d?: number | null;
+  engagementTier: string | null;
   errors24h: number; lastLogAt: string | null; createdAt: string;
+}
+/** The server answers a tier filter with 409 `tier_filter_too_many_farms` when it cannot count that many farms live. */
+export function isTierFilterTooManyFarms(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const r = (error as { response?: { status?: unknown; data?: { code?: unknown } } }).response;
+  return r?.status === 409 && r?.data?.code === "tier_filter_too_many_farms";
 }
 export interface FarmsList { items: FarmSummary[]; totalCount: number; page: number; pageSize: number; }
 export type SilentBand = '7-13' | '14-29' | '30+' | 'never';
@@ -88,6 +98,8 @@ export function useFarmsList(
       return data;
     },
     enabled: options?.enabled !== false,
+    /* The server counts days live and audits each load: no retry (a 409 is an answer, not a fault). */
+    retry: false,
     staleTime: 60_000, placeholderData: keepPreviousDataWithinOrg<AdminResponse<FarmsList>>(org),
   });
 }

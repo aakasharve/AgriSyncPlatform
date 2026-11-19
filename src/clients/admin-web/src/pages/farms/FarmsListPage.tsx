@@ -3,12 +3,12 @@ import { Wheat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { Masked, MetricLines, NotBuiltYetLines, NotBuiltYetMark, NotMeasured, StandingNote } from '@/components/state';
+import { Masked, MetricLines, NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { useListUrlState } from '@/lib/useListUrlState';
-import { useFarmsList } from '@/hooks/useFarms';
+import { isTierFilterTooManyFarms, useFarmsList } from '@/hooks/useFarms';
 import type { FarmSummary } from '@/hooks/useFarms';
 
 /**
@@ -110,6 +110,15 @@ function ownerPhoneOf(farm: FarmSummary): string | null {
   return !value || value === NO_PHONE_SENTINEL ? null : value;
 }
 
+const NO_ENTRY_LAST_WEEK = 'No entry last week';
+
+/** Checked days, with self-confirmed days beside them (never summed). Null means no counted entry last week. */
+function checkedDaysWords(f: FarmSummary): string {
+  if (f.wvfd7d === null || f.wvfd7d === undefined) return NO_ENTRY_LAST_WEEK;
+  const checked = `${f.wvfd7d} checked`;
+  return typeof f.selfOnlyDays7d === 'number' ? `${checked}, ${f.selfOnlyDays7d} self-confirmed` : checked;
+}
+
 const NEVER_LOGGED = 'No log has been recorded on this farm.';
 
 /**
@@ -161,27 +170,23 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     defaultDir: 'asc',
   },
   {
-    /* F4 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
+    /* F4: the A to D group from checked days last week; a farm with no counted entry that week has none. */
     key: 'tier',
-    label: (
-      <>
-        Tier
-        <NotBuiltYetMark />
-      </>
-    ),
-    render: () => null,
+    label: 'Tier',
+    render: (f) => f.engagementTier ?? NO_ENTRY_LAST_WEEK,
+    sortType: 'text',
+    sortValue: (f) => f.engagementTier,
+    defaultDir: 'asc',
   },
   {
-    /* F5 (B24): an idea. The header says so; no cell draws a value from the answer; its two lines sit under the table. */
+    /* F5: checked days last week, with self-confirmed days shown apart in the same cell, never added in. */
     key: 'wvfd7d',
-    label: (
-      <>
-        WVFD 7d
-        <NotBuiltYetMark />
-      </>
-    ),
+    label: 'Checked days last week',
     align: 'right',
-    render: () => null,
+    render: (f) => checkedDaysWords(f),
+    sortType: 'num',
+    sortValue: (f) => f.wvfd7d,
+    defaultDir: 'desc',
   },
   {
     /* F6: a real count of problems in the last 24 hours on requests that named this farm; its two lines sit under the table. */
@@ -261,13 +266,16 @@ export default function FarmsListPage() {
   const url = useListUrlState();
   const page = url.page;
   const search = url.get('search') ?? undefined;
+  const rawTier = url.get('tier');
+  const tier = TIERS.find((t) => t === rawTier);
 
   const { data, isLoading, isFetching, isError, error, refetch } = useFarmsList(
     page,
     PAGE_SIZE,
     search,
-    undefined,
+    tier,
   );
+  const tierTooMany = isError && isTierFilterTooManyFarms(error);
 
   const items = data?.data?.items ?? [];
   const totalCount = data?.data?.totalCount ?? 0;
@@ -303,7 +311,7 @@ export default function FarmsListPage() {
         <FreshnessChip source="live-aggregated" lastRefreshed={lastRefreshed} />
       </div>
 
-      {/* The tier filter (F4): an idea (B24). Disabled, marked, and never sent to the server. */}
+      {/* The tier filter (F4): live. It is sent to the server, which counts every farm's tier before it pages. */}
       <div
         role="group"
         aria-label="Filter by tier"
@@ -315,15 +323,17 @@ export default function FarmsListPage() {
             <button
               key={t}
               type="button"
-              disabled
-              aria-disabled="true"
-              className="glass-quiet cursor-not-allowed rounded-full border border-control-edge px-3.5 py-2 text-body text-text-3 opacity-60"
+              aria-pressed={tier === t}
+              onClick={() => url.set('tier', tier === t ? null : t)}
+              className={`glass-quiet rounded-full border border-control-edge px-3.5 py-2 text-body ${tier === t ? 'font-semibold text-text-1' : 'text-text-2'}`}
             >
               Tier {t}
             </button>
           ))}
         </div>
-        <NotBuiltYetMark />
+        <span className="text-caption text-text-3">
+          A: 5 or more checked days, B: 3-4, C: 1-2, D: none. A farm with no entry last week has no tier.
+        </span>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -343,6 +353,16 @@ export default function FarmsListPage() {
         </p>
       )}
 
+      {tierTooMany ? (
+        <p
+          role="status"
+          data-state="tier-filter-too-many"
+          className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2"
+        >
+          The tier filter cannot count that many farms live, so no farms are listed for it. Clear the
+          tier to see all farms.
+        </p>
+      ) : (
       <DataList<FarmSummary>
         id="farms"
         label="All farms"
@@ -398,10 +418,11 @@ export default function FarmsListPage() {
            this table is. */
         skeleton={{ rows: 8, cells: 7 }}
       />
+      )}
 
       <div className="flex flex-col gap-2">
-        <NotBuiltYetLines metric="farms-tier" />
-        <NotBuiltYetLines metric="farms-wvfd7d" />
+        <MetricLines metric="farms-tier" />
+        <MetricLines metric="farms-wvfd7d" />
         <MetricLines metric="farms-errors24h" />
       </div>
 
@@ -412,8 +433,8 @@ export default function FarmsListPage() {
           <>
             <p>
               The server sends <b>seven things</b> about each farm and nothing else: the farm name,
-              the owner&rsquo;s phone number, how engaged the farm is, its verified-days figure for
-              the last week, how many errors it hit in the last 24 hours, when it last recorded
+              the owner&rsquo;s phone number, its A to D group and checked days for the
+              last week, how many errors it hit in the last 24 hours, when it last recorded
               anything, and when it was created.
             </p>
             <p>
