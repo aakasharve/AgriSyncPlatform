@@ -809,6 +809,17 @@ export function platformName(platform: string | null | undefined): string {
   return typeof platform === 'string' && platform.trim().toLowerCase() === 'android' ? 'Android app' : 'Not the Android app';
 }
 
+/**
+ * CR-2c E10: every release up to 1.0.17 sent this number, which was never a release
+ * (`GetAppVersionsHandler.LegacyVersionNumber`); worded as the app-versions page words it.
+ */
+const LEGACY_VERSION_NUMBER = '0.9.0';
+const LEGACY_VERSION_LABEL = '1.0.17 or earlier';
+
+export function versionLabel(version: string): string {
+  return version === LEGACY_VERSION_NUMBER ? LEGACY_VERSION_LABEL : version;
+}
+
 /** #49: farm-days per score, lowest score first; every bucket 0 is a measured nothing. */
 export function spreadOf(list: MisList<{ score: number; farmDays: number }>): QualityView['spread'] {
   const chart = listChart(list, 'quality.scoreSpread', (items) => {
@@ -877,11 +888,14 @@ export function qualityView(d: CompanyMis): QualityView {
         return withCountHint(tileFrom('quality.corrected', q.logsCorrectedPct, 'pct', false), n === null ? null : `${fmtInt(n)} ${noun(n, 'entry', 'entries')} corrected`);
       })(),
       (() => {
-        /* #47: refused attempts of everything sent (refused attempts + accepted changes), the share's own base. */
+        /* #47 (E10): two plain counts beside the share, never added up (refusals are sends, acceptances are changes, E2). */
         const refused = countOf(q.syncRefusedChanges.current);
         const accepted = countOf(q.syncAcceptedChanges.current);
-        const sent = refused === null || accepted === null ? null : refused + accepted;
-        const hint = refused === null || sent === null ? null : `${fmtInt(refused)} refused of ${fmtInt(sent)} ${noun(sent, 'change', 'changes')}`;
+        const parts = [
+          refused === null ? null : `${fmtInt(refused)} ${noun(refused, 'send', 'sends')} refused`,
+          accepted === null ? null : `${fmtInt(accepted)} ${noun(accepted, 'change', 'changes')} accepted`,
+        ].filter((x): x is string => x !== null);
+        const hint = parts.length > 0 ? parts.join(', ') : null;
         return withCountHint(tileFrom('quality.syncFailTile', q.syncRefusedPct, 'pct', false), hint, SYNC_EVERY_UPLOAD);
       })(),
       tileNotMeasured('quality.crashFree'),
@@ -895,7 +909,7 @@ export function qualityView(d: CompanyMis): QualityView {
     versions: listChart(q.appVersions, 'quality.versionAdoption', (items) => ({
       rows: items.map((r, k) => ({
         key: `${k}-${r.version}-${r.platform}`,
-        version: r.version,
+        version: versionLabel(r.version),
         seenOn: platformName(r.platform),
         people: r.people,
         share: r.sharePct,
