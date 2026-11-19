@@ -39,7 +39,11 @@ const iconFor = (kind: MeAlertKind) => {
     }
 };
 
-const textFor = (alert: MeAlert, farmName?: string): { mr: string; en: string } => {
+/**
+ * spec: plr-d10 lane HONESTY-1 (H9; P4) - `null` = nothing to say. A "plan ends in N days" banner needs N; when the server did not send
+ * the number (or sent something that is not a count of days) the banner used to read "प्लॅन 0 दिवसांत संपेल" - a made-up zero. Now it is not drawn.
+ */
+const textFor = (alert: MeAlert, farmName?: string): { mr: string; en: string } | null => {
     switch (alert.kind) {
         case 'verify_phone':
             return {
@@ -47,7 +51,8 @@ const textFor = (alert: MeAlert, farmName?: string): { mr: string; en: string } 
                 en: 'Verify your phone number',
             };
         case 'plan_expiring': {
-            const days = alert.daysLeft ?? 0;
+            const days = alert.daysLeft;
+            if (typeof days !== 'number' || !Number.isFinite(days) || days < 0) return null;
             const farm = farmName ?? '';
             return {
                 mr: `${farm ? farm + ' — ' : ''}प्लॅन ${days} दिवसांत संपेल`,
@@ -87,15 +92,21 @@ const MeAlertRail: React.FC = () => {
     );
     if (visible.length === 0) return null;
 
+    // H9: an alert with nothing true to say is dropped BEFORE the rail is drawn, so no empty strip is left behind.
+    const rows = visible.flatMap(alert => {
+        const farm = alert.farmId
+            ? meContext?.farms.find(f => f.farmId === alert.farmId)?.name
+            : undefined;
+        const text = textFor(alert, farm);
+        return text ? [{ alert, text }] : [];
+    });
+    if (rows.length === 0) return null;
+
     return (
         <div className="flex flex-col gap-1 px-2 pt-1">
-            {visible.map(alert => {
+            {rows.map(({ alert, text }) => {
                 const key = alertKey(alert);
                 const Icon = iconFor(alert.kind);
-                const farm = alert.farmId
-                    ? meContext?.farms.find(f => f.farmId === alert.farmId)?.name
-                    : undefined;
-                const text = textFor(alert, farm);
 
                 return (
                     <div
