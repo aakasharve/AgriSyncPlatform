@@ -30,7 +30,7 @@ import { arrange, parseLedger, type Ledger, type LedgerRow } from '../seasonLedg
 
 const row = (over: Partial<LedgerRow>): LedgerRow => ({
     inputItemId: 'i-' + Math.random().toString(36).slice(2), dailyLogId: null, date: '2026-11-10', plotName: 'प्लॉट १', cropName: 'Grapes',
-    dayOfSeason: 9, stageName: 'छाटणीनंतर', productSaid: 'Karate', libraryProductId: 'p-karate', ingredients: ['Lambda-cyhalothrin'], groupCodes: 'IRAC 3A',
+    dayOfSeason: 9, stageName: 'छाटणीनंतर', productSaid: 'Karate', libraryProductId: 'p-karate', ingredients: ['Lambda-cyhalothrin'], ingredientsMr: ['लॅम्बडा सायहॅलोथ्रिन'], groupCodes: 'IRAC 3A',
     amount: 250, unit: 'ml', perQuantity: null, perUnit: null, amountCertainty: null, amountSpokenText: null, method: 'Spray', carrierWaterLitres: 600, derived: true, ...over,
 });
 
@@ -38,7 +38,7 @@ const ledgerOf = (rows: LedgerRow[], over: Partial<Ledger> = {}): Ledger => ({
     from: '2026-01-01', to: '2026-11-19', rows,
     products: [{ product: 'Karate', libraryProductId: 'p-karate', uses: 2, lastUsed: '2026-11-12', total: 750, unit: 'ml', noTotalBecause: null },
         { product: 'कोणतंतरी औषध', libraryProductId: null, uses: 1, lastUsed: '2026-11-11', total: null, unit: null, noTotalBecause: 'some uses state no amount' }],
-    ingredients: [{ ingredient: 'Lambda-cyhalothrin', key: 'lambdacyhalothrin', groupCode: 'IRAC 3A', uses: 2 }], notYetDerived: 0, ...over,
+    ingredients: [{ ingredient: 'Lambda-cyhalothrin', ingredientMr: 'लॅम्बडा सायहॅलोथ्रिन', key: 'lambdacyhalothrin', groupCode: 'IRAC 3A', uses: 2 }], notYetDerived: 0, ...over,
 });
 
 const open = async (ledger: Ledger | { kind: string }) => {
@@ -59,27 +59,30 @@ describe('season ledger: what is shown', () => {
         await open(ledgerOf([row({})]));
         const r = await screen.findByTestId('season-ledger-row');
         expect(within(r).getByTestId('season-ledger-product').textContent).toBe('Karate');
-        expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('250 ml');
-        expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('Spray');
-        expect(within(r).getByTestId('season-ledger-when').textContent).toContain('दिवस 9');
+        expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('२५० मिली');
+        expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('फवारणी');
+        expect(within(r).getByTestId('season-ledger-amount').textContent).not.toContain('Spray');
+        expect(within(r).getByTestId('season-ledger-when').textContent).toContain('दिवस ९');
         expect(within(r).getByTestId('season-ledger-when').textContent).toContain('छाटणीनंतर');
-        expect(within(r).getByTestId('season-ledger-ingredients').textContent).toContain('Lambda-cyhalothrin (IRAC 3A)');
+        expect(within(r).getByTestId('season-ledger-ingredients').textContent).toContain('लॅम्बडा सायहॅलोथ्रिन (IRAC 3A)');
+        expect(within(r).getByTestId('season-ledger-ingredients').textContent).not.toContain('Lambda');
     });
 
     it('NoAmountSaid_SaysSo_AndNeverShowsANumber', async () => {
         await open(ledgerOf([row({ amount: null, unit: null })]));
         expect((await screen.findByTestId('season-ledger-amount')).textContent).toContain('सांगितलं नाही');
-        expect(amountOf(row({ amount: null, unit: null, amountSpokenText: 'अंदाजे अर्धा लिटर' }), 'सांगितलं नाही', 'प्रति')).toBe('अंदाजे अर्धा लिटर');
+        expect(amountOf(row({ amount: null, unit: null, amountSpokenText: 'अंदाजे अर्धा लिटर' }), 'सांगितलं नाही', 'mr')).toBe('अंदाजे अर्धा लिटर');
     });
 
-    it('PerWater_IsShownAsHeSaidIt', () => {
-        expect(amountOf(row({ amount: 250, unit: 'ml', perQuantity: 200, perUnit: 'L' }), 'x', 'प्रति')).toBe('250 ml प्रति 200 L');
+    it('PerWater_IsShownAsHeSaidIt_InHisLanguage', () => {
+        expect(amountOf(row({ amount: 250, unit: 'ml', perQuantity: 200, perUnit: 'L' }), 'x', 'mr')).toBe('२५० मिली / २०० लिटर');
+        expect(amountOf(row({ amount: 250, unit: 'ml', perQuantity: 200, perUnit: 'L' }), 'x', 'en')).toBe('250 ml / 200 litres'.replace('litres', 'L'));
     });
 
     it('TotalsAreOnlyWhereTheServerSentOne_OtherwiseADash', async () => {
         await open(ledgerOf([row({})]));
         const totals = await screen.findAllByTestId('season-ledger-product-total');
-        expect(totals[0].textContent).toContain('एकूण 750 ml');
+        expect(totals[0].textContent).toContain('एकूण ७५० मिली');
         expect(totals[1].textContent).toContain('—');
         expect(totals[1].textContent).not.toMatch(/\d{2,}/);
     });
@@ -97,6 +100,8 @@ describe('season ledger: what is shown', () => {
         await open(ledgerOf([row({ amount: null, unit: null })]));
         expect((await screen.findByTestId('season-ledger-amount')).textContent).toContain('not said');
         expect(screen.getByTestId('season-ledger-when').textContent).toContain('Day 9');
+        expect(screen.getByTestId('season-ledger-amount').textContent).toContain('Spray');
+        expect(screen.getByTestId('season-ledger-ingredients').textContent).toContain('Lambda-cyhalothrin');
     });
 });
 

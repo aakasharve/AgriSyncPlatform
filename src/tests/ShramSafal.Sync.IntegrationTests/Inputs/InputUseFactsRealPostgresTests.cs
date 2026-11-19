@@ -248,6 +248,8 @@ public sealed class InputUseFactsRealPostgresTests(ITestOutputHelper output) : S
         var rows = ledger.GetProperty("rows").EnumerateArray().ToList();
         rows.Should().HaveCount(3);
         rows.Where(r => r.GetProperty("productSaid").GetString() == "Karate").Should().OnlyContain(r => r.GetProperty("dayOfSeason").GetInt32() == 9 && r.GetProperty("derived").GetBoolean());
+        rows.First(r => r.GetProperty("productSaid").GetString() == "Karate").GetProperty("ingredientsMr").EnumerateArray().Select(i => i.GetString())
+            .Should().ContainSingle().Which.Should().MatchRegex("[\\u0900-\\u097F]", "a Marathi screen is shown the Marathi ingredient name the library holds");
         var karate = ledger.GetProperty("products").EnumerateArray().Single(p => p.GetProperty("product").GetString() == "Karate");
         karate.GetProperty("uses").GetInt32().Should().Be(2);
         karate.GetProperty("total").GetDecimal().Should().Be(750m, "both uses state an amount, in one unit");

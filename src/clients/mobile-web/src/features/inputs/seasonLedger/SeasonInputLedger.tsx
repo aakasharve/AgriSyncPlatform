@@ -12,6 +12,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ArrowDownUp, Download, FlaskConical, RefreshCw } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { GlassCard, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
+import { amountText } from '../../logs/components/voiceResult/productModel';
 import { arrange, downloadLedgerCsv, loadLedger, rebuildLedger, type Ledger, type LedgerRow, type SortKey } from './seasonLedgerClient';
 
 const WORDS = {
@@ -21,7 +23,7 @@ const WORDS = {
         empty: 'या काळात औषध किंवा खताची एकही नोंद नाही.', filter: 'औषध, प्लॉट किंवा घटक शोधा', sortBy: 'क्रम',
         date: 'तारीख', product: 'औषध', day: 'दिवस', stage: 'अवस्था', plot: 'प्लॉट', amount: 'प्रमाण', method: 'पद्धत', ingredients: 'घटक',
         notSaid: 'सांगितलं नाही', dayAfter: 'दिवस', byProduct: 'औषधानुसार', byIngredient: 'घटकानुसार', uses: 'वेळा', total: 'एकूण',
-        csv: 'Excel साठी फाईल', refresh: 'ताजे करा', pending: (n: number) => `${n} नोंदींचे तपशील अजून तयार नाहीत`, per: 'प्रति',
+        csv: 'Excel साठी फाईल', refresh: 'ताजे करा', pending: (n: string) => `${n} नोंदींचे तपशील अजून तयार नाहीत`, per: 'प्रति',
         water: 'पाणी', litres: 'लि.',
     },
     en: {
@@ -30,22 +32,35 @@ const WORDS = {
         empty: 'No medicine or fertilizer was recorded in this period.', filter: 'Search a product, plot or ingredient', sortBy: 'Sort',
         date: 'Date', product: 'Product', day: 'Day', stage: 'Stage', plot: 'Plot', amount: 'Amount', method: 'Method', ingredients: 'Ingredients',
         notSaid: 'not said', dayAfter: 'Day', byProduct: 'By product', byIngredient: 'By ingredient', uses: 'uses', total: 'Total',
-        csv: 'File for Excel', refresh: 'Refresh', pending: (n: number) => `${n} uses are not worked out yet`, per: 'per',
+        csv: 'File for Excel', refresh: 'Refresh', pending: (n: string) => `${n} uses are not worked out yet`, per: 'per',
         water: 'Water', litres: 'L',
     },
 } as const;
 
+/** How it was applied, in the reader's language (Marathi mode shows Marathi only). A method this list does not know is shown as the record states it. */
+const METHOD: Record<string, { mr: string; en: string }> = {
+    spray: { mr: 'फवारणी', en: 'Spray' }, drip: { mr: 'ठिबक', en: 'Drip' }, drenching: { mr: 'आळवणी', en: 'Drench' }, drench: { mr: 'आळवणी', en: 'Drench' },
+    soil: { mr: 'जमिनीतून', en: 'Soil' }, fertigation: { mr: 'ठिबकातून खत', en: 'Fertigation' }, paste_manual: { mr: 'पेस्ट', en: 'Paste' },
+};
+export const methodWord = (method: string, language: 'mr' | 'en'): string => METHOD[method.trim().toLowerCase()]?.[language] ?? method;
+
+/** The row's ingredients in the reader's language: Marathi where the library has the Marathi name, else the English one. */
+export const ingredientNames = (row: LedgerRow, language: 'mr' | 'en'): string[] =>
+    row.ingredients.map((name, i) => (language === 'mr' ? row.ingredientsMr[i] ?? name : name));
+
 type State = { kind: 'closed' } | { kind: 'loading' } | { kind: 'offline' } | { kind: 'refused' } | { kind: 'failed' } | { kind: 'ledger'; ledger: Ledger };
 
 /** The amount in his words and units; "not said" when he said none. Never a number he did not say. */
-export function amountOf(row: LedgerRow, notSaid: string, per: string): string {
+export function amountOf(row: LedgerRow, notSaid: string, language: 'mr' | 'en'): string {
     if (row.amount === null) return row.amountSpokenText ?? notSaid;
-    const base = `${row.amount}${row.unit ? ' ' + row.unit : ''}`;
-    return row.perQuantity !== null ? `${base} ${per} ${row.perQuantity}${row.perUnit ? ' ' + row.perUnit : ''}` : base;
+    // The card's own helper: his units in this language ("मिली", "किलो") and Devanagari digits in Marathi mode. A unit it has no word for is shown as recorded.
+    const shown = amountText({ qty: row.amount, unit: row.unit ?? '', ...(row.perQuantity !== null ? { per: { qty: row.perQuantity, unit: row.perUnit ?? '' } } : {}) }, language, true);
+    return shown || `${row.amount}${row.unit ? ' ' + row.unit : ''}`;
 }
 
 const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
-    const words = WORDS[useOptionalLanguage()?.language === 'en' ? 'en' : 'mr'];
+    const lang: 'mr' | 'en' = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const words = WORDS[lang];
     const [state, setState] = useState<State>({ kind: 'closed' });
     const [sort, setSort] = useState<SortKey>('date');
     const [descending, setDescending] = useState(true);
@@ -97,7 +112,7 @@ const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
                     <div className="mt-3 space-y-3">
                         {state.ledger.notYetDerived > 0 && (
                             <div className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 p-2.5 ring-1 ring-amber-200" data-testid="season-ledger-pending">
-                                <span className="text-[13px] font-bold text-amber-900">{words.pending(state.ledger.notYetDerived)}</span>
+                                <span className="text-[13px] font-bold text-amber-900">{words.pending(digitsFor(state.ledger.notYetDerived, lang))}</span>
                                 <Tap onClick={() => void refresh()} disabled={busy} data-testid="season-ledger-refresh"
                                     className="flex min-h-[40px] items-center gap-1 rounded-full bg-white px-3 text-[13px] font-extrabold text-amber-900">
                                     <RefreshCw size={15} aria-hidden="true" />{words.refresh}
@@ -126,15 +141,15 @@ const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
                                         <span className="shrink-0 text-[12.5px] font-bold text-stone-500">{row.date}</span>
                                     </div>
                                     <p className="m-0 text-[13.5px] font-bold text-stone-700" data-testid="season-ledger-amount">
-                                        {words.amount}: {amountOf(row, words.notSaid, words.per)}{row.method ? ` · ${row.method}` : ''}
-                                        {row.carrierWaterLitres !== null ? ` · ${words.water} ${row.carrierWaterLitres} ${words.litres}` : ''}
+                                        {words.amount}: {amountOf(row, words.notSaid, lang)}{row.method ? ` · ${methodWord(row.method, lang)}` : ''}
+                                        {row.carrierWaterLitres !== null ? ` · ${words.water} ${digitsFor(row.carrierWaterLitres, lang)} ${words.litres}` : ''}
                                     </p>
                                     <p className="m-0 text-[12.5px] font-bold text-stone-500" data-testid="season-ledger-when">
-                                        {[row.plotName, row.dayOfSeason !== null ? `${words.dayAfter} ${row.dayOfSeason}` : null, row.stageName].filter(Boolean).join(' · ')}
+                                        {[row.plotName, row.dayOfSeason !== null ? `${words.dayAfter} ${digitsFor(row.dayOfSeason, lang)}` : null, row.stageName].filter(Boolean).join(' · ')}
                                     </p>
                                     {row.ingredients.length > 0 && (
                                         <p className="m-0 text-[12.5px] font-bold text-stone-500" data-testid="season-ledger-ingredients">
-                                            {words.ingredients}: {row.ingredients.join(', ')}{row.groupCodes ? ` (${row.groupCodes})` : ''}
+                                            {words.ingredients}: {ingredientNames(row, lang).join(', ')}{row.groupCodes ? ` (${row.groupCodes})` : ''}
                                         </p>
                                     )}
                                 </div>
@@ -145,8 +160,8 @@ const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
                         <div className="space-y-1.5" data-testid="season-ledger-products">
                             {state.ledger.products.map(p => (
                                 <div key={p.libraryProductId ?? p.product} className="flex items-baseline justify-between gap-2 text-[13.5px] font-bold text-stone-700" data-testid="season-ledger-product-total">
-                                    <span className="min-w-0 truncate">{p.product} · {p.uses} {words.uses}</span>
-                                    <span className="shrink-0 text-stone-900">{p.total !== null ? `${words.total} ${p.total}${p.unit ? ' ' + p.unit : ''}` : '—'}</span>
+                                    <span className="min-w-0 truncate">{p.product} · {digitsFor(p.uses, lang)} {words.uses}</span>
+                                    <span className="shrink-0 text-stone-900">{p.total !== null ? `${words.total} ${amountText({ qty: p.total, unit: p.unit ?? '' }, lang, true) || `${p.total}${p.unit ? ' ' + p.unit : ''}`}` : '—'}</span>
                                 </div>
                             ))}
                         </div>
@@ -157,8 +172,8 @@ const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
                                 <div className="space-y-1.5" data-testid="season-ledger-ingredient-totals">
                                     {state.ledger.ingredients.map(i => (
                                         <div key={i.key ?? i.ingredient} className="flex items-baseline justify-between gap-2 text-[13.5px] font-bold text-stone-700">
-                                            <span className="min-w-0 truncate">{i.ingredient}{i.groupCode ? ` (${i.groupCode})` : ''}</span>
-                                            <span className="shrink-0 text-stone-900">{i.uses} {words.uses}</span>
+                                            <span className="min-w-0 truncate">{lang === 'mr' ? i.ingredientMr ?? i.ingredient : i.ingredient}{i.groupCode ? ` (${i.groupCode})` : ''}</span>
+                                            <span className="shrink-0 text-stone-900">{digitsFor(i.uses, lang)} {words.uses}</span>
                                         </div>
                                     ))}
                                 </div>

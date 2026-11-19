@@ -22,6 +22,8 @@ public sealed record InputUseLedgerRowDto(
     string ProductSaid,
     string? LibraryProductId,
     IReadOnlyList<string> Ingredients,
+    // the same ingredients' Marathi names in the same order (null where the library holds none), so a Marathi screen shows Marathi only
+    IReadOnlyList<string?> IngredientsMr,
     string? GroupCodes,
     // what he said, as he said it
     decimal? Amount,
@@ -42,7 +44,7 @@ public sealed record InputUseLedgerRowDto(
 public sealed record InputUseProductTotalDto(string Product, string? LibraryProductId, int Uses, DateOnly LastUsed, decimal? Total, string? Unit, string? NoTotalBecause);
 
 /// <summary>A roll-up by ingredient: how many uses held it, with its group code when the facts file has one.</summary>
-public sealed record InputUseIngredientTotalDto(string Ingredient, string? Key, string? GroupCode, int Uses);
+public sealed record InputUseIngredientTotalDto(string Ingredient, string? IngredientMr, string? Key, string? GroupCode, int Uses);
 
 public sealed record InputUseLedgerDto(
     DateOnly From, DateOnly To,
@@ -87,7 +89,8 @@ public sealed class GetInputUseLedgerHandler(IInputUseStore store, IShramSafalRe
             var f = r.Facts;
             return new InputUseLedgerRowDto(
                 u.ItemId, u.SourceDailyLogId, u.UseDate, u.PlotId, u.PlotName, f?.CropName, f?.DayOfSeason, f?.StageName,
-                u.ProductName, f?.LibraryProductId, r.Ingredients.OrderBy(i => i.Ordinal).Select(i => i.IngredientName).ToList(), f?.GroupCodes,
+                u.ProductName, f?.LibraryProductId, r.Ingredients.OrderBy(i => i.Ordinal).Select(i => i.IngredientName).ToList(),
+                r.Ingredients.OrderBy(i => i.Ordinal).Select(i => i.IngredientNameMr).ToList(), f?.GroupCodes,
                 u.DoseAmount, u.DoseUnit, u.DoseBasisQty, u.DoseBasisUnit, u.DoseCertainty, u.DoseSpokenText, u.Method, u.CarrierWaterLitres,
                 f?.LibraryVersion, f?.FactsVersion, f?.DayZeroSource, f is not null);
         }).OrderBy(r => r.Date).ThenBy(r => r.PlotName, StringComparer.Ordinal).ToList();
@@ -105,9 +108,9 @@ public sealed class GetInputUseLedgerHandler(IInputUseStore store, IShramSafalRe
                 why is null ? list.Sum(r => r.Amount!.Value) : null, why is null ? list[0].Unit : null, why);
         }).OrderByDescending(p => p.Uses).ThenBy(p => p.Product, StringComparer.Ordinal).ToList();
 
-        var ingredients = rows.SelectMany(r => r.Ingredients.Select(i => (i.IngredientKey, i.IngredientName, i.GroupCode, Fact: r.Facts!.Id)))
+        var ingredients = rows.SelectMany(r => r.Ingredients.Select(i => (i.IngredientKey, i.IngredientName, i.IngredientNameMr, i.GroupCode, Fact: r.Facts!.Id)))
             .GroupBy(x => x.IngredientKey ?? x.IngredientName.ToLowerInvariant())
-            .Select(g => new InputUseIngredientTotalDto(g.First().IngredientName, g.First().IngredientKey, g.First().GroupCode, g.Select(x => x.Fact).Distinct().Count()))
+            .Select(g => new InputUseIngredientTotalDto(g.First().IngredientName, g.First().IngredientNameMr, g.First().IngredientKey, g.First().GroupCode, g.Select(x => x.Fact).Distinct().Count()))
             .OrderByDescending(i => i.Uses).ThenBy(i => i.Ingredient, StringComparer.Ordinal).ToList();
 
         return new InputUseLedgerDto(from, to, dtos, products, ingredients, dtos.Count(r => !r.Derived));

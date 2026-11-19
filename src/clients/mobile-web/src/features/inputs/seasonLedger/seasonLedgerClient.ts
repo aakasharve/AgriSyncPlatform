@@ -19,6 +19,8 @@ export interface LedgerRow {
     productSaid: string;
     libraryProductId: string | null;
     ingredients: string[];
+    /** The same ingredients in Marathi, in the same order (null where the library holds none). */
+    ingredientsMr: (string | null)[];
     groupCodes: string | null;
     amount: number | null;
     unit: string | null;
@@ -32,7 +34,7 @@ export interface LedgerRow {
 }
 
 export interface LedgerProduct { product: string; libraryProductId: string | null; uses: number; lastUsed: string; total: number | null; unit: string | null; noTotalBecause: string | null }
-export interface LedgerIngredient { ingredient: string; key: string | null; groupCode: string | null; uses: number }
+export interface LedgerIngredient { ingredient: string; ingredientMr: string | null; key: string | null; groupCode: string | null; uses: number }
 export interface Ledger { from: string; to: string; rows: LedgerRow[]; products: LedgerProduct[]; ingredients: LedgerIngredient[]; notYetDerived: number }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -53,6 +55,7 @@ export function parseLedger(data: unknown): Ledger | null {
             inputItemId: str(r.inputItemId) ?? '', dailyLogId: str(r.dailyLogId), date, plotName: str(r.plotName), cropName: str(r.cropName),
             dayOfSeason: num(r.dayOfSeason), stageName: str(r.stageName), productSaid: product, libraryProductId: str(r.libraryProductId),
             ingredients: Array.isArray(r.ingredients) ? r.ingredients.filter((i): i is string => typeof i === 'string') : [],
+            ingredientsMr: Array.isArray(r.ingredientsMr) ? r.ingredientsMr.map(i => (typeof i === 'string' && i.trim() ? i : null)) : [],
             groupCodes: str(r.groupCodes), amount: num(r.amount), unit: str(r.unit), perQuantity: num(r.perQuantity), perUnit: str(r.perUnit),
             amountCertainty: str(r.amountCertainty), amountSpokenText: str(r.amountSpokenText), method: str(r.method),
             carrierWaterLitres: num(r.carrierWaterLitres), derived: r.derived === true,
@@ -66,7 +69,7 @@ export function parseLedger(data: unknown): Ledger | null {
     const ingredients: LedgerIngredient[] = root.ingredients.flatMap(raw => {
         const i = obj(raw);
         const name = i && str(i.ingredient);
-        return i && name ? [{ ingredient: name, key: str(i.key), groupCode: str(i.groupCode), uses: num(i.uses) ?? 0 }] : [];
+        return i && name ? [{ ingredient: name, ingredientMr: str(i.ingredientMr), key: str(i.key), groupCode: str(i.groupCode), uses: num(i.uses) ?? 0 }] : [];
     });
     return { from: str(root.from) ?? '', to: str(root.to) ?? '', rows, products, ingredients, notYetDerived: num(root.notYetDerived) ?? 0 };
 }
