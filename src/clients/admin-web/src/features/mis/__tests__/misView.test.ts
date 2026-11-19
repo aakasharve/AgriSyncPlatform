@@ -10,7 +10,7 @@ import { RetentionSection } from '@/features/mis/MisRetention';
 import { EngagementSection } from '@/features/mis/MisEngagement';
 import { reasonSentence } from '@/features/mis/misItems';
 import { BUSIEST, at, farmsBlockedFixture, misFixture, notMeasured, num, ramp } from '@/test/misFixture';
-import { PLAN_REASONS, S_OPS_HEADLINE } from '@/test/misPlan';
+import { PLAN_REASONS, S_DISTRICT, S_OPS_HEADLINE } from '@/test/misPlan';
 
 /**
  * CR-2b Task 2 — the pure adapter between the route's answer and the pages.
@@ -146,9 +146,19 @@ describe('misView: values and absences (CR-2b Task 2)', () => {
       expectReason(tileOf(ov.tiles, key).current, why, key);
       expect([key, tileOf(ov.tiles, key).spark]).toEqual([key, null]);
     }
-    for (const t of [...farmsView(d).tiles, ...qualityView(d).tiles].filter((x) => x.fields.length > 0)) {
+    // CR-2c Global Constraints ("Farm block"): the block reaches every farm-derived item, not the two
+    // non-farm reads; sync failures (#47) are read for the whole server, so their tile stays measured.
+    const NOT_PER_FARM = new Set(['quality.syncFailTile']);
+    const blockedTiles = [...farmsView(d).tiles, ...qualityView(d).tiles].filter((x) => x.fields.length > 0);
+    expect(blockedTiles.filter((t) => !NOT_PER_FARM.has(t.item)).length).toBeGreaterThan(5);
+    for (const t of blockedTiles) {
+      if (NOT_PER_FARM.has(t.item)) continue;
       expectReason(t.current, why, t.item);
     }
+    const sync = tileOf(qualityView(d).tiles, 'quality.syncFailTile');
+    expect(sync.current).toMatchObject({ kind: 'value', text: '3.4%' });
+    // #10 is farm-derived: the understanding tile is blocked with the rest.
+    expectReason(tileOf(ov.tiles, 'overview.understanding').current, why, 'overview.understanding');
     for (const t of retentionView(d).tiles.filter((x) => x.fields.length > 0)) {
       expectReason(t.current, why, t.item);
     }
@@ -321,7 +331,8 @@ describe('misView: headlines (CR-2b Task 2)', () => {
   });
 
   it('Headlines_use_real_numbers_or_say_not_measured: farms', () => {
-    expect(headlineFor('farms', d, false)).toBe('415 active farms covering 963.4 acres. Districts are not measured yet.');
+    // CR-2c Task 2 Step 3: #62's district clause stays "not measured yet" and names its blocker (S_DISTRICT).
+    expect(headlineFor('farms', d, false)).toBe(`415 active farms covering 963.4 acres. Districts are not measured yet. ${S_DISTRICT}`);
     const nm = headlineFor('farms', farmsBlockedFixture(), false);
     expect(nm).toContain(`is not measured: ${PLAN_REASONS.farm_list_unreadable}`);
     expect(nm).not.toMatch(/\d/);

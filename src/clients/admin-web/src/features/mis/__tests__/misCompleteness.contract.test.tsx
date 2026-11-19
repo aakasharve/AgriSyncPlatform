@@ -82,6 +82,17 @@ function numbersIn(x: unknown, out: number[] = []): number[] {
   return out;
 }
 
+/**
+ * CR-2c E10(4): a digit can come from a STRING the answer serves, such as an app version
+ * ("1.0.18" in `quality.appVersions`). Only strings of the fields the plan gives the item.
+ */
+function digitStringsIn(x: unknown, out: string[] = []): string[] {
+  if (typeof x === 'string' && /\d/.test(x)) out.push(x);
+  else if (Array.isArray(x)) x.forEach((y) => digitStringsIn(y, out));
+  else if (x && typeof x === 'object') Object.values(x).forEach((y) => digitStringsIn(y, out));
+  return out;
+}
+
 function variants(v: number): string[] {
   const a = Math.abs(v);
   return [
@@ -152,13 +163,15 @@ function tokensFor(d: CompanyMis, n: number): string[] {
   const hit = byN.get(n);
   if (hit) return hit;
   const nums: number[] = [];
+  const strs: string[] = [];
   for (const f of planItem(n).fields) {
     const value = at(d, f);
     numbersIn(value, nums);
+    digitStringsIn(value, strs);
     if (value && typeof value === 'object' && 'current' in (value as object)) nums.push(...deltaTokens(value as MisNumber));
   }
   nums.push(...derivations(d, n));
-  const set = new Set<string>();
+  const set = new Set<string>(strs);
   for (const v of nums) for (const t of variants(v)) if (/\d/.test(t)) set.add(t);
   const list = [...set].sort((x, y) => y.length - x.length);
   byN.set(n, list);
@@ -197,6 +210,16 @@ const PLAN_PHRASES: RegExp[] = [
   /\btrailing 7 days\b/g, // item 61 = CR-2a rule 38, farms active at d (the 7 days to d)
   /\b7 days in\b/g, // B14 and the funnel subtitle: old enough to judge the habit
 ];
+
+/**
+ * CR-2c E10(4): fixed words the plan gives ONE item, exempt only inside that item:
+ * #10 is drawn "x.x of 10" (Task 2 Step 2); #52 shows the legacy number as
+ * "1.0.17 or earlier" (E10(1)).
+ */
+const ITEM_PHRASES: Record<number, RegExp[]> = {
+  10: [/\bof 10\b/g],
+  52: [/\b1\.0\.17 or earlier\b/g],
+};
 
 function stripAxis(text: string): string {
   return text
@@ -242,6 +265,7 @@ function strayDigits(d: CompanyMis | null, section: string, root: HTMLElement): 
     let left = withoutOwnLines(text, key);
     left = stripDates(left);
     for (const re of PLAN_PHRASES) left = left.replace(re, '');
+    for (const re of ITEM_PHRASES[nOf(key)] ?? []) left = left.replace(re, '');
     left = stripAxis(left);
     if (d) left = stripTokens(left, tokensFor(d, nOf(key)));
     if (/\d/.test(left)) out.push({ section, item: key, text, left });
@@ -342,6 +366,27 @@ describe('every tile and card is a registered item (CR-2b Task 4)', () => {
     const strays = strayDigits(D, 'probe', box);
     box.remove();
     expect(strays.map((x) => [x.item, x.text])).toEqual([['overview.understanding', '0']]);
+  });
+
+  it('The_plan_fixed_words_are_exempt_only_inside_their_own_item', () => {
+    // CR-2c E10(4): "of 10" belongs to #10 and "1.0.17 or earlier" to #52; anywhere else they are strays,
+    // and a version string the answer never served is a stray inside #52 too.
+    const box = document.createElement('div');
+    box.innerHTML = [
+      '<div data-mis-item="overview.understanding"><p>6.5 of 10</p></div>',
+      '<div data-mis-item="quality.versionAdoption"><p>1.0.17 or earlier</p><p>1.0.18</p></div>',
+      '<div data-mis-item="overview.dau"><p>143 of 10</p></div>',
+      '<div data-mis-item="quality.scoreSpread"><p>1.0.17 or earlier</p></div>',
+      '<div data-mis-item="quality.versionAdoption"><p>2.4.1</p></div>',
+    ].join('');
+    document.body.appendChild(box);
+    const strays = strayDigits(D, 'probe', box);
+    box.remove();
+    expect(strays.map((x) => [x.item, x.text])).toEqual([
+      ['overview.dau', '143 of 10'],
+      ['quality.scoreSpread', '1.0.17 or earlier'],
+      ['quality.versionAdoption', '2.4.1'],
+    ]);
   });
 
   it('Not_served_items_show_their_sentence_and_no_digit', async () => {
