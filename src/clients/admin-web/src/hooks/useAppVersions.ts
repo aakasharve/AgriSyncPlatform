@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { adminApi, type AdminResponse } from '@/lib/api';
+import { adminApi, metaRefreshedAt, type AdminResponse } from '@/lib/api';
 
 // spec: control-room-app-versions-2026-11-12 (CR-1c Tasks V3 and V4).
 
@@ -41,6 +41,15 @@ export interface AppVersions {
 }
 
 /**
+ * The answer, plus WHEN the server gave it. CR-2d join: the September console's state rules
+ * name the moment a "nobody" was measured (MeasuredZero), and that moment must be the server's
+ * (`meta.lastRefreshedUtc`), never this browser's clock. Null when the server did not say.
+ */
+export interface AppVersionsAnswer extends AppVersions {
+  checkedAtUtc: string | null;
+}
+
+/**
  * Who used which app version in the last 7 or 30 days.
  *
  * Nothing here is automatic. Each load can write an audit row on the server, so the
@@ -49,7 +58,7 @@ export interface AppVersions {
  * cached answer shown under a period it was not asked for.
  */
 export function useAppVersions(days: AppVersionsDays) {
-  return useQuery<AppVersions>({
+  return useQuery<AppVersionsAnswer>({
     queryKey: ['ops', 'app-versions', days],
     queryFn: async () => {
       const { data } = await adminApi.get<AdminResponse<AppVersions>>(
@@ -61,7 +70,7 @@ export function useAppVersions(days: AppVersionsDays) {
       if (!answer || !Array.isArray(answer.versions) || !Array.isArray(answer.onOlderVersions)) {
         throw new Error('app-versions: the answer is not in the expected shape');
       }
-      return answer;
+      return { ...answer, checkedAtUtc: metaRefreshedAt(data.meta) ?? null };
     },
     staleTime: 0,
     gcTime: 0,

@@ -22,11 +22,13 @@ const NotFoundPage            = lazy(() => import('@/pages/NotFoundPage'));
 
 const OpsLivePage             = lazy(() => import('@/pages/ops/OpsLivePage'));
 const OpsErrorsPage           = lazy(() => import('@/pages/ops/OpsErrorsPage'));
+const AppVersionsPage         = lazy(() => import('@/pages/ops/AppVersionsPage'));
 const NorthStarPage           = lazy(() => import('@/pages/metrics/NorthStarPage'));
 const FarmsListPage           = lazy(() => import('@/pages/farms/FarmsListPage'));
 const SilentChurnPage         = lazy(() => import('@/pages/farms/SilentChurnPage'));
 const SufferingPage           = lazy(() => import('@/pages/farms/SufferingPage'));
 const ScheduleTemplatesPage   = lazy(() => import('@/pages/schedules/ScheduleTemplatesPage'));
+const ScheduleCheckPage       = lazy(() => import('@/pages/schedules/ScheduleCheckPage'));
 const UsersPage               = lazy(() => import('@/pages/users/UsersPage'));
 const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdminsPage'));
 
@@ -251,6 +253,11 @@ export default function App() {
                     <Route path="/ops/errors" element={
                       <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
                     } />
+                    {/* spec: control-room-app-versions-2026-11-12 - gated on ops.live, the same key the
+                        server route checks (CR-2d join, Task 3 Step 1). */}
+                    <Route path="/ops/app-versions" element={
+                      <EntitlementGuard module={ModuleKeys.OpsLive}><AppVersionsPage /></EntitlementGuard>
+                    } />
                     <Route path="/metrics/nsm" element={
                       <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
                     } />
@@ -301,6 +308,12 @@ export default function App() {
                         Relying on RequireScope (any resolved scope) for now; specific module
                         gates land when schedule / admin-management surfaces add their keys. */}
                     <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                    {/* spec: plr-d10 lane SCH-A - the schedule check is a ShramSafal platform act: gated on
+                        its own module key. As on the go-live line it has NO menu entry; the templates
+                        page links to it (CR-2d D3, Task 3 Step 2). */}
+                    <Route path="/schedules/check" element={
+                      <EntitlementGuard module={ModuleKeys.ScheduleReview}><ScheduleCheckPage /></EntitlementGuard>
+                    } />
                     <Route path="/settings/admins" element={<SettingsAdminsPage />} />
 
                     {/* TASK 27 STEP 2 — A REAL 404 REPLACES A SILENT BOUNCE (A43).

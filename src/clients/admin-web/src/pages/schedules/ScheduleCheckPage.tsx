@@ -5,12 +5,18 @@ import { ClipboardCheck } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { FreshnessChip } from '@/components/ui/FreshnessChip';
+import { PersonName } from '@/components/ui/PersonName';
+import { LoadFailed, LoadingState, MeasuredZero } from '@/components/state';
 
 // spec: plr-d10 lane SCH-A (Task 5; founder D-74, L8-R) - ShramSafal's check of a library schedule, day by day.
 // A check is a ShramSafal PLATFORM act: the server records who checked (the signed-in person), when, and which version. This page
 // only ever sends the decision, the ticked rows, the note and the name farmers read. Approve needs EVERY row ticked (R4): the
 // checker ticks each activity with its days, repeat, part, role and "after" order (R34, D-104a). Return and Withdraw need a reason.
+//
+// CR-2d join (plan Task 3 Step 2, D3): routed as on the go-live line, with no menu entry (the templates page links here).
+// Ported onto the September console's components and state rules only: no freshness chip (neither answer carries a server
+// time, and a chip may only state an age it has), LoadingState / LoadFailed (always with Retry) / MeasuredZero for the
+// states, the checker's name through PersonName, the token layer's classes. The words and the check itself are the lane's.
 
 interface WaitingSchedule {
   id: string;
@@ -94,23 +100,32 @@ export default function ScheduleCheckPage() {
   });
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between px-1">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-text-primary">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-teal to-brand-sky text-white shadow-[0_4px_12px_rgba(82,192,190,0.35)]"><ClipboardCheck size={18} strokeWidth={2.5}/></span>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <h1 className="flex min-w-0 flex-1 items-center gap-2 text-h1 font-bold text-text-1">
+          <ClipboardCheck size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
           Schedule check
         </h1>
-        <FreshnessChip source="live" />
+        <span className="text-caption text-text-3">no server timestamp</span>
       </div>
 
       <div className="grid grid-cols-[320px_1fr] gap-4">
         <Card>
           <CardHeader><CardTitle>Waiting for a check</CardTitle></CardHeader>
           <CardContent>
-            {waiting.isLoading && <div className="h-16 animate-pulse rounded-xl bg-surface-sidebar"/>}
-            {waiting.isError && <p className="text-sm text-danger">{errorText(waiting.error)}</p>}
+            {waiting.isLoading && <LoadingState label="Loading the schedules waiting for a check…" height={64} />}
+            {waiting.isError && (
+              <LoadFailed
+                error={errorText(waiting.error)}
+                onRetry={() => void waiting.refetch()}
+                what="the schedules waiting for a check"
+              />
+            )}
             {!waiting.isLoading && !waiting.isError && !waiting.data?.length && (
-              <p className="text-sm text-text-muted">Nothing is waiting. A schedule waits here once its days are stored and nobody has decided on it.</p>
+              <MeasuredZero
+                what="Nothing is waiting. A schedule waits here once its days are stored and nobody has decided on it."
+                checkedAt="a time this answer does not report"
+              />
             )}
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {(waiting.data ?? []).map(w => (
@@ -118,10 +133,10 @@ export default function ScheduleCheckPage() {
                   <button
                     type="button"
                     onClick={() => setParams({ id: w.id })}
-                    className={`w-full rounded-lg border-2 px-3 py-2 text-left text-sm ${selectedId === w.id ? 'border-brand-teal bg-surface-panel' : 'border-surface-border bg-surface-glass'}`}
+                    className={`w-full rounded-chip border px-3 py-2 text-left text-body transition-colors ${selectedId === w.id ? 'border-brand bg-brand-wash' : 'border-control-edge hover:border-brand hover:bg-wash'}`}
                   >
-                    <span className="block font-bold text-text-primary">{w.name}</span>
-                    <span className="block text-[12px] text-text-muted">
+                    <span className="block font-semibold text-text-1">{w.name}</span>
+                    <span className="block text-caption text-text-2">
                       v{w.version} - {w.stageCount} stages - {w.activityCount} activities{w.sourceLabel ? ` - ${w.sourceLabel}` : ''}
                     </span>
                   </button>
@@ -132,9 +147,11 @@ export default function ScheduleCheckPage() {
         </Card>
 
         <div>
-          {!selectedId && <div className="glass-panel py-16 text-center text-sm text-text-muted">Pick a schedule to check it day by day.</div>}
-          {selectedId && schedule.isLoading && <div className="h-40 animate-pulse rounded-xl bg-surface-sidebar"/>}
-          {selectedId && schedule.isError && <div className="glass-panel py-10 text-center text-sm text-danger">{errorText(schedule.error)}</div>}
+          {!selectedId && <div className="glass-panel rounded-panel py-16 text-center text-body text-text-2">Pick a schedule to check it day by day.</div>}
+          {selectedId && schedule.isLoading && <LoadingState label="Loading the schedule…" height={160} />}
+          {selectedId && schedule.isError && (
+            <LoadFailed error={errorText(schedule.error)} onRetry={() => void schedule.refetch()} what="this schedule" />
+          )}
           {selectedId && schedule.data && (
             <CheckForm
               key={schedule.data.id}
@@ -196,36 +213,44 @@ function CheckForm({ schedule, onDone }: { schedule: CheckSchedule; onDone: () =
     <Card>
       <CardHeader>
         <CardTitle>{schedule.name}</CardTitle>
-        <span className="font-mono text-[12px] font-bold text-text-muted">{schedule.rowVersionTag ?? ''}</span>
+        <span className="font-mono text-caption font-semibold text-text-2">{schedule.rowVersionTag ?? ''}</span>
       </CardHeader>
       <CardContent>
-        <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-text-muted">
-          <span>Crop: <b className="text-text-primary">{schedule.cropType}</b></span>
-          <span>Source: <b className="text-text-primary">{schedule.sourceLabel ?? schedule.ownerType ?? '-'}</b></span>
-          <span>Total days: <b className="text-text-primary">{schedule.totalDays}</b></span>
-          <span>Now: <b className="text-text-primary">{schedule.check?.state ?? 'NotChecked'}</b>{schedule.check?.checkerDisplayName ? ` - ${schedule.check.checkerDisplayName}` : ''}</span>
+        <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-body text-text-2">
+          <span>Crop: <b className="text-text-1">{schedule.cropType}</b></span>
+          <span>Source: <b className="text-text-1">{schedule.sourceLabel ?? schedule.ownerType ?? '-'}</b></span>
+          <span>Total days: <b className="text-text-1">{schedule.totalDays}</b></span>
+          <span>
+            Now: <b className="text-text-1">{schedule.check?.state ?? 'NotChecked'}</b>
+            {schedule.check?.checkerDisplayName ? (
+              <>
+                {' - '}
+                <PersonName name={schedule.check.checkerDisplayName} />
+              </>
+            ) : null}
+          </span>
         </div>
-        <p className="mb-3 text-[12px] text-text-muted">
+        <p className="mb-3 text-caption text-text-2">
           Stages: {schedule.stages.map(s => `${s.name} (${s.startDay}-${s.endDay})`).join(' | ')}
         </p>
 
         {!storable && (
-          <p className="mb-3 rounded-md bg-surface-sidebar p-3 text-sm text-danger">
+          <p className="mb-3 rounded-chip bg-tint-red p-3 text-body font-medium text-text-1">
             The days of this schedule are not stored, so it cannot be checked.
           </p>
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full border-collapse text-body">
             <thead>
-              <tr className="border-b border-row-divider text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-text-muted">
-                {['Checked', 'Activity', 'Stage', 'Days', 'Repeat', 'Part', 'Operation', 'Role', 'After'].map(h => <th key={h} className="py-2 pr-3">{h}</th>)}
+              <tr className="text-left">
+                {['Checked', 'Activity', 'Stage', 'Days', 'Repeat', 'Part', 'Operation', 'Role', 'After'].map(h => <th key={h} scope="col" className="whitespace-nowrap border-b border-line bg-panel-head px-3 py-2.5 text-caption font-bold text-text-2">{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.id ?? r.name} className="border-b border-row-divider">
-                  <td className="py-2 pr-3">
+                <tr key={r.id ?? r.name} className="border-b border-line text-text-1">
+                  <td className="px-3 py-2">
                     <input
                       type="checkbox"
                       aria-label={`Checked: ${r.name}`}
@@ -234,14 +259,14 @@ function CheckForm({ schedule, onDone }: { schedule: CheckSchedule; onDone: () =
                       onChange={() => r.id !== null && toggle(r.id)}
                     />
                   </td>
-                  <td className="py-2 pr-3 font-semibold text-text-primary">{r.name}</td>
-                  <td className="py-2 pr-3">{r.stageName}</td>
-                  <td className="py-2 pr-3 font-mono text-[12px]">{r.startDay}-{r.endDay}</td>
-                  <td className="py-2 pr-3">{repeatText(r)}</td>
-                  <td className="py-2 pr-3">{r.part ?? '-'}</td>
-                  <td className="py-2 pr-3 font-mono text-[12px]">{r.operationKey ?? '-'}</td>
-                  <td className="py-2 pr-3">{r.role ? `${r.role}${r.nutrientKey ? ` (${r.nutrientKey})` : ''}` : '-'}</td>
-                  <td className="py-2 pr-3">{r.afterActivityId ? `after ${nameById.get(r.afterActivityId) ?? '?'}` : '-'}</td>
+                  <td className="px-3 py-2 font-semibold text-text-1">{r.name}</td>
+                  <td className="px-3 py-2">{r.stageName}</td>
+                  <td className="px-3 py-2 font-mono text-caption">{r.startDay}-{r.endDay}</td>
+                  <td className="px-3 py-2">{repeatText(r)}</td>
+                  <td className="px-3 py-2">{r.part ?? '-'}</td>
+                  <td className="px-3 py-2 font-mono text-caption">{r.operationKey ?? '-'}</td>
+                  <td className="px-3 py-2">{r.role ? `${r.role}${r.nutrientKey ? ` (${r.nutrientKey})` : ''}` : '-'}</td>
+                  <td className="px-3 py-2">{r.afterActivityId ? `after ${nameById.get(r.afterActivityId) ?? '?'}` : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -249,23 +274,23 @@ function CheckForm({ schedule, onDone }: { schedule: CheckSchedule; onDone: () =
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm font-semibold text-text-primary">
+          <label className="flex flex-col gap-1 text-caption font-semibold text-text-1">
             Name farmers read
             <input
               type="text"
               value={checkerName}
               onChange={e => setCheckerName(e.target.value)}
-              className="w-full max-w-md rounded-md border-2 border-surface-border bg-surface-kpi px-3 py-2 text-sm text-text-primary outline-none focus:border-brand-teal"
+              className="glass-quiet w-full max-w-md rounded-chip border border-control-edge px-3 py-2 text-body text-text-1 focus:border-brand"
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-text-primary">
+          <label className="flex flex-col gap-1 text-caption font-semibold text-text-1">
             Reason (needed for Return and Withdraw)
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
               rows={3}
               maxLength={1000}
-              className="w-full max-w-xl rounded-md border-2 border-surface-border bg-surface-kpi px-3 py-2 text-sm text-text-primary outline-none focus:border-brand-teal"
+              className="glass-quiet w-full max-w-xl rounded-chip border border-control-edge px-3 py-2 text-body text-text-1 focus:border-brand"
             />
           </label>
           <div className="flex flex-wrap items-center gap-3">
@@ -278,7 +303,7 @@ function CheckForm({ schedule, onDone }: { schedule: CheckSchedule; onDone: () =
             <Button variant="destructive" disabled={!hasNote || !named || !storable || record.isPending} onClick={() => record.mutate('Withdrawn')}>
               Withdraw
             </Button>
-            {message && <span className={`text-sm font-semibold ${message.ok ? 'text-brand-leaf' : 'text-danger'}`}>{message.text}</span>}
+            {message && <span role={message.ok ? 'status' : 'alert'} className={`text-body font-semibold ${message.ok ? 'text-green' : 'text-red'}`}>{message.text}</span>}
           </div>
         </div>
       </CardContent>

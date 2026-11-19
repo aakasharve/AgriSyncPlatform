@@ -12,6 +12,7 @@ import {
   MapPinned,
   Repeat2,
   Settings as SettingsIcon,
+  Smartphone,
   Star,
   TrendingDown,
   Users as UsersIcon,
@@ -120,6 +121,10 @@ export const NAV: NavItem[] = [
   { to: '/MIS/operations', label: 'Operations', Icon: LifeBuoy, group: 'Company MIS', module: ModuleKeys.MetricsNsm },
   { to: '/ops/live', label: 'Live Health', Icon: Zap, group: 'Operations', module: ModuleKeys.OpsLive },
   { to: '/ops/errors', label: 'API Errors', Icon: AlertTriangle, group: 'Operations', module: ModuleKeys.OpsErrors },
+  // spec: control-room-app-versions-2026-11-12 (CR-2d join, Task 3 Step 1): the recording lane's
+  // page, on the same key as its route and the server's. The schedule check (/schedules/check)
+  // is deliberately NOT listed: it has no menu entry on the go-live line (CR-2d D3).
+  { to: '/ops/app-versions', label: 'App Versions', Icon: Smartphone, group: 'Operations', module: ModuleKeys.OpsLive },
   { to: '/metrics/nsm', label: 'WVFD', Icon: Star, group: 'Product', module: ModuleKeys.MetricsNsm },
   { to: '/farms', label: 'All Farms', Icon: Wheat, group: 'Farms', module: ModuleKeys.FarmsList },
   { to: '/farms/silent-churn', label: 'Silent Churn', Icon: TrendingDown, group: 'Farms', module: ModuleKeys.FarmsSilentChurn },
