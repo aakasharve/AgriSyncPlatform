@@ -33,6 +33,8 @@ import { systemClock } from '../../../core/domain/services/Clock';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SessionStore } from '../../../infrastructure/storage/SessionStore';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import { saveScheduleChoice } from '../../scheduler/schedulePage/saveScheduleChoice';
 import { noteUnqueueableLogs } from '../status/unqueueableLogs';
 import type { Plot } from '../../../types';
 import { areaInAcres } from './plotArea';
@@ -59,12 +61,45 @@ const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const toDateKey = (iso: string | undefined): string =>
     (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : systemClock.nowISO().slice(0, 10));
 
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Is an `adopt_schedule` for this plot already in the outbox, in ANY state (waiting, sent, refused, discarded)? */
+async function adoptAlreadyQueuedFor(plotId: string): Promise<boolean> {
+    const rows = await getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.AdoptSchedule).toArray();
+    return rows.some((row) => (row.payload as { plotId?: unknown } | null)?.plotId === plotId);
+}
+
+/**
+ * spec: plr-d10 lane WIZARD-F2 - the plot's schedule choice, queued AFTER its plot and crop cycle.
+ *
+ * ORDER, read from the code (not assumed): the outbox hands the worker its rows oldest first (`MutationQueue.getPending` sorts on the
+ * queue id) and the server handles one batch in the order sent (`PushSyncBatchHandler`, one `foreach` over the mutations). The adopt
+ * (`AdoptScheduleHandler`) needs the PLOT (`PlotNotFound`) and the crop cycle, which must be this plot's (`CropCycleNotFound`), so it
+ * is queued after `create_plot` and `create_crop_cycle` and carries the cycle id they were queued under. The adopt is the ordinary one
+ * (`saveScheduleChoice`, the schedule tab's own door): the phone's pending subscription row is written with it, so the schedule tab
+ * shows the choice at once and a download cannot put a default over it.
+ *
+ * Idempotent: a second call (the start-up retry) finds the phone's own pending row, or an adopt of this plot already in the outbox
+ * (a refused one the sweep has cleared must not be asked again at every start), and queues nothing. Never throws (saveScheduleChoice
+ * does not either); a choice the server cannot be told about stays on the phone and is logged.
+ */
+async function queueScheduleChoice(reg: PendingPlotRegistration): Promise<void> {
+    const choice = reg.schedule;
+    if (!choice) return;
+    if (await adoptAlreadyQueuedFor(reg.plotId)) return;
+    const result = await saveScheduleChoice([{ plotId: reg.plotId, templateId: choice.templateId, referenceDate: choice.referenceDate }]);
+    if (result.notSent.length > 0 || result.missing.length > 0) {
+        console.error('[registerNewPlotOnServer] the new plot\'s schedule could not be queued for the server', reg.plotId);
+    }
+}
+
 async function enqueueRegistration(reg: PendingPlotRegistration): Promise<void> {
     const cropCycleId = await cropCycleIdForPlot(reg.plotId);
     await CreatePlotCommand.enqueue({ plotId: reg.plotId, farmId: reg.farmId, name: reg.name, areaInAcres: reg.areaInAcres });
     await CreateCropCycleCommand.enqueue({
         cropCycleId, farmId: reg.farmId, plotId: reg.plotId, cropName: reg.cropName, stage: UNSTATED_STAGE, startDate: reg.startDate,
     });
+    await queueScheduleChoice(reg);
 }
 
 export type RegisterPlotOutcome = 'queued' | 'no-farm' | 'needs-area' | 'not-a-server-id' | 'failed';
@@ -73,6 +108,11 @@ export async function registerNewPlotOnServer(args: {
     plot: Plot;
     cropName: string;
     farmId?: string | null;
+    /**
+     * spec: plr-d10 lane WIZARD-F2 - the schedule a new plot follows by itself and the day it counts from (YYYY-MM-DD). Only a real server
+     * schedule (a GUID id) and a real day are sent: the app's stand-in and a half-typed date never leave the phone.
+     */
+    schedule?: { templateId: string; referenceDate: string } | null;
 }): Promise<RegisterPlotOutcome> {
     const { plot, cropName } = args;
     if (!GUID_RE.test(plot.id)) return 'not-a-server-id';
@@ -93,6 +133,9 @@ export async function registerNewPlotOnServer(args: {
 
     const reg: PendingPlotRegistration = {
         plotId: plot.id, farmId, name: plot.name, areaInAcres: acres, cropName, startDate: toDateKey(plot.startDate),
+        ...(args.schedule && GUID_RE.test(args.schedule.templateId) && DAY_KEY_RE.test(args.schedule.referenceDate)
+            ? { schedule: { templateId: args.schedule.templateId, referenceDate: args.schedule.referenceDate } }
+            : {}),
     };
     try {
         // The record goes first, the rows second, on purpose: if the app stops in between,
