@@ -13,8 +13,8 @@
 
 import React from 'react';
 import {
-    MapPin, Clock,
-    ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
+    MapPin,
+    ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, LogOut,
     Cloud, Medal
 } from 'lucide-react';
 import { FarmerProfile, VerificationStatus } from '../../../types';
@@ -29,16 +29,27 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { getOperatorRoleLabel } from '../../../shared/roles/roleLabels';
 import { isActiveSeat } from '../../../core/session/seatStatus';
 
-// Identity verification status for farmer ID
-type IdentityStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+/** The account's own number as the server reports it: a masked form and whether a code proved it. */
+export interface SignedInPhone {
+    masked: string;
+    verified: boolean;
+}
 
-// Identity status helper - maps VerificationStatus enum to IdentityStatus
-const getIdentityStatus = (profile: FarmerProfile): IdentityStatus => {
-    if (profile.verificationStatus === VerificationStatus.GovernmentVerified) return 'VERIFIED';
-    if (profile.verificationStatus === VerificationStatus.PhoneVerified) return 'PENDING';
-    if (profile.verificationStatus === VerificationStatus.Unverified) return 'NOT_STARTED';
-    return 'PENDING'; // Default to PENDING to show the red banner
-};
+/**
+ * Lane HONESTY-2 (H4) — is the number shown on this page the one this account signed in with, proven by a code?
+ * The server masks the number (`******3210`), so all the phone can compare is the last digits and the length: a
+ * typed number passes only if every digit the mask shows is the same digit in the same place. No number, no
+ * account number, or one a code never proved → false (no tick).
+ */
+export function phoneIsVerifiedSignIn(typed: string | null | undefined, signedIn: SignedInPhone | null | undefined): boolean {
+    if (!typed || !signedIn?.verified) return false;
+    const typedDigits = typed.replace(/\D/g, '');
+    // Both sides to the last ten places (the national number): a "+91" or "0" in front is not part of the comparison.
+    const mask = signedIn.masked.replace(/[^*\d]/g, '').slice(-10);
+    const digits = typedDigits.slice(-10);
+    if (mask.length < 4 || digits.length !== mask.length) return false;
+    return [...mask].every((ch, i) => ch === '*' || ch === digits[i]);
+}
 
 interface IdentitySectionProps {
     profile: FarmerProfile;
@@ -73,6 +84,13 @@ interface IdentitySectionProps {
     onOpenTeam?: () => void;
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
+    /**
+     * lane HONESTY-2 (H4) — the number this account signed in with, as the SERVER holds it (`/me/context` → `me`):
+     * `masked` is the server's own mask (`******3210`, nothing but the last four digits) and `verified` is true only
+     * when a code sent to that number was entered (`phoneVerifiedAtUtc`). The "सत्यापित" tick beside the phone shows
+     * only for that number. Absent = no tick (the page cannot say it).
+     */
+    signedInPhone?: SignedInPhone | null;
     isWorkerOnAnyFarm: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workerProfile: { reliability: any } | null;
@@ -95,8 +113,12 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     onOpenTeam,
     nonExitableFarmIds,
     handleExitMembership,
+    signedInPhone = null,
 }) => {
     const { t } = useLanguage();
+    // H4: the only identity statement this page can honestly make is a government-verified one (the same single truth
+    // the सेट-अप केंद्र reads). Nothing in the app sets it for a farmer today, so today no banner and no badge is drawn.
+    const isGovernmentVerified = profile.verificationStatus === VerificationStatus.GovernmentVerified;
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the chip beside the name said "मुख्य मालक" to
     // EVERYONE, a worker included. It now says the role the SERVER holds for the current farm
     // (/farms/mine), falling back to the farm this page loaded; no server answer, no chip.
@@ -116,51 +138,16 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
             {/* 1. FARMER IDENTITY CARD (HIERARCHY LAYER 1) - ENHANCED WITH STATUS */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
 
-                {/* STATUS BANNER - Shows prominently based on verification status */}
-                {(() => {
-                    const identityStatus = getIdentityStatus(profile);
-                    if (identityStatus === 'PENDING') {
-                        return (
-                            <div className="bg-amber-500 text-white px-6 py-3 flex items-center gap-3">
-                                <Clock size={20} />
-                                <div>
-                                    <p className="font-bold text-sm">ओळख तपासली जात आहे</p>
-                                    <p className="text-xs opacity-90">पडताळणी पूर्ण झाल्यावर विश्वासू नोंदी सुरू होतील</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    if (identityStatus === 'NOT_STARTED') {
-                        return (
-                            <div className="bg-slate-600 text-white px-6 py-3 flex items-center gap-3">
-                                <FileText size={20} />
-                                <div>
-                                    <p className="font-bold text-sm">Verification Not Started</p>
-                                    <p className="text-xs opacity-90">Start verification to build trust</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    if (identityStatus === 'REJECTED') {
-                        return (
-                            <div className="bg-orange-500 text-white px-6 py-3 flex items-center gap-3">
-                                <AlertTriangle size={20} />
-                                <div>
-                                    <p className="font-bold text-sm">Verification Rejected</p>
-                                    <p className="text-xs opacity-90">Please fix issues and resubmit</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — "Verified Farmer" dropped: the
-                    // same plain words the सेट-अप केंद्र uses for a verified identity (PLR-D9 T4).
-                    return (
-                        <div className="bg-emerald-500 text-white px-6 py-3 flex items-center gap-3">
-                            <ShieldCheck size={20} />
-                            <p className="font-bold text-sm">✓ ओळख पडताळलेली</p>
-                        </div>
-                    );
-                })()}
+                {/* STATUS BANNER — lane HONESTY-2 (H4). There is no identity-review process in the app, so there is no
+                    "being checked", "not started" or "rejected" to state: those three banners (one in English) are gone, and
+                    so is the "start / view / resubmit" button under each. Only a government-verified identity (the same
+                    one truth the सेट-अप केंद्र reads, PLR-D9 T4) is announced. */}
+                {isGovernmentVerified && (
+                    <div className="bg-emerald-500 text-white px-6 py-3 flex items-center gap-3" data-testid="identity-verified-banner">
+                        <ShieldCheck size={20} />
+                        <p className="font-bold text-sm">✓ ओळख पडताळलेली</p>
+                    </div>
+                )}
 
                 <div className="p-6">
                     <div className="absolute top-16 right-0 p-4 opacity-10 pointer-events-none">
@@ -172,14 +159,9 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-3xl shadow-inner border-4 border-white">
                                 👨‍🌾
                             </div>
-                            {getIdentityStatus(profile) === 'VERIFIED' && (
+                            {isGovernmentVerified && (
                                 <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1.5 rounded-full border-2 border-white shadow-sm" title={t('profile.verified')}>
                                     <ShieldCheck size={16} />
-                                </div>
-                            )}
-                            {getIdentityStatus(profile) === 'PENDING' && (
-                                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-white p-1.5 rounded-full border-2 border-white shadow-sm" title="Under review">
-                                    <Clock size={16} />
                                 </div>
                             )}
                         </div>
@@ -202,8 +184,10 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                 <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
                                     <Phone size={16} className="shrink-0 text-slate-400" />
                                     {profile.phone || '—'}
-                                    {profile.phone && (
-                                        <span className="text-emerald-600 text-xs font-bold flex shrink-0 items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                    {/* H4: "सत्यापित" only for the number this account signed in with (a code was entered for it),
+                                        never for any other number that happens to be typed in the profile. */}
+                                    {phoneIsVerifiedSignIn(profile.phone, signedInPhone) && (
+                                        <span data-testid="identity-phone-verified" className="text-emerald-600 text-xs font-bold flex shrink-0 items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
                                             <Check size={10} /> {t('profile.verified')}
                                         </span>
                                     )}
@@ -228,51 +212,10 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                 <p className="text-[10px] font-bold text-slate-400 uppercase">गाव / तालुका / जिल्हा</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.village || '—'}</p>
                             </div>
-
-                            <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">सातबारा (7/12)</p>
-                                <p className="text-sm font-bold text-slate-500">अजून जोडलेले नाही</p>
-                            </div>
-                            <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">ओळखपत्र</p>
-                                <p className="text-sm font-bold text-amber-600 flex items-center gap-1">
-                                    <Clock size={12} /> जोडायचे बाकी
-                                </p>
-                            </div>
+                            {/* H4: "सातबारा (7/12): अजून जोडलेले नाही" and "ओळखपत्र: जोडायचे बाकी" are gone — the app has no way to add
+                                either, so they only promised something that cannot be done. The four buttons that sat below
+                                (Start Verification / View Submitted Details / Fix & Resubmit / पडताळलेली ओळख पहा) had no handler. */}
                         </div>
-                    </div>
-
-                    {/* CTA BUTTONS based on status */}
-                    <div className="mt-6">
-                        {(() => {
-                            const identityStatus = getIdentityStatus(profile);
-                            if (identityStatus === 'NOT_STARTED') {
-                                return (
-                                    <button className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg">
-                                        <Upload size={18} /> Start Verification
-                                    </button>
-                                );
-                            }
-                            if (identityStatus === 'PENDING') {
-                                return (
-                                    <button className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors shadow-lg">
-                                        <Eye size={18} /> View Submitted Details
-                                    </button>
-                                );
-                            }
-                            if (identityStatus === 'REJECTED') {
-                                return (
-                                    <button className="w-full py-3 bg-red-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-600 transition-colors shadow-lg">
-                                        <Upload size={18} /> Fix & Resubmit
-                                    </button>
-                                );
-                            }
-                            return (
-                                <button className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                                    <Eye size={18} /> पडताळलेली ओळख पहा
-                                </button>
-                            );
-                        })()}
                     </div>
 
                     {/* FARM BOUNDARY + WEATHER LINK — three-state flow:

@@ -158,7 +158,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
     // Mukadam on any farm.
-    const { currentFarmId: profileFarmId, switchFarm, farms: meFarms } = useFarmContext();
+    const { currentFarmId: profileFarmId, switchFarm, farms: meFarms, meContext } = useFarmContext();
+    // lane HONESTY-2 (H4) — the number this account signed in with, as the server holds it, for the one "सत्यापित" tick.
+    const signedInPhone = meContext?.me
+        ? { masked: meContext.me.phoneMasked, verified: meContext.me.phoneVerifiedAtUtc != null }
+        : null;
     const isWorkerOnAnyFarm = farmAdmin.myMemberships.some(m => m.role === 'Worker' || m.role === 'Mukadam');
     const { profile: workerProfile } = useWorkerProfile(
         isWorkerOnAnyFarm ? (authSession?.userId ?? null) : null,
@@ -324,6 +328,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 handleExitMembership={farmAdmin.handleExitMembership}
                                 isWorkerOnAnyFarm={isWorkerOnAnyFarm}
                                 workerProfile={workerProfile}
+                                signedInPhone={signedInPhone}
                             />
                         ),
                     },
@@ -451,10 +456,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     return (
                         <div>
                             <PageBar title="बिलिंग" onBack={() => setActiveExtra(null)} />
+                            {/* lane HONESTY-2 (H5): no `onManageBilling` — there is no billing portal yet, and the English
+                                "coming soon" alert it used to fire sat behind every button on the card (P5). */}
                             <SubscriptionCard
                                 subscription={billingFarm?.subscription}
                                 role={billingFarm?.role ?? ''}
-                                onManageBilling={() => window.alert('Billing portal coming soon. Contact support@shramsafal.in.')}
                             />
                         </div>
                     );
