@@ -6,9 +6,12 @@
  * screen (commit c95afa1c: "खर्च: <what it covers>" with आज / काल / आतापर्यंत), RE-HOMED on the work
  * home. Same numbers, same scope label, from the same `costSnapshot` the router derives — nothing is computed here.
  *
- * Lane UI-6 (founder D-150, note 1.2: the money "seems non noticeable"; the approved picture H1): drawn as a FULL-WIDTH DARK
- * card - stone-900, a 44 px amber circle with the rupee at left, the small label "खर्च — <what it covers> · आजपर्यंत", the
- * running total big in amber-300, and one small line "आज … · काल …" with the real figures. Who sees it is unchanged (the caller
+ * Lane UI-6 (founder D-150, note 1.2: the money "seems non noticeable"; the approved picture H1): a FULL-WIDTH card with a 44 px amber
+ * circle with the rupee at left, the small label "खर्च — <what it covers> · आजपर्यंत", the running total big, and one small line
+ * "आज … · काल …" with the real figures.
+ *
+ * Founder pick M2 (2026-11-19, round 5 question 1): the card was black and "feels different than the whole UI"; it is now a WHITE card with
+ * a thin line, the amber rupee badge and a dark amount, like the other white cards. Who sees it is unchanged (the caller
  * hands in `cost` only to a person who may see the farm's money). It has no tap: the old card had none, so no chevron is drawn
  * (a chevron would promise a place to open that nobody has wired).
  *
@@ -38,12 +41,12 @@ const labelOf = (scopeLabel: string | undefined): string => {
 
 export const RunningCostCard: React.FC<{ cost: RunningCost }> = ({ cost }) => (
     <section data-testid="running-cost-card" style={{ fontFamily: SANS }}
-        className="flex w-full items-center gap-3 rounded-[18px] bg-stone-900 px-3.5 py-3 text-white shadow-[0_6px_16px_rgba(28,25,23,0.3)]">
+        className="flex w-full items-center gap-3 rounded-[18px] border-2 border-stone-200 bg-white px-3.5 py-3 text-stone-900 shadow-sm">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-amber-500 text-stone-900"><IndianRupee size={22} strokeWidth={2.4} aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
-            <p data-testid="running-cost-scope" className="m-0 text-[11.5px] font-semibold leading-snug text-stone-200">{labelOf(cost.scopeLabel)}</p>
-            <p data-testid="running-cost-so-far" className="m-0 text-[26px] font-extrabold leading-[1.1] text-amber-300">{money(cost.soFar)}</p>
-            <p className="m-0 text-[11.5px] font-semibold leading-snug text-stone-200" data-testid="running-cost-recent">
+            <p data-testid="running-cost-scope" className="m-0 text-[11.5px] font-semibold leading-snug text-stone-600">{labelOf(cost.scopeLabel)}</p>
+            <p data-testid="running-cost-so-far" className="m-0 text-[26px] font-extrabold leading-[1.1] text-stone-900">{money(cost.soFar)}</p>
+            <p className="m-0 text-[11.5px] font-semibold leading-snug text-stone-600" data-testid="running-cost-recent">
                 {COST_WORDS.today} <span data-testid="running-cost-today">{money(cost.today)}</span>
                 {' · '}
                 {COST_WORDS.yesterday} <span data-testid="running-cost-yesterday">{money(cost.yesterday)}</span>

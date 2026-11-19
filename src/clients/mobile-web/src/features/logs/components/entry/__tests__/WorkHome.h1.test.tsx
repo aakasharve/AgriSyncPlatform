@@ -256,14 +256,14 @@ describe('the हजेरी card only when a head count was said (founder D-15
     });
 });
 
-describe('the money as a full-width dark card (founder D-150, note 1.2)', () => {
-    it('is stone-900 with white text, a 44 px amber circle with the rupee at left, and the label, the big amount and the small line', () => {
+describe('the money as a full-width white card (founder D-150 note 1.2, colour M2 of 2026-11-19)', () => {
+    it('is white with dark text, a 44 px amber circle with the rupee at left, and the label, the big amount and the small line', () => {
         render(<WorkHome {...full({ cost: { today: 1200, yesterday: 0, soFar: 45000, scopeLabel: 'संपूर्ण शेत' } })} />);
         const card = screen.getByTestId('running-cost-card');
-        expect(card.className).toContain('bg-stone-900');
-        expect(card.className).toContain('text-white');
+        expect(card.className).toContain('bg-white');
+        expect(card.className).toContain('text-stone-900');
         expect(card.className).toContain('w-full');
-        expect(card.className).not.toContain('bg-white');
+        expect(card.className).not.toContain('bg-stone-900');
         const circle = card.querySelector('span.rounded-full') as HTMLElement;
         expect(circle.className).toContain('bg-amber-500');
         expect(circle.className).toContain('h-11');
@@ -275,7 +275,7 @@ describe('the money as a full-width dark card (founder D-150, note 1.2)', () => 
         expect(amount).toHaveTextContent('₹ 45,000');
         expect(amount.className).toContain('text-[26px]');
         expect(amount.className).toContain('font-extrabold');
-        expect(amount.className).toContain('text-amber-300');
+        expect(amount.className).toContain('text-stone-900');
         // the small line carries the real figures; nothing recorded is the app's own "—", never "₹ 0"
         expect(within(card).getByTestId('running-cost-recent').textContent).toBe('आज ₹ 1,200 · काल —');
         expect(within(card).getByTestId('running-cost-today')).toHaveTextContent('₹ 1,200');
@@ -307,7 +307,7 @@ describe('the money as a full-width dark card (founder D-150, note 1.2)', () => 
 
 describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the picture puts on solid colours', () => {
     const HEX: Record<string, string> = {
-        'text-white': '#ffffff', 'text-stone-200': '#e7e5e4', 'text-amber-300': '#fcd34d', 'text-emerald-50': '#ecfdf5',
+        'text-white': '#ffffff', 'text-stone-200': '#e7e5e4', 'text-stone-600': '#57534e', 'text-amber-300': '#fcd34d', 'text-emerald-50': '#ecfdf5',
         'bg-stone-900': '#1c1917', 'bg-emerald-700': '#047857', 'bg-[#1448E6]': '#1448e6', 'bg-amber-500': '#f59e0b', 'text-stone-900': '#1c1917',
     };
     const lin = (c: number) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
@@ -317,13 +317,16 @@ describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the pictur
     // text/90 on a solid: the picture's own "opacity .9" white, mixed into the blue
     const white90OnBlue = () => { const f = [255, 255, 255].map((c, i) => Math.round(0.9 * c + 0.1 * [20, 72, 230][i])); return '#' + f.map(c => c.toString(16).padStart(2, '0')).join(''); };
 
-    it('the money card: the label, the small line and the amber figure on stone-900', () => {
+    it('the money card (founder pick M2): the label, the small line and the figure are dark text on white, with the amber rupee badge', () => {
         render(<WorkHome {...full()} />);
         for (const id of ['running-cost-scope', 'running-cost-recent', 'running-cost-so-far']) {
             const cls = textClass(screen.getByTestId(id));
             expect(cls, `${id} must use a colour this table knows`).toBeTruthy();
-            expect(ratio(HEX[cls as string], HEX['bg-stone-900'])).toBeGreaterThanOrEqual(4.5);
+            expect(ratio(HEX[cls as string], '#ffffff')).toBeGreaterThanOrEqual(4.5);
         }
+        const card = screen.getByTestId('running-cost-card');
+        expect(card.className).toContain('bg-white');
+        expect(card.className).not.toContain('bg-stone-900');
     });
 
     it('the हजेरी note: stone-700 and emerald-700 text on its white', () => {
