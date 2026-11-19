@@ -9,8 +9,9 @@ public interface IAdminMisRepository
 
     // Phase 4 — Farms. adminUserId is named in the cross-farm audit row (spec company-mis-real-numbers-2026-11-15).
     // Checked days, self-only days and the tier come from ConfirmedFarmDays for the farms on the page, read with the
-    // keys of this same audited open (C32). The tier filter counts every farm before paging; above the live-count
-    // ceiling the answer carries FarmsListDto.RefusalCode instead of a list.
+    // keys of this same audited open (C32); a farm that cannot be read is marked not measured on its row (C33). The
+    // tier filter counts every farm before paging; above the live-count ceiling, or when a farm cannot be read, the
+    // answer carries FarmsListDto.RefusalCode instead of a list.
     Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default);
 

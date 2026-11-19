@@ -56,8 +56,10 @@ public sealed class AdminMisRepository(
     // Checked days, self-only days and the tier come from ConfirmedFarmDays over each farm's own rows, read as the
     // app login under row-level security with the keys of that same open (never a second open). Phones and the
     // error count come from the analytics connection (no row-level security on those). Nothing is caught: a failed
-    // read answers 500, never an empty list; a farm whose rows cannot be read answers 500, never "No entry last
-    // week". Plan is always null (no made-up "trial").
+    // read answers 500, never an empty list. A farm whose rows cannot be read (no owner account, or its row did not
+    // come back under its own scope) is sent with its three counts null and ConfirmedDaysNotMeasuredReason
+    // "farm_unreadable", never "No entry last week"; the rest of the page answers normally (C33). Plan is always
+    // null (no made-up "trial").
     public async Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default)
     {
@@ -79,9 +81,10 @@ public sealed class AdminMisRepository(
             actorUserId: adminUserId,
             ct: ct);
 
-        // The tier filter (C32): the tier of EVERY farm, counted from keys read through this same open, BEFORE
-        // paging. Above the live-count ceiling it is refused (409), never applied to part of the farms.
-        IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek>? lastWeekOfEveryFarm = null;
+        // The tier filter (C32, C33): the tier of EVERY farm, counted from keys read through this same open, BEFORE
+        // paging. Above the live-count ceiling, or when any farm could not be read, it is refused (409), never
+        // applied to part of the farms.
+        IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek?>? lastWeekOfEveryFarm = null;
         List<FarmId>? tierFarmIds = null;
         if (hasTier)
         {
@@ -107,11 +110,20 @@ public sealed class AdminMisRepository(
                 };
             }
 
-            lastWeekOfEveryFarm = LastCompleteWeek(rows, countedAtUtc, "the tier filter would leave it out");
+            // A farm that could not be read would be silently left out of every tier.
+            if (rows.FarmsNotReadable > 0)
+            {
+                return new FarmsListDto([], 0, page, pageSize)
+                {
+                    RefusalCode = GetFarmsListHandler.TierFilterNotMeasuredCode,
+                };
+            }
+
+            lastWeekOfEveryFarm = ConfirmedFarmDays.LastCompleteWeek(rows, exclusions.UserIds, countedAtUtc);
             var wanted = tier!.Trim();
             tierFarmIds = lastWeekOfEveryFarm.Values
-                .Where(w => string.Equals(w.EngagementTier, wanted, StringComparison.Ordinal))
-                .Select(w => new FarmId(w.FarmId))
+                .Where(w => w is not null && string.Equals(w.EngagementTier, wanted, StringComparison.Ordinal))
+                .Select(w => new FarmId(w!.FarmId))
                 .ToList();
         }
 
@@ -170,10 +182,11 @@ public sealed class AdminMisRepository(
         var phones = await ReadPhonesAsync(farms.Select(f => f.OwnerUserId).Distinct().ToArray(), ct);
         var errors = await ReadErrors24hAsync(farmIds, ct);
 
+        // A farm present in lastWeek was read (null = no counted entry last week); an absent farm was not read.
         var items = farms
             .Select(f =>
             {
-                var week = lastWeek.GetValueOrDefault(f.FarmId);
+                var read = lastWeek.TryGetValue(f.FarmId, out var week);
                 return new FarmSummaryDto(
                     FarmId: f.FarmId,
                     Name: f.Name,
@@ -182,6 +195,7 @@ public sealed class AdminMisRepository(
                     Wvfd7d: week?.Wvfd,
                     SelfOnlyDays7d: week?.SelfOnlyDays,
                     EngagementTier: week?.EngagementTier,
+                    ConfirmedDaysNotMeasuredReason: read ? null : GetFarmsListHandler.FarmUnreadable,
                     Errors24h: errors.GetValueOrDefault(f.FarmId),
                     LastLogAt: f.LastLogAt,
                     CreatedAt: f.CreatedAtUtc);
@@ -191,8 +205,11 @@ public sealed class AdminMisRepository(
         return new FarmsListDto(items, total, page, pageSize);
     }
 
-    /// <summary>The page's farms, read as the app login one by one (C32); never more than one page.</summary>
-    private async Task<IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek>> ReadLastCompleteWeekAsync(
+    /// <summary>
+    /// The page's farms, read as the app login one by one (C32); never more than one page. Farms that could not be
+    /// read are absent from the answer (C33).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek?>> ReadLastCompleteWeekAsync(
         IReadOnlyCollection<ConfirmedFarmKey> keys, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
     {
         var rows = await confirmedFarmDays.ReadFarmsAsync(keys, sinceUtc, countedAtUtc, ct);
@@ -203,26 +220,6 @@ public sealed class AdminMisRepository(
                 + "\"No entry last week\" for farms whose entries were not read.");
         }
 
-        return LastCompleteWeek(rows, countedAtUtc, "it would read \"No entry last week\"");
-    }
-
-    /// <summary>
-    /// Each farm's last complete India week by <see cref="ConfirmedFarmDays"/>. A farm with no owner account, or whose
-    /// rows did not come back under its own row-level security, throws: a missing farm would otherwise read as "no
-    /// counted entry".
-    /// </summary>
-    private IReadOnlyDictionary<Guid, ConfirmedFarmDays.FarmWeek> LastCompleteWeek(
-        ConfirmedFarmDaysRows rows, DateTime countedAtUtc, string consequence)
-    {
-        if (rows.FarmsNotReadable > 0)
-        {
-            throw new InvalidOperationException(
-                $"{rows.FarmsNotReadable} of {rows.FarmsListed} farms could not be read through row-level security "
-                + $"(no owner account, or the farm row did not come back under its own scope); {consequence}, "
-                + "so the list is refused.");
-        }
-
-        // Throws itself for rows that cannot be counted (ConfirmedFarmDays.NotMeasuredReason).
         return ConfirmedFarmDays.LastCompleteWeek(rows, exclusions.UserIds, countedAtUtc);
     }
 

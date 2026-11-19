@@ -148,23 +148,29 @@ public static class ConfirmedFarmDays
     }
 
     /// <summary>
-    /// Each farm's counts for the last complete India week, keyed by farm. A farm with no counted entry that week is
-    /// absent (All Farms says "No entry last week", never tier D, never 0). Throws when the rows cannot be counted
-    /// (<see cref="NotMeasuredReason"/>): a missing farm would otherwise read as "no entry".
+    /// Every farm that was READ (each farm in <see cref="ConfirmedFarmDaysRows.Farms"/>) mapped to its counts for the
+    /// last complete India week, or to null when it saved no counted entry that week (All Farms says "No entry last
+    /// week", never tier D, never 0). A farm that was asked for but not read is ABSENT, so the caller can say "not
+    /// measured" for it, never "no entry" (plan CR-2e, C33). Throws when nothing was read
+    /// (<see cref="ConfirmedFarmDaysRows.LiveCountSkipped"/>).
     /// </summary>
-    public static IReadOnlyDictionary<Guid, FarmWeek> LastCompleteWeek(
+    public static IReadOnlyDictionary<Guid, FarmWeek?> LastCompleteWeek(
         ConfirmedFarmDaysRows rows, IReadOnlySet<Guid> excludedUserIds, DateTime countedAtUtc)
     {
-        if (NotMeasuredReason(rows) is { } reason)
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (rows.LiveCountSkipped)
         {
             throw new InvalidOperationException(
-                $"These rows cannot be counted ({reason}); refusing to answer that a farm had no entry last week.");
+                "No farm was read (above the live-count ceiling); refusing to answer that a farm had no entry last week.");
         }
 
         var lastWeek = LastCompleteWeekStart(countedAtUtc);
-        return Weeks(Days(rows, excludedUserIds, countedAtUtc))
+        var counted = Weeks(Days(rows, excludedUserIds, countedAtUtc))
             .Where(w => w.WeekStart == lastWeek)
             .ToDictionary(w => w.FarmId);
+
+        return rows.Farms.ToDictionary(f => f.FarmId, f => counted.GetValueOrDefault(f.FarmId));
     }
 
     /// <summary>

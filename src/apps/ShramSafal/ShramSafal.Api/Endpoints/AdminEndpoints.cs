@@ -270,11 +270,19 @@ public static class AdminEndpoints
 
             return r.Error.Kind switch
             {
-                // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32) — the tier filter counts every farm
-                // before paging; above the live-count ceiling it is refused, never applied to part of the farms.
+                // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32, C33) — a tier other than A, B, C or D
+                // is refused before anything is read ("tier_invalid").
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    code = r.Error.Code,
+                    message = r.Error.Description
+                }),
+                // The tier filter counts every farm before paging; above the live-count ceiling
+                // ("tier_filter_too_many_farms") or with a farm that cannot be read ("tier_filter_not_measured") it is
+                // refused, never applied to part of the farms.
                 AgriSync.BuildingBlocks.Results.ErrorKind.Conflict => Results.Json(new
                 {
-                    code = "tier_filter_too_many_farms",
+                    code = r.Error.Code,
                     message = r.Error.Description
                 }, statusCode: StatusCodes.Status409Conflict),
                 _ => Results.Problem()

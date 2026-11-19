@@ -10,9 +10,11 @@ public sealed record FarmsListDto(
 {
     /// <summary>
     /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32). Server-side only, never sent: set by the
-    /// repository when the list could not be built as asked, with <see cref="Items"/> empty. Today the one value is
-    /// <c>GetFarmsListHandler.TierFilterTooManyFarmsCode</c> (the tier filter needs every farm's checked days and the
-    /// platform is above the live-count ceiling); the handler answers it as a 409 refusal, never as an empty list.
+    /// repository when the list could not be built as asked, with <see cref="Items"/> empty: the tier filter needs
+    /// every farm's checked days, and the platform is above the live-count ceiling
+    /// (<c>GetFarmsListHandler.TierFilterTooManyFarmsCode</c>) or a farm could not be read
+    /// (<c>GetFarmsListHandler.TierFilterNotMeasuredCode</c>, C33). The handler answers it as a 409 refusal, never as an
+    /// empty list.
     /// </summary>
     [JsonIgnore]
     public string? RefusalCode { get; init; }
@@ -22,7 +24,11 @@ public sealed record FarmsListDto(
 /// One farm on All Farms. <see cref="Wvfd7d"/> is the farm's checked days in the last complete India week (at most 7),
 /// <see cref="SelfOnlyDays7d"/> its self-only days that week (shown apart, never added in), and
 /// <see cref="EngagementTier"/> its tier by checked days, all by <c>ConfirmedFarmDays</c> (plan CR-2e, C32). All three
-/// are null when the farm saved no counted entry that week ("No entry last week", never tier D, never 0).
+/// are null when the farm saved no counted entry that week ("No entry last week", never tier D, never 0), and then
+/// <see cref="ConfirmedDaysNotMeasuredReason"/> is null. When the farm's rows could not be read (no owner account, or
+/// its row did not come back under its own row-level security) all three are null and
+/// <see cref="ConfirmedDaysNotMeasuredReason"/> is <c>"farm_unreadable"</c> ("not measured", never "No entry last
+/// week"); the rest of the page answers normally (C33).
 /// </summary>
 public sealed record FarmSummaryDto(
     Guid FarmId,
@@ -33,6 +39,7 @@ public sealed record FarmSummaryDto(
     decimal? Wvfd7d,
     int? SelfOnlyDays7d,
     string? EngagementTier,
+    string? ConfirmedDaysNotMeasuredReason,
     int Errors24h,
     DateTime? LastLogAt,
     DateTime CreatedAt);
