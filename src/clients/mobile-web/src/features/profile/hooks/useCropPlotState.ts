@@ -13,9 +13,10 @@ import React from 'react';
 import type { CropProfile, Plot, PlotGeoData } from '../../../types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
-import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
+import { getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 import { getNextUnusedColor } from '../helpers/cropPalette';
 import { registerNewPlotOnServer } from '../../sync/plots/registerNewPlotOnServer';
+import type { NewPlotStart } from '../plotStart/plotStartChoice';
 
 export interface UseCropPlotStateInput {
     crops: CropProfile[];
@@ -37,7 +38,7 @@ export interface UseCropPlotStateResult {
     normalizedNewCropName: string;
     isDuplicateCropName: boolean;
     handleAddCrop: () => void;
-    handleAddPlot: (plot: Plot) => void;
+    handleAddPlot: (plot: Plot, start?: NewPlotStart) => void;
     handleSaveMap: (cropId: string, plotId: string, geoData: PlotGeoData) => void;
     deleteCrop: (id: string) => void;
     deletePlot: (cId: string, pId: string) => void;
@@ -88,37 +89,26 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
         setNewCropData({ iconName: 'Sprout' });
     };
 
-    const handleAddPlot = (plot: Plot) => {
+    const handleAddPlot = (plot: Plot, start?: NewPlotStart) => {
         // spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3) — the new plot and its
         // crop cycle are sent to the server (they never were). Fire-and-forget: it never
         // throws, and a failure is reported as unsent by the sync badge.
+        // spec: plr-d10 lane WIZARD-F2 (founder pick F2) — the schedule that follows by itself (the crop's
+        // ShramSafal-checked one, chosen for him) travels with the plot as the ordinary `adopt_schedule`, queued
+        // behind the plot and its cycle; a crop with no checked schedule sends none (`schedule: null`).
         const cropName = crops.find(crop => crop.id === wizardCropId)?.name;
-        if (cropName) void registerNewPlotOnServer({ plot, cropName });
+        if (cropName) {
+            void registerNewPlotOnServer({
+                plot,
+                cropName,
+                schedule: start?.scheduleTemplateId ? { templateId: start.scheduleTemplateId, referenceDate: start.referenceDate } : null,
+            });
+        }
 
-        onUpdateCrops(crops.map(crop => {
-            if (crop.id !== wizardCropId) return crop;
-
-            const adoptedScheduleId = plot.schedule?.templateId || crop.activeScheduleId || null;
-            const adoptedTemplate = getScheduleById(adoptedScheduleId || '');
-
-            return {
-                ...crop,
-                activeScheduleId: adoptedScheduleId,
-                plots: [...crop.plots, plot].map(existingPlot => {
-                    if (!adoptedScheduleId || !adoptedTemplate) return existingPlot;
-                    return {
-                        ...existingPlot,
-                        schedule: {
-                            ...existingPlot.schedule,
-                            templateId: adoptedScheduleId,
-                            referenceType: adoptedTemplate.referenceType,
-                            stageOverrides: [],
-                            expectationOverrides: [],
-                        },
-                    };
-                }),
-            };
-        }));
+        // spec: plr-d10 lane WIZARD-F2 — ONLY the new plot gets a schedule. The old code copied the wizard's pick onto EVERY plot of the
+        // crop (and cleared their stage and task edits), and rewrote the crop's legacy `activeScheduleId`, which outranks a plot's own
+        // schedule on the schedule page. Existing plots, and that field, are left exactly as they were.
+        onUpdateCrops(crops.map(crop => (crop.id !== wizardCropId ? crop : { ...crop, plots: [...crop.plots, plot] })));
         setWizardCropId(null);
     };
 

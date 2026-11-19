@@ -169,9 +169,10 @@ describe('AddPlotWizard - no demo scores (SCH-A)', () => {
         fireEvent.change(spin[0], { target: { value: '5' } });
         fireEvent.click(screen.getByRole('button', { name: /profile\.nextStep/ }));
 
-        expect(screen.getByText(/Choose Schedule/)).toBeInTheDocument();
+        // spec: plr-d10 lane WIZARD-F2 - step 3 no longer lists schedules to choose from: it names the ONE checked schedule that follows by itself.
+        expect(screen.getByTestId('plot-start-schedule')).toBeInTheDocument();
         const text = document.body.textContent ?? '';
-        expect(text).toContain('Grapes - University Schedule');
+        expect(text).toContain('University Schedule');
         expect(text).not.toContain('/100');
         expect(text.toLowerCase()).not.toContain('followers');
         expect(text).not.toContain('Adoption');

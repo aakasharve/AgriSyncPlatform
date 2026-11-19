@@ -61,6 +61,9 @@ describe('AddPlotWizard - three steps, the last one finishes', () => {
 
         expect(screen.getByText('profile.step 3/3')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /profile\.nextStep/ })).toBeNull();
+        // spec: plr-d10 lane WIZARD-F2 - step 3 now asks "when was this planted?" and finish stays off until he answers (nothing is pre-selected).
+        expect(screen.getByRole('button', { name: /profile\.finishSetup/ })).toBeDisabled();
+        fireEvent.click(screen.getByTestId('plot-start-today'));
         fireEvent.click(screen.getByRole('button', { name: /profile\.finishSetup/ }));
         expect(onSave).toHaveBeenCalledTimes(1);
     });
