@@ -112,10 +112,18 @@ function ownerPhoneOf(farm: FarmSummary): string | null {
 
 const NO_ENTRY_LAST_WEEK = 'No entry last week';
 const NOT_MEASURED_WORDS = 'Not measured';
+const TEST_ACCOUNT_WORDS = 'Test account, not counted';
+
+/** The words for a farm whose days were not counted, or null when they were. */
+function notCountedWords(f: FarmSummary): string | null {
+  if (!f.confirmedDaysNotMeasuredReason) return null;
+  return f.confirmedDaysNotMeasuredReason === 'test_account' ? TEST_ACCOUNT_WORDS : NOT_MEASURED_WORDS;
+}
 
 /** Checked days, with self-confirmed days beside them (never summed). Null means no counted entry last week. */
 function checkedDaysWords(f: FarmSummary): string {
-  if (f.confirmedDaysNotMeasuredReason) return NOT_MEASURED_WORDS;
+  const notCounted = notCountedWords(f);
+  if (notCounted) return notCounted;
   if (f.wvfd7d === null || f.wvfd7d === undefined) return NO_ENTRY_LAST_WEEK;
   const checked = `${f.wvfd7d} checked`;
   return typeof f.selfOnlyDays7d === 'number' ? `${checked}, ${f.selfOnlyDays7d} self-confirmed` : checked;
@@ -176,7 +184,7 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     key: 'tier',
     label: 'Tier',
     render: (f) =>
-      f.confirmedDaysNotMeasuredReason ? NOT_MEASURED_WORDS : (f.engagementTier ?? NO_ENTRY_LAST_WEEK),
+      notCountedWords(f) ?? f.engagementTier ?? NO_ENTRY_LAST_WEEK,
     sortType: 'text',
     sortValue: (f) => f.engagementTier,
     defaultDir: 'asc',

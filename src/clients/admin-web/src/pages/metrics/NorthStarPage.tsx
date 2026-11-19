@@ -44,7 +44,7 @@ function notMeasuredWords(reason: string): string {
     case 'too_many_farms_for_live_count':
       return 'There are too many farms to count checked days live, so they were not counted.';
     case 'farm_list_unreadable':
-      return 'The list of farms could not be read, so checked days were not counted.';
+      return 'At least one farm could not be read, so these numbers were not counted. This is not a zero.';
     default:
       return 'The server did not count checked days.';
   }
