@@ -30,7 +30,7 @@ namespace AgriSync.ArchitectureTests;
 /// </summary>
 public sealed class ErrorCaptureCoverageTests
 {
-    private const int KnownMapperCount = 32;
+    private const int KnownMapperCount = 33;
 
     private static IReadOnlyList<MethodInfo> ErrorMapperEntryPoints()
     {
@@ -62,8 +62,9 @@ public sealed class ErrorCaptureCoverageTests
         // A drop in this number means a mapper was deleted or renamed past the
         // signature filter. Change it deliberately, never to turn a red test green.
         ErrorMapperEntryPoints().Should().HaveCount(KnownMapperCount,
-            "ShramSafal.Api declared exactly 32 private Error->IResult entry points on "
-            + "2026-11-11; adding or removing one is a deliberate act that must be "
+            "ShramSafal.Api declared exactly 33 private Error->IResult entry points on "
+            + "2026-11-19 (the go-live line's PictureEndpoints joined, plan CR-2d D2); "
+            + "adding or removing one is a deliberate act that must be "
             + "reviewed, not absorbed");
     }
 

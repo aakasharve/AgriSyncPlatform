@@ -129,7 +129,11 @@ public static class PictureEndpoints
         return result.IsSuccess ? Results.NoContent() : ToErrorResult(result.Error);
     }
 
+    // plan CR-2d D2: stamped like every other mapper, so a refused picture call is recorded under its own code.
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         if (error.Kind == ErrorKind.NotFound)
         {
