@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Wheat, BarChart3, Shield, TriangleAlert } from 'lucide-react';
 import { adminApi, isSignOutOwed, tellServerSignedOut, watchOwedSignOut } from '@/lib/api';
 import type { AdminSession } from '@/lib/auth';
 import { deviceIdentity } from '@/lib/deviceIdentity';
+import { safeReturnTo } from '@/lib/returnTo';
 // The sentences, and the rules that choose between them, live in a plain module so that they
 // can be tested without this page.
 import {
@@ -163,6 +164,7 @@ export default function LoginPage() {
   );
   const auth = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Whenever the page opens it tries to tell the server about an owed sign-out, and says how
   // that went. While the sign-out is still owed and this page stays open, it tries again every
@@ -209,9 +211,12 @@ export default function LoginPage() {
       void undoRefusedSignIn();
       return;
     }
-    // Always the home page, never a page remembered from before: the last person to use this
-    // tab may have been somebody else.
-    navigate('/', { replace: true });
+    // The page the person asked for before signing in (Preservation Register A9; plan CR-2d
+    // D14 (1)): `from` is the whole url RequireAuth captured, path AND query. `safeReturnTo`
+    // accepts only a path inside this console, never an outside address, and gives the root
+    // when nothing was asked for. Nothing from a previous person can be here: every end of a
+    // session loads this page afresh, with no router state.
+    navigate(safeReturnTo((location.state as { from?: unknown } | null)?.from), { replace: true });
   }
 
   // The browser would not store the session, so nobody is signed in. The page says why and goes

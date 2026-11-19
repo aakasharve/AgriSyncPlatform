@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
@@ -13,6 +13,7 @@ import { ServerUnreachable } from '@/components/ServerUnreachable';
 import { gotNoVerdict } from '@/lib/api';
 import { ModuleKeys } from '@/lib/moduleKeys';
 import { signInKey, type NoAccessState } from '@/lib/noAccessView';
+import { currentPathWithQuery } from '@/lib/returnTo';
 import { queryClient } from '@/lib/queryClient';
 
 const HomePage               = lazy(() => import('@/pages/HomePage'));
@@ -53,19 +54,24 @@ function Fallback({ text = 'Loading…' }: { text?: string }) {
  *   loading     → spinner. A sign-out takes the screens down at the press, and the page then
  *                 stays here while the server is told: it says so.
  *   unreachable → the stored session could not be renewed for want of an answer: say so
- *   anonymous   → /login. The page that was asked for is not remembered: whoever signs in next
- *                 always starts on the home page, never on the page of the person before.
+ *   anonymous   → /login, carrying the page that was asked for (below).
  *
- * CR-2d join: this is the SMS sign-in's gate. The September console's deep-link return
- * (`state.from` = the whole url, spent by the old LoginPage; Preservation Register A9) is not
- * carried: the SMS sign-in decides the first page after a sign-in, and it is always the home
- * page, because the last person to use this tab may have been somebody else.
+ * THE DEEP LINK IS KEPT (Preservation Register A9; plan CR-2d D14 (1)). `state.from` carries
+ * the WHOLE url, path AND query, because that is where page, search, tier, weeks, days and org
+ * live; LoginPage spends it after a successful sign-in through `safeReturnTo`, which accepts
+ * only a path inside this console and falls back to the root. See `lib/returnTo.ts`.
+ *
+ * It cannot hand one person's page to the next: every end of a session in the SMS sign-in
+ * takes the screens down to 'loading' (never 'anonymous', so nothing is captured here) and
+ * then loads /login afresh, which carries no router state.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { status, retry, signingOut } = useAdminAuth();
+  const location = useLocation();
   if (status === 'loading') return <Fallback text={signingOut ? 'Signing out…' : undefined} />;
   if (status === 'unreachable') return <ServerUnreachable onRetry={retry} />;
-  if (status === 'anonymous') return <Navigate to="/login" replace />;
+  if (status === 'anonymous')
+    return <Navigate to="/login" state={{ from: currentPathWithQuery(location) }} replace />;
   return <>{children}</>;
 }
 
