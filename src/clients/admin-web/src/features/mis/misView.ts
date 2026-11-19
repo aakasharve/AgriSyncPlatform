@@ -16,6 +16,9 @@
 import type {
   CompanyMis,
   MisCurvePoint,
+  MisFeatureRole,
+  MisFeatureUse,
+  MisList,
   MisNumber,
   MisRange,
   MisValue,
@@ -229,6 +232,24 @@ export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChar
   };
 }
 
+/* ── lists (CR-2c) ─────────────────────────────────────────────────────── */
+
+/** A served list with no rows: said in words, never as an empty table. */
+export const NONE_IN_PERIOD = 'None in this period';
+
+/**
+ * A served list, or why there is none (CR-2c Step 2). A list's own reason
+ * always wins and is shown as its sentence, never as "none"; a counted list
+ * with no rows is "None in this period".
+ */
+export function listChart<T, M>(list: MisList<T>, item: string, model: (items: T[]) => M): MisChart<M> {
+  if (typeof list.notMeasuredReason === 'string') {
+    return { kind: 'notMeasured', why: notMeasuredWhy(list.notMeasuredReason, item) };
+  }
+  if (list.items.length === 0) return { kind: 'none', what: NONE_IN_PERIOD };
+  return { kind: 'chart', data: model(list.items) };
+}
+
 /* ── shared pieces ─────────────────────────────────────────────────────── */
 
 const ROLE_NAMES: Record<string, string> = {
@@ -345,12 +366,27 @@ export function overviewView(d: CompanyMis): OverviewView {
         const hint = voice === null || all === null ? null : `${fmtInt(voice)} of ${fmtInt(all)} ${noun(all, 'entry', 'entries')}`;
         return withCountHint(tileFrom('overview.voiceShare', o.voiceSharePct, 'pct', true), hint, itemByKey('overview.voiceShare').hint);
       })(),
-      tileNotMeasured('overview.understanding'),
+      understandingTile(o),
       tileNotMeasured('overview.crashFree'),
     ],
     signUps: signUpsChart,
     logsByWeek: logsChart,
   };
+}
+
+/** "6.5 of 10": the understanding score is out of 10 (CR-2c #10). */
+function outOfTen(s: MisShown): MisShown {
+  return s.kind === 'value' ? { ...s, text: `${s.text} of 10` } : s;
+}
+
+/** #10: the median score of scored farm-days, and how many farm-days it rests on. */
+export function understandingTile(o: CompanyMis['overview']): MisTileModel {
+  const tile = tileFrom('overview.understanding', o.understandingMedian, 'decimal', true);
+  const days = countOf(o.understandingScoredDays.current);
+  const hint = tile.current.kind === 'value' && days !== null
+    ? `from ${fmtInt(days)} ${noun(days, 'farm-day', 'farm-days')}`
+    : null;
+  return withCountHint({ ...tile, current: outOfTen(tile.current), previous: outOfTen(tile.previous) }, hint);
 }
 
 /* ── Acquisition ───────────────────────────────────────────────────────── */
@@ -440,10 +476,103 @@ export function acquisitionView(d: CompanyMis): AcquisitionView {
 
 /* ── Engagement ────────────────────────────────────────────────────────── */
 
+export interface FeatureRowModel {
+  key: string;
+  label: string;
+  /** Null when the feature is not measured; `word` and `why` then say so. */
+  people: number | null;
+  share: number | null;
+  shareText: string | null;
+  /** "not recorded" or "not measured"; null when measured. */
+  word: string | null;
+  why: string | null;
+}
+
+export interface FeatureRoleModel {
+  roles: { key: string; label: string }[];
+  /** One cell per role; null = nobody in that role used it (the server lists only pairs it counted). */
+  rows: { key: string; label: string; cells: (number | null)[] }[];
+}
+
 export interface EngagementView {
   perFarm: MisChart<MisLineModel>;
   heat: MisChart<{ grid: number[][]; max: number }>;
   roles: MisChart<{ parts: { key: string; label: string; people: number; share: string | null }[] }>;
+  kinds: MisChart<{ rows: { key: string; label: string; entries: number }[] }>;
+  features: MisChart<{ rows: FeatureRowModel[] }>;
+  featureRoles: MisChart<FeatureRoleModel>;
+}
+
+/** The app's own work words (CR-2c 1f), in plain English. An unknown key is shown as sent. */
+const KIND_NAMES: Record<string, string> = {
+  water: 'Water',
+  nutrition: 'Nutrition',
+  spray: 'Spray',
+  other_work: 'Other field work',
+  labour: 'Labour',
+  not_recognised: 'Not recognised',
+};
+
+/** The counted parts of the app (CR-2c 1d with E1: no schedule feature), in plain English. */
+const FEATURE_NAMES: Record<string, string> = {
+  entries: 'Saved an entry',
+  voice: 'Voice recording',
+  costs: 'Added a cost',
+  attendance: 'Marked attendance',
+  photos: 'Added a photo or receipt',
+  job_cards: 'Made a job card',
+  compare: 'Compare',
+};
+const FEATURE_ORDER = Object.keys(FEATURE_NAMES);
+
+function nameIn(names: Record<string, string>, key: string): string {
+  return Object.prototype.hasOwnProperty.call(names, key) ? names[key] : key;
+}
+
+export function kindName(kind: string): string {
+  return nameIn(KIND_NAMES, kind);
+}
+
+export function featureName(feature: string): string {
+  return nameIn(FEATURE_NAMES, feature);
+}
+
+function featureRank(feature: string): number {
+  const i = FEATURE_ORDER.indexOf(feature);
+  return i < 0 ? FEATURE_ORDER.length : i;
+}
+
+function featureRow(f: MisFeatureUse): FeatureRowModel {
+  const people = f.people;
+  const share = f.sharePct;
+  const base = { key: f.feature, label: featureName(f.feature) };
+  if (people === null || share === null || !Number.isFinite(people) || !Number.isFinite(share)) {
+    return {
+      ...base,
+      people: null,
+      share: null,
+      shareText: null,
+      word: f.notMeasuredReason === 'not_recorded' ? 'not recorded' : 'not measured',
+      why: notMeasuredWhy(f.notMeasuredReason, 'engagement.featureUse'),
+    };
+  }
+  return { ...base, people, share, shareText: fmtPctPoints(share), word: null, why: null };
+}
+
+/** Features down, roles across (roles with the most people first). Only served pairs carry a number. */
+export function featureRoleModel(items: MisFeatureRole[]): FeatureRoleModel {
+  const weight = new Map<string, number>();
+  for (const r of items) weight.set(r.role, (weight.get(r.role) ?? 0) + r.people);
+  const roles = [...weight.entries()].sort((x, y) => y[1] - x[1]).map(([key]) => ({ key, label: roleName(key) }));
+  const features = [...new Set(items.map((r) => r.feature))].sort((x, y) => featureRank(x) - featureRank(y));
+  return {
+    roles,
+    rows: features.map((feature) => ({
+      key: feature,
+      label: featureName(feature),
+      cells: roles.map((role) => items.find((r) => r.feature === feature && r.role === role.key)?.people ?? null),
+    })),
+  };
 }
 
 /** 7 Monday-first rows × 24 hours, every served cell placed; totals over the range. */
@@ -482,6 +611,19 @@ export function engagementView(d: CompanyMis): EngagementView {
       ? { kind: 'chart', data: heatGrid(e.whenLogged) }
       : { kind: 'notMeasured', why: notMeasuredWhy(d.overview.logsRecorded.current.notMeasuredReason) },
     roles,
+    /* Most entries first; "not recognised" is what is left over, so it comes last. */
+    kinds: listChart(e.logsByKind, 'engagement.logsByType', (items) => ({
+      rows: [...items]
+        .sort((x, y) => Number(x.kind === 'not_recognised') - Number(y.kind === 'not_recognised') || y.entries - x.entries)
+        .map((r) => ({ key: r.kind, label: kindName(r.kind), entries: r.entries })),
+    })),
+    /* Largest share first; a feature that is not measured (Compare) comes last and says so. */
+    features: listChart(e.featureUse, 'engagement.featureUse', (items) => ({
+      rows: items
+        .map(featureRow)
+        .sort((x, y) => Number(x.share === null) - Number(y.share === null) || (y.share ?? 0) - (x.share ?? 0)),
+    })),
+    featureRoles: listChart(e.featureUseByRole, 'engagement.featureByRole', featureRoleModel),
   };
 }
 
@@ -623,11 +765,97 @@ export function retentionView(d: CompanyMis): RetentionView {
 
 /* ── Quality ───────────────────────────────────────────────────────────── */
 
+export interface SyncDaysModel {
+  labels: string[];
+  titles: string[];
+  refused: (number | null)[];
+  accepted: (number | null)[];
+  /** Refused changes not measured for the whole range, in words; null when measured. */
+  refusedWhy: string | null;
+}
+
+export interface VersionRowModel {
+  key: string;
+  version: string;
+  /** "Android app" or "Not the Android app" (CR-2c E9). */
+  seenOn: string;
+  people: number;
+  share: number;
+  shareText: string;
+}
+
 export interface QualityView {
   tiles: MisTileModel[];
   saved: MisChart<MisLineModel>;
   latency: MisChart<{ labels: string[]; titles: string[]; avg: (number | null)[]; p95: (number | null)[] }>;
   corrected: MisChart<MisLineModel>;
+  spread: MisChart<{ labels: string[]; titles: string[]; values: number[] }>;
+  sync: MisChart<SyncDaysModel>;
+  versions: MisChart<{ rows: VersionRowModel[] }>;
+  /** Said when the first app-seen record is later than the period's first day; null otherwise. */
+  versionsKnownSince: string | null;
+}
+
+/** Global Constraints: sync failures measure the server, so every upload counts (stated on screen). */
+export const SYNC_EVERY_UPLOAD = 'Every upload counts, test accounts included.';
+/** CR-2c E2: the phone resends a refused change, and each refusal is counted. */
+export const SYNC_REFUSED_AGAIN = 'A change refused again counts each time.';
+
+const NO_SCORED_DAY_WHAT = 'No farm-day in this period got a score';
+const NO_CHANGE_SENT_WHAT = 'No change was sent from a phone in this period';
+
+/** The server writes "android" only for the native Android app; anything else is not it. */
+export function platformName(platform: string | null | undefined): string {
+  return typeof platform === 'string' && platform.trim().toLowerCase() === 'android' ? 'Android app' : 'Not the Android app';
+}
+
+/**
+ * CR-2c E10: every release up to 1.0.17 sent this number, which was never a release
+ * (`GetAppVersionsHandler.LegacyVersionNumber`); worded as the app-versions page words it.
+ */
+const LEGACY_VERSION_NUMBER = '0.9.0';
+const LEGACY_VERSION_LABEL = '1.0.17 or earlier';
+
+export function versionLabel(version: string): string {
+  return version === LEGACY_VERSION_NUMBER ? LEGACY_VERSION_LABEL : version;
+}
+
+/** #49: farm-days per score, lowest score first; every bucket 0 is a measured nothing. */
+export function spreadOf(list: MisList<{ score: number; farmDays: number }>): QualityView['spread'] {
+  const chart = listChart(list, 'quality.scoreSpread', (items) => {
+    const sorted = [...items].sort((x, y) => x.score - y.score);
+    return {
+      labels: sorted.map((b) => String(b.score)),
+      titles: sorted.map((b) => `Score ${b.score} of 10`),
+      values: sorted.map((b) => b.farmDays),
+    };
+  });
+  return chart.kind === 'chart' && chart.data.values.every((v) => v === 0)
+    ? { kind: 'none', what: NO_SCORED_DAY_WHAT }
+    : chart;
+}
+
+/** #50 (CR-2c E8): refused and accepted changes per day, from the two numbers' own day lists. */
+export function syncDaysOf(refused: MisNumber, accepted: MisNumber, range: MisRange): MisChart<SyncDaysModel> {
+  const item = 'quality.syncFailChart';
+  const refusedDays = Array.isArray(refused.currentByDay) ? refused.currentByDay : null;
+  const acceptedDays = Array.isArray(accepted.currentByDay) ? accepted.currentByDay : null;
+  if (!hasServedValue(refusedDays) && !hasServedValue(acceptedDays)) {
+    const blocked = [refused, accepted].find((x) => x.current.value === null);
+    return { kind: 'notMeasured', why: blocked ? notMeasuredWhy(blocked.current.notMeasuredReason, item) : DAY_LINE_NOT_COUNTED };
+  }
+  if (refused.current.value === 0 && accepted.current.value === 0) return { kind: 'none', what: NO_CHANGE_SENT_WHAT };
+  const axis = dayAxis(range);
+  const n = axis.labels.length;
+  return {
+    kind: 'chart',
+    data: {
+      ...axis,
+      refused: byPosition(refusedDays, n) ?? axis.labels.map(() => null),
+      accepted: byPosition(acceptedDays, n) ?? axis.labels.map(() => null),
+      refusedWhy: refused.current.value === null ? notMeasuredWhy(refused.current.notMeasuredReason, item) : null,
+    },
+  };
 }
 
 export function qualityView(d: CompanyMis): QualityView {
@@ -659,12 +887,38 @@ export function qualityView(d: CompanyMis): QualityView {
         const n = countOf(q.logsCorrected.current);
         return withCountHint(tileFrom('quality.corrected', q.logsCorrectedPct, 'pct', false), n === null ? null : `${fmtInt(n)} ${noun(n, 'entry', 'entries')} corrected`);
       })(),
-      tileNotMeasured('quality.syncFailTile'),
+      (() => {
+        /* #47 (E10): two plain counts beside the share, never added up (refusals are sends, acceptances are changes, E2). */
+        const refused = countOf(q.syncRefusedChanges.current);
+        const accepted = countOf(q.syncAcceptedChanges.current);
+        const parts = [
+          refused === null ? null : `${fmtInt(refused)} ${noun(refused, 'send', 'sends')} refused`,
+          accepted === null ? null : `${fmtInt(accepted)} ${noun(accepted, 'change', 'changes')} accepted`,
+        ].filter((x): x is string => x !== null);
+        const hint = parts.length > 0 ? parts.join(', ') : null;
+        return withCountHint(tileFrom('quality.syncFailTile', q.syncRefusedPct, 'pct', false), hint, SYNC_EVERY_UPLOAD);
+      })(),
       tileNotMeasured('quality.crashFree'),
     ],
     saved: dayLineOf(q.voiceRecordingsSavedPct, d.range, 'quality.voiceSaved'),
     latency,
     corrected: dayLineOf(q.logsCorrectedPct, d.range, 'quality.corrected'),
+    spread: spreadOf(q.understandingSpread),
+    sync: syncDaysOf(q.syncRefusedChanges, q.syncAcceptedChanges, d.range),
+    /* The server orders versions by their numbers; that order is kept. */
+    versions: listChart(q.appVersions, 'quality.versionAdoption', (items) => ({
+      rows: items.map((r, k) => ({
+        key: `${k}-${r.version}-${r.platform}`,
+        version: versionLabel(r.version),
+        seenOn: platformName(r.platform),
+        people: r.people,
+        share: r.sharePct,
+        shareText: fmtPctPoints(r.sharePct),
+      })),
+    })),
+    versionsKnownSince: typeof q.appVersionsSeenSince === 'string' && q.appVersionsSeenSince > d.range.from
+      ? `Known since ${fmtDayYear(fromIsoDate(q.appVersionsSeenSince))}: app versions were not recorded before that day.`
+      : null,
   };
 }
 
@@ -674,6 +928,7 @@ export interface FarmsView {
   tiles: MisTileModel[];
   perFpo: MisChart<{ rows: { key: string; label: string; farms: number }[] }>;
   acres: MisChart<{ labels: string[]; titles: string[]; values: number[] }>;
+  crops: MisChart<{ rows: { key: string; label: string; farms: number; acres: number }[] }>;
 }
 
 export function farmsView(d: CompanyMis): FarmsView {
@@ -714,6 +969,15 @@ export function farmsView(d: CompanyMis): FarmsView {
     ],
     perFpo,
     acres,
+    /* The server orders crops by farms, then acres, then name; that order is kept. */
+    crops: listChart(f.cropsOnActiveFarms, 'farms.crops', (items) => ({
+      rows: items.map((r, k) => ({
+        key: `${k}-${r.cropName}`,
+        label: r.cropName.trim() === '' ? 'No crop name entered' : r.cropName,
+        farms: r.farms,
+        acres: r.acres,
+      })),
+    })),
   };
 }
 
@@ -849,7 +1113,8 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       } else {
         first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')}. ${notMeasuredClause('Acres covered', f.acresCovered.current, 'farms.acres')}`;
       }
-      return `${first} Districts are not measured yet.`;
+      /* CR-2c Step 3: the district clause names what blocks it. */
+      return `${first} Districts are not measured yet. ${itemByKey('farms.headline').why ?? ''}`.trim();
     }
   }
 }

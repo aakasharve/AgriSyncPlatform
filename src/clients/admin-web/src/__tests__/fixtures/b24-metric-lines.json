@@ -76,7 +76,7 @@
     "key": "overview.understanding",
     "label": "मला किती समजलं",
     "status": "not-measured",
-    "what": "The middle score, out of 10, for how well the app understood a farm's day.",
+    "what": "The middle score out of 10 across scored farm-days, including days scored 0 the phone hides.",
     "why": "Shows whether farmers' words are understood well enough to trust the record."
   },
   {
@@ -204,7 +204,7 @@
     "key": "engagement.logsByType",
     "label": "Entries by type",
     "status": "not-measured",
-    "what": "Saved entries split by kind: field work, labour, inputs, water and other.",
+    "what": "Saved entries by kind, as the app's own work-word list reads them; one entry can count twice.",
     "why": "Shows what farmers use the app for, and which kinds of work go unrecorded."
   },
   {
@@ -228,7 +228,7 @@
     "key": "engagement.featureUse",
     "label": "Feature use",
     "status": "not-measured",
-    "what": "Share of active people who used each part of the app, such as costs or attendance.",
+    "what": "Of people who did anything counted here this period, the share using each part; Compare is not recorded.",
     "why": "Shows which features earn their place and which nobody uses."
   },
   {
@@ -244,7 +244,7 @@
     "key": "engagement.featureByRole",
     "label": "Feature use by role",
     "status": "not-measured",
-    "what": "Use of each part of the app, split by the person's role on the farm.",
+    "what": "People who used each part of the app, split by their role on the farm.",
     "why": "Shows which features matter to owners and which to workers or supervisors."
   },
   {
@@ -372,7 +372,7 @@
     "key": "quality.syncFailTile",
     "label": "Sync failures",
     "status": "not-measured",
-    "what": "Share of uploads from phones to the server that were refused or had to retry.",
+    "what": "Of changes sent from phones, the share the server refused; a change refused again counts each time.",
     "why": "Shows whether farmers' entries reach the server reliably or get stuck on the phone."
   },
   {
@@ -396,7 +396,7 @@
     "key": "quality.syncFailChart",
     "label": "Sync failures",
     "status": "not-measured",
-    "what": "Refused or retried uploads from phones to the server, day by day.",
+    "what": "Changes from phones the server refused or accepted, day by day.",
     "why": "Shows when upload problems started, to link them to a release or outage."
   },
   {
@@ -412,7 +412,7 @@
     "key": "quality.versionAdoption",
     "label": "App version adoption",
     "status": "not-measured",
-    "what": "Share of people or entries on each version of the app.",
+    "what": "People seen in this period, each counted once on the version they used last; Android app apart.",
     "why": "Shows how many farmers still run an old version that lacks fixes."
   },
   {
@@ -468,7 +468,7 @@
     "key": "farms.crops",
     "label": "Crops on active farms",
     "status": "not-measured",
-    "what": "Main crops grown on active farms, with their acres.",
+    "what": "Crops on active farms by the name entered, with farms and plot acres; a plot can count twice.",
     "why": "Shows which crops the app serves, to shape schedules and partnerships."
   },
   {

@@ -4,9 +4,12 @@
  * not against itself.
  *
  * Source: CR-2b plan "The 73 items" table, amended by B1-B4 (day values,
- * previous curve, five bands, the producer-organisation share). `fields` is
- * every answer field the plan lets that item print (the plan table plus the
- * amendments), the set a page may draw digits from inside that item.
+ * previous curve, five bands, the producer-organisation share), then CR-2c
+ * (nine small additions served with the answer additions' fields; the three
+ * district items keep their kind with the blocker sentences of Task 2 Step 3;
+ * E9 counts 47 served / 3 small-addition / 23 outside-source, 6 reason codes).
+ * `fields` is every answer field the plan lets that item print (the plan table
+ * plus the amendments), the set a page may draw digits from inside that item.
  * `why` is the reason sentence the plan says is shown verbatim (null = served).
  */
 
@@ -25,15 +28,10 @@ export const S_INSTALLS = 'Only Google Play knows how many people installed the 
 export const S_INSTALLS_SHORT = 'Only Google Play knows installs.';
 export const S_CHANNEL = 'The app does not send where an install came from.';
 export const S_INSTALL_DISTRICT = 'The app does not record where an install happened.';
-export const S_UNDERSTANDING = "The daily understanding score is worked out when a farm's day is shown and is not kept, so it cannot be added up across farms yet.";
 export const S_CRASH = 'No crash record reaches the server.';
-export const S_LOG_TYPE = 'The kind of work in an entry is typed freely; there is no agreed list to sort it by yet.';
-export const S_FEATURE = 'Use of each feature is not brought together in one count yet, and Compare is not recorded at all.';
-export const S_QUIET_DISTRICT = 'Farms carry a PIN code but no district, and the PIN-to-district list is not added yet.';
-export const S_SYNC = 'Refused uploads are recorded but not turned into a rate yet, and retries on the phone are not recorded.';
-export const S_VERSION = 'App sessions are not recorded; the version each entry came from is stored but not counted yet.';
-export const S_FARM_DISTRICT = 'Farms carry a PIN code but no district, and taluka is not stored at all.';
-export const S_CROPS = "Crop names are typed freely, and there is no rule yet for a farm's main crop.";
+/* CR-2c Task 2 Step 3: #40 and #62's district clause, then #58. */
+export const S_DISTRICT = 'Most farms have no PIN code recorded, and the public PIN-to-district list is not added.';
+export const S_FARM_DISTRICT = 'Most farms have no PIN code, taluka is not asked for, and the PIN-to-district list is missing.'; // E13(2)
 export const S_SMS = "The SMS provider's delivery reports are not connected.";
 export const S_SUPPORT = 'There is no support tool yet.';
 export const S_OPS_HEADLINE =
@@ -58,7 +56,8 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
   { n: 8, section: ov, kind: 'S', fields: ['overview.logsRecorded'], why: null },
   // B18 V6: the voice tile's hint names {voiceLogs} of {logsRecorded} entries.
   { n: 9, section: ov, kind: 'S', fields: ['overview.voiceSharePct', 'overview.voiceLogs', 'overview.logsRecorded'], why: null },
-  { n: 10, section: ov, kind: 'A', fields: [], why: S_UNDERSTANDING },
+  // CR-2c 1b: the median and the farm-days it rests on.
+  { n: 10, section: ov, kind: 'S', fields: ['overview.understandingMedian', 'overview.understandingScoredDays'], why: null },
   { n: 11, section: ov, kind: 'O', fields: [], why: S_CRASH },
   { n: 12, section: ov, kind: 'O', fields: ['overview.signUpsByDay'], why: S_INSTALLS_SHORT },
   { n: 13, section: ov, kind: 'S', fields: ['overview.logsByWeek'], why: null },
@@ -74,12 +73,12 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
   { n: 23, section: aq, kind: 'O', fields: [], why: S_CHANNEL },
   { n: 24, section: aq, kind: 'O', fields: [], why: S_INSTALL_DISTRICT },
   { n: 25, section: aq, kind: 'O', fields: ['acquisition.verified', 'acquisition.habit', 'acquisition.habitEligible'], why: 'Installs and channels are not measured yet.' },
-  { n: 26, section: en, kind: 'A', fields: [], why: S_LOG_TYPE },
+  { n: 26, section: en, kind: 'S', fields: ['engagement.logsByKind'], why: null },
   { n: 27, section: en, kind: 'S', fields: ['engagement.logsPerActiveFarmPerWeek'], why: null },
   { n: 28, section: en, kind: 'S', fields: ['engagement.whenLogged', 'engagement.whenLoggedClock'], why: null },
-  { n: 29, section: en, kind: 'A', fields: [], why: S_FEATURE },
+  { n: 29, section: en, kind: 'S', fields: ['engagement.featureUse'], why: null },
   { n: 30, section: en, kind: 'S', fields: ['engagement.roleMixOfMau'], why: null },
-  { n: 31, section: en, kind: 'A', fields: [], why: S_FEATURE },
+  { n: 31, section: en, kind: 'S', fields: ['engagement.featureUseByRole'], why: null },
   { n: 32, section: en, kind: 'S', fields: ['engagement.logsPerActiveFarmPerWeek', 'engagement.whenLogged'], why: null },
   { n: 33, section: re, kind: 'S', fields: ['retention.d1Pct'], why: null },
   { n: 34, section: re, kind: 'S', fields: ['retention.d30Pct'], why: null },
@@ -92,7 +91,7 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
     fields: ['retention.activeFarms0To6', 'retention.quietFarms7To13', 'retention.quietFarms14To29', 'retention.quietFarms7To29', 'retention.silentFarms30Plus', 'retention.neverLoggedFarms'],
     why: null,
   },
-  { n: 40, section: re, kind: 'A', fields: [], why: S_QUIET_DISTRICT },
+  { n: 40, section: re, kind: 'A', fields: [], why: S_DISTRICT },
   { n: 41, section: re, kind: 'S', fields: ['retention.winBackByDay', 'retention.quietFarms7To29'], why: null },
   { n: 42, section: re, kind: 'S', fields: ['retention.d1Pct', 'retention.d30Pct', 'retention.quietFarms7To29'], why: null },
   { n: 43, section: qu, kind: 'S', fields: ['quality.voiceRecordingsSavedPct', 'quality.voiceRecordings'], why: null },
@@ -100,22 +99,24 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
   { n: 44, section: qu, kind: 'S', fields: ['quality.transcriptionAvgMs', 'quality.transcriptionP95Ms'], why: null },
   { n: 45, section: qu, kind: 'S', fields: ['quality.transcriptionP95Ms', 'quality.transcriptionAvgMs'], why: null },
   { n: 46, section: qu, kind: 'S', fields: ['quality.logsCorrectedPct', 'quality.logsCorrected'], why: null },
-  { n: 47, section: qu, kind: 'A', fields: [], why: S_SYNC },
+  // CR-2c 1c with E2/E10: the share, and two plain counts, "N sends refused" and "M changes accepted".
+  { n: 47, section: qu, kind: 'S', fields: ['quality.syncRefusedPct', 'quality.syncRefusedChanges', 'quality.syncAcceptedChanges'], why: null },
   { n: 48, section: qu, kind: 'O', fields: [], why: S_CRASH },
-  { n: 49, section: qu, kind: 'A', fields: [], why: S_UNDERSTANDING },
-  { n: 50, section: qu, kind: 'A', fields: [], why: S_SYNC },
+  { n: 49, section: qu, kind: 'S', fields: ['quality.understandingSpread'], why: null },
+  // CR-2c E8: no syncByDay; the chart reads the day lists of the two counts.
+  { n: 50, section: qu, kind: 'S', fields: ['quality.syncRefusedChanges', 'quality.syncAcceptedChanges'], why: null },
   { n: 51, section: qu, kind: 'O', fields: [], why: S_CRASH },
-  { n: 52, section: qu, kind: 'A', fields: [], why: S_VERSION },
+  { n: 52, section: qu, kind: 'S', fields: ['quality.appVersions', 'quality.appVersionsSeenSince'], why: null },
   { n: 53, section: qu, kind: 'S', fields: ['quality.voiceRecordingsSavedPct', 'quality.logsCorrectedPct'], why: null },
   { n: 54, section: fa, kind: 'S', fields: ['farms.activeFarms'], why: null },
   { n: 55, section: fa, kind: 'S', fields: ['farms.farmsRegistered'], why: null },
   { n: 56, section: fa, kind: 'S', fields: ['farms.acresCovered'], why: null },
   { n: 57, section: fa, kind: 'S', fields: ['farms.activeFarmsInFpoPct', 'farms.farmsInFpo'], why: null },
   { n: 58, section: fa, kind: 'A', fields: [], why: S_FARM_DISTRICT },
-  { n: 59, section: fa, kind: 'A', fields: [], why: S_CROPS },
+  { n: 59, section: fa, kind: 'S', fields: ['farms.cropsOnActiveFarms'], why: null },
   { n: 60, section: fa, kind: 'S', fields: ['farms.farmsPerFpo'], why: null },
   { n: 61, section: fa, kind: 'S', fields: ['farms.acresByWeek'], why: null },
-  { n: 62, section: fa, kind: 'A', fields: ['farms.activeFarms', 'farms.acresCovered'], why: 'Districts are not measured yet.' },
+  { n: 62, section: fa, kind: 'A', fields: ['farms.activeFarms', 'farms.acresCovered'], why: S_DISTRICT },
   { n: 63, section: op, kind: 'O', fields: [], why: S_SMS },
   { n: 64, section: op, kind: 'O', fields: [], why: S_SMS },
   { n: 65, section: op, kind: 'O', fields: [], why: S_SMS },
@@ -144,6 +145,8 @@ export const PLAN_REASONS: Record<string, string> = {
   no_complete_window: 'Not enough days have passed since these people signed up to count this.',
   farm_list_unreadable: 'The server could not read the list of farms, so farm numbers were not counted. This is not a zero.',
   no_samples: 'No voice recording in this period finished with a time to average.',
+  // CR-2c: the code a feature that writes no record carries (Compare).
+  not_recorded: 'This is not recorded anywhere yet.',
   too_many_farms_for_live_count: 'There are now more than 500 farms, too many to count while the page loads. A nightly count is needed.',
 };
 export const PLAN_UNKNOWN_REASON = 'The server gave a reason this page does not know yet.';

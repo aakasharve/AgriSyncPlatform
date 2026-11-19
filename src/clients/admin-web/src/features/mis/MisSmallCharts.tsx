@@ -22,7 +22,8 @@ import type { CohortRowModel, FunnelStepModel, MisDelta } from './misView';
 export interface BarRow {
     key: string;
     label: string;
-    value: number;
+    /** null = not measured: the row draws no bar (an empty bar would read as a measured 0, E13(4)). */
+    value: number | null;
     display: string;
     delta?: MisDelta;
     extra?: React.ReactNode[];
@@ -42,13 +43,13 @@ export const BarTable: React.FC<{
     max?: number;
 }> = ({ rows, caption, labelHeader, valueHeader, extraHeaders = [], compare, color = SERIES.s1, max }) => {
     const [open, setOpen] = useState<Set<string>>(() => new Set());
-    const top = max ?? Math.max(0, ...rows.map((r) => r.value));
+    const top = max ?? Math.max(0, ...rows.map((r) => r.value ?? 0));
     const toggle = (k: string) => setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
     const renderRow = (r: BarRow, depth: number): React.ReactNode[] => {
         const expandable = !!r.children?.length;
         const isOpen = open.has(r.key);
-        const pct = top ? Math.max(0, Math.min(1, r.value / top)) : 0;
+        const pct = top && r.value !== null ? Math.max(0, Math.min(1, r.value / top)) : 0;
         const out: React.ReactNode[] = [(
             <tr key={r.key} className={cx('border-t border-stone-100 first:border-t-0', depth > 0 && 'bg-stone-50/60')}>
                 <th scope="row" className="py-2 pr-3 text-left font-normal">
@@ -70,7 +71,9 @@ export const BarTable: React.FC<{
                 </th>
                 <td className="w-[38%] py-2 pr-4 align-middle">
                     <div className="h-2 w-full">
-                        <div className="h-2 rounded-r-[4px]" style={{ width: `${pct * 100}%`, background: r.color ?? color, opacity: depth > 0 ? 0.6 : 1 }} />
+                        {r.value !== null && (
+                            <div className="h-2 rounded-r-[4px]" style={{ width: `${pct * 100}%`, background: r.color ?? color, opacity: depth > 0 ? 0.6 : 1 }} />
+                        )}
                     </div>
                 </td>
                 <td className="whitespace-nowrap py-2 pl-2 text-right tabular-nums text-stone-900">{r.display}</td>

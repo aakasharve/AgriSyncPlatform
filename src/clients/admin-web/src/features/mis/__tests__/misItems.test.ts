@@ -13,13 +13,18 @@ const EMOJI = /\p{Extended_Pictographic}/u;
 const BANNED = [/\bAI\b/, /matview/i, /\bRLS\b/, /\bDTO\b/];
 
 describe('the 73 items (CR-2b Task 2)', () => {
-  it('Holds_73_items_38_served_12_small_23_outside', () => {
+  // CR-2c E9 (plan CR-2c-mis-small-additions, binding): nine small additions became served, so the
+  // console holds 47 served / 3 small-addition / 23 outside-source. Retired by name, citing that plan
+  // (C7 pattern): Holds_73_items_38_served_12_small_23_outside, which pinned the nine as not built.
+  it('Holds_73_items_47_served_3_small_23_outside', () => {
     expect(MIS_ITEMS).toHaveLength(73);
     expect(MIS_ITEMS.map((i) => i.n)).toEqual(Array.from({ length: 73 }, (_, k) => k + 1));
     const count = (k: string) => MIS_ITEMS.filter((i) => i.kind === k).length;
-    expect(count('served')).toBe(38);
-    expect(count('small-addition')).toBe(12);
+    expect(count('served')).toBe(47);
+    expect(count('small-addition')).toBe(3);
     expect(count('outside-source')).toBe(23);
+    // The three left as small additions are the district items #40, #58, #62 (CR-2c Task 2 Step 3).
+    expect(MIS_ITEMS.filter((i) => i.kind === 'small-addition').map((i) => i.n)).toEqual([40, 58, 62]);
     // Item by item, the kind the plan gives it.
     for (const p of PLAN_ITEMS) expect([p.n, KIND[MIS_ITEMS[p.n - 1].kind]]).toEqual([p.n, p.kind]);
     // Keys are unique and look up their own item.
@@ -84,6 +89,8 @@ describe('the 73 items (CR-2b Task 2)', () => {
     expect(reasonSentence(null)).toBe(PLAN_UNKNOWN_REASON);
     expect(reasonSentence('toString')).toBe(PLAN_UNKNOWN_REASON);
     expect(reasonSentence('__proto__')).toBe(PLAN_UNKNOWN_REASON);
-    expect(new Set(Object.keys(PLAN_REASONS).map(reasonSentence)).size).toBe(5);
+    // CR-2c E9: six reason codes (the plan's "answer additions" add `not_recorded`), each its own sentence.
+    expect(Object.keys(PLAN_REASONS)).toHaveLength(6);
+    expect(new Set(Object.keys(PLAN_REASONS).map(reasonSentence)).size).toBe(6);
   });
 });
