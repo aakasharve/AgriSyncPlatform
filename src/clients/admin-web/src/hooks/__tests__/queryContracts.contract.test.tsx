@@ -93,7 +93,9 @@ describe('per-surface polling cadences (A23)', () => {
     ['ops/errors', () => useOpsErrors({ page: 1, pageSize: 50 }), 25_000, 30_000],
     // CR-2e C9 (main-session amendment, citing B23 (founder, 2026-11-17)): farms/suffering no longer polls; it moved to the no-poll list below.
     ['ops/voice', () => useOpsVoice(), 300_000, 300_000],
-    ['metrics/wvfd', () => useWvfd(), 300_000, 300_000],
+    // CR-2e C32 (main-session amendment, citing B23 (founder, 2026-11-17)): W1-W7 became real and the WVFD read opens the
+    // audited factory on every load. Retired by name: "metrics/wvfd polls on its own cadence" (stale 300 s, refetch 300 s);
+    // it moved to the no-poll list below with an explicit `false`.
     ['farmer-health/cohort', () => useCohortPatterns(), 60_000, 300_000],
   ] as const)('%s polls on its own cadence', async (_name, use, staleTime, refetchInterval) => {
     stub = installAdapter(async () => ({ status: 200, data: { data: {}, meta: {} } }));
@@ -111,6 +113,8 @@ describe('per-surface polling cadences (A23)', () => {
     // says so with an explicit `false`.
     ['farms/list', () => useFarmsList(1, 40), 60_000, undefined],
     ['farms/suffering', () => useSuffering(), 60_000, false],
+    // CR-2e C32: the counted-on-request WVFD read never polls and is never held as fresh.
+    ['metrics/wvfd', () => useWvfd(), 0, false],
     // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): S1-S3 became real: the silent-farms read opens the audited factory on every load, so it no longer polls
     // (the old 5-minute cadence is retired) and says "no interval" with an explicit `false`, like Suffering.
     ['farms/silent-churn', () => useSilentChurn(), 30_000, false],

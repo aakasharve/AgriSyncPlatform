@@ -5,7 +5,6 @@ import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import HomePage from '@/pages/HomePage';
 import NorthStarPage from '@/pages/metrics/NorthStarPage';
-import FarmsListPage from '@/pages/farms/FarmsListPage';
 import OpsLivePage from '@/pages/ops/OpsLivePage';
 import OpsErrorsPage from '@/pages/ops/OpsErrorsPage';
 import FarmerHealthPage from '@/features/farmer-health/FarmerHealthPage';
@@ -108,25 +107,35 @@ describe('Home at /home holds its one idea and none of its doubles (B24)', () =>
   });
 });
 
-describe('WVFD is seven ideas and asks for nothing (B24)', () => {
-  it('B24_WVFD_shows_W1_to_W4_W6_W7_as_Not_built_yet_and_W5_as_Goal_not_set_yet', async () => {
-    serveBusyFeeds();
+describe('WVFD keeps its one idea, W5 (B24; W1-W4, W6, W7 are real since CR-2e Task 6)', () => {
+  // CR-2e C32 (main-session amendment, citing B23 (founder, 2026-11-17)): W1 W2 W3 W4 W6 W7 became real.
+  // Retired by name: B24_WVFD_shows_W1_to_W4_W6_W7_as_Not_built_yet_and_W5_as_Goal_not_set_yet (its W1-W7 "Not built yet"
+  // assertions) and B24_WVFD_makes_no_request_to_the_wvfd_feed (the page now counts when opened; it asks once, covered by
+  // NorthStarPage.c32.test.tsx). The W5 half still holds and is kept below, now against a served answer.
+  it('B24_WVFD_keeps_W5_as_Goal_not_set_yet_and_shows_no_old_goal', async () => {
+    stub = installAdapter(async (req) => {
+      if (req.url.includes('/admin/metrics/wvfd')) {
+        return {
+          status: 200,
+          data: {
+            data: {
+              currentWvfd: 3, currentSelfOnlyDays: 1, priorWvfd: 2, goalWvfd: null,
+              weeks: [{ weekStart: '2026-11-09', avgWvfd: 3, avgSelfOnlyDays: 1, activeFarms: 2, isPartial: false }],
+              farms: [], countedAtUtc: '2026-11-19T04:00:00Z', notMeasuredReason: null,
+            },
+            meta: META,
+          },
+        };
+      }
+      return { status: 200, data: { data: [], meta: META } };
+    });
     renderWithProviders(<NorthStarPage />, { route: `/metrics/nsm?org=${ORG}` });
-    await waitFor(() => panelFor('W1'), WAIT);
-    for (const id of ['W1', 'W2', 'W3', 'W4', 'W6', 'W7']) expectIdea(id);
+    await waitFor(() => panelFor('W5', 'Goal not set yet'), WAIT);
     expectIdea('W5', 'Goal not set yet');
     expect(panelFor('W5', 'Goal not set yet').textContent).not.toContain('Not built yet');
     // D-151 b: no share of the goal is shown and the old 4.5 constant is gone.
     expect(document.body.textContent).not.toMatch(/4\.5/);
     expect(document.body.textContent).not.toMatch(/of goal/i);
-  });
-
-  it('B24_WVFD_makes_no_request_to_the_wvfd_feed', async () => {
-    serveBusyFeeds();
-    renderWithProviders(<NorthStarPage />, { route: `/metrics/nsm?org=${ORG}` });
-    await waitFor(() => panelFor('W7'), WAIT);
-    await new Promise((r) => setTimeout(r, 300));
-    for (const u of urls()) expect(u).not.toContain('/admin/metrics/wvfd');
   });
 });
 
@@ -178,39 +187,10 @@ describe('Live Health keeps L6 and L8, shows L1 as real, drops L2 to L5 (B24)', 
 });
 
 describe('column ideas keep their header, print no value, and carry their lines under the table (B24)', () => {
-  it('B24_All_Farms_marks_Tier_and_WVFD_7d_and_prints_no_served_value_for_them', async () => {
-    stub = installAdapter(async () => ({
-      status: 200,
-      data: {
-        data: {
-          items: [{ farmId: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Zzfarm', ownerPhone: '9876543210', plan: 'trial', wvfd7d: 4.7, engagementTier: 'B', errors24h: 11, lastLogAt: '2026-08-24T09:00:00Z', createdAt: '2024-03-12T09:00:00Z' }],
-          totalCount: 1, page: 1, pageSize: 40,
-        },
-        meta: META,
-      },
-    }));
-    renderWithProviders(<FarmsListPage />, { route: `/farms?org=${ORG}` });
-    const table = await screen.findByRole('table', { name: 'All farms' }, WAIT);
-    await screen.findByText('Zzfarm', undefined, WAIT);
-    // CR-2e C7 (main-session amendment, citing B23 (founder, 2026-11-17)): F6 became real; it is asserted in FarmsListPage.errors.test.tsx.
-    for (const id of ['F4', 'F5']) {
-      const e = byId(id);
-      const th = within(table).getAllByRole('columnheader').find((h) => (h.textContent ?? '').includes(e.label));
-      expect(th, `${id} header kept`).toBeTruthy();
-      expect(th!.textContent).toContain('Not built yet');
-      expect(document.body.textContent).toContain(e.what!);
-      expect(document.body.textContent).toContain(e.why!);
-    }
-    const row = within(table).getByText('Zzfarm').closest('tr')!;
-    expect(row.textContent).not.toMatch(/4\.7|\bB\b/);
-    // the real parts of the row still print their values
-    expect(row.textContent).toContain('9876543210');
-    // the tier filter is disabled
-    const group = screen.getByRole('group', { name: /tier/i });
-    const buttons = within(group).queryAllByRole('button');
-    for (const b of buttons) expect(b).toBeDisabled();
-    expect(group.textContent).toContain('Not built yet');
-  });
+  // CR-2e C32 (main-session amendment, citing B23 (founder, 2026-11-17)): F4 (Tier) and F5 (Checked days last week) became real.
+  // Retired by name: B24_All_Farms_marks_Tier_and_WVFD_7d_and_prints_no_served_value_for_them (the Not built yet headers,
+  // the withheld values and the disabled tier filter). Its one still-true part, the owner phone printing, is covered by
+  // FarmsListPage.test.tsx; the live columns and filter are covered by FarmsListPage.c32.test.tsx.
 
   it('B24_API_Errors_keeps_the_error_list_and_the_E1_E2_lines', async () => {
     stub = installAdapter(async () => ({

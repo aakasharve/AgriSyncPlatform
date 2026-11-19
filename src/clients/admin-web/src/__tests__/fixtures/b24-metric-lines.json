@@ -640,9 +640,9 @@
   {
     "page": "WVFD",
     "key": "wvfd-average",
-    "label": "Verified farm-days per farm",
-    "status": "idea",
-    "what": "Average days per farm in a week with an entry confirmed within 48 hours.",
+    "label": "Checked farm-days per farm",
+    "status": "real",
+    "what": "Average days per farm last week with an entry checked by a person within 48 hours.",
     "why": "Shows whether farms record confirmed work most days, the old main company target.",
     "buildId": "W1"
   },
@@ -650,7 +650,7 @@
     "page": "WVFD",
     "key": "wvfd-change",
     "label": "Change from the week before",
-    "status": "idea",
+    "status": "real",
     "what": "Change in that average from the week before.",
     "why": "Shows whether confirmed daily use is improving or slipping.",
     "buildId": "W2"
@@ -659,7 +659,7 @@
     "page": "WVFD",
     "key": "wvfd-farms",
     "label": "Farms with a row that week",
-    "status": "idea",
+    "status": "real",
     "what": "Farms that saved at least one entry in that week.",
     "why": "Shows how many farms the weekly average is worked out over.",
     "buildId": "W3"
@@ -668,8 +668,8 @@
     "page": "WVFD",
     "key": "wvfd-tiers",
     "label": "Tiers among the farms this feed returns",
-    "status": "idea",
-    "what": "Farms grouped A to D by how many confirmed days they had that week.",
+    "status": "real",
+    "what": "Farms grouped A to D by how many checked days they had last week.",
     "why": "Shows how many farms are steady users and how many barely use the app.",
     "buildId": "W6"
   },
@@ -677,8 +677,8 @@
     "page": "WVFD",
     "key": "wvfd-farm-list",
     "label": "Every farm's contribution",
-    "status": "idea",
-    "what": "Each farm's confirmed days that week, highest first.",
+    "status": "real",
+    "what": "Each farm's checked days last week, with self-confirmed days shown apart.",
     "why": "Shows which farms lead and which need attention.",
     "buildId": "W7"
   },
@@ -713,17 +713,17 @@
     "page": "All Farms",
     "key": "farms-tier",
     "label": "Tier",
-    "status": "idea",
-    "what": "Each farm's A to D group by confirmed days last week.",
+    "status": "real",
+    "what": "Each farm's A to D group by checked days last week.",
     "why": "Lets you sort farms into steady, light and absent users.",
     "buildId": "F4"
   },
   {
     "page": "All Farms",
     "key": "farms-wvfd7d",
-    "label": "WVFD 7d",
-    "status": "idea",
-    "what": "Each farm's days with a confirmed entry last week.",
+    "label": "Checked days last week",
+    "status": "real",
+    "what": "Each farm's days last week with an entry checked by a person.",
     "why": "Shows how regularly each farm records its work.",
     "buildId": "F5"
   },
@@ -839,9 +839,9 @@
     "page": "WVFD",
     "key": "wvfd-weeks",
     "label": "Weeks with a row",
-    "status": "idea",
+    "status": "real",
     "buildId": "W4",
-    "what": "How many weeks in the chosen time have any confirmed farm-day counted.",
+    "what": "Weeks in the chosen time with at least one farm saving an entry.",
     "why": "Tells you how much history the averages above are built on."
   },
   {
