@@ -65,6 +65,18 @@ export const getVerificationPresentation = (status?: LogVerificationStatus): {
     return { label: 'UNVERIFIED', tone: 'pending', isPending: true };
 };
 
+/**
+ * spec: plr-d10 lane HONESTY-1 (H8; P4) - did a PERSON OTHER THAN THE AUTHOR approve this record? An owner's own records are approved
+ * at creation (`LogFactory`: the same operator id writes `meta.createdByOperatorId` and `verification.verifiedByOperatorId`), so nobody
+ * checked them and the word "तपासलं" (checked) would be untrue. Only two real, different ids prove another person looked: a missing
+ * id on either side is "not known", never "somebody else".
+ */
+export const isCheckedByAnotherPerson = (log: Pick<DailyLog, 'meta' | 'verification'>): boolean => {
+    const author = log.meta?.createdByOperatorId?.trim();
+    const approver = log.verification?.verifiedByOperatorId?.trim();
+    return !!author && !!approver && author !== approver;
+};
+
 export const getPrimaryWorkDone = (log: DailyLog): string => {
     if (log.disturbance?.reason) {
         return `Work Blocked: ${log.disturbance.reason}`;

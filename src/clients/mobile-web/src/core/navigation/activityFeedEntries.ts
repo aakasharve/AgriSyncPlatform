@@ -23,7 +23,7 @@ import type { CropProfile } from '../../types';
 import type { FeedEntry } from '../../features/logs/components/TodayActivityFeed';
 import { PART_LABEL_EN, blockersOf, partEntriesOf, partMeta, type PartEntry } from '../../features/logs/components/voiceResult/resultModel';
 import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
-import { formatFarmerLogTime, getVerificationPresentation } from './helpers';
+import { formatFarmerLogTime, getVerificationPresentation, isCheckedByAnotherPerson } from './helpers';
 import { cropNameIn } from '../../shared/names/namesIn';
 
 export interface FeedDeps {
@@ -92,6 +92,8 @@ export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): Fee
             timeLabel: formatFarmerLogTime(log.meta?.createdAtISO),
             statusLabel: verification.label,
             statusTone: verification.tone,
+            // H8 (HONESTY-1): "तपासलं" only where another person approved it - an owner's own record is approved at creation.
+            checkedByOther: isCheckedByAnotherPerson(log),
             counts: {
                 cropActivities: log.cropActivities.length,
                 irrigation: log.irrigation.length,
