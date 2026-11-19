@@ -312,8 +312,5 @@ public sealed class AdminFarmContactsGateTests
             Calls.Add(nameof(GetUsersListAsync));
             return Task.FromResult(new UsersListDto(Array.Empty<UserSummaryDto>(), 0, page, pageSize));
         }
-
-        public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException();
     }
 }

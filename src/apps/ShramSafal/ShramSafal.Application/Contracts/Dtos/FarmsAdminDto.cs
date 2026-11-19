@@ -47,19 +47,6 @@ public sealed record FarmSummaryDto(
     DateTime CreatedAt);
 
 /// <summary>
-/// Not sent by any route since plan CR-2e, Task 4 (C26): <c>/admin/farms/silent-churn</c> answers
-/// <see cref="SilentFarmsDto"/>. Kept only as the return type of the off-path
-/// <c>IAdminMisRepository.GetSilentChurnAsync</c> until the CR-2d clean-up.
-/// </summary>
-public sealed record SilentChurnItemDto(
-    Guid FarmId,
-    string Name,
-    string OwnerPhone,
-    string Plan,
-    int WeeksSilent,
-    DateTime? LastLogAt);
-
-/// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4, C10, C26). The farms with no entry for 7 or more
 /// India days, or none ever, as of the India day of <see cref="CountedAtUtc"/>, counted live from the same rows and
 /// by the same age rule as Company MIS Retention, so the list counted by band equals its band numbers for a range

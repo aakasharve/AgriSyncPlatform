@@ -175,9 +175,6 @@ public sealed class GetFarmContactsHandlerTests
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 

@@ -6,7 +6,8 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// Refreshes every time the endpoint is called — no materialized view lag.
 /// </summary>
 public sealed record AdminOpsHealthDto(
-    // Voice/AI pipeline health (last 24 hours)
+    // Voice/AI pipeline health (last 24 hours). Read by the phone app's old admin page (plan CR-2d, D4); a failed
+    // read answers 500, never zeros.
     int VoiceInvocations24h,
     int VoiceFailures24h,
     decimal VoiceFailureRatePct,
@@ -30,12 +31,13 @@ public sealed record AdminOpsHealthDto(
     // When this snapshot was computed
     DateTime ComputedAtUtc,
 
-    // Obsolete (plan CR-2e C30): sent only because the phone app's old admin page still reads them; they leave
-    // with that page in CR-2d. Use AlertR9 instead. = AlertR9.State == "breach".
+    // Obsolete (C30): sent only because the phone app's old admin page still reads them. They stay for go-live
+    // (decided in plan CR-2d) and leave after it, with that page, in a phone release. Use AlertR9 instead.
+    // = AlertR9.State == "breach".
     bool? ApiErrorSpike = null,
 
-    // Obsolete (plan CR-2e C30): same reason. Always null: the voice check lives on its own route
-    // (GET /shramsafal/admin/ops/voice-check). Leaves in CR-2d.
+    // Obsolete (C30): same reason and same exit. Always null: the voice check lives on its own route
+    // (GET /shramsafal/admin/ops/voice-check).
     bool? VoiceDegraded = null);
 
 /// <summary>

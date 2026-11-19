@@ -265,9 +265,6 @@ public sealed class AdminSilentFarmsGateTests
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException("the old nightly view is on no read path (C26)");
-
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 

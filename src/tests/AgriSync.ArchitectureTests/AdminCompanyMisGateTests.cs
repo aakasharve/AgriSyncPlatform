@@ -374,9 +374,6 @@ public sealed class AdminCompanyMisGateTests
             return Task.FromResult(new UsersListDto(Array.Empty<UserSummaryDto>(), 0, page, pageSize));
         }
 
-        public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 

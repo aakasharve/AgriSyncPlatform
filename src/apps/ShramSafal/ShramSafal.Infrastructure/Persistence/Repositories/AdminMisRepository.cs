@@ -14,8 +14,8 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// Reads the admin farms and users lists, the suffering list and the farm contacts. All queries are read-only.
 ///
 /// <para>
-/// The silent-churn read (no longer on any read path, plan CR-2e, Task 4) keeps its older graceful empty-return.
-/// Nothing else here does (spec company-mis-real-numbers-2026-11-15): a failed read escapes and answers 500.
+/// Nothing here swallows a failure (spec company-mis-real-numbers-2026-11-15): a failed read escapes and answers
+/// 500. The old silent-churn read, the last one that did, left in the CR-2d clean-up (C27(6)).
 /// Confirmed farm-days are no longer read from the nightly view <c>mis.wvfd_weekly</c> (plan CR-2e, Task 6, C32):
 /// the route counts them live (<c>GetWvfdHistoryHandler</c>), and All Farms counts them here through
 /// <paramref name="confirmedFarmDays"/> and <see cref="ConfirmedFarmDays"/>.
@@ -288,85 +288,6 @@ public sealed class AdminMisRepository(
         var wasOpen = conn.State == System.Data.ConnectionState.Open;
         if (!wasOpen) await conn.OpenAsync(ct);
         try { await work(conn); }
-        finally { if (!wasOpen) await conn.CloseAsync(); }
-    }
-
-    /// <summary>
-    /// Returns the silent-churn watchlist for admins.
-    ///
-    /// <para>
-    /// <b>Not on any read path</b> since plan CR-2e, Task 4 (C26): <c>/admin/farms/silent-churn</c> counts live
-    /// through <c>GetSilentChurnHandler</c>. Kept, with its old swallowing catch, only until the CR-2d clean-up.
-    /// </para>
-    ///
-    /// <para>
-    /// Reads <c>mis.silent_churn_watchlist</c>, the matview that joins
-    /// <c>mis.subscription_farms</c> (denormalised cross-aggregate
-    /// projection per ADR-0004 α) with <c>analytics.events</c> to
-    /// surface farms whose subscriptions are still active but have not
-    /// produced a <c>log.created</c> event in the last 14 days.
-    /// </para>
-    ///
-    /// <para>
-    /// Restored on 2026-05-01 by T-IGH-03-MIS-MATVIEW-REDESIGN Bucket 1
-    /// (migration <c>20260502010000_AddSubscriptionFarmsAndChurnMatviews</c>).
-    /// Falls back to an empty list if the matview is empty or if the
-    /// query throws — same graceful pattern as the other Get* methods.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>FM-empty caveat (Path C, accepted 2026-05-03):</b>
-    /// <c>mis.silent_churn_watchlist</c> depends on
-    /// <c>mis.subscription_farms</c>, which joins via
-    /// <c>ssf.farm_memberships</c>. That table is currently empty in
-    /// production — <c>ssf.farm_memberships</c> will be populated
-    /// naturally once DWC v2 Phase E ships the worker-capture flow.
-    /// Until then this method returns <c>[]</c> on prod. No engineering
-    /// action required; see T-BUCKET1-CHURN-FM-EMPTY for the full
-    /// decision record.
-    /// </para>
-    /// </summary>
-    public async Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
-    {
-        var conn = analyticsContext.Database.GetDbConnection();
-        var wasOpen = conn.State == System.Data.ConnectionState.Open;
-        if (!wasOpen) await conn.OpenAsync(ct);
-        try
-        {
-            var items = new List<SilentChurnItemDto>();
-            using var cmd = conn.CreateCommand();
-            // Join the matview with ssf.farms (for canonical farm name as
-            // a fallback) and public.users (for the primary owner's
-            // phone via owner_account_memberships → user). Days_since_last_log
-            // is rendered as ceil(days/7) weeks for the dashboard.
-            cmd.CommandText = """
-                SELECT
-                    s.farm_id,
-                    COALESCE(s.farm_name, 'Unknown')        AS name,
-                    COALESCE(u.phone, '—')                  AS owner_phone,
-                    COALESCE(s.plan_code, 'trial')          AS plan,
-                    GREATEST(1, (s.days_since_last_log / 7)) AS weeks_silent,
-                    s.last_log_at
-                FROM mis.silent_churn_watchlist s
-                LEFT JOIN accounts.owner_accounts oa
-                    ON oa.owner_account_id = s.owner_account_id
-                LEFT JOIN public.users u
-                    ON u."Id" = oa.primary_owner_user_id
-                ORDER BY s.days_since_last_log DESC
-                LIMIT 50
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-                items.Add(new SilentChurnItemDto(
-                    FarmId: r.GetGuid(0),
-                    Name: r.GetString(1),
-                    OwnerPhone: r.IsDBNull(2) ? "—" : r.GetString(2),
-                    Plan: r.GetString(3),
-                    WeeksSilent: r.GetInt32(4),
-                    LastLogAt: r.IsDBNull(5) ? null : r.GetDateTime(5)));
-            return items;
-        }
-        catch { return []; }
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 

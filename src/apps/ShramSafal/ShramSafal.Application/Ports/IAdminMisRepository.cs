@@ -15,11 +15,9 @@ public interface IAdminMisRepository
     Task<FarmsListDto> GetFarmsListAsync(
         Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default);
 
-    /// <summary>
-    /// The nightly view's watchlist. Not on any read path since plan CR-2e, Task 4 (C26): the silent-farms route
-    /// counts live through <c>GetSilentChurnHandler</c>. Kept only until the CR-2d clean-up.
-    /// </summary>
-    Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default);
+    // The nightly view's watchlist (mis.silent_churn_watchlist) is no longer read here: it left the read path in plan
+    // CR-2e, Task 4 (C26) and its method left in the CR-2d clean-up (C27(6)); the silent-farms route counts live
+    // through GetSilentChurnHandler.
 
     /// <summary>
     /// Farms with three or more problems in the last 7 days, by the one farm rule and the one problem rule

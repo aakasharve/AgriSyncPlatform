@@ -519,9 +519,6 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             inner.GetFarmsListAsync(adminUserId, page, pageSize, search, tier, ct);
 
-        public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default) =>
-            inner.GetSilentChurnAsync(ct);
-
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             inner.GetSufferingAsync(ct);
 

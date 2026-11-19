@@ -16,8 +16,8 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// Queries analytics.events directly for live operational health.
 /// Uses raw SQL via AnalyticsDbContext connection — no SaveChanges ever.
 ///
-/// Graceful degradation (older reads): the voice totals and the voice trend
-/// return empty values rather than throwing.
+/// Graceful degradation (older read): the voice trend returns an empty value
+/// rather than throwing. The voice totals no longer do (plan CR-2d, D4).
 ///
 /// <para>
 /// The exceptions let every failure escape: the app-versions methods at the
@@ -143,38 +143,39 @@ public sealed class AdminOpsRepository(
         }
     }
 
+    // Plan CR-2d Task 5 (pre-flight amendment D4). Nothing is caught: a failed read escapes and /admin/ops/health
+    // answers 500, instead of zeros that read as "no recordings, none failed". The five voice fields stay: the phone
+    // app's old admin page still reads them (C30).
     private static async Task<(int total, int failures, decimal failureRate, decimal avgLatency, decimal p95Latency)>
         GetVoiceHealthAsync(System.Data.Common.DbConnection conn, CancellationToken ct)
     {
-        try
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT
+                COUNT(*)                                                          AS total,
+                COUNT(*) FILTER (WHERE props->>'outcome' = 'failure')            AS failures,
+                COALESCE(ROUND(
+                    COUNT(*) FILTER (WHERE props->>'outcome' = 'failure') * 100.0
+                    / NULLIF(COUNT(*), 0), 1), 0)                               AS failure_rate,
+                COALESCE(ROUND(AVG((props->>'latencyMs')::numeric)), 0)          AS avg_latency,
+                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP
+                    (ORDER BY (props->>'latencyMs')::numeric)), 0)              AS p95_latency
+            FROM analytics.events
+            WHERE event_type = 'ai.invocation'
+              AND occurred_at_utc >= NOW() - INTERVAL '24 hours'
+            """;
+        using var r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT
-                    COUNT(*)                                                          AS total,
-                    COUNT(*) FILTER (WHERE props->>'outcome' = 'failure')            AS failures,
-                    COALESCE(ROUND(
-                        COUNT(*) FILTER (WHERE props->>'outcome' = 'failure') * 100.0
-                        / NULLIF(COUNT(*), 0), 1), 0)                               AS failure_rate,
-                    COALESCE(ROUND(AVG((props->>'latencyMs')::numeric)), 0)          AS avg_latency,
-                    COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP
-                        (ORDER BY (props->>'latencyMs')::numeric)), 0)              AS p95_latency
-                FROM analytics.events
-                WHERE event_type = 'ai.invocation'
-                  AND occurred_at_utc >= NOW() - INTERVAL '24 hours'
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                return (
-                    r.IsDBNull(0) ? 0 : (int)r.GetInt64(0),
-                    r.IsDBNull(1) ? 0 : (int)r.GetInt64(1),
-                    r.IsDBNull(2) ? 0m : r.GetDecimal(2),
-                    r.IsDBNull(3) ? 0m : r.GetDecimal(3),
-                    r.IsDBNull(4) ? 0m : r.GetDecimal(4));
-            }
+            return (
+                r.IsDBNull(0) ? 0 : (int)r.GetInt64(0),
+                r.IsDBNull(1) ? 0 : (int)r.GetInt64(1),
+                r.IsDBNull(2) ? 0m : r.GetDecimal(2),
+                r.IsDBNull(3) ? 0m : r.GetDecimal(3),
+                r.IsDBNull(4) ? 0m : r.GetDecimal(4));
         }
-        catch { /* table may not exist in test env */ }
+
+        // An aggregate with no GROUP BY always answers one row; with no recordings its counts are real zeros.
         return (0, 0, 0m, 0m, 0m);
     }
 
