@@ -114,6 +114,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var plots = new List<MisPlotRow>();
         var voiceJobs = new List<MisVoiceJobRow>();
         var understandingDays = new List<MisUnderstandingDayRow>();
+        var featureUses = new List<MisFeatureUseRow>();
         var notReadable = 0;
         var liveCountSkipped = keys.Count > _maxFarmsForLiveCount;
 
@@ -151,6 +152,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
                 if (farm.Additions is { } additions)
                 {
                     understandingDays.AddRange(additions.UnderstandingDays);
+                    featureUses.AddRange(additions.FeatureUses);
                 }
             }
         }
@@ -169,8 +171,8 @@ public sealed class CompanyMisReader : ICompanyMisReader
         // Step 4: OTP-verified people, through the analytics connection.
         var verifiedUsers = await ReadVerifiedUsersAsync(sinceUtc, countedAtUtc, ct);
 
-        // Step 5 (CR-2c, Company MIS only): the non-farm additions, through the analytics connection. They run
-        // whatever the farm list said: they are not farm rows.
+        // Step 5 (CR-2c, Company MIS only): the non-farm additions (app.seen and refused sync through the analytics
+        // connection, accepted sync on the scoped context). They run whatever the farm list said: not farm rows.
         IReadOnlyList<MisAppSeenRow> appSeen = [];
         IReadOnlyList<MisSyncDayRow> syncDays = [];
         if (additionsSinceUtc is { } additionsSince)
@@ -194,6 +196,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
             AppSeen = appSeen,
             UnderstandingDays = understandingDays,
             SyncDays = syncDays,
+            FeatureUses = featureUses,
         };
     }
 
@@ -278,7 +281,8 @@ public sealed class CompanyMisReader : ICompanyMisReader
         if (additionsSinceUtc is { } additionsSince)
         {
             additions = new FarmAdditions(
-                await ReadUnderstandingDaysAsync(farmGuid, additionsSince, countedAtUtc, ct));
+                await ReadUnderstandingDaysAsync(farmGuid, additionsSince, countedAtUtc, ct),
+                await ReadFeatureUsesAsync(farmGuid, additionsSince, countedAtUtc, ct));
         }
 
         return new FarmRows(
@@ -399,6 +403,62 @@ public sealed class CompanyMisReader : ICompanyMisReader
     }
 
     /// <summary>
+    /// CR-2c #29, #31 (amendment E6: ONE query per farm, a UNION ALL over the feature tables). Runs inside the farm's
+    /// scope, on its open connection and transaction, so row-level security on <c>cost_entries</c>,
+    /// <c>attendance_marks</c>, <c>attachments</c> and <c>job_cards</c> decides what is seen; the farm filter is
+    /// kept as well. Each table by its own person and time column (see <see cref="MisFeatureUseRow"/>). The feature
+    /// words are the calculator's keys. A row with no person is skipped.
+    /// </summary>
+    private async Task<List<MisFeatureUseRow>> ReadFeatureUsesAsync(
+        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var uses = new List<MisFeatureUseRow>();
+        var conn = _db.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = _db.Database.CurrentTransaction?.GetDbTransaction();
+            cmd.CommandText = """
+                SELECT created_by_user_id AS person_id, created_at_utc AS at_utc, 'costs' AS feature
+                FROM ssf.cost_entries
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                UNION ALL
+                SELECT recorded_by_user_id, recorded_at_utc, 'attendance'
+                FROM ssf.attendance_marks
+                WHERE farm_id = @farm AND recorded_at_utc >= @since AND recorded_at_utc < @counted
+                UNION ALL
+                SELECT created_by_user_id, created_at_utc, 'photos'
+                FROM ssf.attachments
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                UNION ALL
+                SELECT created_by_user_id, created_at_utc, 'job_cards'
+                FROM ssf.job_cards
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                """;
+            AddParam(cmd, "@farm", farmGuid);
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                if (r.IsDBNull(0)) continue;
+
+                uses.Add(new MisFeatureUseRow(
+                    farmGuid,
+                    r.GetGuid(0),
+                    DateTime.SpecifyKind(r.GetDateTime(1), DateTimeKind.Utc),
+                    r.GetString(2)));
+            }
+
+            return uses;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
     /// CR-2c #47, #50 (amendment E2, E6): two grouped queries for the whole range, never per farm, each giving at
     /// most one row per India day (fixed +05:30, the calculator's day).
     /// <list type="bullet">
@@ -503,5 +563,6 @@ public sealed class CompanyMisReader : ICompanyMisReader
 
     /// <summary>CR-2c: one farm's Company MIS rows; null in <see cref="FarmRows"/> when ReadAsync asked.</summary>
     private sealed record FarmAdditions(
-        List<MisUnderstandingDayRow> UnderstandingDays);
+        List<MisUnderstandingDayRow> UnderstandingDays,
+        List<MisFeatureUseRow> FeatureUses);
 }

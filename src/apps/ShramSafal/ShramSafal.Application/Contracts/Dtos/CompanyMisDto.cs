@@ -73,12 +73,18 @@ public sealed record MisAcquisitionDto(
     MisNumberDto Habit,
     MisNumberDto HabitEligible);
 
-/// <summary>WhenLogged always has 168 cells; WhenLoggedClock is always "server-arrival".</summary>
+/// <summary>
+/// WhenLogged always has 168 cells; WhenLoggedClock is always "server-arrival". Plan CR-2c (#29, #31), the current
+/// period only: FeatureUse has one item per feature key (entries, voice, costs, attendance, photos, job_cards,
+/// compare); FeatureUseByRole one item per (feature, role) somebody used it in.
+/// </summary>
 public sealed record MisEngagementDto(
     MisNumberDto LogsPerActiveFarmPerWeek,
     IReadOnlyList<MisHeatCellDto> WhenLogged,
     string WhenLoggedClock,
-    IReadOnlyList<MisRoleCountDto> RoleMixOfMau);
+    IReadOnlyList<MisRoleCountDto> RoleMixOfMau,
+    MisListDto<MisFeatureUseDto> FeatureUse,
+    MisListDto<MisFeatureRoleDto> FeatureUseByRole);
 
 public sealed record MisRetentionDto(
     MisNumberDto D1Pct,
@@ -166,5 +172,16 @@ public sealed record MisListDto<T>(IReadOnlyList<T> Items, string? NotMeasuredRe
 /// </summary>
 /// <summary>#49: FarmDays = scored farm-days of the period with this score (0..10).</summary>
 public sealed record MisScoreBucketDto(int Score, int FarmDays);
+
+/// <summary>
+/// #29: People = distinct people who used the feature in the period; SharePct = of the distinct people who did any
+/// counted thing in the period (so no share exceeds 100). Nobody did anything counted: People 0, SharePct null,
+/// "denominator_zero". Compare is not recorded anywhere: People and SharePct null, "not_recorded".
+/// </summary>
+public sealed record MisFeatureUseDto(string Feature, int? People, decimal? SharePct, string? NotMeasuredReason);
+
+/// <summary>#31: People = distinct people who used the feature in the period holding this role on the farm where
+/// they used it (an AppRole name, or "Unknown"); a person counts once per (feature, role).</summary>
+public sealed record MisFeatureRoleDto(string Feature, string Role, int People);
 
 public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

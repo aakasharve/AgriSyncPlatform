@@ -22,7 +22,8 @@ namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 /// <item>Each number's previous value uses the same rule on the previous
 /// period.</item>
 /// <item>Entries are counted as rows; people are the person who saved
-/// (operator). Worker names, headcounts and attendance are not read, so
+/// (operator). Worker names and headcounts are not read, and attendance
+/// marks only for who recorded them (CR-2c #29, #31), never for whom, so
 /// naming people cannot move any number (doctrine P7).</item>
 /// </list>
 /// </summary>
@@ -57,6 +58,20 @@ public static class CompanyMisCalculator
     /// mean "not yet in production" and leave every sync day not measured.
     /// </summary>
     public static readonly DateOnly? SyncRefusalsRecordedSince = new DateOnly(2026, 8, 27);
+
+    // Plan CR-2c, #29, #31: the feature keys, in answer order (amendment E1: no schedule feature).
+    public const string FeatureEntries = "entries";
+    public const string FeatureVoice = "voice";
+    public const string FeatureCosts = "costs";
+    public const string FeatureAttendance = "attendance";
+    public const string FeaturePhotos = "photos";
+    public const string FeatureJobCards = "job_cards";
+    public const string FeatureCompare = "compare";
+
+    public static readonly IReadOnlyList<string> FeatureKeys =
+    [
+        FeatureEntries, FeatureVoice, FeatureCosts, FeatureAttendance, FeaturePhotos, FeatureJobCards, FeatureCompare,
+    ];
 
     /// <summary>Amendment A11: the cohort grid's days after day 0.</summary>
     private static readonly int[] CohortGridDays = [1, 7, 14, 30];
@@ -194,7 +209,10 @@ public static class CompanyMisCalculator
                 data.ActiveFarmsAt(p.To).Count), DayForm.AsOf),
             WhenLogged: Series(() => WhenLogged(data, current)),
             WhenLoggedClock: WhenLoggedClock,
-            RoleMixOfMau: Series(() => RoleMixOfMau(data, current)));
+            RoleMixOfMau: Series(() => RoleMixOfMau(data, current)),
+            // CR-2c #29, #31.
+            FeatureUse: FarmList(() => FeatureUse(data, current)),
+            FeatureUseByRole: FarmList(() => FeatureUseByRole(data, current)));
 
         MisNumberDto Band(int minAge, int maxAge) =>
             Farm(p => Count(data.FarmsInAgeBand(p.To, minAge, maxAge)), DayForm.AsOf);
@@ -613,6 +631,63 @@ public static class CompanyMisCalculator
         return new MisListDto<MisScoreBucketDto>(buckets, null);
     }
 
+    /// <summary>
+    /// #29: for each feature, the distinct people who used it in the period, and their share of the distinct people
+    /// who did ANY counted thing in the period (saved an entry, started a voice recording, added a cost, marked
+    /// attendance, added a photo or receipt, made a job card), so no share exceeds 100. Compare is not recorded.
+    /// </summary>
+    private static MisListDto<MisFeatureUseDto> FeatureUse(Data data, Period p)
+    {
+        var uses = data.UsesIn(p);
+        var everybody = uses.Select(u => u.PersonId).Distinct().Count();
+
+        var items = FeatureKeys
+            .Select(feature =>
+            {
+                if (feature == FeatureCompare)
+                {
+                    return new MisFeatureUseDto(feature, null, null, NotRecorded);
+                }
+
+                var people = uses.Where(u => u.Feature == feature).Select(u => u.PersonId).Distinct().Count();
+                var share = Pct(people, everybody);
+                return new MisFeatureUseDto(feature, people, share.Value, share.NotMeasuredReason);
+            })
+            .ToList();
+
+        return new MisListDto<MisFeatureUseDto>(items, null);
+    }
+
+    /// <summary>
+    /// #31: the distinct people per (feature, role), the role being the person's Active membership role on the farm
+    /// where the use happened (A8; none there: "Unknown"). A person with two roles counts once under each.
+    /// </summary>
+    private static MisListDto<MisFeatureRoleDto> FeatureUseByRole(Data data, Period p)
+    {
+        var items = data.UsesIn(p)
+            .GroupBy(u => (u.Feature, Role: data.RoleOn(u.FarmId, u.PersonId) ?? UnknownRole))
+            .Select(g => new MisFeatureRoleDto(g.Key.Feature, g.Key.Role, g.Select(u => u.PersonId).Distinct().Count()))
+            .OrderBy(r => IndexOf(FeatureKeys, r.Feature))
+            .ThenBy(r => RoleRank(r.Role == UnknownRole ? null : r.Role))
+            .ThenBy(r => r.Role, StringComparer.Ordinal)
+            .ToList();
+
+        return new MisListDto<MisFeatureRoleDto>(items, null);
+    }
+
+    private static int IndexOf(IReadOnlyList<string> keys, string key)
+    {
+        for (var i = 0; i < keys.Count; i++)
+        {
+            if (keys[i] == key)
+            {
+                return i;
+            }
+        }
+
+        return keys.Count;
+    }
+
     /// <summary>#47, #50: refusals were recorded in production on every day of the period.</summary>
     private static bool SyncRefusalsRecordedFor(Period p) =>
         SyncRefusalsRecordedSince is { } since && p.From >= since;
@@ -683,6 +758,9 @@ public static class CompanyMisCalculator
 
     private sealed record CohortUser(Guid UserId, DateOnly Day0);
 
+    /// <summary>CR-2c #29, #31: one use of a feature by a person on a farm.</summary>
+    private sealed record FeatureUseRow(string Feature, Guid FarmId, Guid PersonId);
+
     private sealed record FarmInfo(Guid FarmId, Guid OwnerUserId, DateOnly RegisteredDay, DateOnly? FirstEntryDay);
 
     /// <summary>The rows after test accounts and rows at or after the counting instant are left out.</summary>
@@ -702,6 +780,7 @@ public static class CompanyMisCalculator
         private readonly List<MisFpoScopeRow> _fpoScopes;
         private Dictionary<DateOnly, List<int>> _scoresByDay = [];
         private Dictionary<DateOnly, (int Refused, int Accepted)> _syncByDay = [];
+        private Dictionary<DateOnly, List<FeatureUseRow>> _usesByDay = [];
 
         private Data(
             List<FarmInfo> farms,
@@ -826,9 +905,26 @@ public static class CompanyMisCalculator
                 .GroupBy(d => d.LocalDate)
                 .ToDictionary(g => g.Key, g => g.Select(d => d.Score!.Value).ToList());
 
+            // CR-2c #29, #31: each use by its own time column; people and farms of test accounts left out. Entries
+            // and voice recordings (any status: a recording was started) are the rows already read.
+            var uses = entries
+                .Select(e => (e.Day, Use: new FeatureUseRow(FeatureEntries, e.FarmId, e.OperatorUserId)))
+                .Concat(voiceJobs.Select(j =>
+                    (Day: IstDay(j.CreatedAtUtc), Use: new FeatureUseRow(FeatureVoice, j.FarmId, j.UserId))))
+                .Concat(rows.FeatureUses
+                    .Where(u => !excludedFarms.Contains(u.FarmId)
+                                && !excludedUsers.Contains(u.PersonId)
+                                && u.AtUtc < countedAtUtc)
+                    .Select(u => (Day: IstDay(u.AtUtc), Use: new FeatureUseRow(u.Feature, u.FarmId, u.PersonId))));
+            var usesByDay = uses
+                .GroupBy(u => u.Day)
+                .ToDictionary(g => g.Key, g => g.Select(u => u.Use).ToList());
+
             return new Data(farms, entries, verifiedUsers, farms.Select(f => f.OwnerUserId).ToHashSet(),
                 activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds)
             {
+                _usesByDay = usesByDay,
+
                 _scoresByDay = scoresByDay,
 
                 // CR-2c #47, #50: every upload counts (it measures the server; the accepted side records no
@@ -843,6 +939,21 @@ public static class CompanyMisCalculator
         }
 
         private static readonly string DeclaredNoWorkDay = nameof(DayClassification.DeclaredNoWorkDay);
+
+        /// <summary>CR-2c #29, #31: every feature use with India day in the period.</summary>
+        public List<FeatureUseRow> UsesIn(Period p)
+        {
+            var uses = new List<FeatureUseRow>();
+            for (var d = p.From; d <= p.To; d = d.AddDays(1))
+            {
+                if (_usesByDay.TryGetValue(d, out var list))
+                {
+                    uses.AddRange(list);
+                }
+            }
+
+            return uses;
+        }
 
         /// <summary>CR-2c #47, #50: refused attempts and accepted changes over the India days of the period.</summary>
         public (int Refused, int Accepted) SyncIn(Period p)

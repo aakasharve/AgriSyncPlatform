@@ -84,6 +84,13 @@ public sealed record CompanyMisRows(
     /// side). Days with neither are absent.
     /// </summary>
     public IReadOnlyList<MisSyncDayRow> SyncDays { get; init; } = [];
+
+    /// <summary>
+    /// #29, #31: each read farm's cost, attendance, photo and job-card rows from the start of the previous period up
+    /// to the counting instant (one query per farm, under the farm's row-level security). Saved entries and voice
+    /// recordings come from <see cref="Entries"/> and <see cref="VoiceJobs"/>.
+    /// </summary>
+    public IReadOnlyList<MisFeatureUseRow> FeatureUses { get; init; } = [];
 }
 
 /// <summary>
@@ -131,5 +138,14 @@ public sealed record MisUnderstandingDayRow(Guid FarmId, DateOnly LocalDate, str
 /// <c>ssf.sync_mutations</c> rows processed that day (one per change; a unique index removes repeats).
 /// </summary>
 public sealed record MisSyncDayRow(DateOnly Day, int RefusedAttempts, int AcceptedChanges);
+
+/// <summary>
+/// One use of a part of the app on a farm (plan CR-2c, #29, #31), by the person and time column of its own table:
+/// <c>costs</c> = <c>cost_entries.created_by_user_id</c> / <c>created_at_utc</c>; <c>attendance</c> =
+/// <c>attendance_marks.recorded_by_user_id</c> / <c>recorded_at_utc</c>; <c>photos</c> =
+/// <c>attachments.created_by_user_id</c> / <c>created_at_utc</c> (a photo or receipt); <c>job_cards</c> =
+/// <c>job_cards.created_by_user_id</c> / <c>created_at_utc</c>.
+/// </summary>
+public sealed record MisFeatureUseRow(Guid FarmId, Guid PersonId, DateTime AtUtc, string Feature);
 
 public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);
