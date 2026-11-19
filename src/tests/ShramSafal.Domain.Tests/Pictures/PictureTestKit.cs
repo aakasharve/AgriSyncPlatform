@@ -107,9 +107,18 @@ internal sealed class PictureRepo : FakeShramSafalRepository, IShramSafalReposit
     }
 }
 
-internal sealed class MemoryPictureStore : IPictureStore
+internal class MemoryPictureStore : IPictureStore
 {
     public List<Picture> Rows { get; } = [];
+
+    /// <summary>How many times the first-picture save ran (<see cref="IPictureStore.TrySaveNewAsync"/>): the first picture of a subject saves through the store.</summary>
+    public int Saves { get; private set; }
+
+    public virtual Task<bool> TrySaveNewAsync(CancellationToken ct = default)
+    {
+        Saves++;
+        return Task.FromResult(true);
+    }
 
     public Task<Picture?> GetAsync(PictureKind kind, Guid subjectId, CancellationToken ct = default) =>
         Task.FromResult(Rows.FirstOrDefault(p => p.Kind == kind && p.SubjectId == subjectId));

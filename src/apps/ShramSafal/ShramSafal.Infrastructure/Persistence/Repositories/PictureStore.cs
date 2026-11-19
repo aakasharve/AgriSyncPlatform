@@ -43,4 +43,49 @@ internal sealed class PictureStore(ShramSafalDbContext context) : IPictureStore
         ArgumentNullException.ThrowIfNull(picture);
         context.Pictures.Remove(picture);
     }
+
+    /// <summary>The one-row-per-(kind, subject) unique index (declared in <c>PictureConfiguration</c>): the only violation caught here.</summary>
+    internal const string KindSubjectIndex = "ux_pictures_kind_subject";
+
+    public async Task<bool> TrySaveNewAsync(CancellationToken ct = default)
+    {
+        // Inside the request the save runs in the request's transaction, and Postgres aborts a whole transaction on a unique violation: a
+        // SAVEPOINT lets the caller go on (re-read the winner) in the same transaction, the way TrySaveScheduleSubscriptionAsync does.
+        // Without an ambient transaction the save is its own and a refusal leaves nothing behind either.
+        var transaction = context.Database.IsRelational() ? context.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_picture_first_save";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await context.SaveChangesAsync(ct);
+            if (transaction is not null)
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+
+            return true;
+        }
+        catch (DbUpdateException ex) when (ShramSafalRepository.IsUniqueViolationOn(ex, KindSubjectIndex))
+        {
+            // Lost the first-upload race. Undo the doomed statements, then discard everything this unit staged (the picture and its
+            // audit row) so a later SaveChanges cannot replay the doomed INSERTs; the handler re-reads the winner and answers from it.
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            foreach (var entry in context.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
 }
