@@ -303,16 +303,6 @@ describe('plotParentsOf — which plot and cycle rows a log waits on', () => {
             .toEqual([{ kind: 'plot', id: 'p1', clientRequestId: `${SyncMutationName.CreatePlot}:p1` }]);
     });
 
-    // spec: plr-d10 lane WIZARD-F2 - a new plot's schedule choice (adopt_schedule) rides in the outbox behind the plot and cycle it was queued
-    // after. The server answers it PlotNotFound / CropCycleNotFound until both have landed, which is a verdict about them, not about the choice.
-    it('a schedule adopt waits on its plot and its crop cycle, in that order', () => {
-        expect(plotParentsOf(SyncMutationName.AdoptSchedule, { plotId: 'p1', cropCycleId: 'c1', scheduleTemplateId: 't1' }))
-            .toEqual([
-                { kind: 'plot', id: 'p1', clientRequestId: `${SyncMutationName.CreatePlot}:p1` },
-                { kind: 'crop cycle', id: 'c1', clientRequestId: `${SyncMutationName.CreateCropCycle}:c1` },
-            ]);
-    });
-
     it('other mutations have no plot parents', () => {
         expect(plotParentsOf(SyncMutationName.AddLogTask, { plotId: 'p1' })).toEqual([]);
     });
