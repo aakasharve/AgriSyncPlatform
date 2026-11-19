@@ -51,7 +51,7 @@ describe('the haystack', () => {
 });
 
 describe('the scan', () => {
-  const hay = searchHaystack(['भोसले', '9764012345', 'Nashik']);
+  const hay = searchHaystack(['भोसले', '9000000764', 'Nashik']);
 
   it('finds a Devanagari name typed in Latin letters', () => {
     expect(matchesQuery(hay, 'bhosle')).toBe(true);
@@ -59,7 +59,7 @@ describe('the scan', () => {
   });
 
   it('finds a phone number', () => {
-    expect(matchesQuery(hay, '9764')).toBe(true);
+    expect(matchesQuery(hay, '0764')).toBe(true);
   });
 
   it('an empty query matches everything — it is not a filter', () => {

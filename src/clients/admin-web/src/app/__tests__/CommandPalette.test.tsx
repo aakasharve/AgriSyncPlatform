@@ -137,7 +137,7 @@ function person(over: Partial<UserSummary> & { userId: string }): UserSummary {
 }
 
 /** कांबळे — the surname a support person hears as "Kamble" on a phone call. */
-const KAMBLE = farm({ farmId: 'farm-kamble', name: 'कांबळे', ownerPhone: '9812345678' });
+const KAMBLE = farm({ farmId: 'farm-kamble', name: 'कांबळे', ownerPhone: '9000000812' });
 const ANAND = farm({ farmId: 'farm-anand', name: 'Anand Farm', ownerPhone: '9899999999' });
 /** The server withheld the name; the phone came back partly masked. */
 const WITHHELD = farm({ farmId: 'farm-hidden', name: '**redacted**', ownerPhone: '98******12' });
@@ -320,10 +320,10 @@ describe('the palette is not reachable before sign-in (A46, Task 13 Step 2)', ()
 
     /* THE EXPOSURE FIRST, so the red message is the farmer's name rather than
        a structural fact about a dialog. Moving this component back outside
-       RequireAuth makes the next two lines fail with कांबळे and 9812345678
+       RequireAuth makes the next two lines fail with कांबळे and 9000000812
        rendered on the sign-in screen. */
     expect(screen.queryByText('कांबळे')).not.toBeInTheDocument();
-    expect(screen.queryByText('9812345678')).not.toBeInTheDocument();
+    expect(screen.queryByText('9000000812')).not.toBeInTheDocument();
     expect(noPalette()).not.toBeInTheDocument();
     /* And it asked the server NOTHING. An anonymous keystroke that fires
        `/admin/me/scope` is already the first half of the leak, even on a day
@@ -612,7 +612,7 @@ describe('a Marathi surname is findable by its Latin spelling, through the real 
 
     await openPalette();
     await indexed('कांबळे');
-    await userEvent.type(box(), '98123');
+    await userEvent.type(box(), '00812');
 
     expect(optionText().some((t) => t.includes('कांबळे'))).toBe(true);
   });

@@ -240,7 +240,7 @@ describe('what the index costs — measured, so Task 8 inherits a number', () =>
 });
 
 describe('a Latin name needs no index', () => {
-  it.each([['Ramesh Patil'], ['ACME Agri FPO'], ['9764012345']])(
+  it.each([['Ramesh Patil'], ['ACME Agri FPO'], ['9000000764']])(
     '%s indexes to nothing — it is already searchable as itself',
     (name) => {
       expect(searchKey(name)).toBe('');
