@@ -179,10 +179,9 @@ describe('Last_week_says_it_can_still_rise_until_tuesday', () => {
     expect(text(panelOfMetric('wvfd-average'))).toContain(CAN_STILL_RISE);
   });
 
-  // FINDING (C32 Page, W1): the plan titles W1 "Days checked by a person, per farm, last week"; the page titles it
-  // "Checked farm-days per farm, last week". The assertion is kept as written and marked `it.fails` so the suite stays
-  // green while the page disagrees; when the page title or the plan is settled, change `it.fails` back to `it`.
-  it.fails('W1 is titled in the plan words', async () => {
+  // C32 Page, W1, settled by C34: the panel heading is "Days checked by a person, per farm, last week"; the metric
+  // line's label stays "Checked farm-days per farm".
+  it('W1 is titled in the plan words', async () => {
     serve(answer());
     render();
     await ready();

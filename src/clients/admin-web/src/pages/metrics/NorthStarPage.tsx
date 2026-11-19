@@ -269,7 +269,7 @@ export default function NorthStarPage() {
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2">
-            <Panel title="Checked farm-days per farm, last week" metric="wvfd-average">
+            <Panel title="Days checked by a person, per farm, last week" metric="wvfd-average">
               <p data-wvfd="checked" className="text-h1 font-bold text-text-1">
                 {days(current) ?? <span className="text-body font-normal text-text-3">{NO_ACTIVE_FARM}</span>}
               </p>
