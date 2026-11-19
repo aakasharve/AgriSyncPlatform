@@ -79,28 +79,9 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
                 TtlSeconds: 0)));
     }
 
-    /// <summary>One row per person: their most recent use in the period.</summary>
-    private static List<AppSeenRow> LatestUsePerPerson(IReadOnlyList<AppSeenRow> rows)
-    {
-        var latest = new Dictionary<Guid, AppSeenRow>();
-
-        foreach (var row in rows)
-        {
-            if (!latest.TryGetValue(row.PersonId, out var best) || IsLater(row, best))
-            {
-                latest[row.PersonId] = row;
-            }
-        }
-
-        return latest.Values.ToList();
-    }
-
-    // Two rows at the very same instant: the higher version wins, so the
-    // answer does not depend on the order the rows arrived in.
-    private static bool IsLater(AppSeenRow row, AppSeenRow best) =>
-        row.SeenAtUtc > best.SeenAtUtc
-        || (row.SeenAtUtc == best.SeenAtUtc
-            && VersionOrder.Instance.Compare(row.AppVersion, best.AppVersion) > 0);
+    /// <summary>One row per person: their most recent use in the period (the shared rule, plan CR-2c E9).</summary>
+    private static List<AppSeenRow> LatestUsePerPerson(IReadOnlyList<AppSeenRow> rows) =>
+        AppVersionRules.LatestPerPerson(rows, r => r.PersonId, r => r.SeenAtUtc, r => r.AppVersion);
 
     /// <summary>
     /// One row per version somebody is counted on, newest first. Two spellings
@@ -112,7 +93,7 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
         var counted = people
             .GroupBy(p => p.AppVersion, StringComparer.Ordinal)
             .Select(g => (AppVersion: g.Key, People: g.Count()))
-            .OrderByDescending(v => v.AppVersion, VersionOrder.Instance)
+            .OrderByDescending(v => v.AppVersion, AppVersionRules.VersionOrder)
             .ThenByDescending(v => v.AppVersion, StringComparer.Ordinal)
             .ToList();
 
@@ -127,7 +108,7 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
             .Select(v => new AppVersionRowDto(
                 v.AppVersion,
                 v.People,
-                IsNewest: VersionOrder.Instance.Compare(v.AppVersion, newest) == 0))
+                IsNewest: AppVersionRules.VersionOrder.Compare(v.AppVersion, newest) == 0))
             .ToList();
     }
 
@@ -170,58 +151,5 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
                 AppVersion: p.AppVersion,
                 LastSeenUtc: p.SeenAtUtc))
             .ToList();
-    }
-
-    /// <summary>
-    /// Orders app versions by their dot-separated parts, read as numbers. A
-    /// part that is not a number (the "18-beta" of 1.0.18-beta) sorts below
-    /// every number; a missing part counts as 0.
-    /// </summary>
-    private sealed class VersionOrder : IComparer<string>
-    {
-        public static readonly VersionOrder Instance = new();
-
-        public int Compare(string? x, string? y)
-        {
-            var a = (x ?? string.Empty).Split('.');
-            var b = (y ?? string.Empty).Split('.');
-
-            for (var i = 0; i < Math.Max(a.Length, b.Length); i++)
-            {
-                var byPart = ComparePart(i < a.Length ? a[i] : "0", i < b.Length ? b[i] : "0");
-                if (byPart != 0)
-                {
-                    return byPart;
-                }
-            }
-
-            return 0;
-        }
-
-        private static int ComparePart(string a, string b)
-        {
-            var aIsNumber = IsNumber(a);
-            var bIsNumber = IsNumber(b);
-
-            if (aIsNumber && bIsNumber)
-            {
-                // Compared as digits, not parsed: a version header may be 32
-                // characters long, which no integer type holds.
-                var aDigits = a.AsSpan().TrimStart('0');
-                var bDigits = b.AsSpan().TrimStart('0');
-                return aDigits.Length != bDigits.Length
-                    ? aDigits.Length.CompareTo(bDigits.Length)
-                    : aDigits.SequenceCompareTo(bDigits);
-            }
-
-            if (aIsNumber != bIsNumber)
-            {
-                return aIsNumber ? 1 : -1;
-            }
-
-            return string.CompareOrdinal(a, b);
-        }
-
-        private static bool IsNumber(string part) => part.Length > 0 && part.All(char.IsAsciiDigit);
     }
 }

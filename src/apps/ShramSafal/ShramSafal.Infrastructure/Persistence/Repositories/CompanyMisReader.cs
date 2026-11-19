@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.AI;
@@ -24,6 +25,9 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// <item>Above the live-count ceiling (amendment A1) no per-farm row is read.</item>
 /// <item>FPO scopes (no row-level security) on the scoped context.</item>
 /// <item>OTP-verified people through the analytics connection.</item>
+/// <item>Plan CR-2c, only for <see cref="ReadForCompanyMisAsync"/> (amendment E3):
+/// the Company MIS additions, inside the same per-farm scope for farm rows, and
+/// the non-farm reads (<c>app.seen</c>) through the analytics connection.</item>
 /// </list>
 /// Every query is bounded strictly before the counting instant.
 /// </summary>
@@ -55,12 +59,42 @@ public sealed class CompanyMisReader : ICompanyMisReader
         _maxFarmsForLiveCount = maxFarmsForLiveCount;
     }
 
-    public async Task<CompanyMisRows> ReadAsync(
+    public Task<CompanyMisRows> ReadAsync(
         Guid adminUserId,
         DateTime sinceUtc,
         DateTime countedAtUtc,
         IReadOnlySet<Guid> excludedUserIds,
+        CancellationToken ct = default) =>
+        ReadCoreAsync(adminUserId, sinceUtc, additionsSinceUtc: null, countedAtUtc, excludedUserIds, ct);
+
+    public Task<CompanyMisRows> ReadForCompanyMisAsync(
+        Guid adminUserId,
+        DateTime sinceUtc,
+        DateTime additionsSinceUtc,
+        DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds,
         CancellationToken ct = default)
+    {
+        if (additionsSinceUtc < sinceUtc || additionsSinceUtc > countedAtUtc)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(additionsSinceUtc), "The additions start must lie between sinceUtc and countedAtUtc.");
+        }
+
+        return ReadCoreAsync(adminUserId, sinceUtc, additionsSinceUtc, countedAtUtc, excludedUserIds, ct);
+    }
+
+    /// <summary>
+    /// The one pass. <paramref name="additionsSinceUtc"/> null: exactly the CR-2a read. Otherwise the Company MIS
+    /// additions are read too (plan CR-2c), from that instant up to the counting instant.
+    /// </summary>
+    private async Task<CompanyMisRows> ReadCoreAsync(
+        Guid adminUserId,
+        DateTime sinceUtc,
+        DateTime? additionsSinceUtc,
+        DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(excludedUserIds);
 
@@ -79,6 +113,9 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var memberships = new List<MisMembershipRow>();
         var plots = new List<MisPlotRow>();
         var voiceJobs = new List<MisVoiceJobRow>();
+        var understandingDays = new List<MisUnderstandingDayRow>();
+        var featureUses = new List<MisFeatureUseRow>();
+        var cropCycles = new List<MisCropCycleRow>();
         var notReadable = 0;
         var liveCountSkipped = keys.Count > _maxFarmsForLiveCount;
 
@@ -98,7 +135,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
 
                 var farm = await RlsIdentityScope.RunAsFarmAsync(
                     _db, key.FarmId, key.OwnerAccountId, actorUserId: null,
-                    token => ReadFarmAsync(key.FarmId, sinceUtc, countedAtUtc, excluded, token),
+                    token => ReadFarmAsync(key.FarmId, sinceUtc, additionsSinceUtc, countedAtUtc, excluded, token),
                     ct);
 
                 if (farm is null)
@@ -112,6 +149,13 @@ public sealed class CompanyMisReader : ICompanyMisReader
                 memberships.AddRange(farm.Memberships);
                 plots.AddRange(farm.Plots);
                 voiceJobs.AddRange(farm.VoiceJobs);
+
+                if (farm.Additions is { } additions)
+                {
+                    understandingDays.AddRange(additions.UnderstandingDays);
+                    featureUses.AddRange(additions.FeatureUses);
+                    cropCycles.AddRange(additions.CropCycles);
+                }
             }
         }
 
@@ -129,6 +173,16 @@ public sealed class CompanyMisReader : ICompanyMisReader
         // Step 4: OTP-verified people, through the analytics connection.
         var verifiedUsers = await ReadVerifiedUsersAsync(sinceUtc, countedAtUtc, ct);
 
+        // Step 5 (CR-2c, Company MIS only): the non-farm additions (app.seen and refused sync through the analytics
+        // connection, accepted sync on the scoped context). They run whatever the farm list said: not farm rows.
+        IReadOnlyList<MisAppSeenRow> appSeen = [];
+        IReadOnlyList<MisSyncDayRow> syncDays = [];
+        if (additionsSinceUtc is { } additionsSince)
+        {
+            appSeen = await ReadAppSeenAsync(additionsSince, countedAtUtc, ct);
+            syncDays = await ReadSyncDaysAsync(additionsSince, countedAtUtc, ct);
+        }
+
         return new CompanyMisRows(
             FarmsListed: keys.Count,
             FarmsNotReadable: notReadable,
@@ -139,12 +193,27 @@ public sealed class CompanyMisReader : ICompanyMisReader
             VoiceJobs: voiceJobs,
             VerifiedUsers: verifiedUsers,
             FpoScopes: fpoScopes.Select(s => new MisFpoScopeRow(s.FarmId, s.Name, s.GrantedAtUtc)).ToList(),
-            LiveCountSkipped: liveCountSkipped);
+            LiveCountSkipped: liveCountSkipped)
+        {
+            AppSeen = appSeen,
+            UnderstandingDays = understandingDays,
+            SyncDays = syncDays,
+            FeatureUses = featureUses,
+            CropCycles = cropCycles,
+        };
     }
 
-    /// <summary>Runs inside the farm's own scope. Null when the farm row does not come back.</summary>
+    /// <summary>
+    /// Runs inside the farm's own scope. Null when the farm row does not come back. With
+    /// <paramref name="additionsSinceUtc"/> (Company MIS only) the CR-2c farm rows are read too, in the same scope.
+    /// </summary>
     private async Task<FarmRows?> ReadFarmAsync(
-        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, List<UserId> excluded, CancellationToken ct)
+        Guid farmGuid,
+        DateTime sinceUtc,
+        DateTime? additionsSinceUtc,
+        DateTime countedAtUtc,
+        List<UserId> excluded,
+        CancellationToken ct)
     {
         var farmId = new FarmId(farmGuid);
 
@@ -165,18 +234,46 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var firstEntryUtc = await counted.MinAsync(l => (DateTime?)l.CreatedAtUtc, ct);
         var lastEntryUtc = await counted.MaxAsync(l => (DateTime?)l.CreatedAtUtc, ct);
 
-        var entries = await _db.DailyLogs
+        var loaded = _db.DailyLogs
             .AsNoTracking()
-            .Where(l => l.FarmId == farmId && l.CreatedAtUtc >= sinceUtc && l.CreatedAtUtc < countedAtUtc)
-            .Select(l => new
-            {
-                OperatorUserId = (Guid)l.OperatorUserId,
-                l.CreatedAtUtc,
-                IsVoice = l.Provenance.Source == Source.Voice,
-                l.ContentVersion,
-                l.SourceAiJobId,
-            })
-            .ToListAsync(ct);
+            .Where(l => l.FarmId == farmId && l.CreatedAtUtc >= sinceUtc && l.CreatedAtUtc < countedAtUtc);
+
+        List<MisEntryRow> entries;
+        if (additionsSinceUtc is null)
+        {
+            var rows = await loaded
+                .Select(l => new
+                {
+                    OperatorUserId = (Guid)l.OperatorUserId,
+                    l.CreatedAtUtc,
+                    IsVoice = l.Provenance.Source == Source.Voice,
+                    l.ContentVersion,
+                    l.SourceAiJobId,
+                })
+                .ToListAsync(ct);
+            entries = rows.Select(e => new MisEntryRow(
+                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId)).ToList();
+        }
+        else
+        {
+            // CR-2c #26 (amendment E6): the task lines' activity types and the capture scope are folded into this same
+            // entries query (log_tasks is gated through daily_logs), on the Company MIS path only.
+            var rows = await loaded
+                .Select(l => new
+                {
+                    OperatorUserId = (Guid)l.OperatorUserId,
+                    l.CreatedAtUtc,
+                    IsVoice = l.Provenance.Source == Source.Voice,
+                    l.ContentVersion,
+                    l.SourceAiJobId,
+                    l.CaptureScope,
+                    ActivityTypes = l.Tasks.Select(t => t.ActivityType).ToList(),
+                })
+                .ToListAsync(ct);
+            entries = rows.Select(e => new MisEntryRow(
+                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId,
+                e.ActivityTypes, e.CaptureScope)).ToList();
+        }
 
         var memberships = await _db.FarmMemberships
             .AsNoTracking()
@@ -211,15 +308,48 @@ public sealed class CompanyMisReader : ICompanyMisReader
             .GroupBy(a => a.AiJobId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<int>)g.Select(a => a.LatencyMs).ToList());
 
+        FarmAdditions? additions = null;
+        if (additionsSinceUtc is { } additionsSince)
+        {
+            additions = new FarmAdditions(
+                await ReadUnderstandingDaysAsync(farmGuid, additionsSince, countedAtUtc, ct),
+                await ReadFeatureUsesAsync(farmGuid, additionsSince, countedAtUtc, ct),
+                await ReadCropCyclesAsync(farmId, farmGuid, additionsSince, countedAtUtc, ct));
+        }
+
         return new FarmRows(
             new MisFarmRow(farmGuid, farm.OwnerUserId, farm.CreatedAtUtc, lastEntryUtc, firstEntryUtc),
-            entries.Select(e => new MisEntryRow(
-                farmGuid, e.OperatorUserId, e.CreatedAtUtc, e.IsVoice, e.ContentVersion, e.SourceAiJobId)).ToList(),
+            entries,
             memberships.Select(m => new MisMembershipRow(farmGuid, m.UserId, m.Role.ToString(), (int)m.Status)).ToList(),
             plots.Select(a => new MisPlotRow(farmGuid, a)).ToList(),
             jobs.Select(j => new MisVoiceJobRow(
                 j.Id, farmGuid, j.UserId, j.CreatedAtUtc, j.Status.ToString(),
-                latenciesByJob.TryGetValue(j.Id, out var ms) ? ms : [])).ToList());
+                latenciesByJob.TryGetValue(j.Id, out var ms) ? ms : [])).ToList(),
+            additions);
+    }
+
+    /// <summary>
+    /// CR-2c #10, #49 (one query per farm, inside the farm's scope: <c>daily_richness_aggregates</c> is farm_id
+    /// row-level-security gated). The farm's stored days from the India day of <paramref name="sinceUtc"/> to the
+    /// counting day. Each row's score is worked out here by the calculator's one rule
+    /// (<see cref="CompanyMisCalculator.UnderstandingScoreOf"/>) so the breakdown is not held in memory.
+    /// </summary>
+    private async Task<List<MisUnderstandingDayRow>> ReadUnderstandingDaysAsync(
+        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var firstDay = CompanyMisCalculator.IstDay(sinceUtc);
+        var lastDay = CompanyMisCalculator.IstDay(countedAtUtc);
+
+        var days = await _db.DailyRichnessAggregates
+            .AsNoTracking()
+            .Where(a => a.FarmId == farmGuid && a.LocalDate >= firstDay && a.LocalDate <= lastDay)
+            .Select(a => new { a.LocalDate, a.DayClassification, a.ComponentsJson })
+            .ToListAsync(ct);
+
+        return days
+            .Select(d => new MisUnderstandingDayRow(
+                farmGuid, d.LocalDate, d.DayClassification.ToString(), CompanyMisCalculator.UnderstandingScoreOf(d.ComponentsJson)))
+            .ToList();
     }
 
     private async Task<IReadOnlyList<MisUserRow>> ReadVerifiedUsersAsync(
@@ -253,6 +383,223 @@ public sealed class CompanyMisReader : ICompanyMisReader
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 
+    /// <summary>
+    /// CR-2c #52. The <c>app.seen</c> rows the SERVER wrote (no actor, role <c>system</c>: the same filter as the
+    /// app-versions page, <c>AdminOpsRepository.GetAppSeenAsync</c>, amendment E9), with the platform the server
+    /// stamped. A row whose person is not an id, or that names no version, cannot be counted on any version and is
+    /// skipped, as on that page. Every person is read; test accounts are left out by the calculator.
+    /// </summary>
+    private async Task<IReadOnlyList<MisAppSeenRow>> ReadAppSeenAsync(
+        DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var rows = new List<MisAppSeenRow>();
+        var conn = _analytics.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT
+                    props->>'personId'   AS person_id,
+                    props->>'appVersion' AS app_version,
+                    props->>'platform'   AS platform,
+                    occurred_at_utc
+                FROM analytics.events
+                WHERE event_type = 'app.seen'
+                  AND actor_user_id IS NULL
+                  AND actor_role = 'system'
+                  AND occurred_at_utc >= @since
+                  AND occurred_at_utc < @counted
+                """;
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                if (r.IsDBNull(0) || !Guid.TryParse(r.GetString(0), out var personId)) continue;
+                if (r.IsDBNull(1) || string.IsNullOrWhiteSpace(r.GetString(1))) continue;
+
+                rows.Add(new MisAppSeenRow(
+                    personId,
+                    r.GetString(1),
+                    DateTime.SpecifyKind(r.GetDateTime(3), DateTimeKind.Utc),
+                    r.IsDBNull(2) ? null : r.GetString(2)));
+            }
+
+            return rows;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// CR-2c #59 (one query per farm, inside the farm's scope: <c>crop_cycles</c> and <c>plots</c> are row-level
+    /// security gated). The farm's crop cycles that started by the counting day and had not ended before the India
+    /// day of <paramref name="sinceUtc"/>, each with its plot's area. The calculator applies the period exactly.
+    /// </summary>
+    private async Task<List<MisCropCycleRow>> ReadCropCyclesAsync(
+        FarmId farmId, Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var firstDay = CompanyMisCalculator.IstDay(sinceUtc);
+        var lastDay = CompanyMisCalculator.IstDay(countedAtUtc);
+
+        var cycles = await _db.CropCycles
+            .AsNoTracking()
+            .Where(c => c.FarmId == farmId && c.StartDate <= lastDay && (c.EndDate == null || c.EndDate >= firstDay))
+            .Join(
+                _db.Plots.AsNoTracking().Where(pl => pl.FarmId == farmId),
+                c => c.PlotId,
+                pl => pl.Id,
+                (c, pl) => new { c.PlotId, c.CropName, c.StartDate, c.EndDate, pl.AreaInAcres })
+            .ToListAsync(ct);
+
+        return cycles
+            .Select(c => new MisCropCycleRow(farmGuid, c.PlotId, c.CropName, c.StartDate, c.EndDate, c.AreaInAcres))
+            .ToList();
+    }
+
+    /// <summary>
+    /// CR-2c #29, #31 (amendment E6: ONE query per farm, a UNION ALL over the feature tables). Runs inside the farm's
+    /// scope, on its open connection and transaction, so row-level security on <c>cost_entries</c>,
+    /// <c>attendance_marks</c>, <c>attachments</c> and <c>job_cards</c> decides what is seen; the farm filter is
+    /// kept as well. Each table by its own person and time column (see <see cref="MisFeatureUseRow"/>). The feature
+    /// words are the calculator's keys. A row with no person is skipped.
+    /// </summary>
+    private async Task<List<MisFeatureUseRow>> ReadFeatureUsesAsync(
+        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var uses = new List<MisFeatureUseRow>();
+        var conn = _db.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = _db.Database.CurrentTransaction?.GetDbTransaction();
+            cmd.CommandText = """
+                SELECT created_by_user_id AS person_id, created_at_utc AS at_utc, 'costs' AS feature
+                FROM ssf.cost_entries
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                UNION ALL
+                SELECT recorded_by_user_id, recorded_at_utc, 'attendance'
+                FROM ssf.attendance_marks
+                WHERE farm_id = @farm AND recorded_at_utc >= @since AND recorded_at_utc < @counted
+                UNION ALL
+                SELECT created_by_user_id, created_at_utc, 'photos'
+                FROM ssf.attachments
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                UNION ALL
+                SELECT created_by_user_id, created_at_utc, 'job_cards'
+                FROM ssf.job_cards
+                WHERE farm_id = @farm AND created_at_utc >= @since AND created_at_utc < @counted
+                """;
+            AddParam(cmd, "@farm", farmGuid);
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                if (r.IsDBNull(0)) continue;
+
+                uses.Add(new MisFeatureUseRow(
+                    farmGuid,
+                    r.GetGuid(0),
+                    DateTime.SpecifyKind(r.GetDateTime(1), DateTimeKind.Utc),
+                    r.GetString(2)));
+            }
+
+            return uses;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// CR-2c #47, #50 (amendment E2, E6): two grouped queries for the whole range, never per farm, each giving at
+    /// most one row per India day (fixed +05:30, the calculator's day).
+    /// <list type="bullet">
+    /// <item>Refused attempts: the <c>sync.mutation_rejected</c> rows the SERVER wrote (no actor, role
+    /// <c>system</c>; client ingest can never write that pair), through the analytics connection. The count is
+    /// guarded (C4): a <c>rejectedWorkItems</c> that is not a plain number of at most nine digits counts nothing and
+    /// cannot break the page.</item>
+    /// <item>Accepted changes: <c>ssf.sync_mutations</c> rows by <c>processed_at_utc</c>, on the scoped context as
+    /// the app login (the table has no farm column and no row-level security; nothing deletes from it).</item>
+    /// </list>
+    /// </summary>
+    private async Task<IReadOnlyList<MisSyncDayRow>> ReadSyncDaysAsync(
+        DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var refused = await ReadDayCountsAsync(
+            _analytics.Database.GetDbConnection(),
+            transaction: null,
+            """
+            SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
+                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{1,9}$'
+                                     THEN (props->>'rejectedWorkItems')::int END), 0)::bigint AS refused
+            FROM analytics.events
+            WHERE event_type = 'sync.mutation_rejected'
+              AND actor_user_id IS NULL
+              AND actor_role = 'system'
+              AND occurred_at_utc >= @since
+              AND occurred_at_utc < @counted
+            GROUP BY 1
+            """,
+            sinceUtc, countedAtUtc, ct);
+
+        var accepted = await ReadDayCountsAsync(
+            _db.Database.GetDbConnection(),
+            _db.Database.CurrentTransaction?.GetDbTransaction(),
+            """
+            SELECT ((processed_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
+                   COUNT(*)::bigint AS accepted
+            FROM ssf.sync_mutations
+            WHERE processed_at_utc >= @since
+              AND processed_at_utc < @counted
+            GROUP BY 1
+            """,
+            sinceUtc, countedAtUtc, ct);
+
+        return refused.Keys.Union(accepted.Keys)
+            .Order()
+            .Select(day => new MisSyncDayRow(
+                day,
+                checked((int)refused.GetValueOrDefault(day)),
+                checked((int)accepted.GetValueOrDefault(day))))
+            .ToList();
+    }
+
+    /// <summary>Runs a query that answers (India day, count) rows; a failure escapes.</summary>
+    private static async Task<Dictionary<DateOnly, long>> ReadDayCountsAsync(
+        System.Data.Common.DbConnection conn,
+        System.Data.Common.DbTransaction? transaction,
+        string sql,
+        DateTime sinceUtc,
+        DateTime countedAtUtc,
+        CancellationToken ct)
+    {
+        var counts = new Dictionary<DateOnly, long>();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = transaction;
+            cmd.CommandText = sql;
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                counts[DateOnly.FromDateTime(r.GetDateTime(0))] = r.GetInt64(1);
+            }
+
+            return counts;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
     private static void AddParam(System.Data.IDbCommand cmd, string name, object value)
     {
         var p = cmd.CreateParameter();
@@ -268,5 +615,12 @@ public sealed class CompanyMisReader : ICompanyMisReader
         List<MisEntryRow> Entries,
         List<MisMembershipRow> Memberships,
         List<MisPlotRow> Plots,
-        List<MisVoiceJobRow> VoiceJobs);
+        List<MisVoiceJobRow> VoiceJobs,
+        FarmAdditions? Additions);
+
+    /// <summary>CR-2c: one farm's Company MIS rows; null in <see cref="FarmRows"/> when ReadAsync asked.</summary>
+    private sealed record FarmAdditions(
+        List<MisUnderstandingDayRow> UnderstandingDays,
+        List<MisFeatureUseRow> FeatureUses,
+        List<MisCropCycleRow> CropCycles);
 }

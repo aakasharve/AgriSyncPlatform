@@ -19,6 +19,22 @@ public interface ICompanyMisReader
     Task<CompanyMisRows> ReadAsync(
         Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Plan CR-2c, amendment E3: everything <see cref="ReadAsync"/> reads, plus the
+    /// Company MIS additions (the members of <see cref="CompanyMisRows"/> declared in
+    /// its body), in the same single pass over the farms (farm keys listed once, one
+    /// audit row). Called ONLY by the Company MIS handler, so the voice check and the
+    /// silent-farms list, which call <see cref="ReadAsync"/>, pay nothing for them.
+    /// </summary>
+    /// <param name="additionsSinceUtc">
+    /// Earliest instant the additions need: 00:00 India time of the previous period's
+    /// first day (amendment E6). Not before <paramref name="sinceUtc"/> and not after
+    /// <paramref name="countedAtUtc"/>.
+    /// </param>
+    Task<CompanyMisRows> ReadForCompanyMisAsync(
+        Guid adminUserId, DateTime sinceUtc, DateTime additionsSinceUtc, DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -38,7 +54,50 @@ public sealed record CompanyMisRows(
     IReadOnlyList<MisVoiceJobRow> VoiceJobs,
     IReadOnlyList<MisUserRow> VerifiedUsers,
     IReadOnlyList<MisFpoScopeRow> FpoScopes,
-    bool LiveCountSkipped = false);
+    bool LiveCountSkipped = false)
+{
+    // ---- Company MIS additions (plan CR-2c). Read only by ICompanyMisReader.ReadForCompanyMisAsync;
+    // amendment E3: empty by default, so ReadAsync and its callers pay nothing for them.
+
+    /// <summary>
+    /// #52: <c>app.seen</c> rows the server itself wrote (no actor, role <c>system</c>), from the start of the
+    /// previous period up to the counting instant. Every person, test accounts included; the calculator leaves
+    /// test accounts out.
+    /// </summary>
+    public IReadOnlyList<MisAppSeenRow> AppSeen { get; init; } = [];
+
+    /// <summary>
+    /// #52: when the first <c>app.seen</c> row the server wrote was written (all time); null when there is none.
+    /// Set by the handler from <c>IAdminOpsRepository.GetAppSeenStartAsync</c> (amendment E9).
+    /// </summary>
+    public DateTime? AppSeenStartUtc { get; init; }
+
+    /// <summary>
+    /// #10, #49: each read farm's <c>daily_richness_aggregates</c> rows with <c>local_date</c> from the previous
+    /// period's first India day to the counting day, read under the farm's row-level security.
+    /// </summary>
+    public IReadOnlyList<MisUnderstandingDayRow> UnderstandingDays { get; init; } = [];
+
+    /// <summary>
+    /// #47, #50: per India day from the previous period's first day to the counting day, the refused attempts and the
+    /// accepted changes of phone sync. Every upload, test accounts included (they record no person on the accepted
+    /// side). Days with neither are absent.
+    /// </summary>
+    public IReadOnlyList<MisSyncDayRow> SyncDays { get; init; } = [];
+
+    /// <summary>
+    /// #29, #31: each read farm's cost, attendance, photo and job-card rows from the start of the previous period up
+    /// to the counting instant (one query per farm, under the farm's row-level security). Saved entries and voice
+    /// recordings come from <see cref="Entries"/> and <see cref="VoiceJobs"/>.
+    /// </summary>
+    public IReadOnlyList<MisFeatureUseRow> FeatureUses { get; init; } = [];
+
+    /// <summary>
+    /// #59: each read farm's crop cycles that started by the counting day and had not ended before the previous
+    /// period's first India day, each with its plot's area (one query per farm, under the farm's row-level security).
+    /// </summary>
+    public IReadOnlyList<MisCropCycleRow> CropCycles { get; init; } = [];
+}
 
 /// <summary>
 /// LastEntryUtc and FirstEntryUtc are the farm's latest and earliest entry of all
@@ -48,9 +107,21 @@ public sealed record CompanyMisRows(
 public sealed record MisFarmRow(
     Guid FarmId, Guid OwnerUserId, DateTime CreatedAtUtc, DateTime? LastEntryUtc, DateTime? FirstEntryUtc);
 
-/// <summary>One ssf.daily_logs row. CreatedAtUtc is server arrival time.</summary>
+/// <summary>
+/// One ssf.daily_logs row. CreatedAtUtc is server arrival time. Plan CR-2c (#26), read only by
+/// <c>ReadForCompanyMisAsync</c> (folded into the same entries query, amendment E6): ActivityTypes = the entry's
+/// <c>log_tasks.activity_type</c> values (empty: no task line; null: not read); CaptureScope = <c>capture_scope</c>
+/// (<c>labour</c> at the हजेरी door; null for every other save and for entries saved before lane F1).
+/// </summary>
 public sealed record MisEntryRow(
-    Guid FarmId, Guid OperatorUserId, DateTime CreatedAtUtc, bool IsVoice, int ContentVersion, Guid? SourceAiJobId);
+    Guid FarmId,
+    Guid OperatorUserId,
+    DateTime CreatedAtUtc,
+    bool IsVoice,
+    int ContentVersion,
+    Guid? SourceAiJobId,
+    IReadOnlyList<string>? ActivityTypes = null,
+    string? CaptureScope = null);
 
 /// <summary>Role is an AppRole name; Status is the MembershipStatus number (3 = Active).</summary>
 public sealed record MisMembershipRow(Guid FarmId, Guid UserId, string Role, int Status);
@@ -64,3 +135,42 @@ public sealed record MisVoiceJobRow(
 public sealed record MisUserRow(Guid UserId, DateTime PhoneVerifiedAtUtc);
 
 public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTime GrantedAtUtc);
+
+/// <summary>
+/// One <c>daily_richness_aggregates</c> row, one farm-day (plan CR-2c, #10, #49). DayClassification is the stored
+/// <c>DayClassification</c> name. Score is <c>CompanyMisCalculator.UnderstandingScoreOf(components_json)</c>, worked
+/// out as the row is read so the breakdown itself is not held: null when nothing in it can be scored or it cannot
+/// be read (amendment E5: such a row is left out of the count, never a 0).
+/// </summary>
+public sealed record MisUnderstandingDayRow(Guid FarmId, DateOnly LocalDate, string DayClassification, int? Score);
+
+/// <summary>
+/// One India day of phone sync (plan CR-2c, #47, #50, amendment E2). RefusedAttempts = the sum of the guarded
+/// <c>rejectedWorkItems</c> of the server-written <c>sync.mutation_rejected</c> rows that day (one row per request; a
+/// change the phone sends again is refused again, and counted again). AcceptedChanges = the
+/// <c>ssf.sync_mutations</c> rows processed that day (one per change; a unique index removes repeats).
+/// </summary>
+public sealed record MisSyncDayRow(DateOnly Day, int RefusedAttempts, int AcceptedChanges);
+
+/// <summary>
+/// One use of a part of the app on a farm (plan CR-2c, #29, #31), by the person and time column of its own table:
+/// <c>costs</c> = <c>cost_entries.created_by_user_id</c> / <c>created_at_utc</c>; <c>attendance</c> =
+/// <c>attendance_marks.recorded_by_user_id</c> / <c>recorded_at_utc</c>; <c>photos</c> =
+/// <c>attachments.created_by_user_id</c> / <c>created_at_utc</c> (a photo or receipt); <c>job_cards</c> =
+/// <c>job_cards.created_by_user_id</c> / <c>created_at_utc</c>.
+/// </summary>
+public sealed record MisFeatureUseRow(Guid FarmId, Guid PersonId, DateTime AtUtc, string Feature);
+
+/// <summary>
+/// One crop cycle with its plot (plan CR-2c, #59). CropName is as entered; PlotAreaInAcres is the plot's
+/// <c>AreaInAcres</c>.
+/// </summary>
+public sealed record MisCropCycleRow(
+    Guid FarmId, Guid PlotId, string CropName, DateOnly StartDate, DateOnly? EndDate, decimal PlotAreaInAcres);
+
+/// <summary>
+/// One <c>app.seen</c> row (plan CR-2c, #52). Platform is <c>props-&gt;&gt;'platform'</c> as stored: the server
+/// writes the literal <c>android</c> for the native Android app and no key otherwise, so null means "not the
+/// Android app" (D-141's default, amendment E9).
+/// </summary>
+public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);

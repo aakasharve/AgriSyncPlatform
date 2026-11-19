@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -61,7 +60,7 @@ public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
         // NOT a failure: the success screen simply shows no number.
         var score = aggregate is null
             ? (int?)null
-            : DayUnderstandingScore.From(ReadComponents(aggregate.ComponentsJson));
+            : DayUnderstandingScore.From(UnderstandingComponents.Read(aggregate.ComponentsJson));
 
         // The STORED classification, passed straight out. No aggregate means the
         // server has no opinion on what kind of day this was — null, never a
@@ -69,38 +68,5 @@ public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
         var classification = aggregate?.DayClassification.ToString();
 
         return Result.Success(new DayUnderstandingDto(score, classification));
-    }
-
-    // An unstamped shell row carries "{}", and a hand-edited row could carry
-    // anything. Either way the honest answer is "I have nothing to score" — an
-    // EMPTY breakdown, which DayUnderstandingScore turns into null, never a 0.
-    private static readonly LensInput NothingScorable = new([], [], []);
-
-    private static LensInput ReadComponents(string? componentsJson)
-    {
-        if (string.IsNullOrWhiteSpace(componentsJson))
-        {
-            return NothingScorable;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<LensInput>(componentsJson) ?? NothingScorable;
-        }
-        catch (JsonException ex)
-        {
-            // An unreadable breakdown means the farmer is shown NO number for a day
-            // he did log. Falling back is right — a guessed score would be a
-            // fabricated one — but it must never be SILENT, or "no number" looks
-            // like "nothing to score" instead of "the row is corrupt".
-            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
-                "GetDayUnderstanding.MalformedComponentsJson",
-                tags: new System.Diagnostics.ActivityTagsCollection
-                {
-                    ["exception.type"] = ex.GetType().Name,
-                    ["exception.message"] = ex.Message,
-                }));
-            return NothingScorable;
-        }
     }
 }

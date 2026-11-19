@@ -228,7 +228,7 @@ public sealed class AdminCompanyMisGateTests
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(resolver);
         services.AddSingleton(new GetCompanyMisHandler(
-            reader, new CompanyMisExclusions(new HashSet<Guid>()), new FixedClock(Now)));
+            reader, new NoAppSeenOpsRepository(), new CompanyMisExclusions(new HashSet<Guid>()), new FixedClock(Now)));
         services.AddSingleton(new GetFarmsListHandler(repository));
         services.AddSingleton(new GetUsersListHandler(repository));
 
@@ -289,6 +289,41 @@ public sealed class AdminCompanyMisGateTests
             Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Compile-only (plan CR-2c, E9): the handler asks when app.seen rows began; here none were ever written.
+    /// No other member is used by the Company MIS handler.
+    /// </summary>
+    private sealed class NoAppSeenOpsRepository : IAdminOpsRepository
+    {
+        public Task<DateTime?> GetAppSeenStartAsync(CancellationToken ct = default) => Task.FromResult<DateTime?>(null);
+
+        public Task<AdminOpsHealthDto> GetOpsHealthAsync(CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<OpsErrorsPageDto> GetErrorsPagedAsync(
+            int page, int pageSize, string? endpoint, DateTime? since, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<OpsVoiceTrendDto> GetVoiceTrendAsync(int days, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(
+            IReadOnlyCollection<Guid> personIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetFarmNamesByPersonAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> personIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class FixedClock(DateTime now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(now, DateTimeKind.Utc));
@@ -298,6 +333,12 @@ public sealed class AdminCompanyMisGateTests
     {
         public int Calls { get; private set; }
         public Guid AdminUserId { get; private set; }
+
+        // Compile-only (plan CR-2c, E3): the Company MIS method reads as ReadAsync here.
+        public Task<CompanyMisRows> ReadForCompanyMisAsync(
+            Guid adminUserId, DateTime sinceUtc, DateTime additionsSinceUtc, DateTime countedAtUtc,
+            IReadOnlySet<Guid> excludedUserIds, CancellationToken ct = default) =>
+            ReadAsync(adminUserId, sinceUtc, countedAtUtc, excludedUserIds, ct);
 
         public Task<CompanyMisRows> ReadAsync(
             Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds,
