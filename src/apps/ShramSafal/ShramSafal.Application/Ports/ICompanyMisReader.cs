@@ -71,6 +71,12 @@ public sealed record CompanyMisRows(
     /// Set by the handler from <c>IAdminOpsRepository.GetAppSeenStartAsync</c> (amendment E9).
     /// </summary>
     public DateTime? AppSeenStartUtc { get; init; }
+
+    /// <summary>
+    /// #10, #49: each read farm's <c>daily_richness_aggregates</c> rows with <c>local_date</c> from the previous
+    /// period's first India day to the counting day, read under the farm's row-level security.
+    /// </summary>
+    public IReadOnlyList<MisUnderstandingDayRow> UnderstandingDays { get; init; } = [];
 }
 
 /// <summary>
@@ -103,4 +109,12 @@ public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTi
 /// writes the literal <c>android</c> for the native Android app and no key otherwise, so null means "not the
 /// Android app" (D-141's default, amendment E9).
 /// </summary>
+/// <summary>
+/// One <c>daily_richness_aggregates</c> row, one farm-day (plan CR-2c, #10, #49). DayClassification is the stored
+/// <c>DayClassification</c> name. Score is <c>CompanyMisCalculator.UnderstandingScoreOf(components_json)</c>, worked
+/// out as the row is read so the breakdown itself is not held: null when nothing in it can be scored or it cannot
+/// be read (amendment E5: such a row is left out of the count, never a 0).
+/// </summary>
+public sealed record MisUnderstandingDayRow(Guid FarmId, DateOnly LocalDate, string DayClassification, int? Score);
+
 public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);

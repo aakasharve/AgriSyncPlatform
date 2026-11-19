@@ -2,6 +2,8 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
+using ShramSafal.Application.UseCases.Dfes;
+using ShramSafal.Domain.Dfes;
 
 namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
@@ -58,6 +60,15 @@ public static class CompanyMisCalculator
     /// the one-farm page (plan CR-2e, Task 3, C21) uses this rule rather than a copy of it.
     /// </summary>
     public static bool IsFinishedJobStatus(string status) => CountedVoiceJobStatuses.Contains(status);
+
+    /// <summary>
+    /// Plan CR-2c (#10, #49), the score of one stored farm-day: the day screen's own rollup
+    /// (<see cref="DayUnderstandingScore.From"/>) of its breakdown read by the day screen's own reader
+    /// (<see cref="UnderstandingComponents.Read"/>, amendment E5). Null when nothing in the breakdown can be scored,
+    /// or it cannot be read; such a day is left out of the count, never counted as 0.
+    /// </summary>
+    public static int? UnderstandingScoreOf(string? componentsJson) =>
+        DayUnderstandingScore.From(UnderstandingComponents.Read(componentsJson));
 
     /// <summary>
     /// Amendment A5, the one age rule. Lifted out of the nested data class (plan CR-2e, Task 4, C10) so the
@@ -130,6 +141,10 @@ public static class CompanyMisCalculator
         IReadOnlyList<T> Series<T>(Func<IReadOnlyList<T>> build) =>
             farmBlock is null ? build() : [];
 
+        // CR-2c: a farm-derived list is not measured, with the block's reason, when farm numbers are blocked.
+        MisListDto<T> FarmList<T>(Func<MisListDto<T>> build) =>
+            farmBlock is null ? build() : new MisListDto<T>([], farmBlock);
+
         // Sign-ups and OTP-verified come from public.users and stay measured (with their lists).
         var signUps = Number(p => Count(data.CohortOf(p).Count), DayForm.During);
 
@@ -151,7 +166,10 @@ public static class CompanyMisCalculator
                 data.EntriesIn(p.From, p.To).Count()), DayForm.During),
             SignUpsByDay: SignUpsByDay(data, current), // A6: from public.users, stays measured
             ActivePeopleByDay: Series(() => ActivePeopleByDay(data, current)),
-            LogsByWeek: Series(() => LogsByWeek(data, current, today)));
+            LogsByWeek: Series(() => LogsByWeek(data, current, today)),
+            // CR-2c #10 (amendment E4, E8): scored farm-days only; none is "no_samples", never 0.
+            UnderstandingMedian: Farm(p => MedianScore(data.ScoresIn(p)), DayForm.During),
+            UnderstandingScoredDays: Farm(p => ScoredDays(data.ScoresIn(p)), DayForm.During));
 
         var acquisition = new MisAcquisitionDto(
             Verified: signUps,
@@ -198,6 +216,8 @@ public static class CompanyMisCalculator
             LogsCorrectedPct: Farm(p => Pct(
                 data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1),
                 data.EntriesIn(p.From, p.To).Count()), DayForm.During),
+            // CR-2c #49: the same scored farm-days as #10, per score.
+            UnderstandingSpread: FarmList(() => ScoreSpread(data.ScoresIn(current))),
             // CR-2c #52: not farm-derived, so the farm block does not reach it.
             AppVersions: AppVersions(rows, exclusions.UserIds, current, countedAtUtc),
             AppVersionsSeenSince: AppSeenSince(rows));
@@ -532,6 +552,41 @@ public static class CompanyMisCalculator
 
     // ---- plan CR-2c additions ---------------------------------------------
 
+    /// <summary>#10: the median of the scored farm-days, one decimal (two middles: their mean).</summary>
+    private static MisValueDto MedianScore(List<int> scores)
+    {
+        if (scores.Count == 0)
+        {
+            return new MisValueDto(null, NoSamples);
+        }
+
+        scores.Sort();
+        var middle = scores.Count / 2;
+        var median = scores.Count % 2 == 1
+            ? scores[middle]
+            : (scores[middle - 1] + scores[middle]) / 2m;
+        return new MisValueDto(Math.Round(median, 1, MidpointRounding.AwayFromZero), null);
+    }
+
+    /// <summary>#10: how many farm-days got a score; none is not measured, never 0.</summary>
+    private static MisValueDto ScoredDays(List<int> scores) =>
+        scores.Count == 0 ? new MisValueDto(null, NoSamples) : Count(scores.Count);
+
+    /// <summary>#49: scored farm-days per score 0..10, all eleven present; none at all is "no_samples".</summary>
+    private static MisListDto<MisScoreBucketDto> ScoreSpread(List<int> scores)
+    {
+        if (scores.Count == 0)
+        {
+            return new MisListDto<MisScoreBucketDto>([], NoSamples);
+        }
+
+        var buckets = Enumerable
+            .Range(DayUnderstandingScore.MinScore, DayUnderstandingScore.MaxScore - DayUnderstandingScore.MinScore + 1)
+            .Select(score => new MisScoreBucketDto(score, scores.Count(s => s == score)))
+            .ToList();
+        return new MisListDto<MisScoreBucketDto>(buckets, null);
+    }
+
     private static DateOnly? AppSeenSince(CompanyMisRows rows) =>
         rows.AppSeenStartUtc is { } first ? IstDay(first) : null;
 
@@ -615,6 +670,7 @@ public static class CompanyMisCalculator
         private readonly Dictionary<(Guid FarmId, Guid UserId), string> _roles;
         private readonly Dictionary<Guid, decimal> _acresByFarm;
         private readonly List<MisFpoScopeRow> _fpoScopes;
+        private Dictionary<DateOnly, List<int>> _scoresByDay = [];
 
         private Data(
             List<FarmInfo> farms,
@@ -730,8 +786,37 @@ public static class CompanyMisCalculator
                             && j.CreatedAtUtc < countedAtUtc)
                 .ToList();
 
+            // CR-2c #10, #49 (amendment E4): a scored farm-day has a stored row, a score (a computed 0 counts),
+            // and is not a declared no-work day. Farms owned by a test account are left out.
+            var scoresByDay = rows.UnderstandingDays
+                .Where(d => !excludedFarms.Contains(d.FarmId)
+                            && d.Score is not null
+                            && !string.Equals(d.DayClassification, DeclaredNoWorkDay, StringComparison.Ordinal))
+                .GroupBy(d => d.LocalDate)
+                .ToDictionary(g => g.Key, g => g.Select(d => d.Score!.Value).ToList());
+
             return new Data(farms, entries, verifiedUsers, farms.Select(f => f.OwnerUserId).ToHashSet(),
-                activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds);
+                activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds)
+            {
+                _scoresByDay = scoresByDay,
+            };
+        }
+
+        private static readonly string DeclaredNoWorkDay = nameof(DayClassification.DeclaredNoWorkDay);
+
+        /// <summary>CR-2c #10, #49: the scored farm-days' scores with India day in the period (a new list).</summary>
+        public List<int> ScoresIn(Period p)
+        {
+            var scores = new List<int>();
+            for (var d = p.From; d <= p.To; d = d.AddDays(1))
+            {
+                if (_scoresByDay.TryGetValue(d, out var list))
+                {
+                    scores.AddRange(list);
+                }
+            }
+
+            return scores;
         }
 
         private const int ActiveMembershipStatus = 3;

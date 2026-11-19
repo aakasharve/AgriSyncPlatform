@@ -45,6 +45,11 @@ public sealed record MisNumberDto(
     IReadOnlyList<decimal?>? CurrentByDay = null,
     IReadOnlyList<decimal?>? PreviousByDay = null);
 
+/// <summary>
+/// Plan CR-2c (#10, amendment E4): UnderstandingMedian is the middle score out of 10 of the period's scored
+/// farm-days, one decimal; UnderstandingScoredDays is how many there are. A scored farm-day has a stored day and a
+/// score and is not a declared no-work day; a computed 0 counts. No scored farm-day: both "no_samples".
+/// </summary>
 public sealed record MisOverviewDto(
     MisNumberDto ActiveFarms,
     MisNumberDto SignUps,
@@ -57,7 +62,9 @@ public sealed record MisOverviewDto(
     MisNumberDto VoiceSharePct,
     IReadOnlyList<MisDayPointDto> SignUpsByDay,
     IReadOnlyList<MisDayPointDto> ActivePeopleByDay,
-    IReadOnlyList<MisWeekSplitDto> LogsByWeek);
+    IReadOnlyList<MisWeekSplitDto> LogsByWeek,
+    MisNumberDto UnderstandingMedian,
+    MisNumberDto UnderstandingScoredDays);
 
 public sealed record MisAcquisitionDto(
     MisNumberDto Verified,
@@ -88,7 +95,8 @@ public sealed record MisRetentionDto(
     IReadOnlyList<MisCurvePointDto> PreviousCurve);
 
 /// <summary>
-/// Plan CR-2c: AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
+/// Plan CR-2c: UnderstandingSpread (#49) is the scored farm-days of the current period per score 0..10, all eleven
+/// present (zeros real), or "no_samples" when there is none. AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
 /// the first app.seen row the server wrote (null: none), so a period that starts earlier can say from
 /// when people are known.
 /// </summary>
@@ -99,6 +107,7 @@ public sealed record MisQualityDto(
     MisNumberDto TranscriptionP95Ms,
     MisNumberDto LogsCorrected,
     MisNumberDto LogsCorrectedPct,
+    MisListDto<MisScoreBucketDto> UnderstandingSpread,
     MisListDto<MisVersionShareDto> AppVersions,
     DateOnly? AppVersionsSeenSince);
 
@@ -148,4 +157,7 @@ public sealed record MisListDto<T>(IReadOnlyList<T> Items, string? NotMeasuredRe
 /// Platform is "android" (the native Android app) or "not_android" (no platform recorded: a browser,
 /// or an app build that does not say). SharePct = People of all people counted, one decimal.
 /// </summary>
+/// <summary>#49: FarmDays = scored farm-days of the period with this score (0..10).</summary>
+public sealed record MisScoreBucketDto(int Score, int FarmDays);
+
 public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

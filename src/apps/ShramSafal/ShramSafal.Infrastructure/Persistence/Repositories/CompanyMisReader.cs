@@ -112,6 +112,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var memberships = new List<MisMembershipRow>();
         var plots = new List<MisPlotRow>();
         var voiceJobs = new List<MisVoiceJobRow>();
+        var understandingDays = new List<MisUnderstandingDayRow>();
         var notReadable = 0;
         var liveCountSkipped = keys.Count > _maxFarmsForLiveCount;
 
@@ -131,7 +132,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
 
                 var farm = await RlsIdentityScope.RunAsFarmAsync(
                     _db, key.FarmId, key.OwnerAccountId, actorUserId: null,
-                    token => ReadFarmAsync(key.FarmId, sinceUtc, countedAtUtc, excluded, token),
+                    token => ReadFarmAsync(key.FarmId, sinceUtc, additionsSinceUtc, countedAtUtc, excluded, token),
                     ct);
 
                 if (farm is null)
@@ -145,6 +146,11 @@ public sealed class CompanyMisReader : ICompanyMisReader
                 memberships.AddRange(farm.Memberships);
                 plots.AddRange(farm.Plots);
                 voiceJobs.AddRange(farm.VoiceJobs);
+
+                if (farm.Additions is { } additions)
+                {
+                    understandingDays.AddRange(additions.UnderstandingDays);
+                }
             }
         }
 
@@ -183,12 +189,21 @@ public sealed class CompanyMisReader : ICompanyMisReader
             LiveCountSkipped: liveCountSkipped)
         {
             AppSeen = appSeen,
+            UnderstandingDays = understandingDays,
         };
     }
 
-    /// <summary>Runs inside the farm's own scope. Null when the farm row does not come back.</summary>
+    /// <summary>
+    /// Runs inside the farm's own scope. Null when the farm row does not come back. With
+    /// <paramref name="additionsSinceUtc"/> (Company MIS only) the CR-2c farm rows are read too, in the same scope.
+    /// </summary>
     private async Task<FarmRows?> ReadFarmAsync(
-        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, List<UserId> excluded, CancellationToken ct)
+        Guid farmGuid,
+        DateTime sinceUtc,
+        DateTime? additionsSinceUtc,
+        DateTime countedAtUtc,
+        List<UserId> excluded,
+        CancellationToken ct)
     {
         var farmId = new FarmId(farmGuid);
 
@@ -255,6 +270,13 @@ public sealed class CompanyMisReader : ICompanyMisReader
             .GroupBy(a => a.AiJobId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<int>)g.Select(a => a.LatencyMs).ToList());
 
+        FarmAdditions? additions = null;
+        if (additionsSinceUtc is { } additionsSince)
+        {
+            additions = new FarmAdditions(
+                await ReadUnderstandingDaysAsync(farmGuid, additionsSince, countedAtUtc, ct));
+        }
+
         return new FarmRows(
             new MisFarmRow(farmGuid, farm.OwnerUserId, farm.CreatedAtUtc, lastEntryUtc, firstEntryUtc),
             entries.Select(e => new MisEntryRow(
@@ -263,7 +285,32 @@ public sealed class CompanyMisReader : ICompanyMisReader
             plots.Select(a => new MisPlotRow(farmGuid, a)).ToList(),
             jobs.Select(j => new MisVoiceJobRow(
                 j.Id, farmGuid, j.UserId, j.CreatedAtUtc, j.Status.ToString(),
-                latenciesByJob.TryGetValue(j.Id, out var ms) ? ms : [])).ToList());
+                latenciesByJob.TryGetValue(j.Id, out var ms) ? ms : [])).ToList(),
+            additions);
+    }
+
+    /// <summary>
+    /// CR-2c #10, #49 (one query per farm, inside the farm's scope: <c>daily_richness_aggregates</c> is farm_id
+    /// row-level-security gated). The farm's stored days from the India day of <paramref name="sinceUtc"/> to the
+    /// counting day. Each row's score is worked out here by the calculator's one rule
+    /// (<see cref="CompanyMisCalculator.UnderstandingScoreOf"/>) so the breakdown is not held in memory.
+    /// </summary>
+    private async Task<List<MisUnderstandingDayRow>> ReadUnderstandingDaysAsync(
+        Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var firstDay = CompanyMisCalculator.IstDay(sinceUtc);
+        var lastDay = CompanyMisCalculator.IstDay(countedAtUtc);
+
+        var days = await _db.DailyRichnessAggregates
+            .AsNoTracking()
+            .Where(a => a.FarmId == farmGuid && a.LocalDate >= firstDay && a.LocalDate <= lastDay)
+            .Select(a => new { a.LocalDate, a.DayClassification, a.ComponentsJson })
+            .ToListAsync(ct);
+
+        return days
+            .Select(d => new MisUnderstandingDayRow(
+                farmGuid, d.LocalDate, d.DayClassification.ToString(), CompanyMisCalculator.UnderstandingScoreOf(d.ComponentsJson)))
+            .ToList();
     }
 
     private async Task<IReadOnlyList<MisUserRow>> ReadVerifiedUsersAsync(
@@ -362,5 +409,10 @@ public sealed class CompanyMisReader : ICompanyMisReader
         List<MisEntryRow> Entries,
         List<MisMembershipRow> Memberships,
         List<MisPlotRow> Plots,
-        List<MisVoiceJobRow> VoiceJobs);
+        List<MisVoiceJobRow> VoiceJobs,
+        FarmAdditions? Additions);
+
+    /// <summary>CR-2c: one farm's Company MIS rows; null in <see cref="FarmRows"/> when ReadAsync asked.</summary>
+    private sealed record FarmAdditions(
+        List<MisUnderstandingDayRow> UnderstandingDays);
 }
