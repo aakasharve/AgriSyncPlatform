@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { AppRoute, PageView } from '../../types';
+import { initialViewFromSearch } from '../state/machines/initialViewFromSearch';
 
 // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — carries a
 // one-shot "why am I on the log page" hint across the labour -> log
@@ -94,9 +95,12 @@ const readInitialRouteFromUrl = (): AppRoute => {
     return 'main';
 };
 
+// `?view=reflect` opens the whole-farm overview (founder, 2026-11-19); no `view` = the log page, as always.
+const readInitialViewFromUrl = (): PageView => (typeof window === 'undefined' ? 'log' : initialViewFromSearch(window.location.search));
+
 export const useAppNavigation = (): UseAppNavigationResult => {
     const [currentRoute, setCurrentRouteState] = useState<AppRoute>(readInitialRouteFromUrl);
-    const [mainView, setMainView] = useState<PageView>('log');
+    const [mainView, setMainView] = useState<PageView>(readInitialViewFromUrl);
     const [logIntent, setLogIntentState] = useState<LogIntent>(null);
     const [lastLabourLogIds, setLastLabourLogIdsState] = useState<string[]>([]);
     const [placeResetKey, setPlaceResetKey] = useState(0);

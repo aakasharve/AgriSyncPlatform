@@ -28,6 +28,7 @@
  */
 import { setup, assign, type ActorRefFrom } from 'xstate';
 import type { AppRoute, PageView } from '../../../domain/types/farm.types';
+import { initialViewFromSearch } from './initialViewFromSearch';
 
 /** URL nudge codes accepted via `?nudge=…` deep-link replay. */
 export type NavNudge = 'close-day' | 'review-summary' | 'open-today';
@@ -123,7 +124,7 @@ export function readNavigationInputFromLocation(): NavigationInput {
         const initialNudge = nudgeCandidate && isKnownNudge(nudgeCandidate)
             ? nudgeCandidate
             : null;
-        return { initialRoute, initialView: 'log', initialNudge };
+        return { initialRoute, initialView: initialViewFromSearch(window.location.search), initialNudge };
     } catch {
         return { initialRoute: 'main', initialView: 'log', initialNudge: null };
     }
