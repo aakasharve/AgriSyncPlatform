@@ -62,7 +62,9 @@ export const ScheduleCreatorBadge: React.FC<ScheduleCreatorBadgeProps> = ({ imag
             style={sizeClass ? undefined : { width: size, height: size, fontSize: Math.round(size * 0.46) }}
             className={`grid shrink-0 place-items-center overflow-hidden font-black ${sizeClass ?? ''} ${shape === 'square' ? 'rounded-xl' : 'rounded-full'} ${look}`}>
             {picture
-                ? <img src={picture} alt="" className="h-full w-full object-cover" onError={() => setBrokenUrl(picture)} />
+                // A person's round photo fills the circle; a square place (a schedule's picture, an institution's logo) shows the WHOLE picture on white,
+                // because a logo is usually wide and filling the square would cut its name in half (found in the real browser, gate 45).
+                ? <img src={picture} alt="" className={`h-full w-full ${shape === 'square' ? 'bg-white object-contain p-1' : 'object-cover'}`} onError={() => setBrokenUrl(picture)} />
                 : letter ?? <Leaf size={Math.round(size * 0.5)} aria-hidden="true" />}
         </span>
     );
