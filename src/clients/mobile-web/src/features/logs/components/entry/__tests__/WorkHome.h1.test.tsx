@@ -171,7 +171,7 @@ describe('the हजेरी card only when a head count was said (founder D-15
         expect(screen.getByTestId('attendance-card-tell')).toHaveTextContent('आधी आजचं काम सांगा');
     });
 
-    it('work was logged but NO head count: no big card; ONE small line with the existing card words, and the same tap as the green door', () => {
+    it('work was logged but NO head count: no big card; a small note that echoes the work, says the head count comes next, and taps into the same step as the green door', () => {
         const onTell = vi.fn();
         const onAttendance = vi.fn();
         render(<WorkHome {...full({ attendance: WORK_NO_COUNT, onTell, onAttendance })} />);
@@ -180,20 +180,35 @@ describe('the हजेरी card only when a head count was said (founder D-15
         const wrap = screen.getByTestId('home-attendance');
         expect(wrap).toHaveAttribute('data-shape', 'ask');
         expect(within(wrap).getAllByRole('button')).toHaveLength(1);
-        const line = screen.getByTestId('home-attendance-ask');
-        expect(line).toHaveTextContent('किती जण होते ते सांगा');
-        expect(line.className).toMatch(/text-\[1[0-4](\.5)?px\]/);
-        expect(Number(/min-h-\[(\d+)px\]/.exec(line.className)?.[1])).toBeGreaterThanOrEqual(44);
-        fireEvent.click(line);
+        const note = screen.getByTestId('home-attendance-ask');
+        expect(note).toHaveTextContent('आजची हजेरी');
+        expect(screen.getByTestId('home-attendance-told')).toHaveTextContent('काम सांगितलं — खुरपणी');
+        expect(note).toHaveTextContent('किती जण होते ते सांगितल्यानंतर तुम्ही हजेरी घेऊ शकता — कोण आले, कोण नाही आणि त्यांचा पगार पक्का करू शकता.');
+        expect(note).toHaveTextContent('किती जण होते ते सांगा');
+        expect(note.className).toContain('border-dashed');
+        fireEvent.click(note);
         expect(onTell).toHaveBeenCalledTimes(1); // the crop -> plot -> mic step, exactly the card's old button
         expect(onAttendance).not.toHaveBeenCalled();
     });
 
-    it('nothing told yet: no हजेरी part at all (the green door already asks for the work)', () => {
-        render(<WorkHome {...full({ attendance: NOTHING })} />);
-        expect(screen.queryByTestId('home-attendance')).toBeNull();
+    it('nothing told yet: the हजेरी part is NOT gone - a small note says it works only after the work is told (which crop, which plot), no tap of its own', () => {
+        const onTell = vi.fn();
+        render(<WorkHome {...full({ attendance: NOTHING, onTell })} />);
         expect(screen.queryByTestId('attendance-card')).toBeNull();
         expect(screen.queryByTestId('home-attendance-ask')).toBeNull();
+        const wrap = screen.getByTestId('home-attendance');
+        expect(wrap).toHaveAttribute('data-shape', 'rule');
+        const note = screen.getByTestId('home-attendance-rule');
+        expect(note).toHaveTextContent('आजची हजेरी');
+        expect(note.textContent).toContain('झालेलं काम सांगितल्यानंतरच तुम्ही हजेरी घेऊ शकता — कोण आले, कोण नाही आणि त्यांचा पगार पक्का करू शकता.');
+        expect(note.textContent).toContain('आधी कोणत्या पिकावर, कोणत्या प्लॉटवर काम झालं ते सांगा.');
+        expect(note.className).toContain('border-dashed');
+        // plain text: the green door above is the way in, so the note adds no second button
+        expect(within(wrap).queryAllByRole('button')).toHaveLength(0);
+        // it is quiet next to the two doors: small text, and placed under the blue door and above the money
+        expect(follows(screen.getByTestId('home-plan'), wrap)).toBe(true);
+        expect(follows(wrap, screen.getByTestId('running-cost-card'))).toBe(true);
+        expect(Array.from(note.querySelectorAll('span')).some(el => /text-\[13px\]/.test(el.className))).toBe(true);
     });
 
     it('a declared rest day and nothing else: one small line with the existing card sentence, opening the हजेरी place', () => {
@@ -219,17 +234,23 @@ describe('the हजेरी card only when a head count was said (founder D-15
     it('English mode: the small line is English only', () => {
         h.language = 'en';
         render(<WorkHome {...full({ attendance: WORK_NO_COUNT })} />);
-        const line = screen.getByTestId('home-attendance-ask');
-        expect(line).toHaveTextContent('Tell how many people worked');
-        expect(line.textContent).not.toMatch(/[ऀ-ॿ]/);
+        const note = screen.getByTestId('home-attendance-ask');
+        expect(note).toHaveTextContent('Tell how many people worked');
+        expect(note.textContent).not.toMatch(/[ऀ-ॿ]/);
+        cleanup();
+        render(<WorkHome {...full({ attendance: NOTHING })} />);
+        const rule = screen.getByTestId('home-attendance-rule');
+        expect(rule).toHaveTextContent('You can take attendance only after you tell the work done');
+        expect(rule).toHaveTextContent('which crop and which plot');
+        expect(rule.textContent).not.toMatch(/[ऀ-ॿ]/);
     });
 
-    it('the decision itself: head count -> card; work only -> ask; rest day only -> rest; nothing -> none', () => {
+    it('the decision itself: head count -> card; work only -> ask; rest day only -> rest; nothing -> rule', () => {
         expect(homeAttendanceShape(WORK_AND_COUNT)).toBe('card');
         expect(homeAttendanceShape(COUNT_NO_WORK)).toBe('card');
         expect(homeAttendanceShape(WORK_NO_COUNT)).toBe('ask');
         expect(homeAttendanceShape(REST_DAY)).toBe('rest');
-        expect(homeAttendanceShape(NOTHING)).toBe('none');
+        expect(homeAttendanceShape(NOTHING)).toBe('rule');
         // a head count wins over a rest-day mark (the card's own rest branch then speaks, as before)
         expect(homeAttendanceShape({ ...REST_DAY, headcount: 3 })).toBe('card');
     });
@@ -303,6 +324,13 @@ describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the pictur
             expect(cls, `${id} must use a colour this table knows`).toBeTruthy();
             expect(ratio(HEX[cls as string], HEX['bg-stone-900'])).toBeGreaterThanOrEqual(4.5);
         }
+    });
+
+    it('the हजेरी note: stone-700 and emerald-700 text on its white', () => {
+        render(<WorkHome {...full({ attendance: WORK_NO_COUNT })} />);
+        expect(screen.getByTestId('home-attendance-told').className).toContain('text-emerald-700');
+        expect(ratio('#047857', '#ffffff')).toBeGreaterThanOrEqual(4.5);
+        expect(ratio('#44403c', '#ffffff')).toBeGreaterThanOrEqual(4.5);
     });
 
     it('the green door: title and line on emerald-700; the blue door: title, line and pill on #1448E6', () => {
