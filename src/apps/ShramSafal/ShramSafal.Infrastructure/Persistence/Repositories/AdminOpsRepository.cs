@@ -146,6 +146,11 @@ public sealed class AdminOpsRepository(
     // Plan CR-2d Task 5 (pre-flight amendment D4). Nothing is caught: a failed read escapes and /admin/ops/health
     // answers 500, instead of zeros that read as "no recordings, none failed". The five voice fields stay: the phone
     // app's old admin page still reads them (C30).
+    //
+    // Plan CR-2d D15: every column is read in the type the query returns. total and failures are bigint;
+    // failure_rate and avg_latency are numeric (ROUND of a numeric). PERCENTILE_CONT always answers double
+    // precision, even over a numeric, so p95_latency is cast back to numeric in the query; read as a decimal
+    // without that cast it threw on every call (the old catch hid it as zeros).
     private static async Task<(int total, int failures, decimal failureRate, decimal avgLatency, decimal p95Latency)>
         GetVoiceHealthAsync(System.Data.Common.DbConnection conn, CancellationToken ct)
     {
@@ -158,8 +163,8 @@ public sealed class AdminOpsRepository(
                     COUNT(*) FILTER (WHERE props->>'outcome' = 'failure') * 100.0
                     / NULLIF(COUNT(*), 0), 1), 0)                               AS failure_rate,
                 COALESCE(ROUND(AVG((props->>'latencyMs')::numeric)), 0)          AS avg_latency,
-                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP
-                    (ORDER BY (props->>'latencyMs')::numeric)), 0)              AS p95_latency
+                COALESCE(ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP
+                    (ORDER BY (props->>'latencyMs')::numeric))::numeric), 0)    AS p95_latency
             FROM analytics.events
             WHERE event_type = 'ai.invocation'
               AND occurred_at_utc >= NOW() - INTERVAL '24 hours'
