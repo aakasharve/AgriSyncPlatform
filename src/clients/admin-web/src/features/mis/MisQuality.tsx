@@ -191,7 +191,7 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
                     item="quality.versionAdoption"
                     className="col-span-12"
                     title="App version adoption"
-                    subtitle="People seen in this period, by the newest version each used"
+                    subtitle="People seen in this period, by the version each used last"
                     footnote={view.versionsKnownSince ?? undefined}
                 >
                     <ChartBody chart={view.versions} checkedAt={checkedAt}>

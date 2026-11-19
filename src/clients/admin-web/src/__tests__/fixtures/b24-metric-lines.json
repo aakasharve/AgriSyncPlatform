@@ -76,7 +76,7 @@
     "key": "overview.understanding",
     "label": "मला किती समजलं",
     "status": "not-measured",
-    "what": "The middle score, out of 10, across scored farm-days, including days scored 0 that the phone does not show.",
+    "what": "The middle score out of 10 across scored farm-days, including days scored 0 the phone hides.",
     "why": "Shows whether farmers' words are understood well enough to trust the record."
   },
   {
@@ -228,7 +228,7 @@
     "key": "engagement.featureUse",
     "label": "Feature use",
     "status": "not-measured",
-    "what": "Share of people who did anything counted here in this period who used each part; Compare is not recorded.",
+    "what": "Of people who did anything counted here this period, the share using each part; Compare is not recorded.",
     "why": "Shows which features earn their place and which nobody uses."
   },
   {

@@ -28,7 +28,7 @@ const NOBODY_COUNTED = 'Nobody did anything counted here in this period.'; // E1
 const NONE = 'None in this period'; // Task 2 Step 2
 const LEGACY_LABEL = '1.0.17 or earlier'; // E10(1)
 /* The two item lines with digits in them (E4 for #10; #49 unchanged), removed before a digit check. */
-const LINE_10 = 'The middle score, out of 10, across scored farm-days, including days scored 0 that the phone does not show.';
+const LINE_10 = 'The middle score out of 10 across scored farm-days, including days scored 0 the phone hides.'; // E12
 const LINE_49 = 'How farm days spread across understanding scores from 0 to 10.';
 
 function quality(d: CompanyMis, compare = false) {
