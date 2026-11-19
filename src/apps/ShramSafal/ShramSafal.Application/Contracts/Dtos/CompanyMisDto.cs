@@ -169,11 +169,6 @@ public sealed record MisAcresPointDto(DateOnly Day, decimal Acres);
 /// </summary>
 public sealed record MisListDto<T>(IReadOnlyList<T> Items, string? NotMeasuredReason);
 
-/// <summary>
-/// #52: people seen in the period, each once, on the version of their most recent app.seen row.
-/// Platform is "android" (the native Android app) or "not_android" (no platform recorded: a browser,
-/// or an app build that does not say). SharePct = People of all people counted, one decimal.
-/// </summary>
 /// <summary>#49: FarmDays = scored farm-days of the period with this score (0..10).</summary>
 public sealed record MisScoreBucketDto(int Score, int FarmDays);
 
@@ -202,4 +197,9 @@ public sealed record MisCropRowDto(string CropName, int Farms, decimal Acres);
 /// </summary>
 public sealed record MisKindCountDto(string Kind, int Entries);
 
+/// <summary>
+/// #52: people seen in the period, each once, on the version of their most recent app.seen row.
+/// Platform is "android" (the native Android app) or "not_android" (no platform recorded: a browser,
+/// or an app build that does not say). SharePct = People of all people counted, one decimal.
+/// </summary>
 public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

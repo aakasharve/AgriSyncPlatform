@@ -137,11 +137,6 @@ public sealed record MisUserRow(Guid UserId, DateTime PhoneVerifiedAtUtc);
 public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTime GrantedAtUtc);
 
 /// <summary>
-/// One <c>app.seen</c> row (plan CR-2c, #52). Platform is <c>props-&gt;&gt;'platform'</c> as stored: the server
-/// writes the literal <c>android</c> for the native Android app and no key otherwise, so null means "not the
-/// Android app" (D-141's default, amendment E9).
-/// </summary>
-/// <summary>
 /// One <c>daily_richness_aggregates</c> row, one farm-day (plan CR-2c, #10, #49). DayClassification is the stored
 /// <c>DayClassification</c> name. Score is <c>CompanyMisCalculator.UnderstandingScoreOf(components_json)</c>, worked
 /// out as the row is read so the breakdown itself is not held: null when nothing in it can be scored or it cannot
@@ -173,4 +168,9 @@ public sealed record MisFeatureUseRow(Guid FarmId, Guid PersonId, DateTime AtUtc
 public sealed record MisCropCycleRow(
     Guid FarmId, Guid PlotId, string CropName, DateOnly StartDate, DateOnly? EndDate, decimal PlotAreaInAcres);
 
+/// <summary>
+/// One <c>app.seen</c> row (plan CR-2c, #52). Platform is <c>props-&gt;&gt;'platform'</c> as stored: the server
+/// writes the literal <c>android</c> for the native Android app and no key otherwise, so null means "not the
+/// Android app" (D-141's default, amendment E9).
+/// </summary>
 public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);
