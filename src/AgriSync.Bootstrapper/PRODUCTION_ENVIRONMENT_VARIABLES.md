@@ -115,6 +115,19 @@ AppRelease__PlayStoreUrl="https://play.google.com/store/apps/details?id=com.agri
 AppRelease__ApkUrl="https://shramsafal.in/apk"
 ```
 
+## Company MIS test accounts (spec company-mis-real-numbers-2026-11-15)
+
+User ids of test accounts, left out of every company number (their farms, their entries, their sign-ups and
+their voice jobs). Not a secret, but no values in git: `appsettings.json` carries an empty list and the real ids
+live only in the server's environment. User ids only, never phone numbers. Read once at start; an entry that is
+not a user id (GUID) stops start-up with a message naming the key and position. Answers report how many are
+excluded, never which.
+
+```bash
+CompanyMis__ExcludedUserIds__0="<user id of a test account>"
+CompanyMis__ExcludedUserIds__1="<user id of another test account>"
+```
+
 ## Notes
 
 - `secrets/local/credentials.json` is a local-development convenience file only. It must not exist on EC2.

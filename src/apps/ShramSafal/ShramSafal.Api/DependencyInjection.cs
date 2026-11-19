@@ -800,6 +800,9 @@ public static class DependencyInjection
 
         // Admin ops — real-time operational health dashboard + Phase 2 paginated endpoints
         services.AddScoped<GetOpsHealthHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29) — alert check R10 on its own route.
+        // Needs ICompanyMisReader and CompanyMisExclusions (Infrastructure) and TimeProvider.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsHealth.GetVoiceCheckHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
         // spec: control-room-app-versions-2026-11-12 (ADR 0028) — who uses which app version. Takes TimeProvider,
         // which AddBuildingBlocks and the Bootstrapper both register.
@@ -816,11 +819,22 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly.GetAiSpendMonthlyHandler>();
 
         // Admin MIS — Phase 3+ (WVFD, Farms, Users)
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6, C32) — confirmed farm-days counted live.
+        // Needs IConfirmedFarmDaysReader and CompanyMisExclusions (Infrastructure) and TimeProvider.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones by id.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmContacts.GetFarmContactsHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4) — silent farms counted live. Needs
+        // ICompanyMisReader, CompanyMisExclusions, ISubscriptionReader and the scoped DbContext (Infrastructure),
+        // IAdminMisRepository (below) and TimeProvider.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSilentChurn.GetSilentChurnHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSuffering.GetSufferingHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetUsersList.GetUsersListHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a) — company MIS, platform owners only.
+        // Needs ICompanyMisReader and CompanyMisExclusions, registered with the reader (plan Task 3),
+        // and TimeProvider.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetCompanyMis.GetCompanyMisHandler>();
         services.AddScoped<ShramSafal.Application.Ports.IAdminMisRepository,
             ShramSafal.Infrastructure.Persistence.Repositories.AdminMisRepository>();
 

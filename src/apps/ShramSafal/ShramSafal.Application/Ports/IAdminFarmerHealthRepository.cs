@@ -4,31 +4,23 @@ using ShramSafal.Application.Contracts.Dtos;
 namespace ShramSafal.Application.Ports;
 
 /// <summary>
-/// Reads the per-farmer DWC v2 health payload (Mode A drilldown) from
-/// the <c>mis</c> matview spine, gated by the caller's
-/// <see cref="AdminScope"/>. Implementation joins
-/// <c>mis.effective_org_farm_scope</c> per CEI W0 so a farm outside the
-/// caller's scope returns <c>null</c> (NotFound at the handler layer).
+/// Reads the one-farm page (<c>GET /admin/farmer-health/{farmId}</c>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// DWC v2 §3.5 Step 1. Five parallel reads under the hood (each
-/// targeted &lt;300ms; assembly under the §3.9 1500ms p95 budget):
+/// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3, C21). A caller who is not a platform admin is
+/// first checked against <c>mis.effective_org_farm_scope</c>; a farm outside the scope returns <c>null</c> and
+/// nothing else is read. The farm's name and owner come from the audited cross-farm factory, opened once and
+/// naming <paramref name="adminUserId"/>; a farm that does not exist returns <c>null</c> (404). Every other figure
+/// is read on request: the farm's own rows as the app login through row-level security, and its events through the
+/// analytics connection.
 /// </para>
-/// <list type="bullet">
-/// <item>DWC score row from <c>mis.dwc_score_per_farm_week</c></item>
-/// <item>14-day timeline from <c>analytics.events</c></item>
-/// <item>Sync state from recent <c>api.error</c> rows</item>
-/// <item>AI invocation success rate (last 14 days)</item>
-/// <item>Verification states (counts) + WTL v0 worker summary (top 5)</item>
-/// </list>
 /// <para>
-/// Returns <c>null</c> when the farm is not in the caller's scope or
-/// does not exist; never throws on missing matview rows (graceful empty
-/// payload — same discipline as <c>AdminMisRepository</c>).
+/// <b>Failures escape.</b> A failed read throws (the route answers 500), never an empty or zero payload; a factory
+/// that can see no farm at all throws rather than answering that the farm does not exist (C5).
 /// </para>
 /// </remarks>
 public interface IAdminFarmerHealthRepository
 {
-    Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, CancellationToken ct = default);
+    Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default);
 }

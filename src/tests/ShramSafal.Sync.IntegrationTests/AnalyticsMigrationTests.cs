@@ -327,7 +327,7 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
 
         var wvfdCols = await ReadMatviewColumns("wvfd_weekly");
         wvfdCols.Should().Contain(new[] { "farm_id", "week_start", "wvfd", "engagement_tier" },
-            "Task 9's wvfd_weekly must expose the columns AdminMisRepository.GetWvfdHistoryAsync queries");
+            "Task 9's wvfd_weekly must keep exposing these columns (the confirmed farm-days equivalence check and the cohort and report reads query them)");
 
         var correctionCols = await ReadMatviewColumns("correction_rate");
         correctionCols.Should().Contain(new[] { "farm_id", "correction_rate_pct" },

@@ -1,8 +1,8 @@
 using AgriSync.BuildingBlocks.Analytics;   // AnalyticsDbContext lives here — omitting this is CS0246
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Npgsql;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 
 namespace ShramSafal.Admin.IntegrationTests;
@@ -40,7 +40,7 @@ public sealed class AdminOpsErrorProjectionTests(AdminTestFixture fixture)
 
     private static AdminOpsRepository Repository(IServiceScope scope)
         => new(scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>(),
-               scope.ServiceProvider.GetRequiredService<ILogger<AdminOpsRepository>>());
+               CompanyMisExclusions.None);
 
     [Fact]
     public async Task Ops_errors_carry_the_error_code_and_its_explanation()

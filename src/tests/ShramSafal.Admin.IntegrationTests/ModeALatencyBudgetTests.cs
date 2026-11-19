@@ -3,12 +3,14 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Admin.IntegrationTests.Fixtures;
 using ShramSafal.Application.Admin;
 using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Infrastructure.Persistence;
@@ -69,16 +71,18 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
     public ModeALatencyBudgetTests(AdminTestFixture fx) => _fx = fx;
 
     /// <summary>
-    /// Bootstrap the gaming-signals matview the repo's
-    /// <c>GetVerificationCounts</c> + score reads touch. The other
-    /// upstream matviews (<c>mis.wvfd_weekly</c>,
-    /// <c>mis.schedule_compliance_weekly</c>, <c>mis.dwc_score_per_farm_week</c>)
-    /// are NOT bootstrapped here — the repo gracefully degrades when
-    /// they're absent (per <c>AdminFarmerHealthRepository</c>'s
-    /// per-block try/catch fallbacks). That's the realistic worst-case
-    /// load the latency budget is designed to gate: matview-cold reads
-    /// hitting the catch path are the slowest production case.
+    /// Bootstrap the gaming-signals matview (kept from the DWC v2 seed
+    /// shape; harmless if the repository no longer reads it).
     /// </summary>
+    /// <remarks>
+    /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3,
+    /// amendment C14). This test used to rely on the repository's
+    /// per-block try/catch fallbacks ("matview-cold reads hitting the
+    /// catch path are the slowest production case"). C14 removed every
+    /// such catch: a failed read now escapes and the route answers 500,
+    /// never a zero or empty block. So the budget is measured on the
+    /// success path only, and every sample must succeed.
+    /// </remarks>
     public Task InitializeAsync()
         => DwcMatviewBootstrap.EnsureGamingSignalsMatviewAsync(_fx.ConnectionString);
 
@@ -150,7 +154,7 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
         {
             var farmId = Guid.NewGuid();
             var ownerId = Guid.NewGuid();
-            await SeedFarmAsync(conn, farmId, ownerId, $"Farm {f}");
+            await SeedFarmAsync(conn, farmId, ownerId, Guid.NewGuid(), $"Farm {f}");
             farmIds.Add(farmId);
 
             for (var d = 0; d < daysOfEvents; d++)
@@ -224,21 +228,28 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
         {
             await using var scope = _fx.Services.CreateAsyncScope();
             var analytics = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
-            var repo = new AdminFarmerHealthRepository(analytics);
+            var repo = new AdminFarmerHealthRepository(
+                analytics,
+                scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>(),
+                NoExclusions,
+                TimeProvider.System,
+                new ShramSafalAdminDbContextFactory(AdminFactoryConfiguration()));
             var redactor = scope.ServiceProvider.GetRequiredService<IResponseRedactor>();
             var handler = new GetFarmerHealthHandler(repo, redactor, NullAuditEmitter.Instance);
 
             var farmId = farmIds[rng.Next(0, farmIds.Count)];
-            var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), farmId);
+            var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), farmId, AdminUserId);
 
             var sw = Stopwatch.StartNew();
             var result = await handler.HandleAsync(query, CancellationToken.None);
             sw.Stop();
 
-            // The repo synthesises an identity placeholder rather than
-            // returning null when ssf.farms lacks join columns, so the
-            // result is reliably success on the seeded fixture. We
-            // assert it to catch outright regressions, not for budget.
+            // spec: CR-2e Task 3 (C14, C23 item 4). The repository no
+            // longer synthesises an identity placeholder or falls back to
+            // zeros: an unknown farm is NotFound, a farm without an owner
+            // account or a failed read throws. The seed gives every farm
+            // an owner account, so every sample must succeed; a sample
+            // that fails is a regression, never a fast path.
             result.IsSuccess.Should().BeTrue(
                 $"Mode A drilldown must succeed on seeded farm {farmId} (sample {i}); " +
                 $"error={(result.IsSuccess ? "<n/a>" : result.Error.Code)}");
@@ -253,16 +264,20 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
     // schema assumptions stay in lockstep across the two suites.
     // ----------------------------------------------------------------
 
-    private static async Task SeedFarmAsync(NpgsqlConnection db, Guid farmId, Guid ownerId, string name)
+    // spec: CR-2e Task 3 (C23 item 4) — a farm without an owner account now
+    // answers 500 (its own rows are read inside the farm's owner-account
+    // scope), so every seeded farm carries one.
+    private static async Task SeedFarmAsync(NpgsqlConnection db, Guid farmId, Guid ownerId, Guid ownerAccountId, string name)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO ssf.farms ("Id", name, owner_user_id, created_at_utc)
-            VALUES (@id, @name, @owner, NOW());
+            INSERT INTO ssf.farms ("Id", name, owner_user_id, owner_account_id, created_at_utc)
+            VALUES (@id, @name, @owner, @account, NOW());
             """;
         cmd.Parameters.AddWithValue("id", farmId);
         cmd.Parameters.AddWithValue("name", name);
         cmd.Parameters.AddWithValue("owner", ownerId);
+        cmd.Parameters.AddWithValue("account", ownerAccountId);
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -339,6 +354,19 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
         cmd.Parameters.AddWithValue("count", assignmentCount);
         await cmd.ExecuteNonQueryAsync();
     }
+
+    private static readonly Guid AdminUserId = Guid.Parse("a0000000-0000-0000-0000-0000000000fe");
+
+    private static readonly CompanyMisExclusions NoExclusions = new(new HashSet<Guid>());
+
+    /// <summary>The audited cross-farm factory on this fixture's database (the shape of production's migration login).</summary>
+    private IConfiguration AdminFactoryConfiguration() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:ShramSafalDb_Migration"] = _fx.ConnectionString,
+            })
+            .Build();
 
     private static AdminScope MakePlatformOwnerScope() => new(
         OrganizationId: Guid.Parse("a0000000-0000-0000-0000-0000000000ff"),

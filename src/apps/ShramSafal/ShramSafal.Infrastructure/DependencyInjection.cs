@@ -509,6 +509,24 @@ public static class DependencyInjection
         }
 
         services.AddSingleton(new ShramSafal.Application.Privacy.ErasureTiming(TimeSpan.FromDays(erasureWaitDays)));
+
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a, decision 4) — the test accounts left out of every
+        // company count, read ONCE here. Git carries an empty list; real user ids live only in the server's
+        // environment (CompanyMis__ExcludedUserIds__0=...). An entry that is not a user id stops start-up with a
+        // message naming the key and position, never the value. Set as one value instead of a list, it stops
+        // start-up too (it would otherwise read as an empty list and count every test account).
+        var companyMisExcluded = configuration.GetSection(
+            ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.ConfigurationKey);
+        services.AddSingleton(ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.FromConfiguration(
+            companyMisExcluded.Value,
+            companyMisExcluded.GetChildren().Select(child => child.Value)));
+        // The company MIS rows: farm keys through the admin factory, every counted row per farm under
+        // row-level security on the scoped context.
+        services.AddScoped<ICompanyMisReader, CompanyMisReader>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6, C32) — confirmed farm-days rows: farm keys
+        // through the admin factory (or from the caller's own open), every farm's entries and checks under
+        // row-level security on the scoped context.
+        services.AddScoped<IConfirmedFarmDaysReader, ConfirmedFarmDaysReader>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 
         // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.

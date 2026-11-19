@@ -1,9 +1,12 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
+using ShramSafal.Application.UseCases.Admin.GetFarmContacts;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
@@ -108,6 +111,40 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminOpsHealth")
         .CacheOutput("AdminLive");
+
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C11, C29) — alert check R10, voice
+        // recordings failing, counted live: it reads every farm's voice jobs (farm keys through the audited
+        // cross-farm factory), so it is not on the polled /admin/ops/health; the console asks it when Live Health
+        // opens and on "Check again" only. Platform owners only (a read across every farm). Deliberately has no
+        // CacheOutput: each call is an honest live count and writes one cross-farm audit row. Failures are not
+        // caught: a read failure answers 500, never an answer that reads as clear.
+        group.MapGet("/admin/ops/voice-check", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetVoiceCheckHandler h,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsLive)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
+
+            var r = await h.HandleAsync(new GetVoiceCheckQuery(
+                http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetAdminOpsVoiceCheck");
 
         group.MapGet("/admin/ops/errors", async (
             HttpContext http,
@@ -218,6 +255,11 @@ public static class AdminEndpoints
         .WithName("GetAdminOpsVoice")
         .CacheOutput("AdminLive");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6 as replaced by C32; C12) — confirmed
+        // farm-days, counted live on request (the nightly view mis.wvfd_weekly is no longer read). Platform owners
+        // only: it reads every farm and opens the audited cross-farm factory once per call. Deliberately has no
+        // CacheOutput: each call is an honest live count and writes one cross-farm audit row. Failures are not
+        // caught: a read failure answers 500, never zeros or a made-up goal.
         group.MapGet("/admin/metrics/wvfd", async (
             HttpContext http,
             IEntitlementResolver resolver,
@@ -228,13 +270,24 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.MetricsNsm)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
-            var result = await handler.HandleAsync(
-                new GetWvfdHistoryQuery(Math.Clamp(weeks, 4, 52), http.User.GetUserIdOrEmpty()), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+            var r = await handler.HandleAsync(new GetWvfdHistoryQuery(
+                Math.Clamp(weeks, 4, 52), http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
         })
-        .WithName("GetAdminWvfd")
-        .CacheOutput("AdminMaterialized");
+        .WithName("GetAdminWvfd");
 
         group.MapGet("/admin/farms", async (
             HttpContext http,
@@ -249,15 +302,91 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsList)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 — every farm / every person across the platform: platform
+            // owners only (an FPO owner also holds this module).
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetFarmsListQuery(
                 Math.Max(1, page), Math.Clamp(pageSize, 10, 200), search, tier,
                 http.User.GetUserIdOrEmpty()), ct);
-            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32, C33) — a tier other than A, B, C or D
+                // is refused before anything is read ("tier_invalid").
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    code = r.Error.Code,
+                    message = r.Error.Description
+                }),
+                // The tier filter counts every farm before paging; above the live-count ceiling
+                // ("tier_filter_too_many_farms") or with a farm that cannot be read ("tier_filter_not_measured") it is
+                // refused, never applied to part of the farms.
+                AgriSync.BuildingBlocks.Results.ErrorKind.Conflict => Results.Json(new
+                {
+                    code = r.Error.Code,
+                    message = r.Error.Description
+                }, statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Problem()
+            };
         })
         .WithName("GetAdminFarms")
         .CacheOutput("AdminLive");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones for a list
+        // of farm ids (?ids=<comma-separated uuids>, 1 to 200), so the pages the console polls carry farm ids only
+        // and never open the audited cross-farm factory. Platform owners only (names and phones). Deliberately has
+        // no CacheOutput: each call writes one cross-farm audit row. A farm that does not exist is left out. A read
+        // failure is not caught: it answers 500, never an empty list.
+        group.MapGet("/admin/farms/contacts", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetFarmContactsHandler h,
+            string? ids,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsList)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
+
+            var r = await h.HandleAsync(new GetFarmContactsQuery(
+                ids, http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess)
+            {
+                return Results.Ok(r.Value.Select(c => new
+                {
+                    farmId = c.FarmId,
+                    name = c.Name,
+                    ownerPhone = c.OwnerPhone
+                }).ToList());
+            }
+
+            return r.Error.Kind switch
+            {
+                // C17: the refusal key is "code", as every other admin refusal.
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    code = "contacts_ids_invalid",
+                    message = r.Error.Description
+                }),
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetAdminFarmContacts");
+
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4, C26) — the silent farms, named, with phone,
+        // band and plan, counted live. Platform owners only (names and phones of every farm). Deliberately has no
+        // CacheOutput: each load opens the audited cross-farm factory. Failures are not caught: a read failure
+        // answers 500, never an empty list.
         group.MapGet("/admin/farms/silent-churn", async (
             HttpContext http,
             IEntitlementResolver resolver,
@@ -267,12 +396,24 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsSilentChurn)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
-            var r = await h.HandleAsync(new GetSilentChurnQuery(http.User.GetUserIdOrEmpty()), ct);
-            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+            var r = await h.HandleAsync(new GetSilentChurnQuery(
+                http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
         })
-        .WithName("GetAdminSilentChurn")
-        .CacheOutput("AdminMaterialized");
+        .WithName("GetAdminSilentChurn");
 
         group.MapGet("/admin/farms/suffering", async (
             HttpContext http,
@@ -283,6 +424,9 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.FarmsSuffering)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 2) — a list across all farms: platform
+            // owners only. It reads analytics.events only and opens no cross-farm factory, so it keeps its cache.
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetSufferingQuery(http.User.GetUserIdOrEmpty()), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
@@ -302,6 +446,9 @@ public static class AdminEndpoints
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.AdminUsers)) return Results.Empty;
+            // spec: company-mis-real-numbers-2026-11-15 — every farm / every person across the platform: platform
+            // owners only (an FPO owner also holds this module).
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var r = await h.HandleAsync(new GetUsersListQuery(
                 Math.Max(1, page), Math.Clamp(pageSize, 10, 200), search,
@@ -310,6 +457,55 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminUsers")
         .CacheOutput("AdminLive");
+
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a) — company-wide numbers counted live
+        // from real rows, India-time days. Platform owners only: metrics.nsm is also held by FPO owners,
+        // so the platform gate follows the module gate and the handler re-checks before reading anything.
+        // Deliberately has no CacheOutput (each load writes one cross-farm audit row). Failures are not
+        // caught: a read failure answers 500, never an empty answer.
+        group.MapGet("/admin/mis/company", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetCompanyMisHandler h,
+            string? from,
+            string? to,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.MetricsNsm)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
+
+            if (!TryParseMisDay(from, out var fromDay) || !TryParseMisDay(to, out var toDay))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "mis_range_invalid",
+                    message = "Dates must be written yyyy-MM-dd."
+                });
+            }
+
+            var r = await h.HandleAsync(new GetCompanyMisQuery(
+                fromDay, toDay, http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    code = "mis_range_invalid",
+                    message = r.Error.Description
+                }),
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetAdminCompanyMis");
 
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.1 — rolling 24h
         // provider-health rollup. Reads ssf.v_ai_provider_health_24h via
@@ -355,6 +551,24 @@ public static class AdminEndpoints
         .CacheOutput("AdminMaterialized");
 
         return group;
+    }
+
+    /// <summary>
+    /// Company MIS date parameter: absent or blank is null (true); otherwise it must be
+    /// exactly yyyy-MM-dd, else false (the route answers 400 mis_range_invalid).
+    /// </summary>
+    private static bool TryParseMisDay(string? raw, out DateOnly? day)
+    {
+        day = null;
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+        if (!DateOnly.TryParseExact(raw.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var parsed))
+        {
+            return false;
+        }
+
+        day = parsed;
+        return true;
     }
 }
 

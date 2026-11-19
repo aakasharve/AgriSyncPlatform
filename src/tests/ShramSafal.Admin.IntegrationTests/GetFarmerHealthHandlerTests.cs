@@ -28,13 +28,14 @@ public sealed class GetFarmerHealthHandlerTests
 {
     private static readonly Guid OrgId = Guid.Parse("a0000000-0000-0000-0000-000000000001");
     private static readonly Guid FarmId = Guid.Parse("b0000000-0000-0000-0000-000000000001");
+    private static readonly Guid AdminUserId = Guid.Parse("c0000000-0000-0000-0000-000000000001");
 
     [Fact]
     public async Task Returns_NotFound_when_repository_returns_null()
     {
         var (handler, repo, _, audit) = BuildHandler(repoResult: null);
 
-        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId);
+        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId);
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -42,6 +43,8 @@ public sealed class GetFarmerHealthHandlerTests
         result.Error.Code.Should().Be("farmer_health.not_found");
         repo.LastFarmId.Should().Be(FarmId);
         repo.LastScope!.OrganizationId.Should().Be(OrgId);
+        repo.LastAdminUserId.Should().Be(AdminUserId,
+            "the signed-in admin is handed to the repository, which names him on the cross-farm audit row (CR-2e C21)");
         audit.Emissions.Should().BeEmpty(
             "audit must NOT emit when the farm is out of scope — audit row would otherwise leak the scoped-out farmId");
     }
@@ -52,7 +55,7 @@ public sealed class GetFarmerHealthHandlerTests
         var dto = SeedDto();
         var (handler, _, _, audit) = BuildHandler(repoResult: dto);
 
-        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId);
+        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId);
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -70,7 +73,7 @@ public sealed class GetFarmerHealthHandlerTests
         var (handler, _, redactor, _) = BuildHandler(repoResult: dto);
 
         var lowPrivilege = MakeFpoEmployeeScope();
-        var query = new GetFarmerHealthQuery(lowPrivilege, FarmId);
+        var query = new GetFarmerHealthQuery(lowPrivilege, FarmId, AdminUserId);
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -105,30 +108,32 @@ public sealed class GetFarmerHealthHandlerTests
                EntitlementMatrix.For(OrganizationType.FPO, OrganizationRole.Employee),
                IsPlatformAdmin: false);
 
+    // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 3, C21/C23): the score block is sent as null, the
+    // checks carry a fifth count (self-checked) and the farm's name is its own field.
     private static FarmerHealthDto SeedDto() => new(
         FarmId: FarmId,
         FarmerName: "Ramu Patil",
         Phone: "9876543210",
-        Score: new FarmerHealthScoreBreakdownDto(
-            Total: 72, Bucket: "healthy", Flag: "ok",
-            Pillars: new(8m, 18m, 20m, 8m, 7m, 11m),
-            WeekStart: DateOnly.FromDateTime(DateTime.UtcNow.Date)),
+        Score: null,
         Timeline: Array.Empty<FarmerHealthTimelineDto>(),
         SyncState: null,
         AiHealth: null,
-        Verifications: new(0, 0, 0, 0),
-        WorkerSummary: Array.Empty<FarmerHealthWorkerSummaryDto>());
+        Verifications: new(0, 0, 0, 0, 0),
+        WorkerSummary: Array.Empty<FarmerHealthWorkerSummaryDto>(),
+        FarmName: "Fake Patil Farm");
 }
 
 internal sealed class FakeFarmerHealthRepo(FarmerHealthDto? result) : IAdminFarmerHealthRepository
 {
     public Guid LastFarmId { get; private set; }
     public AdminScope? LastScope { get; private set; }
+    public Guid? LastAdminUserId { get; private set; }
 
-    public Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, CancellationToken ct = default)
+    public Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default)
     {
         LastFarmId = farmId;
         LastScope = scope;
+        LastAdminUserId = adminUserId;
         return Task.FromResult(result);
     }
 }
