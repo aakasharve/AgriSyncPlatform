@@ -196,8 +196,9 @@ export function useScheduleTemplates() {
       const { data } = await adminApi.get<ScheduleTemplate[]>(SCHEDULE_TEMPLATES_PATH);
       return data;
     },
-    /* Reference data. Five minutes, and no `refetchInterval`: nothing about a
-       template changes on a poll, and this console runs against a 2-vCPU box. */
-    staleTime: 300_000,
+    /* One minute, and no `refetchInterval` (CR-2d D20 (4)): the go-live line's value, which came with the
+       schedule check state, so a check made by someone else shows within a minute; the check page itself
+       invalidates ['schedules'] at once after a decision. */
+    staleTime: 60_000,
   });
 }

@@ -1,12 +1,16 @@
 /**
  * WHERE THE USER WAS GOING — preserved across a sign-in.
  *
- * Three call sites, one rule: when this console throws someone back to /login,
+ * Two call sites, one rule: when this console throws someone back to /login,
  * it must remember the WHOLE url, not just its path.
  *
  *   RequireAuth (App.tsx)  — no session at all, capture and redirect.
- *   The 401 interceptor    — a token that expired mid-session.
  *   LoginPage              — spends the captured value on success.
+ *
+ * (CR-2d D20 (3): the SMS code sign-in, PR 95, retired the old 401 interceptor
+ * and the login-redirect bridge, so `setLoginRedirectHandler` and
+ * `redirectToLogin` below have NO caller in this console. They stay, tested; a
+ * session that ends mid-way now loads /login afresh, by PR 95's design.)
  *
  * ── Why the query string is not optional ──────────────────────────────────
  * Every piece of state this console keeps in a url lives in the query string:

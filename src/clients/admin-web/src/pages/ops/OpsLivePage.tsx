@@ -110,23 +110,20 @@ import type { OpsErrorEvent, OpsFarmError } from '@/hooks/useOpsHealth';
  *      page. A breach reaches a person only when somebody opens this page or
  *      reads the host log.
  *
- *  (7) 🛑 AN ALL-ZERO VOICE BLOCK IS WHAT A FAILED QUERY LOOKS LIKE.
- *      `GetVoiceHealthAsync` ends `catch { } return (0, 0, 0m, 0m, 0m);`
- *      (`AdminOpsRepository.cs:81-82`), and its SQL wraps the rate and both
- *      latencies in `COALESCE(..., 0)`. So five zeroes arrive identically
- *      from a quiet night and from an unreachable analytics database. The
- *      tiles report that as no reading, in words — D18 catalogued the CLIENT
- *      half of this (`?? 0`, `?? 0%`, `?? 0ms` at the old lines 49/55/62/69);
- *      this is the server-side twin, which survives every client-side fix.
- *      A rate over zero calls and a latency of 0ms are not readings either.
+ *  (7) THE VOICE BLOCK NO LONGER SWALLOWS ITS FAILURE (CR-2d D4, D15).
+ *      `GetVoiceHealthAsync` used to end in a catch answering five zeroes, so
+ *      a quiet night and an unreachable analytics database looked the same.
+ *      That catch is gone and its type mismatch fixed: a failed read answers
+ *      500. Its SQL still wraps the rate and latencies in `COALESCE(..., 0)`,
+ *      which is why this screen shows none of those voice tiles (they repeated
+ *      Company MIS, Quality, and were removed as doubles in B24).
  *
  *  (8) THE RECENT-EVENTS READ NO LONGER SWALLOWS ITS FAILURE (C3, C20). The
  *      `catch` that answered a database failure with an empty list and HTTP
  *      200 is gone from `GetRecentErrorsAsync` and from the repeated-problems
  *      read: a failed read answers 500 and this screen shows its own "could
  *      not load" state. An empty recent-events list is therefore a real
- *      "none", worded with its window. (The voice block of (7) still swallows;
- *      its tiles are gone from this screen.)
+ *      "none", worded with its window.
  *
  *  (9) 🛑 THE RECENT-EVENTS LIST IS NOT ONLY ERRORS, AND IT IS CAPPED AT 50.
  *      `event_type IN ('api.error','api.slow','client.error')` … `LIMIT 50`

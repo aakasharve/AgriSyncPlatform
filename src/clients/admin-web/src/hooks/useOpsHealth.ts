@@ -41,19 +41,19 @@ export interface OpsHealthData {
 
 /**
  * THE `recentErrors` WINDOW IS TWO HOURS AND ITS CAP IS FIFTY — read in
- * `AdminOpsRepository.GetRecentErrorsAsync` (`:85-123`) on 2026-09-01, and
- * recorded here because Task 26 needed it and the plan assumed otherwise.
+ * `AdminOpsRepository.GetRecentErrorsAsync`, first on 2026-09-01.
  *
  * `WHERE event_type IN ('api.error','api.slow','client.error') AND
  *  occurred_at_utc >= NOW() - INTERVAL '2 hours' ORDER BY occurred_at_utc DESC
- *  LIMIT 50`, ending in `catch { /* graceful *\/ }` over a pre-declared empty
- * list. Three consequences a caller must not discover by accident:
+ *  LIMIT 50`. Its old swallowing catch is gone (CR-2e C3), and so is the voice
+ *  read's (CR-2d D4, D15): a failed read answers 500 and the screen shows its
+ *  own "could not load" state. Consequences a caller must not miss:
  *
  *   1. There is NO 24-hour API-error count on this endpoint. The plan's Home
  *      tile asked for one; the nearest true reading is a 2-hour count, and
  *      Home says two hours because two hours is what was measured.
- *   2. An EMPTY list is not a quiet window. The catch and a genuinely calm two
- *      hours arrive identically, with HTTP 200.
+ *   2. An EMPTY list is now a real quiet window (C20): a failure is a 500,
+ *      never an empty 200.
  *   3. FIFTY ROWS IS A FLOOR. At the cap the count is "at least 50", and a
  *      subcount of one event type within it is a floor twice over.
  */
