@@ -115,6 +115,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var voiceJobs = new List<MisVoiceJobRow>();
         var understandingDays = new List<MisUnderstandingDayRow>();
         var featureUses = new List<MisFeatureUseRow>();
+        var cropCycles = new List<MisCropCycleRow>();
         var notReadable = 0;
         var liveCountSkipped = keys.Count > _maxFarmsForLiveCount;
 
@@ -153,6 +154,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
                 {
                     understandingDays.AddRange(additions.UnderstandingDays);
                     featureUses.AddRange(additions.FeatureUses);
+                    cropCycles.AddRange(additions.CropCycles);
                 }
             }
         }
@@ -197,6 +199,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
             UnderstandingDays = understandingDays,
             SyncDays = syncDays,
             FeatureUses = featureUses,
+            CropCycles = cropCycles,
         };
     }
 
@@ -282,7 +285,8 @@ public sealed class CompanyMisReader : ICompanyMisReader
         {
             additions = new FarmAdditions(
                 await ReadUnderstandingDaysAsync(farmGuid, additionsSince, countedAtUtc, ct),
-                await ReadFeatureUsesAsync(farmGuid, additionsSince, countedAtUtc, ct));
+                await ReadFeatureUsesAsync(farmGuid, additionsSince, countedAtUtc, ct),
+                await ReadCropCyclesAsync(farmId, farmGuid, additionsSince, countedAtUtc, ct));
         }
 
         return new FarmRows(
@@ -400,6 +404,32 @@ public sealed class CompanyMisReader : ICompanyMisReader
             return rows;
         }
         finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// CR-2c #59 (one query per farm, inside the farm's scope: <c>crop_cycles</c> and <c>plots</c> are row-level
+    /// security gated). The farm's crop cycles that started by the counting day and had not ended before the India
+    /// day of <paramref name="sinceUtc"/>, each with its plot's area. The calculator applies the period exactly.
+    /// </summary>
+    private async Task<List<MisCropCycleRow>> ReadCropCyclesAsync(
+        FarmId farmId, Guid farmGuid, DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var firstDay = CompanyMisCalculator.IstDay(sinceUtc);
+        var lastDay = CompanyMisCalculator.IstDay(countedAtUtc);
+
+        var cycles = await _db.CropCycles
+            .AsNoTracking()
+            .Where(c => c.FarmId == farmId && c.StartDate <= lastDay && (c.EndDate == null || c.EndDate >= firstDay))
+            .Join(
+                _db.Plots.AsNoTracking().Where(pl => pl.FarmId == farmId),
+                c => c.PlotId,
+                pl => pl.Id,
+                (c, pl) => new { c.PlotId, c.CropName, c.StartDate, c.EndDate, pl.AreaInAcres })
+            .ToListAsync(ct);
+
+        return cycles
+            .Select(c => new MisCropCycleRow(farmGuid, c.PlotId, c.CropName, c.StartDate, c.EndDate, c.AreaInAcres))
+            .ToList();
     }
 
     /// <summary>
@@ -564,5 +594,6 @@ public sealed class CompanyMisReader : ICompanyMisReader
     /// <summary>CR-2c: one farm's Company MIS rows; null in <see cref="FarmRows"/> when ReadAsync asked.</summary>
     private sealed record FarmAdditions(
         List<MisUnderstandingDayRow> UnderstandingDays,
-        List<MisFeatureUseRow> FeatureUses);
+        List<MisFeatureUseRow> FeatureUses,
+        List<MisCropCycleRow> CropCycles);
 }

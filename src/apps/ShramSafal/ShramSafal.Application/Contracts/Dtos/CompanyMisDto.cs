@@ -106,9 +106,9 @@ public sealed record MisRetentionDto(
 /// refused attempts (a change refused twice counts twice), SyncAcceptedChanges = changes the server accepted,
 /// SyncRefusedPct = refused ÷ (refused + accepted); every upload counts, test accounts included; refused and the
 /// share are "not_recorded" for a period that starts before refusals were recorded in production; nothing sent
-/// is "denominator_zero"; the day chart reads their CurrentByDay (E8). AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
-/// the first app.seen row the server wrote (null: none), so a period that starts earlier can say from
-/// when people are known.
+/// is "denominator_zero"; the day chart reads their CurrentByDay (E8). AppVersions (#52) is the current period
+/// only; AppVersionsSeenSince is the India day of the first app.seen row the server wrote (null: none), so a
+/// period that starts earlier can say from when people are known.
 /// </summary>
 public sealed record MisQualityDto(
     MisNumberDto VoiceRecordings,
@@ -124,6 +124,7 @@ public sealed record MisQualityDto(
     MisListDto<MisVersionShareDto> AppVersions,
     DateOnly? AppVersionsSeenSince);
 
+/// <summary>Plan CR-2c (#59): CropsOnActiveFarms is the current period only.</summary>
 public sealed record MisFarmsDto(
     MisNumberDto ActiveFarms,
     MisNumberDto FarmsRegistered,
@@ -131,7 +132,8 @@ public sealed record MisFarmsDto(
     MisNumberDto FarmsInFpo,
     IReadOnlyList<MisFpoRowDto> FarmsPerFpo,
     IReadOnlyList<MisAcresPointDto> AcresByWeek,
-    MisNumberDto ActiveFarmsInFpoPct);
+    MisNumberDto ActiveFarmsInFpoPct,
+    MisListDto<MisCropRowDto> CropsOnActiveFarms);
 
 public sealed record MisDayPointDto(DateOnly Day, int Value);
 
@@ -183,5 +185,12 @@ public sealed record MisFeatureUseDto(string Feature, int? People, decimal? Shar
 /// <summary>#31: People = distinct people who used the feature in the period holding this role on the farm where
 /// they used it (an AppRole name, or "Unknown"); a person counts once per (feature, role).</summary>
 public sealed record MisFeatureRoleDto(string Feature, string Role, int People);
+
+/// <summary>
+/// #59: one crop name (grouped trimmed and lower-cased; shown with its most common spelling) on the farms active at
+/// the end of the period: Farms = farms with at least one such cycle; Acres = the sum of the distinct plots' areas
+/// under such cycles (a plot with two crops counts for both).
+/// </summary>
+public sealed record MisCropRowDto(string CropName, int Farms, decimal Acres);
 
 public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

@@ -279,7 +279,9 @@ public static class CompanyMisCalculator
                 var active = data.ActiveFarmsAt(p.To);
                 var inFpo = data.FpoFarmIdsBy(p.To);
                 return Pct(active.Count(inFpo.Contains), active.Count);
-            }, DayForm.AsOf));
+            }, DayForm.AsOf),
+            // CR-2c #59.
+            CropsOnActiveFarms: FarmList(() => CropsOnActiveFarms(data, current)));
 
         return new CompanyMisDto(
             CountedAtUtc: countedAtUtc,
@@ -688,6 +690,39 @@ public static class CompanyMisCalculator
         return keys.Count;
     }
 
+    /// <summary>
+    /// #59: on the farms active at the end of the period (the A9 active-farm rule), the crop cycles that started on
+    /// or before the period's last day and had not ended before its first day (amendment E9), grouped by the crop
+    /// name trimmed and lower-cased (no translation: a Marathi name is its own row), shown with the most common
+    /// trimmed spelling (ties: ordinal). Farms = farms with such a cycle; Acres = the sum of the distinct plots'
+    /// areas under them, so a plot with two crops counts for both. No "main crop" rule. Ordered by farms, then
+    /// acres, then name.
+    /// </summary>
+    private static MisListDto<MisCropRowDto> CropsOnActiveFarms(Data data, Period p)
+    {
+        var active = data.ActiveFarmsAt(p.To);
+
+        var items = data.CropCycles
+            .Where(c => active.Contains(c.FarmId)
+                        && c.StartDate <= p.To
+                        && (c.EndDate is null || c.EndDate >= p.From)
+                        && !string.IsNullOrWhiteSpace(c.CropName))
+            .GroupBy(c => c.CropName.Trim().ToLowerInvariant(), StringComparer.Ordinal)
+            .Select(g => new MisCropRowDto(
+                CropName: g.GroupBy(c => c.CropName.Trim(), StringComparer.Ordinal)
+                    .OrderByDescending(spelling => spelling.Count())
+                    .ThenBy(spelling => spelling.Key, StringComparer.Ordinal)
+                    .First().Key,
+                Farms: g.Select(c => c.FarmId).Distinct().Count(),
+                Acres: g.GroupBy(c => c.PlotId).Sum(plot => plot.First().PlotAreaInAcres)))
+            .OrderByDescending(r => r.Farms)
+            .ThenByDescending(r => r.Acres)
+            .ThenBy(r => r.CropName, StringComparer.Ordinal)
+            .ToList();
+
+        return new MisListDto<MisCropRowDto>(items, null);
+    }
+
     /// <summary>#47, #50: refusals were recorded in production on every day of the period.</summary>
     private static bool SyncRefusalsRecordedFor(Period p) =>
         SyncRefusalsRecordedSince is { } since && p.From >= since;
@@ -781,6 +816,9 @@ public static class CompanyMisCalculator
         private Dictionary<DateOnly, List<int>> _scoresByDay = [];
         private Dictionary<DateOnly, (int Refused, int Accepted)> _syncByDay = [];
         private Dictionary<DateOnly, List<FeatureUseRow>> _usesByDay = [];
+
+        /// <summary>CR-2c #59: crop cycles on farms not owned by a test account.</summary>
+        public List<MisCropCycleRow> CropCycles { get; private init; } = [];
 
         private Data(
             List<FarmInfo> farms,
@@ -924,6 +962,7 @@ public static class CompanyMisCalculator
                 activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds)
             {
                 _usesByDay = usesByDay,
+                CropCycles = rows.CropCycles.Where(c => !excludedFarms.Contains(c.FarmId)).ToList(),
 
                 _scoresByDay = scoresByDay,
 

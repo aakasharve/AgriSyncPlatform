@@ -91,6 +91,12 @@ public sealed record CompanyMisRows(
     /// recordings come from <see cref="Entries"/> and <see cref="VoiceJobs"/>.
     /// </summary>
     public IReadOnlyList<MisFeatureUseRow> FeatureUses { get; init; } = [];
+
+    /// <summary>
+    /// #59: each read farm's crop cycles that started by the counting day and had not ended before the previous
+    /// period's first India day, each with its plot's area (one query per farm, under the farm's row-level security).
+    /// </summary>
+    public IReadOnlyList<MisCropCycleRow> CropCycles { get; init; } = [];
 }
 
 /// <summary>
@@ -147,5 +153,12 @@ public sealed record MisSyncDayRow(DateOnly Day, int RefusedAttempts, int Accept
 /// <c>job_cards.created_by_user_id</c> / <c>created_at_utc</c>.
 /// </summary>
 public sealed record MisFeatureUseRow(Guid FarmId, Guid PersonId, DateTime AtUtc, string Feature);
+
+/// <summary>
+/// One crop cycle with its plot (plan CR-2c, #59). CropName is as entered; PlotAreaInAcres is the plot's
+/// <c>AreaInAcres</c>.
+/// </summary>
+public sealed record MisCropCycleRow(
+    Guid FarmId, Guid PlotId, string CropName, DateOnly StartDate, DateOnly? EndDate, decimal PlotAreaInAcres);
 
 public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);
