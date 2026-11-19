@@ -340,6 +340,38 @@ describe('the nine items drawn (CR-2c Task 2)', () => {
     }
   });
 
+  it('Sync_before_refusals_were_recorded_says_from_when', () => {
+    // E13(1): a period starting before refusals were recorded (2026-08-27) answers `not_recorded` on #47 and #50;
+    // both say from when refusals are counted, never the general "This is not recorded anywhere yet.".
+    const SYNC_FROM = 'Refused changes are counted only from 27 August 2026; earlier days were not recorded.';
+    const v = quality(misFixture({
+      quality: {
+        syncRefusedPct: notMeasured('not_recorded'),
+        syncRefusedChanges: notMeasured('not_recorded'),
+        syncAcceptedChanges: notMeasured('not_recorded'),
+      },
+    }));
+    expect(text(v.getByTestId('kpi-quality.syncFailTile-value'))).toContain(SYNC_FROM);
+    expect(text(itemOf(v.container, 'quality.syncFailChart'))).toContain(SYNC_FROM);
+    expect(text(v.container)).not.toContain(PLAN_REASONS.not_recorded);
+  });
+
+  it('An_unmeasured_feature_row_draws_no_bar', () => {
+    // E13(4): a feature row with no share (Compare `not_recorded`, or `denominator_zero`) draws NO bar, because an
+    // empty bar would read as a measured 0%; a measured row keeps its bar.
+    const d = misFixture();
+    const v = engagement(d);
+    const card = cardOf(v.container, 'engagement.featureUse');
+    const barOf = (row: HTMLElement) => row.querySelectorAll('td')[0]?.querySelector('div > div') ?? null;
+    const compare = rowWith(card, /compare/i);
+    expect(compare).toHaveLength(1);
+    expect(barOf(compare[0])).toBeNull();
+    const measured = d.engagement.featureUse.items.find((x) => x.people !== null)!;
+    const row = rowWith(card, new RegExp(`(^|\\D)${fmtInt(measured.people!)}(\\D|$)`));
+    expect(row).toHaveLength(1);
+    expect(barOf(row[0])).not.toBeNull();
+  });
+
   it('Feature_by_role_table', () => {
     // #31: a feature by role table; roles in plain words (CR-2b role names), each served count in its cell.
     const d = misFixture();

@@ -31,7 +31,7 @@ export const S_INSTALL_DISTRICT = 'The app does not record where an install happ
 export const S_CRASH = 'No crash record reaches the server.';
 /* CR-2c Task 2 Step 3: #40 and #62's district clause, then #58. */
 export const S_DISTRICT = 'Most farms have no PIN code recorded, and the public PIN-to-district list is not added.';
-export const S_FARM_DISTRICT = 'Most farms have no PIN code recorded, taluka is not asked for, and the PIN-to-district list is not added.';
+export const S_FARM_DISTRICT = 'Most farms have no PIN code, taluka is not asked for, and the PIN-to-district list is missing.'; // E13(2)
 export const S_SMS = "The SMS provider's delivery reports are not connected.";
 export const S_SUPPORT = 'There is no support tool yet.';
 export const S_OPS_HEADLINE =

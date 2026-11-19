@@ -42,7 +42,7 @@ const INSTALL_DISTRICT = 'The app does not record where an install happened.';
 const CRASH = 'No crash record reaches the server.';
 /* CR-2c Step 3: the district items name what blocks them. */
 const DISTRICT = 'Most farms have no PIN code recorded, and the public PIN-to-district list is not added.';
-const FARM_DISTRICT = 'Most farms have no PIN code recorded, taluka is not asked for, and the PIN-to-district list is not added.';
+const FARM_DISTRICT = 'Most farms have no PIN code, taluka is not asked for, and the PIN-to-district list is missing.'; // E13(2)
 const SMS = "The SMS provider's delivery reports are not connected.";
 const SUPPORT = 'There is no support tool yet.';
 
@@ -195,6 +195,9 @@ const NO_SAMPLES: Record<string, string> = {
 /** CR-2c E11(5): no app-seen record by the period's end; the generic sentence stays for Compare. */
 const NOT_RECORDED: Record<string, string> = {
   'quality.versionAdoption': 'App versions were not recorded yet in this period.',
+  /* E13(1): refusals are recorded from SyncRefusalsRecordedSince (2026-08-27), never "not recorded anywhere". */
+  'quality.syncFailTile': 'Refused changes are counted only from 27 August 2026; earlier days were not recorded.',
+  'quality.syncFailChart': 'Refused changes are counted only from 27 August 2026; earlier days were not recorded.',
 };
 
 const PER_ITEM: Record<string, Record<string, string>> = {

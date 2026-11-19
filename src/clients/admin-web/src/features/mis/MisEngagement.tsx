@@ -104,7 +104,7 @@ export const EngagementSection: React.FC<MisSectionProps<EngagementView>> = ({ v
                                     rows={f.rows.map((r): BarRow => ({
                                         key: r.key,
                                         label: r.label,
-                                        value: r.share ?? 0,
+                                        value: r.share,
                                         display: r.shareText ?? r.word ?? '',
                                         extra: [r.people === null ? '' : fmtInt(r.people)],
                                         color: SERIES.s1,
