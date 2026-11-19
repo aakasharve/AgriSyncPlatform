@@ -91,8 +91,6 @@ const PlotStartQuestion: React.FC<PlotStartQuestionProps> = ({
                 </p>
             )}
 
-            {mode === null && <p className="m-0 text-[14px] font-bold text-slate-600" data-testid="plot-start-hint">{words.chooseOne}</p>}
-
             {dayCount !== null && (
                 <p className="m-0 text-[17px] font-black text-emerald-800" data-testid="plot-start-day">{words.dayToday(dayCount)}</p>
             )}

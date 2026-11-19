@@ -35,7 +35,6 @@ export interface PlotStartWords {
     dateLabel: string;
     today: string;
     earlier: string;
-    chooseOne: string;
     dayToday: (n: number) => string;
     problem: (kind: PlantingDateProblem) => string;
     scheduleTitle: string;
@@ -53,7 +52,6 @@ export function plotStartWords(language: string | null | undefined, word: Planti
         dateLabel: en ? DATE_LABEL_EN[word] : DAY_ZERO_LABEL[word] ?? DAY_ZERO_LABEL.PLANTING,
         today: en ? 'Today' : 'आज',
         earlier: en ? 'Earlier' : 'आधी केली',
-        chooseOne: en ? 'Choose one to finish' : 'एक निवडा, मगच पूर्ण होईल',
         // The same count the schedule tab shows; digits follow the screen's language (Devanagari in Marathi).
         dayToday: n => (en ? `Day ${n} today` : `आज दिवस ${digitsFor(n, language)}`),
         problem: kind => {
