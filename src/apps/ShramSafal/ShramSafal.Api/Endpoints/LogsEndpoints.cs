@@ -361,15 +361,18 @@ public static class LogsEndpoints
     private static IResult OriginalVoiceRefusal(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
-        return error.Kind switch
+        return ErrorCapture.Stamp(error, error.Kind switch
         {
             ErrorKind.NotFound => Results.NotFound(body),
             ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
             _ => Results.BadRequest(body),
-        };
+        });
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
         if (PlotRefusalResult.For(error) is { } plotRefusal)

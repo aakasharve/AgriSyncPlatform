@@ -165,8 +165,11 @@ public static class PersonalInvitationEndpoints
         return new InvitationAuditContext(string.IsNullOrWhiteSpace(header) ? "unknown" : header.Trim(), deviceId, ipHash);
     }
 
-    /// <summary>{error, message} bodies the phone branches on. Any unknown code is one answer naming nothing (no message).</summary>
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    /// <summary>{error, message} bodies the phone branches on. Any unknown code is one answer naming nothing (no message).</summary>
+    private static IResult MapErrorResult(Error error)
     {
         if (error == PersonalInvitationService.Unknown)
         {

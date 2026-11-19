@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
+using ShramSafal.Application.UseCases.Admin.GetAppVersions;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
+using ShramSafal.Application.UseCases.Admin.GetOpsRecorded;
 using ShramSafal.Application.UseCases.Admin.GetOpsVoice;
 using ShramSafal.Application.UseCases.Admin.GetSilentChurn;
 using ShramSafal.Application.UseCases.Admin.GetSuffering;
@@ -133,6 +136,69 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminOpsErrors")
         .CacheOutput("AdminLive");
+
+        // spec: control-room-app-versions-2026-11-12 (ADR 0028) — who used the app on which version.
+        // Deliberately has no CacheOutput. The handler catches nothing: a repository failure escapes to the
+        // server's own error path and answers 500, so the page says it could not load instead of showing an
+        // empty list.
+        group.MapGet("/admin/ops/app-versions", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetAppVersionsHandler handler,
+            int? days,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsLive)) return Results.Empty;
+
+            var result = await handler.HandleAsync(
+                new GetAppVersionsQuery(days, http.User.GetUserIdOrEmpty()), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+        })
+        .WithName("GetAdminOpsAppVersions");
+
+        // spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task R1) — reads back what the failure
+        // recording captured, row by row, each with the person's name and no phone number.
+        // Deliberately has no CacheOutput: a failure must be readable the moment after it happened, and a failed
+        // query must never be answered from an earlier good answer.
+        // A failed query is caught HERE, logged with its exception and answered 503; the handler and the repository
+        // catch nothing. It is never answered with an empty list: this route is the proof that failures are being
+        // recorded, and an empty list would read as "nothing failed". The body is fixed text. The exception's own
+        // message stays in the log, because a database error can quote the data it choked on.
+        group.MapGet("/admin/ops/recorded", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetOpsRecordedHandler handler,
+            ILoggerFactory loggerFactory,
+            int? minutes,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsErrors)) return Results.Empty;
+
+            try
+            {
+                var result = await handler.HandleAsync(new GetOpsRecordedQuery(minutes), ct);
+                return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // A caller who went away (the filter above) is not a failed query and is left to the server.
+                loggerFactory
+                    .CreateLogger(typeof(AdminEndpoints))
+                    .LogError(ex,
+                        "AdminOpsRecordedQueryFailed: minutes={Minutes}. Answering 503, not an empty list.",
+                        minutes);
+
+                return Results.Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "The recorded failures could not be read.",
+                    detail: "The query failed. This is not an empty answer: nothing is known about the period asked for.");
+            }
+        })
+        .WithName("GetAdminOpsRecorded");
 
         group.MapGet("/admin/ops/voice", async (
             HttpContext http,

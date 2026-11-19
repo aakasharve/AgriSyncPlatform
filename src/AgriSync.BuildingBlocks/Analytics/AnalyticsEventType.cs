@@ -70,6 +70,29 @@ public static class AnalyticsEventType
     // its own name and its own alarm; see ops/aws/alarms/.
     public const string SyncMutationRejected = "sync.mutation_rejected";
 
+    // api.refused = a signed-in write answered 400-499 (not 401) on a route
+    // outside the critical paths (ADR 0027 D1). DELIBERATELY NOT `api.error`,
+    // for the same reason as above: a farmer correcting a refused save must
+    // not move mis.alert_r9_api_error_spike. Everything that was api.error
+    // before this type existed stays api.error.
+    public const string ApiRefused = "api.refused";
+
+    // sync.push_outcome = the farmer app's own report, at most once per sync
+    // cycle, that work which had failed arrived or now needs the farmer
+    // (ADR 0027 D2). A CLIENT type: the server never writes it. It arrives
+    // through POST /analytics/ingest, which stamps the sender as the row's
+    // actor. It is named here because the server reads it back
+    // (GET /shramsafal/admin/ops/recorded).
+    public const string SyncPushOutcome = "sync.push_outcome";
+
+    // app.seen = a signed-in person used the farmer app on a version
+    // (ADR 0028). Written by AppSeenMiddleware at most once per person, app
+    // version and UTC day. The person is props.personId; actor_user_id and
+    // farm_id stay EMPTY on this row, because the weekly-active, retention and
+    // suffering readers count any row that has one of them set, and merely
+    // opening the app must not move those numbers.
+    public const string AppSeen = "app.seen";
+
     // Admin scope resolution (W0-A §4.4b). Emitted by IEntitlementResolver
     // + OrgFarmScopeProjector. Powers mis.admin_scope_health (Metabase card 15).
     public const string AdminScopeResolved = "admin.scope.resolved";

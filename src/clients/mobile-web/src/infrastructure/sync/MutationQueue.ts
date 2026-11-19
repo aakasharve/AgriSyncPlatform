@@ -162,6 +162,9 @@ export class MutationQueue {
             retryCount: 0,
             lastError: undefined,
             errorCode: undefined,
+            // plan CR-1a Task C3 — this is NEW work on the old row, and new work has not failed: the stamp of the
+            // refused work goes with it, or the new work's first arrival would be reported as a failure that recovered.
+            firstFailedAt: undefined,
             ...CLEAR_BACKOFF,
             createdAt: now,
             updatedAt: now,
@@ -304,6 +307,10 @@ export class MutationQueue {
      * kind clears a stale code (a row that was held and now fails for another reason is no
      * longer held).
      *
+     * plan CR-1a Task C3 (ADR 0027 D2) — the first REAL failed attempt stamps `firstFailedAt`,
+     * and nothing later moves it. `HELD` and `DEPENDENCY` are waits, not failures: neither
+     * stamps it, however long the row waits, and neither removes a stamp already there.
+     *
      * @returns the row's CHARGED retry count after this attempt, so the caller
      *          can tell — without a second read — whether this is the failure
      *          that just exhausted the cap and therefore needs announcing to
@@ -329,14 +336,17 @@ export class MutationQueue {
             ? chargedRetries + 1
             : kind === 'HELD' ? Math.min(chargedRetries, MAX_AUTO_RETRY_COUNT - 1) : chargedRetries;
         const delayMs = kind === 'HELD' ? HELD_RECHECK_MS : backoffDelayMs(attemptCount);
+        const now = systemClock.nowISO();
+        const isRealAttempt = kind !== 'HELD' && kind !== 'DEPENDENCY';
         await db.mutationQueue.update(id, {
             status: 'FAILED',
-            updatedAt: systemClock.nowISO(),
+            updatedAt: now,
             retryCount: nextRetryCount,
             lastError: error,
             errorCode: kind === 'HELD' ? errorCode : undefined,
             attemptCount,
             nextRetryAfterMs: Date.now() + delayMs,
+            ...(isRealAttempt && !existing?.firstFailedAt ? { firstFailedAt: now } : {}),
         });
 
         return nextRetryCount;
@@ -353,16 +363,23 @@ export class MutationQueue {
      * `ShramSafal.AttendanceContradiction` parks to render the question)
      * without matching English prose. Trailing and optional: every existing
      * caller compiles and keeps meaning what it meant.
+     *
+     * plan CR-1a Task C3 (ADR 0027 D2) — a refusal is a real attempt too, so
+     * it stamps `firstFailedAt` when the row has none. Without this a save
+     * refused on its first attempt, which the farmer then corrects, would
+     * never be reported as arrived.
      */
     async markRejectedUserReview(id: number, error: string, errorCode?: string): Promise<void> {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
+        const now = systemClock.nowISO();
         await db.mutationQueue.update(id, {
             status: 'REJECTED_USER_REVIEW',
-            updatedAt: systemClock.nowISO(),
+            updatedAt: now,
             retryCount: (existing?.retryCount ?? 0) + 1,
             lastError: error,
             ...(errorCode !== undefined ? { errorCode } : {}),
+            ...(existing?.firstFailedAt ? {} : { firstFailedAt: now }),
         });
     }
 

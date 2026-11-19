@@ -115,8 +115,11 @@ public static class FarmRateEndpoints
         return group;
     }
 
-    /// <summary>Every refusal carries its code and words (P5): the phone says the rule, never a bare status.</summary>
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    /// <summary>Every refusal carries its code and words (P5): the phone says the rule, never a bare status.</summary>
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))

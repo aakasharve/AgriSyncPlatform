@@ -1,7 +1,7 @@
 namespace Analytics.Domain.Vocabulary;
 
 /// <summary>
-/// Frozen registry of the 13 closure-loop event names that may appear in
+/// Frozen registry of the event names (a unit test pins the count) that may appear in
 /// <c>analytics.events.event_type</c>. Mirrors the Zod registry on
 /// <c>mobile-web/src/core/telemetry/eventSchema.ts</c>; both producers and
 /// consumers MUST read the same name set, enforced at CI time by the
@@ -9,10 +9,12 @@ namespace Analytics.Domain.Vocabulary;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Source of truth: <c>ADR-2026-05-02_event-vocabulary.md</c>. Adding a
-/// 14th event requires a new ADR — do not extend this dictionary
-/// silently. The parity gate fails the build the moment the C# and
-/// TypeScript registries drift.
+/// Source of truth: <c>ADR-2026-05-02_event-vocabulary.md</c>, extended by
+/// ADR 0027 (2026-11-11), which added <c>api.refused</c> and
+/// <c>sync.push_outcome</c>, and by ADR 0028 (2026-11-12), which added
+/// <c>app.seen</c>. Adding an event requires a new ADR — do not
+/// extend this dictionary silently. The parity gate fails the build the
+/// moment the C# and TypeScript registries drift.
 /// </para>
 /// <para>
 /// Each entry declares its <see cref="EventDefinition.RequiredProps"/>
@@ -28,7 +30,8 @@ namespace Analytics.Domain.Vocabulary;
 public static class EventVocabulary
 {
     /// <summary>
-    /// The 13 frozen event names mapped to their property contracts.
+    /// The frozen event names mapped to their property contracts. The count
+    /// is pinned in <c>EventVocabularyTests</c>, not here.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, EventDefinition> Registry =
         new Dictionary<string, EventDefinition>(StringComparer.Ordinal)
@@ -69,11 +72,84 @@ public static class EventVocabulary
                 RequiredProps: ["farmId", "outcome"],
                 Optional: ["cost_usd", "model"]),
 
-            // api.error fires on pre-auth pipeline failures too, where the
-            // farmId is not yet known; no required props per the ADR.
+            // 2026-08-30 (founder decision, spec error-capture-engine):
+            // an api.error MUST name itself and MUST state whether the farmer's
+            // work survived. Before this the row kept only endpoint/status/farmId
+            // — so `ShramSafal.CropCycleOverlap` travelled correctly all the way
+            // to the client and the record we kept said `500`.
+            //
+            // `workKept` is three-state: "kept" | "lost" | "unknown". Required
+            // means it must be STATED, never that it must be known — claiming
+            // "kept", or reading "lost" off a status code, violates P4.
+            //
+            // farmId stays OPTIONAL: the 2026-05-02 rationale holds for it
+            // specifically, because pre-auth failures fire before the user is
+            // known. It does not hold for the other four — a pre-auth failure
+            // still knows its endpoint, its status and whether it refused work,
+            // and names itself "Uncatalogued" when no catalogued Error produced it.
+            //
+            // The key is `statusCode`, NOT `status`. This entry listed `status`
+            // from the day it was written and nothing ever emitted or read it;
+            // the emitter has always written `statusCode`
+            // (RequestObservabilityProps.Build) and three live queries read
+            // props->>'statusCode' (AdminOpsRepository.GetRecentErrorsAsync,
+            // its GetErrorsPagedAsync, and AdminFarmerHealthRepository).
+            // The doc was wrong, not the code.
+            // 2026-11-11 (ADR 0027): `personId`, `routeFarmId`, `route` and
+            // `serverBuild` are optional keys on every row the request
+            // middleware writes. The person and the addressed farm live in
+            // props, NOT in the actor_user_id / farm_id columns: the
+            // weekly-active and retention views count those columns, and a
+            // person who only hit an error must not count as active.
             ["api.error"] = new(
-                RequiredProps: [],
-                Optional: ["endpoint", "status", "farmId"]),
+                RequiredProps: ["endpoint", "statusCode", "errorCode", "workKept"],
+                Optional: ["farmId", "message", "appVersion",
+                           "latencyMs", "traceId",
+                           "rejectedWorkItems", "rejectedWorkReason",
+                           "personId", "routeFarmId", "route", "serverBuild"]),
+
+            // 2026-11-11 (ADR 0027): a write that an endpoint itself refused
+            // (4xx, never 401) on a route outside the critical list, from a
+            // signed-in person. Server-only. Deliberately NOT `api.error`:
+            // mis.alert_r9_api_error_spike counts `api.error` rows, and a
+            // farmer retrying a form must not trip it. The key is
+            // `statusCode`, as on `api.error`. The optional list is exactly
+            // the eight keys of ADR 0027 D1 and a unit test pins it; do not
+            // add to it without a new ADR. For a reader of real rows: the
+            // shared props builder also writes `rejectedWorkItems` and
+            // `rejectedWorkReason` on every row it builds, as null except
+            // on a refused sync save. Two more row types the middleware
+            // writes, `api.slow` and `sync.mutation_rejected`, are not in
+            // this registry at all (so the client ingest route refuses them
+            // as unknown types); their keys are the ones of `api.error`
+            // plus `rejectedWorkCodes`.
+            ["api.refused"] = new(
+                RequiredProps: ["endpoint", "statusCode"],
+                Optional: ["errorCode", "route", "appVersion", "serverBuild",
+                           "personId", "routeFarmId", "latencyMs", "traceId"]),
+
+            // 2026-11-12 (ADR 0028): a signed-in person used the app on this
+            // version. Server-only, written at most once per person, version
+            // and UTC day. The person is in props and the actor_user_id and
+            // farm_id columns stay empty, so merely opening the app never
+            // moves the weekly-active or retention numbers. No device
+            // identifier (ADR 0027 D7).
+            ["app.seen"] = new(
+                RequiredProps: ["appVersion", "personId"],
+                Optional: ["platform"]),
+
+            // 2026-11-14 (ADR 0027 D2): sent by the farmer app, at most once
+            // per sync cycle, when work that had failed arrived or now needs
+            // the farmer. A CLIENT type: it arrives through the ingest route,
+            // so its sender is the row's actor (the one known effect on the
+            // weekly-active number, recorded in the ADR). Three counts and
+            // the app version, nothing else: no farmer text, no phone number,
+            // no device id. There is deliberately no attempts count (the
+            // queue's counter is reset when a backoff is cleared) and no
+            // dropped count (nothing in a push cycle drops work).
+            ["sync.push_outcome"] = new(
+                RequiredProps: ["recoveredCount", "needsReviewCount", "pendingAfter", "appVersion"],
+                Optional: ["firstFailedAtUtc"]),
 
             ["client.error"] = new(
                 RequiredProps: ["message"],
@@ -101,6 +177,33 @@ public static class EventVocabulary
     /// on unknown event types before paying the dictionary-lookup cost twice.
     /// </summary>
     public static bool IsKnown(string eventType) => Registry.ContainsKey(eventType);
+
+    /// <summary>
+    /// Event types that only the server itself may write. A client must never
+    /// be able to place one of these rows: readers trust them (the control
+    /// room's app-versions page trusts <c>app.seen</c>; an alert counts
+    /// <c>api.error</c>). <c>POST /analytics/ingest</c> refuses them through
+    /// <c>IngestEventsValidator.ValidateFromClient</c>.
+    /// </summary>
+    /// <remarks>
+    /// Must stay equal to <c>SERVER_ONLY</c> in
+    /// <c>.github/scripts/check-event-vocabulary-parity.mjs</c>; a unit test
+    /// pins the seven names. Review round 2 of lane CR-1c (2026-11-12) found
+    /// that "server-only" was a convention the server did not enforce.
+    /// </remarks>
+    public static readonly IReadOnlySet<string> ServerOnly = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "log.created",
+        "ai.invocation",
+        "api.error",
+        "api.refused",
+        "app.seen",
+        "worker.named",
+        "admin.farmer_lookup",
+    };
+
+    /// <summary>True when only the server may write this event type.</summary>
+    public static bool IsServerOnly(string eventType) => ServerOnly.Contains(eventType);
 }
 
 /// <summary>

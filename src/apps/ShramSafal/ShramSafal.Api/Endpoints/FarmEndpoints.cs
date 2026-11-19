@@ -326,6 +326,9 @@ public static class FarmEndpoints
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
         if (PlotRefusalResult.For(error) is { } plotRefusal)

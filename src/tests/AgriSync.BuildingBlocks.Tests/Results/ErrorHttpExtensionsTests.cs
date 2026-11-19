@@ -1,6 +1,8 @@
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace AgriSync.BuildingBlocks.Tests.Results;
@@ -27,8 +29,11 @@ public sealed class ErrorHttpExtensionsTests
 
         var result = error.ToHttpResult();
 
-        // Results.Problem returns ProblemHttpResult under the hood.
-        var problem = Assert.IsType<ProblemHttpResult>(result);
+        // 2026-08-30: the result is now wrapped so it can record the error's
+        // identity on HttpContext.Items. The wrapper delegates verbatim, so
+        // every assertion below is unchanged — it just reads through .Inner.
+        var captured = Assert.IsType<CapturedErrorResult>(result);
+        var problem = Assert.IsType<ProblemHttpResult>(captured.Inner);
         Assert.Equal(expectedStatus, problem.StatusCode);
         Assert.Equal("Sample.Code", problem.ProblemDetails.Title);
         Assert.Equal("Sample description.", problem.ProblemDetails.Detail);
@@ -40,7 +45,31 @@ public sealed class ErrorHttpExtensionsTests
     {
         var error = Error.Validation("Sample.Bad", "Field required.");
         var result = error.ToHttpResult();
-        var problem = Assert.IsType<ProblemHttpResult>(result);
+        var captured = Assert.IsType<CapturedErrorResult>(result);
+        var problem = Assert.IsType<ProblemHttpResult>(captured.Inner);
         Assert.Equal(400, problem.StatusCode);
+    }
+
+    [Fact]
+    public async Task ToHttpResult_stashes_the_error_code_on_the_context()
+    {
+        var ctx = new DefaultHttpContext
+        {
+            Response = { Body = new MemoryStream() },
+            RequestServices = new ServiceCollection()
+                .AddLogging()
+                .AddProblemDetails()
+                .BuildServiceProvider(),
+        };
+        var error = Error.Conflict(
+            "ShramSafal.CropCycleOverlap",
+            "Crop cycle dates overlap an existing cycle on this plot.");
+
+        await error.ToHttpResult().ExecuteAsync(ctx);
+
+        Assert.Equal(
+            "ShramSafal.CropCycleOverlap",
+            ctx.Items[RequestObservabilityKeys.ErrorCode]);
+        Assert.Equal(409, ctx.Response.StatusCode);
     }
 }

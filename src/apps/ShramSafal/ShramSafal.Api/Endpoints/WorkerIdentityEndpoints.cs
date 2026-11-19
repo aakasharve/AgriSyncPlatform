@@ -170,8 +170,11 @@ public static class WorkerIdentityEndpoints
         return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
     }
 
-    /// <summary>Mirrors <c>LabourEndpoints.ToErrorResult</c>: {error, message} bodies the phone branches on.</summary>
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    /// <summary>Mirrors <c>LabourEndpoints.ToErrorResult</c>: {error, message} bodies the phone branches on.</summary>
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

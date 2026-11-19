@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.Bootstrapper.Middleware;
 using Analytics.Application.UseCases.IngestEvents;
 using AgriSync.BuildingBlocks.Results;
 
@@ -90,20 +91,5 @@ public static class AnalyticsIngestEndpoints
         return app;
     }
 
-    private static Guid? TryGetUserId(ClaimsPrincipal? user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-        {
-            return null;
-        }
-
-        // Match the claim resolution used by every other authenticated
-        // endpoint in the Bootstrapper (see ResolveAiRateLimitPartitionKey
-        // in Program.cs and FirstFarmBootstrapEndpoints.TryGetUserId).
-        var subject =
-            user.FindFirst("sub")?.Value ??
-            user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        return Guid.TryParse(subject, out var userId) ? userId : null;
-    }
+    private static Guid? TryGetUserId(ClaimsPrincipal? user) => ClaimsUserId.TryGet(user);
 }

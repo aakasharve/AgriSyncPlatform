@@ -494,6 +494,9 @@ public static class TestEndpoints
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         // lane MU-4 fix pass 2 (N4) — the plot rule's refusal carries its code and words.
         if (PlotRefusalResult.For(error) is { } plotRefusal)

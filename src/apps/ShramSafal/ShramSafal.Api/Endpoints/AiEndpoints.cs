@@ -1534,6 +1534,9 @@ public static class AiEndpoints
         };
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     /// <summary>
     /// lane F99 — an AI job's farm, then its scope. <c>ssf.ai_jobs</c> has no read policy keyed on the caller (only the
     /// farm's), so the job is looked for under each farm he is an active member of in turn (the farms are found under his
@@ -1574,7 +1577,7 @@ public static class AiEndpoints
     /// the AI tests + the mobile-web SDK depend on it; switching to
     /// RFC 7807 is a follow-up contract change.
     /// </summary>
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

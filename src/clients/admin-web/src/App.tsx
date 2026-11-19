@@ -19,6 +19,7 @@ const ForbiddenPage           = lazy(() => import('@/pages/ForbiddenPage'));
 const OpsLivePage             = lazy(() => import('@/pages/ops/OpsLivePage'));
 const OpsErrorsPage           = lazy(() => import('@/pages/ops/OpsErrorsPage'));
 const OpsVoicePage            = lazy(() => import('@/pages/ops/OpsVoicePage'));
+const AppVersionsPage         = lazy(() => import('@/pages/ops/AppVersionsPage'));
 const NorthStarPage           = lazy(() => import('@/pages/metrics/NorthStarPage'));
 const FarmsListPage           = lazy(() => import('@/pages/farms/FarmsListPage'));
 const SilentChurnPage         = lazy(() => import('@/pages/farms/SilentChurnPage'));
@@ -132,6 +133,10 @@ export default function App() {
                     } />
                     <Route path="/ops/errors" element={
                       <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
+                    } />
+                    {/* spec: control-room-app-versions-2026-11-12 - gated on ops.live, the same key the server route checks. */}
+                    <Route path="/ops/app-versions" element={
+                      <EntitlementGuard module={ModuleKeys.OpsLive}><AppVersionsPage /></EntitlementGuard>
                     } />
                     <Route path="/ops/voice" element={
                       <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>

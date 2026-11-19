@@ -31,7 +31,6 @@ export function emit<E extends EventName>(eventName: E, payload: EventPayload<E>
     const schema = EventSchemas[eventName];
     const result = schema.safeParse(payload);
     if (!result.success) {
-        // eslint-disable-next-line no-console
         console.warn(
             `[telemetry] dropped invalid ${eventName} event:`,
             result.error.issues,
@@ -73,4 +72,8 @@ export function emitNextActionCreated(payload: EventPayload<'next_action.created
 
 export function emitClientError(payload: EventPayload<'client.error'>): void {
     emit('client.error', payload);
+}
+
+export function emitSyncPushOutcome(payload: EventPayload<'sync.push_outcome'>): void {
+    emit('sync.push_outcome', payload);
 }
