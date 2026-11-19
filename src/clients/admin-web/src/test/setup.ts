@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import { adminApi } from '@/lib/api';
 
 /**
@@ -93,8 +93,19 @@ const UNSTUBBED: AxiosAdapter = (async (config: InternalAxiosRequestConfig) => {
 
 adminApi.defaults.adapter = UNSTUBBED;
 
+/* THE SECOND CLIENT (CR-2d join). Since the SMS sign-in, a 401 on `adminApi`
+   starts a session renewal, and the renewal goes out on axios's DEFAULT
+   instance (`lib/sessionRenewal.ts`), on purpose without adminApi's
+   interceptors. With no VITE_API_BASE_URL in tests its address is
+   `http://localhost:5048`, the port the API listens on locally, so without
+   this line a stubbed 401 sends a real POST /user/auth/refresh there. The
+   same transport refuses it: no response, so the renewal reads "no verdict"
+   and the session is kept, exactly as when nothing listens on the port. */
+axios.defaults.adapter = UNSTUBBED;
+
 /* Re-armed per test, so a `restore()` inside a test body cannot hand the wire
    back to the network for the remainder of the file. */
 beforeEach(() => {
   adminApi.defaults.adapter = UNSTUBBED;
+  axios.defaults.adapter = UNSTUBBED;
 });
