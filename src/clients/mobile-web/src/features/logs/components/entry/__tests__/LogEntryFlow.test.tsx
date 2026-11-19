@@ -79,10 +79,10 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
         expect(onOpenAttendance).toHaveBeenCalledTimes(1);
     });
 
-    it('lane UI-6 (D-150): nothing told today = no हजेरी card, only the door; work told without a head count = one small line that opens the same step', () => {
+    it('lane UI-6 (D-150): nothing told today = no हजेरी card but the rule note (work first: which crop, which plot), only the door as a button; work told without a head count = a note that opens the same step', () => {
         render(<Harness role="PrimaryOwner" />);
-        expect(screen.queryByTestId('home-attendance')).toBeNull();
         expect(screen.queryByTestId('attendance-card')).toBeNull();
+        expect(screen.getByTestId('home-attendance-rule')).toHaveTextContent('झालेलं काम सांगितल्यानंतरच तुम्ही हजेरी घेऊ शकता');
         expect(screen.getAllByRole('button')).toHaveLength(1);
         cleanup();
         render(<Harness role="PrimaryOwner" attendance={WORK_NO_COUNT} />);

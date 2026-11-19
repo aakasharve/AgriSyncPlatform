@@ -90,12 +90,12 @@ function ctx(over: Partial<AppRouterContext> = {}): AppRouterContext {
 afterEach(() => { cleanup(); vi.resetModules(); seen.props = null; });
 
 describe('ATT-LOG on the work home', { timeout: 60_000 }, () => {
-    it('nothing stored today: no हजेरी card and no line (lane UI-6: the card comes only when a head count was said)', async () => {
+    it('nothing stored today: no big card, but the rule note (lane UI-6: the card comes only when a head count was said, and the part is never simply gone)', async () => {
         const { renderLogView } = await load();
         render(<>{renderLogView(ctx())}</>);
         expect(screen.getByTestId('home-tell')).toBeInTheDocument();
         expect(screen.queryByTestId('attendance-card')).toBeNull();
-        expect(screen.queryByTestId('home-attendance')).toBeNull();
+        expect(screen.getByTestId('home-attendance-rule')).toHaveTextContent('कोणत्या पिकावर, कोणत्या प्लॉटवर काम झालं ते सांगा');
     });
 
     it('a head count stored, no work: the card; its button opens the crop question (the "झालेले काम सांगा" step), not the mic', async () => {

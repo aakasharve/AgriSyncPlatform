@@ -35,6 +35,13 @@ export interface AttendanceCardWords {
     wholeFarm: string;
     /** D-62: a declared rest day — the card's one sentence (the only link is `register`). */
     restDay: string;
+    /**
+     * Lane UI-6 follow-up (founder D-150, 2026-11-19): while the big card is not drawn on the Home, a small note says WHEN the हजेरी
+     * part works, so the feature is not hidden. `homeRuleWork`: nothing told yet - work first (which crop, which plot).
+     * `homeRuleCount`: the work is told, the head count is not.
+     */
+    homeRuleWork: string;
+    homeRuleCount: string;
 }
 
 const mr: AttendanceCardWords = {
@@ -53,6 +60,10 @@ const mr: AttendanceCardWords = {
     register: 'हजेरी वही बघा', // PROPOSED (Marathi) — the old door's own line "हजेरी घ्या आणि हजेरी वही बघा", its second half
     restDay: 'आज कामाला सुट्टी नोंदली आहे', // FOUNDER (D-62, verbatim)
     wholeFarm: RESULT_STR.wholeFarm, // REUSED
+    // FOUNDER (2026-11-19, his sentence reframed): "झालेलं काम सांगितल्यानंतरच तुम्ही हजेरी घेऊ शकता — कोण आले, कोण नाही, त्यांचा पगार याची खात्री"
+    homeRuleWork: 'झालेलं काम सांगितल्यानंतरच तुम्ही हजेरी घेऊ शकता — कोण आले, कोण नाही आणि त्यांचा पगार पक्का करू शकता. आधी कोणत्या पिकावर, कोणत्या प्लॉटवर काम झालं ते सांगा.',
+    // PROPOSED (Marathi) — the same sentence for the second step (the head count)
+    homeRuleCount: 'किती जण होते ते सांगितल्यानंतर तुम्ही हजेरी घेऊ शकता — कोण आले, कोण नाही आणि त्यांचा पगार पक्का करू शकता.',
 };
 
 const en: AttendanceCardWords = {
@@ -71,6 +82,8 @@ const en: AttendanceCardWords = {
     register: 'See the attendance register', // PROPOSED (English)
     restDay: 'Today is recorded as a rest day', // PROPOSED (English)
     wholeFarm: 'Whole farm', // PROPOSED (English) — the ONE mic's own English for it
+    homeRuleWork: 'You can take attendance only after you tell the work done — then you can confirm who came, who did not and their pay. First tell which crop and which plot the work was on.', // PROPOSED (English)
+    homeRuleCount: 'Once you tell how many people worked, you can take attendance — confirm who came, who did not and their pay.', // PROPOSED (English)
 };
 
 export const attendanceCardWords = (language: string | null | undefined): AttendanceCardWords => (language === 'en' ? en : mr);
