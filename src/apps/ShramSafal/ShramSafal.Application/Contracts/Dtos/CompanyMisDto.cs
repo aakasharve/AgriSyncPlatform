@@ -96,7 +96,11 @@ public sealed record MisRetentionDto(
 
 /// <summary>
 /// Plan CR-2c: UnderstandingSpread (#49) is the scored farm-days of the current period per score 0..10, all eleven
-/// present (zeros real), or "no_samples" when there is none. AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
+/// present (zeros real), or "no_samples" when there is none. Sync (#47, #50, amendment E2): SyncRefusedChanges =
+/// refused attempts (a change refused twice counts twice), SyncAcceptedChanges = changes the server accepted,
+/// SyncRefusedPct = refused ÷ (refused + accepted); every upload counts, test accounts included; refused and the
+/// share are "not_recorded" for a period that starts before refusals were recorded in production; nothing sent
+/// is "denominator_zero"; the day chart reads their CurrentByDay (E8). AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
 /// the first app.seen row the server wrote (null: none), so a period that starts earlier can say from
 /// when people are known.
 /// </summary>
@@ -108,6 +112,9 @@ public sealed record MisQualityDto(
     MisNumberDto LogsCorrected,
     MisNumberDto LogsCorrectedPct,
     MisListDto<MisScoreBucketDto> UnderstandingSpread,
+    MisNumberDto SyncRefusedChanges,
+    MisNumberDto SyncAcceptedChanges,
+    MisNumberDto SyncRefusedPct,
     MisListDto<MisVersionShareDto> AppVersions,
     DateOnly? AppVersionsSeenSince);
 

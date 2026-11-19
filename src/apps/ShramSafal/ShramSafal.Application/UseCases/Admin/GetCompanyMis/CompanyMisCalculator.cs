@@ -48,6 +48,16 @@ public static class CompanyMisCalculator
     /// <summary>Plan CR-2c, #52 (amendment E9): no platform recorded reads "not the Android app".</summary>
     public const string PlatformNotAndroid = "not_android";
 
+    /// <summary>
+    /// Plan CR-2c, #47, #50 (amendment E2): the first India day on which production recorded refused sync changes
+    /// for the WHOLE day. <c>sync.mutation_rejected</c> arrived with <c>28f70962</c>, first deployed to production on
+    /// 2026-08-26 (Wave 1 cutover, DEPLOYMENT_TRACKER.md; pre-deploy snapshot taken 13:05 UTC, i.e. 18:35 India
+    /// time), so 2026-08-26 itself is only partly recorded and the first whole day is 2026-08-27. A period with an
+    /// earlier day has refused attempts and the refused share not measured (<see cref="NotRecorded"/>); null would
+    /// mean "not yet in production" and leave every sync day not measured.
+    /// </summary>
+    public static readonly DateOnly? SyncRefusalsRecordedSince = new DateOnly(2026, 8, 27);
+
     /// <summary>Amendment A11: the cohort grid's days after day 0.</summary>
     private static readonly int[] CohortGridDays = [1, 7, 14, 30];
 
@@ -218,6 +228,22 @@ public static class CompanyMisCalculator
                 data.EntriesIn(p.From, p.To).Count()), DayForm.During),
             // CR-2c #49: the same scored farm-days as #10, per score.
             UnderstandingSpread: FarmList(() => ScoreSpread(data.ScoresIn(current))),
+            // CR-2c #47, #50 (amendment E2, E8): every upload, test accounts included; not farm-derived, so the
+            // farm block does not reach them.
+            SyncRefusedChanges: Number(p => SyncRefusalsRecordedFor(p)
+                ? Count(data.SyncIn(p).Refused)
+                : new MisValueDto(null, NotRecorded), DayForm.During),
+            SyncAcceptedChanges: Number(p => Count(data.SyncIn(p).Accepted), DayForm.During),
+            SyncRefusedPct: Number(p =>
+            {
+                if (!SyncRefusalsRecordedFor(p))
+                {
+                    return new MisValueDto(null, NotRecorded);
+                }
+
+                var (refused, accepted) = data.SyncIn(p);
+                return Pct(refused, refused + accepted);
+            }, DayForm.During),
             // CR-2c #52: not farm-derived, so the farm block does not reach it.
             AppVersions: AppVersions(rows, exclusions.UserIds, current, countedAtUtc),
             AppVersionsSeenSince: AppSeenSince(rows));
@@ -587,6 +613,10 @@ public static class CompanyMisCalculator
         return new MisListDto<MisScoreBucketDto>(buckets, null);
     }
 
+    /// <summary>#47, #50: refusals were recorded in production on every day of the period.</summary>
+    private static bool SyncRefusalsRecordedFor(Period p) =>
+        SyncRefusalsRecordedSince is { } since && p.From >= since;
+
     private static DateOnly? AppSeenSince(CompanyMisRows rows) =>
         rows.AppSeenStartUtc is { } first ? IstDay(first) : null;
 
@@ -671,6 +701,7 @@ public static class CompanyMisCalculator
         private readonly Dictionary<Guid, decimal> _acresByFarm;
         private readonly List<MisFpoScopeRow> _fpoScopes;
         private Dictionary<DateOnly, List<int>> _scoresByDay = [];
+        private Dictionary<DateOnly, (int Refused, int Accepted)> _syncByDay = [];
 
         private Data(
             List<FarmInfo> farms,
@@ -799,10 +830,35 @@ public static class CompanyMisCalculator
                 activeMembers, roles, acresByFarm, fpoScopes, voiceJobs, referencedJobIds)
             {
                 _scoresByDay = scoresByDay,
+
+                // CR-2c #47, #50: every upload counts (it measures the server; the accepted side records no
+                // person), so neither list of test accounts applies. Rows at or after the counting day's end are
+                // never read.
+                _syncByDay = rows.SyncDays
+                    .GroupBy(d => d.Day)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (g.Sum(d => d.RefusedAttempts), g.Sum(d => d.AcceptedChanges))),
             };
         }
 
         private static readonly string DeclaredNoWorkDay = nameof(DayClassification.DeclaredNoWorkDay);
+
+        /// <summary>CR-2c #47, #50: refused attempts and accepted changes over the India days of the period.</summary>
+        public (int Refused, int Accepted) SyncIn(Period p)
+        {
+            int refused = 0, accepted = 0;
+            for (var d = p.From; d <= p.To; d = d.AddDays(1))
+            {
+                if (_syncByDay.TryGetValue(d, out var day))
+                {
+                    refused += day.Refused;
+                    accepted += day.Accepted;
+                }
+            }
+
+            return (refused, accepted);
+        }
 
         /// <summary>CR-2c #10, #49: the scored farm-days' scores with India day in the period (a new list).</summary>
         public List<int> ScoresIn(Period p)

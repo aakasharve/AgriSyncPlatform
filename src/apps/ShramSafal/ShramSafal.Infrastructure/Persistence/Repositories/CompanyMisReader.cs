@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.AI;
@@ -171,9 +172,11 @@ public sealed class CompanyMisReader : ICompanyMisReader
         // Step 5 (CR-2c, Company MIS only): the non-farm additions, through the analytics connection. They run
         // whatever the farm list said: they are not farm rows.
         IReadOnlyList<MisAppSeenRow> appSeen = [];
+        IReadOnlyList<MisSyncDayRow> syncDays = [];
         if (additionsSinceUtc is { } additionsSince)
         {
             appSeen = await ReadAppSeenAsync(additionsSince, countedAtUtc, ct);
+            syncDays = await ReadSyncDaysAsync(additionsSince, countedAtUtc, ct);
         }
 
         return new CompanyMisRows(
@@ -190,6 +193,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         {
             AppSeen = appSeen,
             UnderstandingDays = understandingDays,
+            SyncDays = syncDays,
         };
     }
 
@@ -390,6 +394,91 @@ public sealed class CompanyMisReader : ICompanyMisReader
             }
 
             return rows;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// CR-2c #47, #50 (amendment E2, E6): two grouped queries for the whole range, never per farm, each giving at
+    /// most one row per India day (fixed +05:30, the calculator's day).
+    /// <list type="bullet">
+    /// <item>Refused attempts: the <c>sync.mutation_rejected</c> rows the SERVER wrote (no actor, role
+    /// <c>system</c>; client ingest can never write that pair), through the analytics connection. The count is
+    /// guarded (C4): a <c>rejectedWorkItems</c> that is not a plain number of at most nine digits counts nothing and
+    /// cannot break the page.</item>
+    /// <item>Accepted changes: <c>ssf.sync_mutations</c> rows by <c>processed_at_utc</c>, on the scoped context as
+    /// the app login (the table has no farm column and no row-level security; nothing deletes from it).</item>
+    /// </list>
+    /// </summary>
+    private async Task<IReadOnlyList<MisSyncDayRow>> ReadSyncDaysAsync(
+        DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var refused = await ReadDayCountsAsync(
+            _analytics.Database.GetDbConnection(),
+            transaction: null,
+            """
+            SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
+                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{1,9}$'
+                                     THEN (props->>'rejectedWorkItems')::int END), 0)::bigint AS refused
+            FROM analytics.events
+            WHERE event_type = 'sync.mutation_rejected'
+              AND actor_user_id IS NULL
+              AND actor_role = 'system'
+              AND occurred_at_utc >= @since
+              AND occurred_at_utc < @counted
+            GROUP BY 1
+            """,
+            sinceUtc, countedAtUtc, ct);
+
+        var accepted = await ReadDayCountsAsync(
+            _db.Database.GetDbConnection(),
+            _db.Database.CurrentTransaction?.GetDbTransaction(),
+            """
+            SELECT ((processed_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
+                   COUNT(*)::bigint AS accepted
+            FROM ssf.sync_mutations
+            WHERE processed_at_utc >= @since
+              AND processed_at_utc < @counted
+            GROUP BY 1
+            """,
+            sinceUtc, countedAtUtc, ct);
+
+        return refused.Keys.Union(accepted.Keys)
+            .Order()
+            .Select(day => new MisSyncDayRow(
+                day,
+                checked((int)refused.GetValueOrDefault(day)),
+                checked((int)accepted.GetValueOrDefault(day))))
+            .ToList();
+    }
+
+    /// <summary>Runs a query that answers (India day, count) rows; a failure escapes.</summary>
+    private static async Task<Dictionary<DateOnly, long>> ReadDayCountsAsync(
+        System.Data.Common.DbConnection conn,
+        System.Data.Common.DbTransaction? transaction,
+        string sql,
+        DateTime sinceUtc,
+        DateTime countedAtUtc,
+        CancellationToken ct)
+    {
+        var counts = new Dictionary<DateOnly, long>();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = transaction;
+            cmd.CommandText = sql;
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                counts[DateOnly.FromDateTime(r.GetDateTime(0))] = r.GetInt64(1);
+            }
+
+            return counts;
         }
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }

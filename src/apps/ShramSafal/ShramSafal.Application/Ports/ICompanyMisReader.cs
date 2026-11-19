@@ -77,6 +77,13 @@ public sealed record CompanyMisRows(
     /// period's first India day to the counting day, read under the farm's row-level security.
     /// </summary>
     public IReadOnlyList<MisUnderstandingDayRow> UnderstandingDays { get; init; } = [];
+
+    /// <summary>
+    /// #47, #50: per India day from the previous period's first day to the counting day, the refused attempts and the
+    /// accepted changes of phone sync. Every upload, test accounts included (they record no person on the accepted
+    /// side). Days with neither are absent.
+    /// </summary>
+    public IReadOnlyList<MisSyncDayRow> SyncDays { get; init; } = [];
 }
 
 /// <summary>
@@ -116,5 +123,13 @@ public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTi
 /// be read (amendment E5: such a row is left out of the count, never a 0).
 /// </summary>
 public sealed record MisUnderstandingDayRow(Guid FarmId, DateOnly LocalDate, string DayClassification, int? Score);
+
+/// <summary>
+/// One India day of phone sync (plan CR-2c, #47, #50, amendment E2). RefusedAttempts = the sum of the guarded
+/// <c>rejectedWorkItems</c> of the server-written <c>sync.mutation_rejected</c> rows that day (one row per request; a
+/// change the phone sends again is refused again, and counted again). AcceptedChanges = the
+/// <c>ssf.sync_mutations</c> rows processed that day (one per change; a unique index removes repeats).
+/// </summary>
+public sealed record MisSyncDayRow(DateOnly Day, int RefusedAttempts, int AcceptedChanges);
 
 public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);
