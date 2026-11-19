@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format, isValid } from 'date-fns';
 import { Smartphone } from 'lucide-react';
 import {
   useAppVersions,
@@ -55,10 +54,13 @@ const TH =
 const TD = 'px-4 py-2.5 align-top text-body text-text-1';
 const ROW = 'border-b border-line last:border-0';
 
-/** "12 Nov 2026". A date that cannot be read is shown as it came, never guessed. */
+/**
+ * "12 Nov 2026". A date that cannot be read is shown as it came, never guessed. Read through the
+ * console's one date module (Register A51: no screen imports date-fns), with this page's own
+ * pattern, unchanged.
+ */
 function readableDay(iso: string): string {
-  const date = new Date(iso);
-  return isValid(date) ? format(date, 'd MMM yyyy') : iso;
+  return fmt.date(iso, 'd MMM yyyy') ?? iso;
 }
 
 /** A count the server sent, or null when it did not: a missing figure is never a zero. */
