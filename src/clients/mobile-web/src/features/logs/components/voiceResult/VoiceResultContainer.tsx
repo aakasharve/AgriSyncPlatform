@@ -14,7 +14,7 @@
  * refused as "not found".
  */
 import React, { useMemo, useState } from 'react';
-import type { DailyLog, FarmerProfile } from '../../../../types';
+import type { CropProfile, DailyLog, FarmerProfile } from '../../../../types';
 import { useDataSource } from '../../../../app/providers/DataSourceProvider';
 import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
 import { resolveVerifierUserId } from '../../../../core/domain/verifierIdentity';
@@ -29,6 +29,8 @@ import { captureAttachment } from '../../../../application/use-cases/CaptureAtta
 import { CATALOG_VERSION } from '../../../../domain/inputs/inputCatalog';
 import type { MixRule } from '../../../../domain/inputs/mixVerdict';
 import type { ProductAnswerKit } from './ProductCard';
+import { usePlotScheduleChoices } from '../../../scheduler/schedulePage/usePlotScheduleChoices';
+import { useContextFor } from './inputUseContext';
 import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
 import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
@@ -55,6 +57,8 @@ export interface VoiceResultContainerProps {
     farmerProfile: FarmerProfile;
     operatorNameById: ReadonlyMap<string, string>;
     farmId: string | null;
+    /** Lane FACTS-1 - the farm's crops and plots, so a product card can say which day of the season and which stage a use was (from the plot's own schedule). Absent = those lines are left out. */
+    crops?: readonly CropProfile[];
     /** The server-told role on this farm: only the primary owner confirms his own recording here (I27). */
     farmRole: string | null | undefined;
     placeLabel: string | ((language: string | undefined) => string);
@@ -79,7 +83,7 @@ export interface VoiceResultContainerProps {
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
-    result, history, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
+    result, history, farmerProfile, operatorNameById, farmId, crops, farmRole, placeLabel, syncQueuedById,
     onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules,
 }) => {
     const [pickingDay, setPickingDay] = useState(false);
@@ -130,6 +134,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const canCheck = mayConfirmOwn || holdsAuthority(currentFarm, AUTHORITY.confirmRecords);
     const canSeeMoney = mayShowFarmMoney(farmRole, seeMoneyDoor(storedScopes, farmId, currentFarm));
     const ownName = deps.ownName;
+    const scheduleChoices = usePlotScheduleChoices();
     const answerKit: ProductAnswerKit = useMemo(() => {
         const logById = new Map<string, DailyLog>([...dayLogs, ...current].map(l => [l.id, l] as const));
         const farmOf = (logId: string): string | null => logById.get(logId)?.meta?.farmId ?? farmId;
@@ -147,6 +152,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             canSeeMoney,
             nameOfUser: userId => (userId && (operatorNameById.get(userId) || (userId === sessionUserId ? ownName : undefined))) || RS.unknownPerson,
             cropNamesOf: logId => (logById.get(logId)?.context?.selection ?? []).map(s => s.cropName).filter((n): n is string => !!n),
+            useContextOf: logId => useContextFor({ log: logById.get(logId), crops: crops ?? [], choices: scheduleChoices }),
             onAnswer: ({ logId, item, verdict, catalogProductId }) => enqueue(logId, item, { verdict, ...(catalogProductId ? { catalogProductId } : {}) }),
             // The photo goes with the SAME record as its parent ("DailyLog"), through the existing attachment flow; the answer
             // then points at it (the photo may not have reached the server yet - the server takes a pointer).
@@ -157,7 +163,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                 await enqueue(logId, item, { verdict: 'photo', attachmentId: photo.id });
             },
         };
-    }, [dayLogs, current, farmId, canCheck, canSeeMoney, operatorNameById, sessionUserId, ownName, RS]);
+    }, [dayLogs, current, farmId, canCheck, canSeeMoney, operatorNameById, sessionUserId, ownName, RS, crops, scheduleChoices]);
 
     if (current.length === 0) return null;
     // Only a log KNOWN to be on its way to the server can be verified there. `null` (the write held but the

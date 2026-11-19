@@ -56,6 +56,16 @@ export interface ResultCopy {
     factDose: string;
     factBill: string;
     factBenefit: string;
+    /** Lane FACTS-1 (founder 2026-11-19): the use itself on the product card - when (the day of the season), the stage, what he did not say. */
+    factWhen: string;
+    factStage: string;
+    doseNotSaid: string;
+    factDoes: string;
+    pendingTick: string;
+    atThisStage: string;
+    fromPacket: string;
+    /** "छाटणीनंतर दिवस ३३": the day, counted from what the plot's schedule counts from (PRUNING, PLANTING, TRANSPLANTING, SOWING). */
+    dayAfter: (ref: string, day: string) => string;
     /** A row's status line. */
     statusAsk: string;
     statusOwnerWillCheck: string;
@@ -141,6 +151,15 @@ const mr: ResultCopy = {
     factDose: 'सांगितलेलं प्रमाण', // PROPOSED (Marathi)
     factBill: 'बिल',
     factBenefit: 'कशासाठी वापरायचं', // founder wording 2026-11-09 (IT-W1)
+    // Lane FACTS-1 (founder 2026-11-19: "Marathi wording is nearly okay"). All PROPOSED (Marathi).
+    factWhen: 'कधी',
+    factStage: 'टप्पा',
+    doseNotSaid: 'तुम्ही सांगितलं नाही. माहीत असेल तेव्हा सांगा (ऐच्छिक).',
+    factDoes: 'काम',
+    pendingTick: 'तपासणी बाकी',
+    atThisStage: 'या टप्प्यावर',
+    fromPacket: 'पॅकेटवर',
+    dayAfter: (ref: string, day: string) => `${({ PRUNING: 'छाटणीनंतर', PLANTING: 'लागवडीनंतर', TRANSPLANTING: 'पुनर्लागवडीनंतर', SOWING: 'पेरणीनंतर' } as Record<string, string>)[ref] ?? 'सुरुवातीपासून'} दिवस ${day}`,
     statusAsk: 'हेच का? तपासा',
     statusOwnerWillCheck: 'मालक तपासतील',
     saidYes: (name: string) => `${name}: हो, हेच`,
@@ -202,6 +221,15 @@ const en: ResultCopy = {
     factDose: 'Amount said',
     factBill: 'Bill',
     factBenefit: 'What it is used for', // PROPOSED (English)
+    // Lane FACTS-1. All PROPOSED (English).
+    factWhen: 'When',
+    factStage: 'Stage',
+    doseNotSaid: 'You did not say. Tell us when you know (optional).',
+    factDoes: 'What it does',
+    pendingTick: 'Not yet checked',
+    atThisStage: 'At this stage',
+    fromPacket: 'Packet',
+    dayAfter: (ref: string, day: string) => `Day ${day} after ${({ PRUNING: 'pruning', PLANTING: 'planting', TRANSPLANTING: 'transplanting', SOWING: 'sowing' } as Record<string, string>)[ref] ?? 'the start'}`,
     statusAsk: 'Is this it? Check',
     statusOwnerWillCheck: 'The owner will check',
     saidYes: (name: string) => `${name}: yes, this one`,

@@ -1,0 +1,782 @@
+{
+  "version": "facts-2026-11-19.1",
+  "note": "Ingredient facts for the farmer product card (lane FACTS-1). Every line carries its sources and ships UNTICKED. A line shows to a farmer only after an agronomist sets checkedBy (D-96). Written once per ingredient, by ingredient and not by brand. Source summaries were read via search; the agronomist opens each source before ticking. Doctrine P4: no source, no line.",
+  "sources": {
+    "LIB": {
+      "short": "लायब्ररी",
+      "shortEn": "ShramSafal library",
+      "title": "ShramSafal library entry (from the agro dosage guide; not yet signed by an agronomist)",
+      "url": null,
+      "url2": null,
+      "kind": "library",
+      "strength": "ok",
+      "note": null,
+      "retrievedOn": "2026-11-19"
+    },
+    "IRAC": {
+      "short": "IRAC",
+      "shortEn": "IRAC",
+      "title": "IRAC mode-of-action classification of insecticides (brochure and CropLife Australia list)",
+      "url": "https://irac-online.org/documents/moa-brochure",
+      "url2": null,
+      "kind": "industry body",
+      "strength": "strong",
+      "note": "Group numbers for beta-cyfluthrin (3A) was not individually opened; the others were seen in search summaries",
+      "retrievedOn": "2026-11-19"
+    },
+    "FRAC": {
+      "short": "FRAC",
+      "shortEn": "FRAC",
+      "title": "Fungicide activity groups: CropLife 2026 table and UC IPM grape fungicide table",
+      "url": "https://media.croplife.org.au/2026/07/CropLife_2026-FungicideActivityGroupTable.pdf",
+      "url2": "https://ipm.ucanr.edu/agriculture/grape/General-Properties-of-Fungicides-Used-in-Grapes",
+      "kind": "industry body / university",
+      "strength": "strong",
+      "note": null,
+      "retrievedOn": "2026-11-19"
+    },
+    "NHB": {
+      "short": "NHB",
+      "shortEn": "NHB",
+      "title": "National Horticulture Board, grape production note (hydrogen cyanamide within 48 hours of pruning)",
+      "url": "https://nhb.gov.in/pdf/fruits/grape/gra005.pdf",
+      "url2": null,
+      "kind": "government",
+      "strength": "strong",
+      "note": null,
+      "retrievedOn": "2026-11-19"
+    },
+    "NRCG": {
+      "short": "ICAR-NRC Grapes",
+      "shortEn": "ICAR-NRC Grapes",
+      "title": "ICAR-National Research Centre for Grapes: Technical Bulletin 18 and the weekly advisory (no nitrogen just before flowering)",
+      "url": "https://krishi.icar.gov.in/jspui/bitstream/123456789/76845/1/ICAR_Technical%20Bulletin%2018_FULL.pdf",
+      "url2": "https://nrcgrapes.icar.gov.in/sites/default/files/Advisory%20/English%20Advisory%2009-1%20-2025-%2015-1-2025.pdf",
+      "kind": "ICAR",
+      "strength": "strong",
+      "note": "advisory is dated to a 2025 pruning cycle",
+      "retrievedOn": "2026-11-19"
+    },
+    "UC": {
+      "short": "UC विद्यापीठ",
+      "shortEn": "UC extension",
+      "title": "University of California Cooperative Extension papers on CPPU in table grapes, plus a Farm Progress trial report",
+      "url": "https://ucanr.edu/sites/default/files/2010-07/27755.pdf",
+      "url2": "https://farmprogress.com/grapes/cppu-shows-virtues-vices-in-table-grape-trials",
+      "kind": "university (foreign)",
+      "strength": "ok",
+      "note": "Thompson Seedless in California; Indian practice must be checked",
+      "retrievedOn": "2026-11-19"
+    },
+    "CA": {
+      "short": "संशोधन",
+      "shortEn": "research",
+      "title": "Effect of CaCl2 sprays at different fruit stages on grape berry cracking (Frontiers/PMC) and a Yara table-grape firmness guide",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9234641/",
+      "url2": "https://english-master.yara.co.uk/crop-nutrition-master/table-grapes/improving-table-grape-skin-strengthfirmness/",
+      "kind": "journal / company",
+      "strength": "ok",
+      "note": "best single spray window is not settled in the sources",
+      "retrievedOn": "2026-11-19"
+    },
+    "ZN": {
+      "short": "संशोधन",
+      "shortEn": "research",
+      "title": "Foliar Zn, Fe, Mn EDTA on grapevine (Zanjan 2022, DOAJ) and a chelated-micronutrient maker's page (Haifa)",
+      "url": "https://doaj.org/article/47d026f145704bcd99ff6b528cb2de2d",
+      "url2": "https://www.haifa-group.com/node/608",
+      "kind": "journal / manufacturer",
+      "strength": "weak",
+      "note": "role of each nutrient only; manufacturer text is marketing",
+      "retrievedOn": "2026-11-19"
+    },
+    "SWE": {
+      "short": "संशोधन",
+      "shortEn": "research",
+      "title": "Foliar seaweed extracts and abiotic stress: Reviews in Agricultural Science 2024 and a PMC review",
+      "url": "https://www.jstage.jst.go.jp/article/ras/12/0/12_295/_article",
+      "url2": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8000310",
+      "kind": "journal review",
+      "strength": "ok",
+      "note": "mechanisms largely unknown; not a Sargassum-only study",
+      "retrievedOn": "2026-11-19"
+    },
+    "KMB": {
+      "short": "ICAR",
+      "shortEn": "ICAR",
+      "title": "ICAR-CTRI trials of the potassium-mobilising bacterium Frateuria aurantia (tobacco)",
+      "url": "https://krishi.icar.gov.in/jspui/handle/123456789/9603",
+      "url2": null,
+      "kind": "ICAR",
+      "strength": "ok",
+      "note": "evidence is mainly tobacco; response needs potash to be added",
+      "retrievedOn": "2026-11-19"
+    },
+    "PH": {
+      "short": "संशोधन",
+      "shortEn": "research",
+      "title": "Biostimulant properties of protein hydrolysates (Colla et al. and a 2023 review, PMC)",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10253749/",
+      "url2": null,
+      "kind": "journal review",
+      "strength": "ok",
+      "note": "mode of action not fully drawn",
+      "retrievedOn": "2026-11-19"
+    },
+    "POLY": {
+      "short": "विद्यापीठ",
+      "shortEn": "university",
+      "title": "Polyoxin D zinc salt: WSU grape chemical guide (label extract) and an Indian Thompson Seedless powdery-mildew trial",
+      "url": "https://cpg.wine.wsu.edu/chemical/polyoxin-d-zinc-salt/",
+      "url2": "https://agris.fao.org/search/en/records/65df0afe0f3e94b9e5d4550c",
+      "kind": "university / trial",
+      "strength": "ok",
+      "note": "rates and timing are a US label; Indian label must be checked",
+      "retrievedOn": "2026-11-19"
+    },
+    "AT": {
+      "short": "विद्यापीठ",
+      "shortEn": "university",
+      "title": "WSU Extension note on antitranspirants (fatty-alcohol claims often unsupported) and an MDPI review",
+      "url": "https://Puyallup.WSU.edu/wp-content/uploads/sites/403/2015/03/antitranspirants.pdf",
+      "url2": "https://mdpi.com/2071-1050/15/12/9165",
+      "kind": "university",
+      "strength": "ok",
+      "note": null,
+      "retrievedOn": "2026-11-19"
+    },
+    "KSP": {
+      "short": "संशोधन",
+      "shortEn": "research",
+      "title": "Foliar potassium from veraison to harvest on Thompson Seedless (ISHS Acta Horticulturae 640)",
+      "url": "https://ishs.org/ishs-article/640_18/",
+      "url2": null,
+      "kind": "journal",
+      "strength": "weak",
+      "note": "one cultivar, one trial",
+      "retrievedOn": "2026-11-19"
+    },
+    "UF": {
+      "short": "UF/IFAS",
+      "shortEn": "UF/IFAS",
+      "title": "University of Florida IFAS Extension: nitrogen in plants (EDIS SS580) and a PMC review on nitrogen starvation and leaf yellowing",
+      "url": "https://edis.ifas.ufl.edu/publication/SS580/pdf",
+      "url2": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9538721",
+      "kind": "university (foreign) / journal",
+      "strength": "strong",
+      "note": "general plant biology, citrus-based sheet",
+      "retrievedOn": "2026-11-19"
+    },
+    "UFM": {
+      "short": "UF/IFAS",
+      "shortEn": "UF/IFAS",
+      "title": "University of Florida IFAS EDIS fact sheets and a Mississippi State info sheet on boron, copper and molybdenum",
+      "url": "https://edis.ifas.ufl.edu/publication/SS422/pdf",
+      "url2": "https://extension.msstate.edu/sites/default/files/document/2026-05/P3726_web.pdf",
+      "kind": "university (foreign)",
+      "strength": "ok",
+      "note": "citrus-based fact sheets; general plant roles",
+      "retrievedOn": "2026-11-19"
+    },
+    "PKT": {
+      "short": "पॅकेट",
+      "shortEn": "packet",
+      "title": "What is printed on the packet itself (a claim, not a measured fact)",
+      "url": null,
+      "url2": null,
+      "kind": "packet",
+      "strength": "claim",
+      "note": null,
+      "retrievedOn": "2026-11-19"
+    }
+  },
+  "ingredients": [
+    {
+      "key": "lambdacyhalothrin",
+      "names": [
+        "lambda cyhalothrin",
+        "lambda-cyhalothrin",
+        "lambdacyhalothrin"
+      ],
+      "does": {
+        "mr": "किडीच्या नसांवर परिणाम करून तिला लगेच पाडतं. स्पर्श आणि पोटात गेल्यावर.",
+        "en": "Acts on the pest's nerves and knocks it down fast, by contact and when eaten."
+      },
+      "group": "IRAC 3A",
+      "sources": [
+        "IRAC",
+        "LIB"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "spirotetramat",
+      "names": [
+        "spirotetramat"
+      ],
+      "does": {
+        "mr": "किडीच्या शरीरात चरबी तयार होऊ देत नाही, त्यामुळे पिल्लं वाढत नाहीत. पानातून वर आणि खाली दोन्हीकडे पसरतं (पॅकेटवर ‘2-way systemic’).",
+        "en": "Stops the pest building body fat, so the young stages cannot grow. Moves both up and down inside the leaf (packet: 2-way systemic)."
+      },
+      "group": "IRAC 23",
+      "sources": [
+        "IRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "imidacloprid",
+      "names": [
+        "imidacloprid"
+      ],
+      "does": {
+        "mr": "किडीच्या नसांना सतत उत्तेजित करून तिला मारतं. रस शोषणाऱ्या किडींवर.",
+        "en": "Over-excites the pest's nerves until it dies. For sucking pests."
+      },
+      "group": "IRAC 4A",
+      "sources": [
+        "IRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "betacyfluthrin",
+      "names": [
+        "beta-cyfluthrin",
+        "beta cyfluthrin",
+        "betacyfluthrin"
+      ],
+      "does": {
+        "mr": "किडीच्या नसांवर परिणाम करून तिला लगेच पाडतं (पायरेथ्रॉइड प्रकार).",
+        "en": "Acts on the pest's nerves and knocks it down fast (pyrethroid type)."
+      },
+      "group": "IRAC 3A",
+      "sources": [
+        "IRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "chlorpyrifos",
+      "names": [
+        "chlorpyrifos"
+      ],
+      "does": {
+        "mr": "किडीच्या मज्जातंतूतील एक एन्झाइम बंद करून तिला मारतं. स्पर्श आणि पोटात गेल्यावर.",
+        "en": "Blocks an enzyme in the pest's nerves and kills it, by contact and when eaten."
+      },
+      "group": "IRAC 1B",
+      "sources": [
+        "IRAC",
+        "LIB"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "emamectinbenzoate",
+      "names": [
+        "emamectin benzoate",
+        "emamectin-benzoate"
+      ],
+      "does": {
+        "mr": "किडीच्या मज्जातंतूंना सुन्न करून तिचं खाणं थांबवतं. कीड काही दिवसांत मरते.",
+        "en": "Numbs the pest's nerves so it stops feeding. The pest dies in a few days."
+      },
+      "group": "IRAC 6",
+      "sources": [
+        "IRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "ziram",
+      "names": [
+        "ziram"
+      ],
+      "does": {
+        "mr": "पानावर संरक्षक थर करून बुरशी आधीच अडवतं. बुरशीच्या अनेक ठिकाणी परिणाम करतं, म्हणून बुरशी औषधाला दाद न देण्याची शक्यता कमी.",
+        "en": "Makes a protective coat on the leaf and stops the fungus before it starts. Works at many sites of the fungus, so resistance is less likely."
+      },
+      "group": "FRAC M3",
+      "sources": [
+        "FRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "propineb",
+      "names": [
+        "propineb"
+      ],
+      "does": {
+        "mr": "पानावर संरक्षक थर करून बुरशी आधीच अडवतं. अनेक ठिकाणी परिणाम करतं, म्हणून बुरशी दाद न देण्याची शक्यता कमी.",
+        "en": "Makes a protective coat on the leaf and stops the fungus before it starts. Works at many sites of the fungus, so resistance is less likely."
+      },
+      "group": "FRAC M3",
+      "sources": [
+        "FRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "mancozeb",
+      "names": [
+        "mancozeb"
+      ],
+      "does": {
+        "mr": "पानावर संरक्षक थर करून बुरशी आधीच अडवतं.",
+        "en": "Makes a protective coat on the leaf and stops the fungus before it starts."
+      },
+      "group": "FRAC M3",
+      "sources": [
+        "FRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "cymoxanil",
+      "names": [
+        "cymoxanil"
+      ],
+      "does": {
+        "mr": "पानात शिरून रोग थांबवतं. हे नेमकं कसं काम करतं ते पक्कं माहीत नाही (गट २७).",
+        "en": "Enters the leaf and stops the disease. Exactly how it works is not firmly known (group 27)."
+      },
+      "group": "FRAC 27",
+      "sources": [
+        "FRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "dimethomorph",
+      "names": [
+        "dimethomorph"
+      ],
+      "does": {
+        "mr": "केवड्याची बुरशी पानात शिरून थांबवतं. पानाच्या आतही पसरतं.",
+        "en": "Enters the leaf and stops the downy mildew fungus. Spreads inside the leaf."
+      },
+      "group": "FRAC 40",
+      "sources": [
+        "FRAC",
+        "LIB"
+      ],
+      "checkedBy": null,
+      "checkedOn": null,
+      "caution": {
+        "mr": "द्राक्षाच्या केवड्यात या गटाच्या औषधाला दाद न देणारी बुरशी आढळली आहे. एकाच गटाचं औषध सतत वापरू नका.",
+        "en": "Fungus that no longer responds to this group has been found in grape downy mildew. Do not use one group again and again.",
+        "sources": [
+          "FRAC"
+        ],
+        "checkedBy": null
+      }
+    },
+    {
+      "key": "tebuconazole",
+      "names": [
+        "tebuconazole"
+      ],
+      "does": {
+        "mr": "बुरशीच्या पेशीपटलासाठी लागणारा घटक बनू देत नाही; पानात शिरून आतून काम करतं.",
+        "en": "Stops the fungus building a part of its cell membrane. Works from inside the leaf."
+      },
+      "group": "FRAC 3",
+      "sources": [
+        "FRAC",
+        "LIB"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "trifloxystrobin",
+      "names": [
+        "trifloxystrobin"
+      ],
+      "does": {
+        "mr": "बुरशीच्या श्वसनातली (ऊर्जा) साखळी बंद करतं. या गटाला दाद न देण्याचा धोका जास्त आहे, म्हणून सतत वापरू नका.",
+        "en": "Shuts down the energy chain of the fungus."
+      },
+      "group": "FRAC 11",
+      "sources": [
+        "FRAC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null,
+      "caution": {
+        "mr": "या गटाला दाद न देण्याचा धोका जास्त आहे, म्हणून सतत वापरू नका.",
+        "en": "The risk that the fungus stops responding to this group is high, so do not use it repeatedly.",
+        "sources": [
+          "FRAC"
+        ],
+        "checkedBy": null
+      }
+    },
+    {
+      "key": "polyoxindzincsalt",
+      "names": [
+        "polyoxin d zinc salt",
+        "polyoxin d"
+      ],
+      "does": {
+        "mr": "बुरशीच्या पेशीभिंतीला लागणारा घटक (कायटिन) तयार होऊ देत नाही. जिवाणूपासून बनवलेलं औषध.",
+        "en": "Stops the fungus building the chitin of its cell wall. Made from bacteria."
+      },
+      "group": "FRAC 19",
+      "sources": [
+        "FRAC",
+        "POLY"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "hydrogencyanamide",
+      "names": [
+        "hydrogen cyanamide",
+        "hydrogencyanamide"
+      ],
+      "does": {
+        "mr": "द्राक्षाच्या डोळ्यांची सुप्तावस्था (झोप) तोडून फूट एकसारखी आणि लवकर आणतं.",
+        "en": "Breaks the sleep of grape buds so they sprout evenly and early."
+      },
+      "group": null,
+      "sources": [
+        "NHB",
+        "NRCG"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "forchlorfenuron",
+      "names": [
+        "forchlorfenuron",
+        "cppu"
+      ],
+      "does": {
+        "mr": "पेशींची संख्या व वाढ वाढवणारं वाढ नियंत्रक. मण्याचा आकार वाढतो, पण साखर आणि रंग यायला थोडा उशीर होऊ शकतो.",
+        "en": "A growth regulator that increases the number and growth of cells. Berry size goes up, but sugar and colour can come a little late."
+      },
+      "group": null,
+      "sources": [
+        "UC"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "proteinhydrolysate",
+      "names": [
+        "protein hydrolysate",
+        "protein hydrolysate"
+      ],
+      "does": {
+        "mr": "अमिनो आम्लं आणि पेप्टाइड्स. वाढ आणि ताण सहन करण्यास मदत. पण ते नेमकं कसं काम करतं ते अजून पूर्ण समजलेलं नाही.",
+        "en": "Amino acids and peptides. They help growth and stress tolerance, but exactly how is not fully understood."
+      },
+      "group": null,
+      "sources": [
+        "PH"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "auxinsvitamins",
+      "names": [
+        "auxins vitamins",
+        "auxins and vitamins",
+        "auxins & vitamins"
+      ],
+      "does": {
+        "mr": "ऑक्सिनसारखा परिणाम असल्याचा अंदाज आहे; पक्कं नाही.",
+        "en": "Likely an auxin-like effect, but this is not certain."
+      },
+      "group": null,
+      "sources": [
+        "PH"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "seaweedextract",
+      "names": [
+        "seaweed extract",
+        "sargassum wightii",
+        "seaweed (sargassum wightii) extract",
+        "blue green alga",
+        "arthrospira platensis"
+      ],
+      "does": {
+        "mr": "ताण (उष्णता, पाण्याचा) सहन करण्यास मदत करणारा नैसर्गिक अर्क. पण तो नेमकं कसं काम करतो ते अजून पूर्ण समजलेलं नाही.",
+        "en": "Seaweed extract. Helps the crop bear heat or water stress, but exactly how is not fully understood."
+      },
+      "group": null,
+      "sources": [
+        "SWE"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "zinc",
+      "names": [
+        "zinc",
+        "edta zinc",
+        "zinc edta",
+        "zn"
+      ],
+      "does": {
+        "mr": "प्रथिनं बनण्यास आणि झाडाच्या वाढीस मदत. कमी पडलं तर पानं ठिपकेदार दिसतात.",
+        "en": "Helps the plant make proteins and grow. If it is short, leaves look blotchy."
+      },
+      "group": null,
+      "sources": [
+        "ZN"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "iron",
+      "names": [
+        "iron",
+        "edta iron",
+        "iron edta",
+        "ferrous",
+        "fe"
+      ],
+      "does": {
+        "mr": "पानातला हिरवेपणा (क्लोरोफिल) बनण्यास मदत.",
+        "en": "Helps the leaf make its green colour (chlorophyll)."
+      },
+      "group": null,
+      "sources": [
+        "ZN"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "manganese",
+      "names": [
+        "manganese",
+        "edta manganese",
+        "mn"
+      ],
+      "does": {
+        "mr": "प्रकाशसंश्लेषण आणि श्वसनासाठी लागतं.",
+        "en": "Needed for photosynthesis and breathing of the plant."
+      },
+      "group": null,
+      "sources": [
+        "ZN"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "copper",
+      "names": [
+        "copper",
+        "cu"
+      ],
+      "does": {
+        "mr": "कार्बोदकं आणि नत्राच्या वापरासाठी लागतं; पेशीभिंत मजबूत ठेवण्यास मदत.",
+        "en": "Needed for the use of carbohydrates and nitrogen; helps keep cell walls strong."
+      },
+      "group": null,
+      "sources": [
+        "UFM"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "boron",
+      "names": [
+        "boron",
+        "b"
+      ],
+      "does": {
+        "mr": "पेशीभिंत बनण्यास आणि परागकण व फुलं टिकण्यास मदत.",
+        "en": "Helps cell walls form, and helps pollen and flowers to stay."
+      },
+      "group": null,
+      "sources": [
+        "UFM"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "molybdenum",
+      "names": [
+        "molybdenum",
+        "mo"
+      ],
+      "does": {
+        "mr": "झाडाला नत्र वापरता येण्यासाठी लागतं.",
+        "en": "Needed so the plant can use nitrogen."
+      },
+      "group": null,
+      "sources": [
+        "UFM"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "calcium",
+      "names": [
+        "calcium",
+        "calcium as ca",
+        "ca"
+      ],
+      "does": {
+        "mr": "फळाच्या पेशीभिंती मजबूत करतो. मणी टणक राहतात; तडे आणि कुज कमी होण्यास मदत.",
+        "en": "Makes fruit cell walls strong. Berries stay firm; cracking and rot can be reduced."
+      },
+      "group": null,
+      "sources": [
+        "CA"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "nitrogen",
+      "names": [
+        "nitrogen",
+        "n",
+        "total nitrogen"
+      ],
+      "does": {
+        "mr": "पानं हिरवी ठेवतं (हिरवेपणासाठी नत्र लागतो) आणि प्रथिनांचा मुख्य घटक आहे. कमी पडलं तर आधी जुनी पानं पिवळी होतात.",
+        "en": "Keeps leaves green (it is needed for the green colour) and is a main part of proteins. If short, older leaves turn yellow first."
+      },
+      "group": null,
+      "sources": [
+        "UF"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "potassium",
+      "names": [
+        "potassium",
+        "potash",
+        "k"
+      ],
+      "does": {
+        "mr": "पक्वतेच्या काळात फवारल्यास फळाची गुणवत्ता सुधारल्याचं एका द्राक्ष अभ्यासात दिसलं.",
+        "en": "In one grape study, spraying it during ripening improved fruit quality."
+      },
+      "group": null,
+      "sources": [
+        "KSP"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "potassiummobilisingbacteria",
+      "names": [
+        "potassium mobilising bacteria",
+        "potassium mobilizing bacteria",
+        "potassium solubilizing bacteria"
+      ],
+      "does": {
+        "mr": "मातीत अडकलेलं पालाश झाडाला घेता येईल अशा रूपात आणतात. पालाश खत घातलं असेल तरच चांगला परिणाम. पुरावा मुख्यतः तंबाखूवर.",
+        "en": "Bring potash that is stuck in the soil into a form the plant can take. Works best when potash fertiliser is also given. Evidence is mainly on tobacco."
+      },
+      "group": null,
+      "sources": [
+        "KMB"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    },
+    {
+      "key": "fattyalcohol",
+      "names": [
+        "fatty alcohol"
+      ],
+      "does": {
+        "mr": "पॅकेटवर ‘ताण कमी करणारं’ असं लिहिलं आहे. पानांवर थर करून पाण्याची गळती कमी करणाऱ्या फवारण्यांचे अभ्यास आहेत, पण फॅटी अल्कोहोलच्या दाव्यांना पुरावा नाही, असं अमेरिकन विद्यापीठ सांगतं.",
+        "en": "The packet calls it a stress reducer. Sprays that form a film to cut water loss have been studied, but a US university says fatty-alcohol claims are often unsupported."
+      },
+      "group": null,
+      "sources": [
+        "PKT",
+        "AT"
+      ],
+      "checkedBy": null,
+      "checkedOn": null
+    }
+  ],
+  "stage": [
+    {
+      "id": "hc-bud-48h",
+      "ingredient": "hydrogencyanamide",
+      "crop": "grapes",
+      "ref": "PRUNING",
+      "window": {
+        "fromDay": 0,
+        "toDay": 2
+      },
+      "text": {
+        "mr": "छाटणीनंतर ४८ तासांच्या आत डोळ्यांवर लावतात. उद्देश एकसारखी फूट.",
+        "en": "Applied to the buds within 48 hours of pruning. The aim is even bud break."
+      },
+      "within": {
+        "mr": "तुम्ही दिवस {day} ला लावलं: सल्ल्याच्या वेळेत.",
+        "en": "You applied it on day {day}: within the advised time."
+      },
+      "outside": {
+        "mr": "तुम्ही दिवस {day} ला लावलं. सल्ल्याची वेळ छाटणीनंतर ४८ तासांच्या आत आहे.",
+        "en": "You applied it on day {day}. The advised time is within 48 hours of pruning."
+      },
+      "sources": [
+        "NHB",
+        "NRCG"
+      ],
+      "checkedBy": null
+    },
+    {
+      "id": "n-before-flowering",
+      "ingredient": "nitrogen",
+      "crop": "grapes",
+      "ref": "PRUNING",
+      "stageNameHas": [
+        "फुलोरा",
+        "flower"
+      ],
+      "lookAheadDays": 5,
+      "text": {
+        "mr": "फुलोऱ्याच्या अगदी आधी ते फळधारणेपर्यंत नत्रयुक्त खत देऊ नका. फुलोरा करपण्याचा (कूज) धोका.",
+        "en": "Do not give nitrogen fertiliser from just before flowering to fruit set. Risk of flower-cluster necrosis (kooj)."
+      },
+      "warn": true,
+      "sources": [
+        "NRCG"
+      ],
+      "checkedBy": null
+    }
+  ]
+}
