@@ -9,10 +9,9 @@
  * The phone never recounts a stage, never clips a window and never decides what "matched" means. Numbers are the server's; the few sums the
  * phone adds are named in `compareFacts.ts`. Two colours only: green and grey. "अजून नोंद नाही", never "राहिलं" / "काम झालं नाही".
  */
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, HelpCircle, WifiOff } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, WifiOff } from 'lucide-react';
 import type { CropProfile, FarmerProfile } from '../../types';
-import { useUiPref } from '../../shared/hooks/useUiPref';
 import { formatUpToWhen } from '../oversight/formatUpToWhen';
 import { digitsFor } from '../../shared/utils/marathiDigits';
 import { scheduleNameIn } from '../../shared/names/namesIn';
@@ -29,7 +28,6 @@ import {
     type SheetContext, type SheetState, type ShownReason,
 } from './CompareSheets';
 import OwnWorkSheet from './OwnWorkSheet';
-import CompareCoach from './CompareCoach';
 import { useOnline } from './useOnline';
 
 export interface CompareViewProps {
@@ -57,8 +55,6 @@ export const CompareView: React.FC<CompareViewProps> = ({ result, plot, farmId, 
     const stageIndex = plot ? Math.max(0, Math.min(stageAt, plot.stages.length - 1)) : 0;
     const [stack, setStack] = useState<SheetState[]>([]);
     const [kept, setKept] = useState<Record<string, ShownReason>>({});
-    const [seen, setSeen, seenLoaded] = useUiPref<boolean>('compare_coach_seen_v1', false);
-    const [coachOpen, setCoachOpen] = useState(false);
 
     const primary = plot ? mainScheduleOf(plot) : null;
     const others = useMemo<ScheduleCompareDto[]>(() => (plot ? plot.schedules.filter(s => s !== primary) : []), [plot, primary]);
@@ -67,11 +63,7 @@ export const CompareView: React.FC<CompareViewProps> = ({ result, plot, farmId, 
     const primaryCounts = plot && primary ? countsAt(primary, stageIndex) : null;
     const showsNumbers = !!plot && !!stage && stage.state !== 'ahead';
 
-    // the coach shows once, by itself, the first time a plot's numbers are drawn
-    useEffect(() => {
-        if (seenLoaded && !seen && primaryCounts) setCoachOpen(true);
-    }, [seenLoaded, seen, primaryCounts !== null]); // eslint-disable-line react-hooks/exhaustive-deps
-    const finishCoach = () => { setCoachOpen(false); if (!seen) setSeen(true); };
+    // Founder change note 2026-11-19: the short tour (the three-card coach that opened by itself and the "?" that brought it back) is gone.
 
     const go = (to: number) => { setStack([]); setStageIndex(to); };
     const top = stack[stack.length - 1] ?? null;
@@ -173,8 +165,6 @@ export const CompareView: React.FC<CompareViewProps> = ({ result, plot, farmId, 
                     <span className="min-w-0 flex-1 truncate">{chip}</span>
                     <span className="shrink-0 text-[14px] font-bold text-stone-600">{words.change}</span>
                 </button>
-                <button type="button" onClick={() => { setStack([]); setCoachOpen(true); }} data-testid="compare-help" aria-label={words.help}
-                    className="grid min-h-[48px] min-w-[48px] place-items-center rounded-2xl border-2 border-stone-300 bg-white text-stone-800"><HelpCircle size={22} aria-hidden="true" /></button>
             </div>
             {freshness && (
                 <div className="flex items-center gap-2 rounded-xl bg-stone-200 px-3 py-2 text-[14px] font-bold text-stone-800" data-testid="compare-offline-strip" role="status">
@@ -197,7 +187,6 @@ export const CompareView: React.FC<CompareViewProps> = ({ result, plot, farmId, 
             )}
             {body}
             {sheet}
-            {coachOpen && <CompareCoach words={words} lang={lang} onFinish={finishCoach} />}
         </div>
     );
 };

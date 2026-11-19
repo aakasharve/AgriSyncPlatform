@@ -502,29 +502,15 @@ describe('fix round 1: one number for "no record", everywhere (P002, P003) and a
     });
 });
 
-describe('the "?" coach: three cards, shown once, skippable, the "?" brings it back', () => {
-    it('first time: it opens by itself, "पुढे" steps, "वगळा" closes and keeps the seen flag', () => {
+describe('founder change note 2026-11-19: there is no short tour on the compare screen', () => {
+    it('first time: nothing opens by itself and there is no "?" button (no coach, no help)', () => {
         h.seen = false;
         openPlot();
-        expect(screen.getByTestId('compare-coach')).toBeInTheDocument();
-        expect(screen.getByTestId('compare-coach-text').textContent).toBe('हिरवी खूण: शेड्यूलने सांगितलं तेवढं नोंदीत आलं.');
-        fireEvent.click(screen.getByTestId('compare-coach-next'));
-        expect(screen.getByTestId('compare-coach-text').textContent).toContain('राखाडी आकडा');
-        fireEvent.click(screen.getByTestId('compare-coach-skip'));
+        expect(screen.getByTestId('compare-screen')).toBeInTheDocument();
         expect(screen.queryByTestId('compare-coach')).toBeNull();
-        expect(h.setSeen).toHaveBeenCalledWith(true);
-    });
-
-    it('already seen: it does not open by itself; the "?" opens it, and the last card ends it', () => {
-        openPlot();
-        expect(screen.queryByTestId('compare-coach')).toBeNull();
-        fireEvent.click(screen.getByTestId('compare-help'));
-        fireEvent.click(screen.getByTestId('compare-coach-next'));
-        fireEvent.click(screen.getByTestId('compare-coach-next'));
-        expect(screen.getByTestId('compare-coach-text').textContent).toContain('शेड्यूलमध्ये नव्हतं, तुम्ही केलं');
-        expect(screen.queryByTestId('compare-coach-skip')).toBeNull();
-        fireEvent.click(screen.getByTestId('compare-coach-next'));
-        expect(screen.queryByTestId('compare-coach')).toBeNull();
+        expect(screen.queryByTestId('compare-coach-veil')).toBeNull();
+        expect(screen.queryByTestId('compare-help')).toBeNull();
+        expect(h.setSeen).not.toHaveBeenCalled();
     });
 });
 
@@ -543,10 +529,6 @@ function everyViewText(): string {
         fireEvent.click(screen.getByTestId('compare-sheet-close'));
     }
     fireEvent.click(screen.getByTestId('compare-other-sub-uni')); peek(); fireEvent.click(screen.getByTestId('compare-sheet-close'));
-    fireEvent.click(screen.getByTestId('compare-help')); peek();
-    fireEvent.click(screen.getByTestId('compare-coach-next')); peek();
-    fireEvent.click(screen.getByTestId('compare-coach-next')); peek();
-    fireEvent.click(screen.getByTestId('compare-coach-next'));
     ahead(); peek(); previous(); previous(); peek();
     return parts.join('\n');
 }
@@ -615,15 +597,7 @@ describe('words: the plan\'s, in two colours, in one language', () => {
     });
 });
 
-describe('fix round 1: the selector and the coach keep the 14 px / 44 px rule and draw no amber (P010)', () => {
-    const rules = (root: HTMLElement) => {
-        for (const b of Array.from(root.querySelectorAll('button')).filter(x => !x.hasAttribute('aria-hidden'))) {
-            expect(b.className, b.outerHTML.slice(0, 160)).toMatch(/min-h-\[(4[4-9]|[5-9]\d|\d{3})px\]/);
-        }
-        expect(root.innerHTML).not.toMatch(/text-\[(1[0-3]|[0-9])(\.\d+)?px\]|text-xs/);
-        expect(root.innerHTML).not.toMatch(/amber|orange|rose-|red-/);
-    };
-
+describe('fix round 1: the selector keeps the 14 px / 44 px rule and draws no amber (P010)', () => {
     it('the plot step of the selector (a crop chosen, no plot yet): no 12 px label, no amber', () => {
         render(<ComparePage crops={cropsOf()} />);
         fireEvent.click(screen.getByTestId(`flow-crop-${CROP_ID}`));
@@ -633,12 +607,6 @@ describe('fix round 1: the selector and the coach keep the 14 px / 44 px rule an
         expect(screen.getByTestId('compare-selector').innerHTML).not.toMatch(/amber/);
         // the choices he taps (plot tiles, back) are 44 px or more; the crop chip is a 64-76 px card
         for (const id of [`flow-plot-${PLOT_ID}`, 'flow-plot-plot-2']) expect(screen.getByTestId(id).className).toMatch(/min-h-\[(4[4-9]|[5-9]\d)px\]/);
-    });
-
-    it('the coach: every control is 44 px or more, no text under 14 px', () => {
-        h.seen = false;
-        openPlot();
-        rules(screen.getByTestId('compare-coach'));
     });
 });
 

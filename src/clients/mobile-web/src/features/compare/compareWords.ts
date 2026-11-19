@@ -32,7 +32,6 @@ export interface CompareWords {
     noCropsAtAll: string;
     // --- chrome
     change: string;
-    help: string;
     previousStage: string;
     nextStage: string;
     stageEnded: string;
@@ -123,8 +122,6 @@ export interface CompareWords {
     micOfflineNote: string;
     pictureEnough: string;
     spokenTag: string;
-    // --- coach
-    coach: { title: string; cards: readonly [string, string, string]; next: string; done: string; skip: string };
 }
 
 const MR: CompareWords = {
@@ -134,7 +131,6 @@ const MR: CompareWords = {
     cropNoPlots: 'या पिकाचा अजून प्लॉट नाही.', // PROPOSED (Marathi)
     noCropsAtAll: 'अजून पीक किंवा प्लॉट नोंदलेला नाही. पीक आणि प्लॉट जोडले की इथे शेड्यूलशी तुलना दिसेल.', // the old page's words (PLR-D9 T7)
     change: 'बदला', // PROPOSED (Marathi)
-    help: 'कसं वाचायचं',
     previousStage: 'मागची', // PROPOSED (Marathi)
     nextStage: 'पुढची', // PROPOSED (Marathi)
     stageEnded: 'संपलेली स्टेज', // PROPOSED (Marathi)
@@ -221,17 +217,6 @@ const MR: CompareWords = {
     micOfflineNote: 'इंटरनेट नाही, म्हणून बोलून सांगता येत नाही. चित्र निवडलं की पुरेसं आहे.', // v4
     pictureEnough: 'चित्र निवडलं की पुरेसं आहे.', // v4
     spokenTag: 'बोलून सांगितलं',
-    coach: {
-        title: 'कसं वाचायचं',
-        cards: [
-            'हिरवी खूण: शेड्यूलने सांगितलं तेवढं नोंदीत आलं.',
-            'राखाडी आकडा: अजून किती कामांची नोंद नाही. नोंद नाही, म्हणजे काम झालं नाही असं नाही.',
-            'शेड्यूलमध्ये नव्हतं, तुम्ही केलं: शेड्यूलमध्ये नसलेलं तुमचं स्वतःचं काम. यात काही राहिलेलं नाही.',
-        ],
-        next: 'पुढे',
-        done: 'समजलं',
-        skip: 'वगळा',
-    },
 };
 
 const EN: CompareWords = {
@@ -241,7 +226,6 @@ const EN: CompareWords = {
     cropNoPlots: 'This crop has no plot yet.', // PROPOSED (English)
     noCropsAtAll: 'No crop or plot is recorded yet. Once you add a crop and a plot, the comparison with the schedule shows here.', // PROPOSED (English)
     change: 'Change', // PROPOSED (English)
-    help: 'How to read this',
     previousStage: 'Previous', // PROPOSED (English)
     nextStage: 'Next', // PROPOSED (English)
     stageEnded: 'Stage is over', // PROPOSED (English)
@@ -328,17 +312,6 @@ const EN: CompareWords = {
     micOfflineNote: 'No internet, so you cannot say it by voice. Choosing a picture is enough.', // PROPOSED (English)
     pictureEnough: 'Choosing a picture is enough.', // PROPOSED (English)
     spokenTag: 'Said by voice', // PROPOSED (English)
-    coach: {
-        title: 'How to read this', // PROPOSED (English)
-        cards: [
-            'Green tick: the record has what the schedule asked.', // PROPOSED (English)
-            'Grey number: how many works have no record yet. No record does not mean the work was not done.', // PROPOSED (English)
-            'Not in the schedule, you did it: your own work that is not in a schedule. Nothing is left undone here.', // PROPOSED (English)
-        ],
-        next: 'Next', // PROPOSED (English)
-        done: 'Got it', // PROPOSED (English)
-        skip: 'Skip', // PROPOSED (English)
-    },
 };
 
 export const compareWords = (language: string | null | undefined): CompareWords => (langOf(language) === 'en' ? EN : MR);
