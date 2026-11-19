@@ -348,7 +348,7 @@ export function cropCycleParentClientRequestId(cropCycleId: string): string {
 }
 
 /**
- * PURE — the plot and crop-cycle rows a `create_daily_log` payload names, or the plot row
+ * PURE — the plot and crop-cycle rows a `create_daily_log` (or `adopt_schedule`, lane WIZARD-F2) payload names, or the plot row
  * a `create_crop_cycle` names (the cycle is refused `PlotNotFound` when its plot was; its
  * own `cropCycleId` is itself, never its parent).
  */
@@ -357,7 +357,9 @@ export function plotParentsOf(mutationType: string, payload: unknown): QueuedPar
         const plotId = readStringField(payload, 'plotId');
         return plotId ? [{ kind: 'plot', id: plotId, clientRequestId: plotParentClientRequestId(plotId) }] : [];
     }
-    if (mutationType !== SyncMutationName.CreateDailyLog) {
+    // spec: plr-d10 lane WIZARD-F2 - a new plot's schedule choice is queued right behind its plot and cycle; refused PlotNotFound /
+    // CropCycleNotFound it is a verdict about those two, exactly like a log's (same payload fields: `plotId`, `cropCycleId`).
+    if (mutationType !== SyncMutationName.CreateDailyLog && mutationType !== SyncMutationName.AdoptSchedule) {
         return [];
     }
 
