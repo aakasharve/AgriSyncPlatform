@@ -18,8 +18,9 @@ import type { CompanyMis, MisNumber, MisDayPoint } from '@/hooks/useCompanyMis';
  *
  * CR-2c additions (the plan's "answer additions"): the understanding median
  * 6.5 rests on 684 scored farm-days, the spread's eleven buckets add up to
- * 684 and split 342 / 342 around 6 and 7; sync 118 refused of 3,482 sent
- * (3.4%); app versions known since 24 Oct 2026, after the range's first day.
+ * 684 and split 342 / 342 around 6 and 7; sync 118 sends refused and 3,364
+ * changes accepted (3.4% refused, E2/E10); app versions known since 24 Oct
+ * 2026, after the range's first day.
  *
  * Range: 17 Oct – 15 Nov 2026 (30 India days); previous: 17 Sep – 16 Oct 2026.
  * Counted at 2026-11-15T09:02:00Z = 15 Nov 2026, 2:32 pm India time.

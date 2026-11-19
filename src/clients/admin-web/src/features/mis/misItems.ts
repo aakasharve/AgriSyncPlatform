@@ -107,7 +107,7 @@ export const MIS_ITEMS: readonly MisItem[] = [
   { n: 49, key: 'quality.scoreSpread', section: 'quality', label: 'मला किती समजलं, score spread', kind: 'served', fields: ['quality.understandingSpread'], why: null, what: "How farm days spread across understanding scores from 0 to 10.", whyHere: "Shows whether poor understanding is rare or common, beyond the middle score." },
   { n: 50, key: 'quality.syncFailChart', section: 'quality', label: 'Sync failures', kind: 'served', fields: ['quality.syncRefusedChanges', 'quality.syncAcceptedChanges'], why: null, what: "Changes from phones the server refused or accepted, day by day.", whyHere: "Shows when upload problems started, to link them to a release or outage." },
   { n: 51, key: 'quality.crashByVersion', section: 'quality', label: 'Crashes by app version', kind: 'outside-source', fields: [], why: CRASH, what: "Crashes counted for each version of the app.", whyHere: "Shows whether a new release made the app less stable." },
-  { n: 52, key: 'quality.versionAdoption', section: 'quality', label: 'App version adoption', kind: 'served', fields: ['quality.appVersions', 'quality.appVersionsSeenSince'], why: null, what: "People seen in this period, each on the newest app version they used, phones and web apart.", whyHere: "Shows how many farmers still run an old version that lacks fixes." },
+  { n: 52, key: 'quality.versionAdoption', section: 'quality', label: 'App version adoption', kind: 'served', fields: ['quality.appVersions', 'quality.appVersionsSeenSince'], why: null, what: "People seen in this period, each counted once on the version they used last; Android app apart.", whyHere: "Shows how many farmers still run an old version that lacks fixes." },
   { n: 53, key: 'quality.headline', section: 'quality', label: 'Headline', kind: 'served', fields: ['quality.voiceRecordingsSavedPct', 'quality.logsCorrectedPct'], why: null, what: "One sentence joining voice recordings saved and entries corrected.", whyHere: "Gives in one line whether voice recording works for farmers." },
 
   /* Farms & geography, 9 */
@@ -177,6 +177,8 @@ const NOTHING_TO_DIVIDE_BY: Record<string, string> = {
   /* CR-2c E7: sync says it in its own words for both codes. */
   'quality.syncFailTile': NO_CHANGE_SENT,
   'quality.syncFailChart': NO_CHANGE_SENT,
+  /* CR-2c E11(5): a feature share, or the whole list, with nobody counted. */
+  'engagement.featureUse': 'Nobody did anything counted here in this period.',
 };
 
 /**
@@ -190,6 +192,17 @@ const NO_SAMPLES: Record<string, string> = {
   'quality.syncFailChart': NO_CHANGE_SENT,
 };
 
+/** CR-2c E11(5): no app-seen record by the period's end; the generic sentence stays for Compare. */
+const NOT_RECORDED: Record<string, string> = {
+  'quality.versionAdoption': 'App versions were not recorded yet in this period.',
+};
+
+const PER_ITEM: Record<string, Record<string, string>> = {
+  denominator_zero: NOTHING_TO_DIVIDE_BY,
+  no_samples: NO_SAMPLES,
+  not_recorded: NOT_RECORDED,
+};
+
 /**
  * The sentence shown after "Not measured:" for a server reason code. Unknown
  * codes fail closed.
@@ -199,9 +212,9 @@ export function reasonSentence(code: string | null): string {
   return UNKNOWN_REASON;
 }
 
-/** `reasonSentence` said for one item (B11, CR-2c E7); one argument would let `.map` pass an index here. */
+/** `reasonSentence` said for one item (B11, CR-2c E7, E11); one argument would let `.map` pass an index here. */
 export function reasonSentenceFor(code: string | null, itemKey: string | undefined): string {
-  const own = code === 'denominator_zero' ? NOTHING_TO_DIVIDE_BY : code === 'no_samples' ? NO_SAMPLES : null;
+  const own = code !== null && Object.prototype.hasOwnProperty.call(PER_ITEM, code) ? PER_ITEM[code] : null;
   if (own && itemKey && Object.prototype.hasOwnProperty.call(own, itemKey)) return own[itemKey];
   return reasonSentence(code);
 }

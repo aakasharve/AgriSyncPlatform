@@ -99,7 +99,7 @@ export const PLAN_ITEMS: readonly PlanItem[] = [
   { n: 44, section: qu, kind: 'S', fields: ['quality.transcriptionAvgMs', 'quality.transcriptionP95Ms'], why: null },
   { n: 45, section: qu, kind: 'S', fields: ['quality.transcriptionP95Ms', 'quality.transcriptionAvgMs'], why: null },
   { n: 46, section: qu, kind: 'S', fields: ['quality.logsCorrectedPct', 'quality.logsCorrected'], why: null },
-  // CR-2c 1c with E2: the share, and "N refused of M changes" (M = refused + accepted, the share's base).
+  // CR-2c 1c with E2/E10: the share, and two plain counts, "N sends refused" and "M changes accepted".
   { n: 47, section: qu, kind: 'S', fields: ['quality.syncRefusedPct', 'quality.syncRefusedChanges', 'quality.syncAcceptedChanges'], why: null },
   { n: 48, section: qu, kind: 'O', fields: [], why: S_CRASH },
   { n: 49, section: qu, kind: 'S', fields: ['quality.understandingSpread'], why: null },
