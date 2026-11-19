@@ -416,7 +416,7 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         rows.VerifiedUsers.Select(u => u.UserId).Should().BeEquivalentTo(new[] { U1, U2 }, "sign-ups are still read");
         rows.FpoScopes.Should().NotBeEmpty("step 3 still runs");
 
-        var result = await new GetCompanyMisHandler(reader, CompanyMisExclusions.None, new FixedClock(CountedAt))
+        var result = await new GetCompanyMisHandler(reader, sp.GetRequiredService<IAdminOpsRepository>(), CompanyMisExclusions.None, new FixedClock(CountedAt))
             .HandleAsync(new GetCompanyMisQuery(new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 13), Admin, true));
         result.Value!.Data.Overview.LogsRecorded.Current.Should().Be(new MisValueDto(null, "too_many_farms_for_live_count"));
         result.Value.Data.Overview.SignUps.Current.Should().Be(new MisValueDto(2m, null));
@@ -454,7 +454,7 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static GetCompanyMisHandler Handler(IServiceProvider sp) =>
-        new(sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt));
+        new(sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<IAdminOpsRepository>(), sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt));
 
     private static async Task<CompanyMisDto> LoadAsync(ServiceProvider provider, DateOnly from, DateOnly to)
     {

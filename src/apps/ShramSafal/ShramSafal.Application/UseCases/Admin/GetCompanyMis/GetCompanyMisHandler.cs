@@ -21,12 +21,19 @@ public sealed record GetCompanyMisQuery(DateOnly? From, DateOnly? To, Guid Actor
 /// after today in India time, at most <see cref="MaxRangeDays"/> days.</item>
 /// <item>The previous period has the same length and ends the day before From.</item>
 /// <item>The reader is asked for rows from 30 days before the previous period
-/// up to the moment of counting; <see cref="CompanyMisCalculator"/> counts.</item>
+/// up to the moment of counting, and (plan CR-2c, amendment E3) for the Company
+/// MIS additions from the start of the previous period, through its separate
+/// method <see cref="ICompanyMisReader.ReadForCompanyMisAsync"/>;
+/// <see cref="CompanyMisCalculator"/> counts.</item>
+/// <item>When people's app versions began to be recorded (#52) is asked of
+/// <see cref="IAdminOpsRepository.GetAppSeenStartAsync"/>, the app-versions
+/// page's own read (amendment E9).</item>
 /// </list>
 /// <para><b>A reader failure is not caught.</b> It escapes to the server's error
 /// path (500). An empty answer would read as "no farmers".</para>
 /// </summary>
-public sealed class GetCompanyMisHandler(ICompanyMisReader reader, CompanyMisExclusions exclusions, TimeProvider clock)
+public sealed class GetCompanyMisHandler(
+    ICompanyMisReader reader, IAdminOpsRepository opsRepo, CompanyMisExclusions exclusions, TimeProvider clock)
 {
     public const int MaxRangeDays = 180;
 
@@ -94,9 +101,12 @@ public sealed class GetCompanyMisHandler(ICompanyMisReader reader, CompanyMisExc
         var previousTo = from.AddDays(-1);
         var previousFrom = previousTo.AddDays(-(days - 1));
 
-        var sinceUtc = IstDayStartUtc(previousFrom).AddDays(-30);
+        var additionsSinceUtc = IstDayStartUtc(previousFrom);
+        var sinceUtc = additionsSinceUtc.AddDays(-30);
 
-        var rows = await reader.ReadAsync(query.ActorId, sinceUtc, countedAtUtc, exclusions.UserIds, ct);
+        var rows = await reader.ReadForCompanyMisAsync(
+            query.ActorId, sinceUtc, additionsSinceUtc, countedAtUtc, exclusions.UserIds, ct);
+        rows = rows with { AppSeenStartUtc = await opsRepo.GetAppSeenStartAsync(ct) };
 
         var data = CompanyMisCalculator.Compute(
             rows, exclusions, from, to, previousFrom, previousTo, countedAtUtc);

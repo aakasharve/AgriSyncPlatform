@@ -24,6 +24,9 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// <item>Above the live-count ceiling (amendment A1) no per-farm row is read.</item>
 /// <item>FPO scopes (no row-level security) on the scoped context.</item>
 /// <item>OTP-verified people through the analytics connection.</item>
+/// <item>Plan CR-2c, only for <see cref="ReadForCompanyMisAsync"/> (amendment E3):
+/// the Company MIS additions, inside the same per-farm scope for farm rows, and
+/// the non-farm reads (<c>app.seen</c>) through the analytics connection.</item>
 /// </list>
 /// Every query is bounded strictly before the counting instant.
 /// </summary>
@@ -55,12 +58,42 @@ public sealed class CompanyMisReader : ICompanyMisReader
         _maxFarmsForLiveCount = maxFarmsForLiveCount;
     }
 
-    public async Task<CompanyMisRows> ReadAsync(
+    public Task<CompanyMisRows> ReadAsync(
         Guid adminUserId,
         DateTime sinceUtc,
         DateTime countedAtUtc,
         IReadOnlySet<Guid> excludedUserIds,
+        CancellationToken ct = default) =>
+        ReadCoreAsync(adminUserId, sinceUtc, additionsSinceUtc: null, countedAtUtc, excludedUserIds, ct);
+
+    public Task<CompanyMisRows> ReadForCompanyMisAsync(
+        Guid adminUserId,
+        DateTime sinceUtc,
+        DateTime additionsSinceUtc,
+        DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds,
         CancellationToken ct = default)
+    {
+        if (additionsSinceUtc < sinceUtc || additionsSinceUtc > countedAtUtc)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(additionsSinceUtc), "The additions start must lie between sinceUtc and countedAtUtc.");
+        }
+
+        return ReadCoreAsync(adminUserId, sinceUtc, additionsSinceUtc, countedAtUtc, excludedUserIds, ct);
+    }
+
+    /// <summary>
+    /// The one pass. <paramref name="additionsSinceUtc"/> null: exactly the CR-2a read. Otherwise the Company MIS
+    /// additions are read too (plan CR-2c), from that instant up to the counting instant.
+    /// </summary>
+    private async Task<CompanyMisRows> ReadCoreAsync(
+        Guid adminUserId,
+        DateTime sinceUtc,
+        DateTime? additionsSinceUtc,
+        DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(excludedUserIds);
 
@@ -129,6 +162,14 @@ public sealed class CompanyMisReader : ICompanyMisReader
         // Step 4: OTP-verified people, through the analytics connection.
         var verifiedUsers = await ReadVerifiedUsersAsync(sinceUtc, countedAtUtc, ct);
 
+        // Step 5 (CR-2c, Company MIS only): the non-farm additions, through the analytics connection. They run
+        // whatever the farm list said: they are not farm rows.
+        IReadOnlyList<MisAppSeenRow> appSeen = [];
+        if (additionsSinceUtc is { } additionsSince)
+        {
+            appSeen = await ReadAppSeenAsync(additionsSince, countedAtUtc, ct);
+        }
+
         return new CompanyMisRows(
             FarmsListed: keys.Count,
             FarmsNotReadable: notReadable,
@@ -139,7 +180,10 @@ public sealed class CompanyMisReader : ICompanyMisReader
             VoiceJobs: voiceJobs,
             VerifiedUsers: verifiedUsers,
             FpoScopes: fpoScopes.Select(s => new MisFpoScopeRow(s.FarmId, s.Name, s.GrantedAtUtc)).ToList(),
-            LiveCountSkipped: liveCountSkipped);
+            LiveCountSkipped: liveCountSkipped)
+        {
+            AppSeen = appSeen,
+        };
     }
 
     /// <summary>Runs inside the farm's own scope. Null when the farm row does not come back.</summary>
@@ -249,6 +293,56 @@ public sealed class CompanyMisReader : ICompanyMisReader
             }
 
             return users;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// CR-2c #52. The <c>app.seen</c> rows the SERVER wrote (no actor, role <c>system</c>: the same filter as the
+    /// app-versions page, <c>AdminOpsRepository.GetAppSeenAsync</c>, amendment E9), with the platform the server
+    /// stamped. A row whose person is not an id, or that names no version, cannot be counted on any version and is
+    /// skipped, as on that page. Every person is read; test accounts are left out by the calculator.
+    /// </summary>
+    private async Task<IReadOnlyList<MisAppSeenRow>> ReadAppSeenAsync(
+        DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+    {
+        var rows = new List<MisAppSeenRow>();
+        var conn = _analytics.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT
+                    props->>'personId'   AS person_id,
+                    props->>'appVersion' AS app_version,
+                    props->>'platform'   AS platform,
+                    occurred_at_utc
+                FROM analytics.events
+                WHERE event_type = 'app.seen'
+                  AND actor_user_id IS NULL
+                  AND actor_role = 'system'
+                  AND occurred_at_utc >= @since
+                  AND occurred_at_utc < @counted
+                """;
+            AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
+            AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                if (r.IsDBNull(0) || !Guid.TryParse(r.GetString(0), out var personId)) continue;
+                if (r.IsDBNull(1) || string.IsNullOrWhiteSpace(r.GetString(1))) continue;
+
+                rows.Add(new MisAppSeenRow(
+                    personId,
+                    r.GetString(1),
+                    DateTime.SpecifyKind(r.GetDateTime(3), DateTimeKind.Utc),
+                    r.IsDBNull(2) ? null : r.GetString(2)));
+            }
+
+            return rows;
         }
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }

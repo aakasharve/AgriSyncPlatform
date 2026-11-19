@@ -28,7 +28,8 @@ public sealed record MisRangeDto(DateOnly From, DateOnly To, int Days);
 /// <summary>
 /// Value == null exactly when NotMeasuredReason != null. Reasons:
 /// "denominator_zero", "no_complete_window", "farm_list_unreadable",
-/// "no_samples", "too_many_farms_for_live_count".
+/// "no_samples", "too_many_farms_for_live_count"; plan CR-2c adds "not_recorded"
+/// (nothing records this yet, or not for the days asked about).
 /// </summary>
 public sealed record MisValueDto(decimal? Value, string? NotMeasuredReason);
 
@@ -86,13 +87,20 @@ public sealed record MisRetentionDto(
     MisNumberDto QuietFarms14To29,
     IReadOnlyList<MisCurvePointDto> PreviousCurve);
 
+/// <summary>
+/// Plan CR-2c: AppVersions (#52) is the current period only; AppVersionsSeenSince is the India day of
+/// the first app.seen row the server wrote (null: none), so a period that starts earlier can say from
+/// when people are known.
+/// </summary>
 public sealed record MisQualityDto(
     MisNumberDto VoiceRecordings,
     MisNumberDto VoiceRecordingsSavedPct,
     MisNumberDto TranscriptionAvgMs,
     MisNumberDto TranscriptionP95Ms,
     MisNumberDto LogsCorrected,
-    MisNumberDto LogsCorrectedPct);
+    MisNumberDto LogsCorrectedPct,
+    MisListDto<MisVersionShareDto> AppVersions,
+    DateOnly? AppVersionsSeenSince);
 
 public sealed record MisFarmsDto(
     MisNumberDto ActiveFarms,
@@ -126,3 +134,18 @@ public sealed record MisCurvePointDto(int Day, decimal? ActivePct, int Eligible)
 public sealed record MisFpoRowDto(string OrganizationName, int Farms);
 
 public sealed record MisAcresPointDto(DateOnly Day, decimal Acres);
+
+// ---- plan CR-2c (the answer additions) ----
+
+/// <summary>
+/// A list for the current period. NotMeasuredReason != null means the list could not be counted
+/// (Items is then empty); an empty list with no reason is a real "none in this period".
+/// </summary>
+public sealed record MisListDto<T>(IReadOnlyList<T> Items, string? NotMeasuredReason);
+
+/// <summary>
+/// #52: people seen in the period, each once, on the version of their most recent app.seen row.
+/// Platform is "android" (the native Android app) or "not_android" (no platform recorded: a browser,
+/// or an app build that does not say). SharePct = People of all people counted, one decimal.
+/// </summary>
+public sealed record MisVersionShareDto(string Version, string Platform, int People, decimal SharePct);

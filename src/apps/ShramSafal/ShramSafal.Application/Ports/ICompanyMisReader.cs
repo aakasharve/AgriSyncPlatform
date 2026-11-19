@@ -19,6 +19,22 @@ public interface ICompanyMisReader
     Task<CompanyMisRows> ReadAsync(
         Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Plan CR-2c, amendment E3: everything <see cref="ReadAsync"/> reads, plus the
+    /// Company MIS additions (the members of <see cref="CompanyMisRows"/> declared in
+    /// its body), in the same single pass over the farms (farm keys listed once, one
+    /// audit row). Called ONLY by the Company MIS handler, so the voice check and the
+    /// silent-farms list, which call <see cref="ReadAsync"/>, pay nothing for them.
+    /// </summary>
+    /// <param name="additionsSinceUtc">
+    /// Earliest instant the additions need: 00:00 India time of the previous period's
+    /// first day (amendment E6). Not before <paramref name="sinceUtc"/> and not after
+    /// <paramref name="countedAtUtc"/>.
+    /// </param>
+    Task<CompanyMisRows> ReadForCompanyMisAsync(
+        Guid adminUserId, DateTime sinceUtc, DateTime additionsSinceUtc, DateTime countedAtUtc,
+        IReadOnlySet<Guid> excludedUserIds, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -38,7 +54,24 @@ public sealed record CompanyMisRows(
     IReadOnlyList<MisVoiceJobRow> VoiceJobs,
     IReadOnlyList<MisUserRow> VerifiedUsers,
     IReadOnlyList<MisFpoScopeRow> FpoScopes,
-    bool LiveCountSkipped = false);
+    bool LiveCountSkipped = false)
+{
+    // ---- Company MIS additions (plan CR-2c). Read only by ICompanyMisReader.ReadForCompanyMisAsync;
+    // amendment E3: empty by default, so ReadAsync and its callers pay nothing for them.
+
+    /// <summary>
+    /// #52: <c>app.seen</c> rows the server itself wrote (no actor, role <c>system</c>), from the start of the
+    /// previous period up to the counting instant. Every person, test accounts included; the calculator leaves
+    /// test accounts out.
+    /// </summary>
+    public IReadOnlyList<MisAppSeenRow> AppSeen { get; init; } = [];
+
+    /// <summary>
+    /// #52: when the first <c>app.seen</c> row the server wrote was written (all time); null when there is none.
+    /// Set by the handler from <c>IAdminOpsRepository.GetAppSeenStartAsync</c> (amendment E9).
+    /// </summary>
+    public DateTime? AppSeenStartUtc { get; init; }
+}
 
 /// <summary>
 /// LastEntryUtc and FirstEntryUtc are the farm's latest and earliest entry of all
@@ -64,3 +97,10 @@ public sealed record MisVoiceJobRow(
 public sealed record MisUserRow(Guid UserId, DateTime PhoneVerifiedAtUtc);
 
 public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTime GrantedAtUtc);
+
+/// <summary>
+/// One <c>app.seen</c> row (plan CR-2c, #52). Platform is <c>props-&gt;&gt;'platform'</c> as stored: the server
+/// writes the literal <c>android</c> for the native Android app and no key otherwise, so null means "not the
+/// Android app" (D-141's default, amendment E9).
+/// </summary>
+public sealed record MisAppSeenRow(Guid PersonId, string AppVersion, DateTime SeenAtUtc, string? Platform);

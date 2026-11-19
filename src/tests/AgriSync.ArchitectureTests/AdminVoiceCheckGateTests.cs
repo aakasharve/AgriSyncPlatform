@@ -196,6 +196,12 @@ public sealed class AdminVoiceCheckGateTests
         public DateTime? ReaderSinceUtc { get; private set; }
         public DateTime? ReaderCountedAtUtc { get; private set; }
 
+        // Compile-only (plan CR-2c, E3): the Company MIS method reads as ReadAsync here.
+        public Task<CompanyMisRows> ReadForCompanyMisAsync(
+            Guid adminUserId, DateTime sinceUtc, DateTime additionsSinceUtc, DateTime countedAtUtc,
+            IReadOnlySet<Guid> excludedUserIds, CancellationToken ct = default) =>
+            ReadAsync(adminUserId, sinceUtc, countedAtUtc, excludedUserIds, ct);
+
         public Task<CompanyMisRows> ReadAsync(
             Guid adminUserId, DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds,
             CancellationToken ct = default)

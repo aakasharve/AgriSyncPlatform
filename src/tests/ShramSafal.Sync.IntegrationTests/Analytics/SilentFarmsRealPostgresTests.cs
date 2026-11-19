@@ -481,7 +481,8 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         await using var scope = AdminScope(provider);
         var sp = scope.ServiceProvider;
         var result = await new GetCompanyMisHandler(
-                sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt))
+                sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<IAdminOpsRepository>(),
+                sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt))
             .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformAdmin: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         return result.Value!.Data;

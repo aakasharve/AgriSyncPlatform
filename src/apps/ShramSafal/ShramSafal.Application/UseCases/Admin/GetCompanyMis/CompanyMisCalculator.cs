@@ -1,6 +1,7 @@
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetAppVersions;
 
 namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
@@ -34,7 +35,16 @@ public static class CompanyMisCalculator
     public const string NoSamples = "no_samples";
     public const string TooManyFarmsForLiveCount = "too_many_farms_for_live_count";
 
+    /// <summary>Plan CR-2c: nothing records this yet, or not for the days asked about.</summary>
+    public const string NotRecorded = "not_recorded";
+
     public const string UnknownRole = "Unknown";
+
+    /// <summary>Plan CR-2c, #52: an app.seen row whose platform is the native Android app.</summary>
+    public const string PlatformAndroid = "android";
+
+    /// <summary>Plan CR-2c, #52 (amendment E9): no platform recorded reads "not the Android app".</summary>
+    public const string PlatformNotAndroid = "not_android";
 
     /// <summary>Amendment A11: the cohort grid's days after day 0.</summary>
     private static readonly int[] CohortGridDays = [1, 7, 14, 30];
@@ -187,7 +197,10 @@ public static class CompanyMisCalculator
             LogsCorrected: Farm(p => Count(data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1)), DayForm.During),
             LogsCorrectedPct: Farm(p => Pct(
                 data.EntriesIn(p.From, p.To).Count(e => e.ContentVersion > 1),
-                data.EntriesIn(p.From, p.To).Count()), DayForm.During));
+                data.EntriesIn(p.From, p.To).Count()), DayForm.During),
+            // CR-2c #52: not farm-derived, so the farm block does not reach it.
+            AppVersions: AppVersions(rows, exclusions.UserIds, current, countedAtUtc),
+            AppVersionsSeenSince: AppSeenSince(rows));
 
         var farms = new MisFarmsDto(
             ActiveFarms: activeFarms,
@@ -516,6 +529,52 @@ public static class CompanyMisCalculator
         points.Reverse();
         return points;
     }
+
+    // ---- plan CR-2c additions ---------------------------------------------
+
+    private static DateOnly? AppSeenSince(CompanyMisRows rows) =>
+        rows.AppSeenStartUtc is { } first ? IstDay(first) : null;
+
+    /// <summary>
+    /// #52, app version adoption, the current period only. People seen by <c>app.seen</c> on an India day of the
+    /// period (test accounts left out), each once, on the version of their most recent row, by the same rule as the
+    /// app-versions page (<see cref="AppVersionRules"/>); phones (<see cref="PlatformAndroid"/>) are counted apart
+    /// from everything else (<see cref="PlatformNotAndroid"/>, D-141's default). SharePct is of all people counted.
+    /// Newest version first. Not measured (<see cref="NotRecorded"/>) when no app.seen row was written by the end of
+    /// the period: an empty list would read as "nobody", while nothing was being recorded then. Not farm-derived.
+    /// </summary>
+    private static MisListDto<MisVersionShareDto> AppVersions(
+        CompanyMisRows rows, IReadOnlySet<Guid> excludedUsers, Period p, DateTime countedAtUtc)
+    {
+        if (AppSeenSince(rows) is not { } since || since > p.To)
+        {
+            return new MisListDto<MisVersionShareDto>([], NotRecorded);
+        }
+
+        var inPeriod = rows.AppSeen.Where(r =>
+            r.SeenAtUtc < countedAtUtc
+            && !excludedUsers.Contains(r.PersonId)
+            && IstDay(r.SeenAtUtc) >= p.From
+            && IstDay(r.SeenAtUtc) <= p.To);
+
+        var people = AppVersionRules.LatestPerPerson(inPeriod, r => r.PersonId, r => r.SeenAtUtc, r => r.AppVersion);
+
+        var items = people
+            .GroupBy(r => (r.AppVersion, Platform: PlatformOf(r.Platform)))
+            .Select(g => new MisVersionShareDto(
+                g.Key.AppVersion, g.Key.Platform, g.Count(), PctValue(g.Count(), people.Count)))
+            .OrderByDescending(v => v.Version, AppVersionRules.VersionOrder)
+            .ThenByDescending(v => v.Version, StringComparer.Ordinal)
+            .ThenBy(v => v.Platform == PlatformAndroid ? 0 : 1)
+            .ToList();
+
+        return new MisListDto<MisVersionShareDto>(items, null);
+    }
+
+    private static string PlatformOf(string? platform) =>
+        string.Equals(platform?.Trim(), PlatformAndroid, StringComparison.OrdinalIgnoreCase)
+            ? PlatformAndroid
+            : PlatformNotAndroid;
 
     // ---- types --------------------------------------------------------------
 
