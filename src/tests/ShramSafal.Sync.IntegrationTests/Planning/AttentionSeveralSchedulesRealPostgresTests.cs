@@ -790,6 +790,109 @@ public sealed class AttentionSeveralSchedulesRealPostgresTests(ITestOutputHelper
         (await MoveAuditsAsync()).Should().Be(0, "no audit row");
     }
 
+    // ---- lane POSTPONE-B (founder pick B, round 5 question 4): count, limit of two, honest lateness ----------------
+
+    [Fact]
+    public async Task A_third_postpone_of_the_same_step_is_refused_with_words_and_writes_nothing()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var (_, _, u, sub) = await OneScheduleAsync(40);
+        var spray = ActivityOf(u, Fungicide);
+        var original = DayOf(40, 39);
+
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 41))).Status.Should().Be(HttpStatusCode.OK, "first postpone");
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 42))).Status.Should().Be(HttpStatusCode.OK, "second postpone");
+        (await MoveRowsAsync(sub)).Should().Be(2);
+        (await MoveAuditsAsync()).Should().Be(2, "each postpone wrote its one audit row, unchanged");
+
+        var third = await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 43));
+
+        third.Status.Should().Be(HttpStatusCode.BadRequest);
+        third.Body.Should().Contain("ScheduleStepPostponeLimit");
+        (await MoveRowsAsync(sub)).Should().Be(2, "the refusal wrote nothing");
+        (await MoveAuditsAsync()).Should().Be(2, "...and no audit row");
+
+        // a re-sent request for the day the step already has is still the same request: 200, nothing written
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 42))).Status.Should().Be(HttpStatusCode.OK);
+        (await MoveRowsAsync(sub)).Should().Be(2);
+
+        // the limit is the STEP's: the next spray (its own original day) still has its two
+        (await MoveAsync(Owner, FarmA, sub, spray, DayOf(40, 44), DayOf(40, 45))).Status.Should().Be(HttpStatusCode.OK);
+        (await MoveRowsAsync(sub)).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task The_board_carries_the_count_and_a_postponed_step_still_counts_late_for_the_plot()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var (plot, _, u, sub) = await OneScheduleAsync(40);
+        var spray = ActivityOf(u, Fungicide);
+        var original = DayOf(40, 39); // yesterday: one day late, with no record
+
+        var before = await BoardAsync(Owner);
+        var baselineCard = CardOf(before, plot);
+        var baseline = baselineCard.GetProperty("overdueTaskCount").GetInt32();
+        var baselineRank = baselineCard.GetProperty("rank").GetRawText();
+        var baselineHealth = baselineCard.TryGetProperty("latestHealthScore", out var h0) ? h0.GetRawText() : "null";
+        WorkOf(before, plot).Should().OnlyContain(w => Absent(w, "postponeCount"), "a step never postponed carries no count: its wire shape is what it was");
+
+        // First postpone, to today: the step comes back as "today, 0 days late" - with the count - and the plot is exactly as late as before.
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 40))).Status.Should().Be(HttpStatusCode.OK);
+        var afterOne = await BoardAsync(Owner);
+        var item = WorkOf(afterOne, plot).Single(w => NameOf(w) == Fungicide && DateOfItem(w, "originalDate") == original);
+        item.GetProperty("postponeCount").GetInt32().Should().Be(1);
+        item.GetProperty("daysLate").GetInt32().Should().Be(0);
+        CardOf(afterOne, plot).GetProperty("overdueTaskCount").GetInt32().Should().Be(baseline, "the original day still counts as late");
+
+        // Second postpone, to the day after tomorrow: out of the list, still late for the plot, count 2 when it returns.
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 42))).Status.Should().Be(HttpStatusCode.OK);
+        var afterTwo = await BoardAsync(Owner);
+        WorkOf(afterTwo, plot).Should().NotContain(w => NameOf(w) == Fungicide && DateOfItem(w, "originalDate") == original, "snoozed: not on the list");
+        var cardTwo = CardOf(afterTwo, plot);
+        cardTwo.GetProperty("overdueTaskCount").GetInt32().Should().Be(baseline, "a postponed step never makes the plot look healthier");
+        cardTwo.GetProperty("rank").GetRawText().Should().Be(baselineRank);
+        (cardTwo.TryGetProperty("latestHealthScore", out var h2) ? h2.GetRawText() : "null").Should().Be(baselineHealth);
+
+        // The next step of the same work (not postponed) is untouched, and the planned-activity table was never written.
+        WorkOf(afterTwo, plot).Where(w => NameOf(w) == Fungicide).Should().OnlyContain(w => Absent(w, "postponeCount"));
+    }
+
+    [Fact]
+    public async Task A_step_postponed_to_the_future_whose_original_day_has_passed_still_ranks_the_plot_without_any_listed_item()
+    {
+        // Every due step of the plot is postponed out of the list: the plot must still read as late (the old board read it as clear).
+        await AssertAppRoleIsNotVacuousAsync();
+        var (plot, _, u, sub) = await OneScheduleAsync(40);
+        var spray = ActivityOf(u, Fungicide);
+        var baseline = CardOf(await BoardAsync(Owner), plot).GetProperty("overdueTaskCount").GetInt32();
+        baseline.Should().BeGreaterThan(0, "not vacuous: the plot is late before any postpone");
+
+        foreach (var original in new[] { DayOf(40, 34), DayOf(40, 39) })
+        {
+            (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 43))).Status.Should().Be(HttpStatusCode.OK);
+        }
+
+        var board = await BoardAsync(Owner);
+        WorkOf(board, plot).Should().NotContain(w => NameOf(w) == Fungicide, "both late sprays are snoozed");
+        CardOf(board, plot).GetProperty("overdueTaskCount").GetInt32().Should().Be(baseline);
+    }
+
+    [Fact]
+    public async Task A_postponed_step_that_is_then_recorded_leaves_the_plots_late_count()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var (plot, cycle, u, sub) = await OneScheduleAsync(40);
+        var spray = ActivityOf(u, Fungicide);
+        var original = DayOf(40, 39);
+        var baseline = CardOf(await BoardAsync(Owner), plot).GetProperty("overdueTaskCount").GetInt32();
+        (await MoveAsync(Owner, FarmA, sub, spray, original, DayOf(40, 42))).Status.Should().Be(HttpStatusCode.OK);
+
+        await RecordAsync(Owner, plot, cycle, DayOf(40, 40), Fungicide); // done on the day after its own day: inside the on-time window
+
+        var card = CardOf(await BoardAsync(Owner), plot);
+        card.GetProperty("overdueTaskCount").GetInt32().Should().BeLessThan(baseline, "recorded work still clears a postponed step");
+    }
+
     [Fact]
     public async Task LastSameWorkDate_never_names_a_record_outside_an_own_records_seats_reach()
     {

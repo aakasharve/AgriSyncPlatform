@@ -26,8 +26,9 @@ namespace ShramSafal.Application.UseCases.Planning.MoveScheduleStep;
 /// rule (<c>PlotScopeForbidden</c>).</para>
 ///
 /// <para><b>Refused with words, nothing written:</b> a subscription that is not Active; an activity that is not an activity of its schedule;
-/// an original day that is not one of that activity's <c>Expand</c> days; a new day before today (the farm's India day). A move to the day
-/// the step already has is accepted and writes nothing (a re-sent request is the same request).</para>
+/// an original day that is not one of that activity's <c>Expand</c> days; a new day before today (the farm's India day); a third move of
+/// the same step (<see cref="MaxPostpones"/>, lane POSTPONE-B). A move to the day the step already has is accepted and writes nothing
+/// (a re-sent request is the same request).</para>
 /// </summary>
 public sealed class MoveScheduleStepHandler(
     IShramSafalRepository repository,
@@ -41,6 +42,12 @@ public sealed class MoveScheduleStepHandler(
     /// itself asks the step (farm-local days), so a seat can never silence a reminder for ever (a typed 9999-12-31).
     /// </summary>
     public const int MaxDaysAhead = 90;
+
+    /// <summary>
+    /// spec: plr-d10 lane POSTPONE-B (founder pick B). A step is postponed at most this many times (its move rows); the next one is refused
+    /// (<see cref="ShramSafalErrors.ScheduleStepPostponeLimit"/>). The phone mirrors the number to draw "आता ठरवा"; the server is the rule.
+    /// </summary>
+    public const int MaxPostpones = 2;
 
     public async Task<Result> HandleAsync(MoveScheduleStepCommand command, CancellationToken ct = default)
     {
@@ -122,13 +129,23 @@ public sealed class MoveScheduleStepHandler(
             return Result.Failure(ShramSafalErrors.ScheduleStepMoveTooFar);
         }
 
-        var latest = (await moves.GetForSubscriptionsAsync([subscription.Id], ct))
+        var stepMoves = (await moves.GetForSubscriptionsAsync([subscription.Id], ct))
             .Where(m => m.TemplateActivityId == command.ActivityId && m.OriginalDate == command.OriginalDate)
+            .ToList();
+        var latest = stepMoves
             .OrderByDescending(m => m.MovedAtUtc)
             .FirstOrDefault();
         if ((latest?.NewDate ?? command.OriginalDate) == command.NewDate)
         {
             return Result.Success();
+        }
+
+        // spec: plr-d10 lane POSTPONE-B (founder pick B) - the step's own move rows ARE its postpone count. A third move is refused with words
+        // and nothing is written, so an old or stale phone cannot get past the limit the new phone draws. Asked AFTER the no-op above, so a
+        // re-sent request of a move that already stands is still the same request, and BEFORE any write.
+        if (stepMoves.Count >= MaxPostpones)
+        {
+            return Result.Failure(ShramSafalErrors.ScheduleStepPostponeLimit);
         }
 
         // The latest row wins by its time, so a row is always strictly later than the one it follows.

@@ -34,6 +34,9 @@ namespace ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 /// <param name="ActivityId">The schedule activity this step is (a move names it).</param>
 /// <param name="OriginalDate">The day the schedule itself asks the step (a move names it).</param>
 /// <param name="ScheduleDay">That day as the schedule counts it from its day 0 ("दिवस 34").</param>
+/// <param name="PostponeCount">Lane POSTPONE-B (founder pick B). How many times this step was postponed ("पुढे ठरवा"), counted from the step's
+/// own move rows; null when it never was (and for a planned-activity row, whose override keeps no count). Additive, at the END: an older phone
+/// never reads it, a newer phone reads its absence as "never postponed". The server also refuses a third postpone.</param>
 public sealed record ScheduledWorkItemDto(
     Guid PlannedActivityId,
     Guid FarmId,
@@ -53,7 +56,8 @@ public sealed record ScheduledWorkItemDto(
     string ReasonKey = ScheduledReasonKey.Late,
     Guid? ActivityId = null,
     DateOnly? OriginalDate = null,
-    int? ScheduleDay = null);
+    int? ScheduleDay = null,
+    int? PostponeCount = null);
 
 /// <summary>spec: plr-d10 lane ATT-W - the words of <see cref="ScheduledWorkItemDto.ReasonKey"/> (stable keys, never shown as they are).</summary>
 public static class ScheduledReasonKey

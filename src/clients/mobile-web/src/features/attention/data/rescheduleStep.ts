@@ -13,6 +13,29 @@
 import { apiFetch } from '../../../infrastructure/api/apiFetch';
 import { markRescheduled, type ScheduledWorkItem } from '../scheduledWork';
 
+/**
+ * spec: plr-d10 lane POSTPONE-B (founder pick B) - the server refused a THIRD postpone of the same step (`ScheduleStepPostponeLimit`). Not a
+ * failure to retry: the row turns to "आता ठरवा" and says so in plain words.
+ */
+export class PostponeLimitError extends Error {
+    constructor() {
+        super('reschedule refused: the step was already postponed twice');
+        this.name = 'PostponeLimitError';
+    }
+}
+
+/** Is this refusal the postpone limit? Reads the server's error code from the body; anything unreadable is "no" (the generic failure line). */
+async function refusedForLimit(response: Response): Promise<boolean> {
+    if (response.status !== 400) return false;
+    try {
+        const body: unknown = await response.json();
+        const code = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+        return typeof code === 'string' && code.includes('ScheduleStepPostponeLimit');
+    } catch {
+        return false;
+    }
+}
+
 /** The reason the server keeps with the move. PROPOSED (Marathi) */
 export const RESCHEDULE_REASON_MR = 'लक्ष द्या: शेतकऱ्याने पुढे ठरवले';
 
@@ -34,7 +57,10 @@ export async function rescheduleStep(
                 newDate: newDateKey,
             }),
         });
-        if (!moved.ok) throw new Error(`reschedule failed: HTTP ${moved.status}`);
+        if (!moved.ok) {
+            if (await refusedForLimit(moved)) throw new PostponeLimitError();
+            throw new Error(`reschedule failed: HTTP ${moved.status}`);
+        }
         markRescheduled(step.plannedActivityId);
         return;
     }
