@@ -354,6 +354,19 @@ describe('the nine items drawn (CR-2c Task 2)', () => {
     expect(text(v.getByTestId('kpi-quality.syncFailTile-value'))).toContain(SYNC_FROM);
     expect(text(itemOf(v.container, 'quality.syncFailChart'))).toContain(SYNC_FROM);
     expect(text(v.container)).not.toContain(PLAN_REASONS.not_recorded);
+    v.unmount();
+    // The shape the server sends (E13 re-review): accepted changes counted, refusals not recorded yet.
+    const accepted = Array<number>(30).fill(4);
+    const w = quality(misFixture({
+      quality: {
+        syncRefusedPct: notMeasured('not_recorded'),
+        syncRefusedChanges: notMeasured('not_recorded'),
+        syncAcceptedChanges: num(120, 110, accepted, accepted),
+      },
+    }));
+    expect(text(w.getByTestId('kpi-quality.syncFailTile-value'))).toContain(SYNC_FROM);
+    expect(text(itemOf(w.container, 'quality.syncFailChart'))).toContain(SYNC_FROM);
+    expect(text(w.container)).not.toContain(PLAN_REASONS.not_recorded);
   });
 
   it('An_unmeasured_feature_row_draws_no_bar', () => {
