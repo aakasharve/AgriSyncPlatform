@@ -14,9 +14,9 @@
  * The three versions the founder asked to compare at phone size (D-4; defined in
  * `ALIGN-PLANNING-ATTENTION-2026-10-27.md` §5.3 step 4), same farm data:
  *   V1 — all open, nothing remembered (the TEST build before this change);
- *   V2 — the founder's preferred start: शेताची स्थिती, करायची कामे, प्लॉटनिहाय काम open; notes, calendar and
- *        money folded (their headers keep a count / a line); folds and order remembered. THE DEFAULT, and the
- *        only version a release build ever runs;
+ *   V2 — the start (changed 2026-11-19, founder: the page is for revisiting a day): शेताची स्थिती, कामाचं कॅलेंडर (the day chooser),
+ *        करायची कामे (his D-4 choice, kept), प्लॉटनिहाय काम open; notes and money folded (their headers keep a count / a line); folds and order
+ *        remembered. THE DEFAULT, and the only version a release build ever runs;
  *   V3 — LIVE's way: remembered folds and order, everything open at first except the calendar and the money,
  *        which open one at a time (opening one folds the other), as LIVE's two accordions did.
  * शेताची स्थिती stays first in every version: it picks the crop and plot every section below reads (LIVE kept
@@ -33,14 +33,15 @@ export const DEFAULT_LAYOUT: LayoutVersion = 'v2';
 /** Always first, never moved. */
 export const FIXED_FIRST: SectionId = 'status';
 /** The sections that can be moved, in their first-use order. */
-export const DEFAULT_ORDER: readonly SectionId[] = ['todo', 'day', 'notes', 'calendar', 'cost'];
+// Founder 2026-11-19 (the page is for REVISITING a day): the calendar chooses the day first, then that day's plots, then the notes; the to-do list and the money wait folded.
+export const DEFAULT_ORDER: readonly SectionId[] = ['calendar', 'day', 'notes', 'todo', 'cost'];
 
 const MOVABLE = new Set<SectionId>(DEFAULT_ORDER);
 
 /** Opened together in V3, one at a time (LIVE's calendar / money accordions). */
 export const ONE_AT_A_TIME: readonly SectionId[] = ['calendar', 'cost'];
 
-const V2_FIRST_OPEN = new Set<SectionId>(['status', 'todo', 'day']);
+const V2_FIRST_OPEN = new Set<SectionId>(['status', 'calendar', 'todo', 'day']);
 
 export function firstOpen(version: LayoutVersion, id: SectionId): boolean {
     if (version === 'v1') return true;
@@ -93,7 +94,7 @@ export function orderFromLegacy(value: unknown): SectionId[] | null {
     const notes = value.indexOf('notes');
     const day = value.indexOf('daily-logs');
     if (notes < 0 || day < 0 || notes > day) return null;
-    return ['todo', 'notes', 'day', 'calendar', 'cost'];
+    return ['calendar', 'notes', 'day', 'todo', 'cost']; // the new default order, with his LIVE choice (notes before the day) applied
 }
 
 /** Is the section open: his choice here, else his LIVE choice, else the version's first-use state. */

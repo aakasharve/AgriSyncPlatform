@@ -10,9 +10,9 @@ import { DEFAULT_ORDER, firstOpen, foldsOf, isOpen, moved, orderFromLegacy, orde
 const ALL: SectionId[] = ['status', 'todo', 'day', 'notes', 'calendar', 'cost'];
 
 describe('sectionLayout (D-4)', () => {
-    it('first use: V1 all open; V2 the founder\'s three open; V3 all but calendar and money', () => {
+    it('first use: V1 all open; V2 the picker, the to-dos, the day and the calendar open; V3 all but calendar and money', () => {
         expect(ALL.filter(id => firstOpen('v1', id))).toEqual(ALL);
-        expect(ALL.filter(id => firstOpen('v2', id))).toEqual(['status', 'todo', 'day']);
+        expect(ALL.filter(id => firstOpen('v2', id))).toEqual(['status', 'todo', 'day', 'calendar']);
         expect(ALL.filter(id => firstOpen('v3', id))).toEqual(['status', 'todo', 'day', 'notes']);
     });
 
@@ -30,12 +30,12 @@ describe('sectionLayout (D-4)', () => {
     });
 
     it('order: a stored order is made whole, LIVE\'s "notes before the day" is kept, a move stops at the edge', () => {
-        expect(orderOf(['cost', 'nope', 'cost'])).toEqual(['cost', 'todo', 'day', 'notes', 'calendar']);
+        expect(orderOf(['cost', 'nope', 'cost'])).toEqual(['cost', 'calendar', 'day', 'notes', 'todo']);
         expect(orderOf('x')).toBeNull();
-        expect(orderFromLegacy(['farm-status', 'notes', 'daily-logs'])).toEqual(['todo', 'notes', 'day', 'calendar', 'cost']);
+        expect(orderFromLegacy(['farm-status', 'notes', 'daily-logs'])).toEqual(['calendar', 'notes', 'day', 'todo', 'cost']);
         expect(orderFromLegacy(['farm-status', 'daily-logs', 'notes'])).toBeNull();
-        expect(moved(DEFAULT_ORDER, 'todo', -1)).toEqual([...DEFAULT_ORDER]);
-        expect(moved(DEFAULT_ORDER, 'cost', -1)).toEqual(['todo', 'day', 'notes', 'cost', 'calendar']);
+        expect(moved(DEFAULT_ORDER, 'calendar', -1)).toEqual([...DEFAULT_ORDER]);
+        expect(moved(DEFAULT_ORDER, 'cost', -1)).toEqual(['calendar', 'day', 'notes', 'cost', 'todo']);
     });
 
     it('only known sections and real booleans are read back', () => {
