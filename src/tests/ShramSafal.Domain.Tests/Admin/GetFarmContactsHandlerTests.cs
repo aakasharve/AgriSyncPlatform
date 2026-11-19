@@ -171,9 +171,6 @@ public sealed class GetFarmContactsHandlerTests
             return Task.FromResult<IReadOnlyList<FarmContactDto>>(answer);
         }
 
-        public Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             throw new NotSupportedException();

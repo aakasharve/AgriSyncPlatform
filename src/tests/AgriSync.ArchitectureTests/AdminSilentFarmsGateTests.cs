@@ -255,9 +255,6 @@ public sealed class AdminSilentFarmsGateTests
             OwnerAccountId ownerAccountId, DateTime asOfUtc, CancellationToken ct = default) =>
             throw new NotSupportedException("the silent list reads the subscription only");
 
-        public Task<WvfdHistoryDto> GetWvfdHistoryAsync(int weeks, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             throw new NotSupportedException();

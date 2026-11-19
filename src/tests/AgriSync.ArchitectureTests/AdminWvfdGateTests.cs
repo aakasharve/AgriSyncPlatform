@@ -90,6 +90,38 @@ public sealed class AdminWvfdGateTests
         doc.RootElement.GetProperty("meta").GetProperty("source").GetString().Should().Be("live");
     }
 
+    /// <summary>
+    /// C35 (3). The handler repeats the platform check, so a non-platform admin gets the same 403 body whether or
+    /// not the route's own check is there; the response cannot tell. So the route's source is pinned: the module
+    /// check, then the platform check, then the handler call, in that order, inside the wvfd route.
+    /// </summary>
+    [Fact]
+    public void The_wvfd_route_checks_platform_owner_before_calling_the_handler()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "src", "apps", "ShramSafal", "ShramSafal.Api", "Endpoints", "AdminEndpoints.cs")))
+        {
+            dir = dir.Parent;
+        }
+
+        dir.Should().NotBeNull("the repository root holds src/apps/ShramSafal/ShramSafal.Api/Endpoints/AdminEndpoints.cs");
+        var source = File.ReadAllText(Path.Combine(dir!.FullName, "src", "apps", "ShramSafal", "ShramSafal.Api", "Endpoints", "AdminEndpoints.cs"));
+
+        var start = source.IndexOf("MapGet(\"/admin/metrics/wvfd\"", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(-1);
+        var end = source.IndexOf(".WithName(\"GetAdminWvfd\")", start, StringComparison.Ordinal);
+        end.Should().BeGreaterThan(start);
+        var route = source[start..end];
+
+        var module = route.IndexOf("RequireReadAsync(http, scope, ModuleKey.MetricsNsm)", StringComparison.Ordinal);
+        var platform = route.IndexOf("RequirePlatformAdminAsync(http, scope)", StringComparison.Ordinal);
+        var call = route.IndexOf("handler.HandleAsync", StringComparison.Ordinal);
+
+        module.Should().BeGreaterThan(-1);
+        platform.Should().BeGreaterThan(module, "the route's own platform-owner check follows the module check");
+        call.Should().BeGreaterThan(platform, "and runs before the handler is called");
+    }
+
     [Fact]
     public void The_wvfd_route_is_not_cached()
     {

@@ -681,6 +681,77 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         (await CrossFarmAuditRowsAsync(Admin)).Should().Be(0, "refused at once: nothing was read, no audited factory opened");
     }
 
+    /// <summary>C35 (1): a farm owned by a test account is on All Farms, but never "No entry last week".</summary>
+    [SkippableFact]
+    public async Task A_test_account_farm_row_says_test_account_not_no_entry()
+    {
+        await GuardAsync();
+
+        await using (var db = await SuperuserAsync())
+        {
+            await SeedCheckedDayAsync(db, Fm(1), Ist(11, 9, 10));
+            await SeedFarmRowAsync(db, Fm(2), owner: TestAccount);
+            await SeedCheckedDayAsync(db, Fm(2), Ist(11, 9, 10), seedFarm: false);
+        }
+
+        var provider = BuildProvider(new[] { TestAccount });
+        await using var scope = AdminScope(provider);
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+
+        result.IsSuccess.Should().BeTrue();
+        var items = result.Value!.Data.Items;
+        items.Should().HaveCount(2);
+        var test = items.Single(f => f.FarmId == Fm(2));
+        test.ConfirmedDaysNotMeasuredReason.Should().Be("test_account");
+        test.Wvfd7d.Should().BeNull();
+        test.SelfOnlyDays7d.Should().BeNull();
+        test.EngagementTier.Should().BeNull();
+        var real = items.Single(f => f.FarmId == Fm(1));
+        real.ConfirmedDaysNotMeasuredReason.Should().BeNull();
+        real.Wvfd7d.Should().Be(1);
+    }
+
+    /// <summary>
+    /// C35 (2): a farm the admin open lists but whose own row does not come back under its row-level security (the
+    /// reader's <c>notReadable++</c> on a null farm). Built by narrowing the farms policy in the scratch database so
+    /// one named farm is hidden from the farm scope; the admin open still lists it.
+    /// </summary>
+    [SkippableFact]
+    public async Task A_farm_whose_own_row_does_not_come_back_is_not_measured()
+    {
+        await GuardAsync();
+
+        await using (var db = await SuperuserAsync())
+        {
+            await SeedCheckedDayAsync(db, Fm(1), Ist(11, 9, 10));
+            await SeedFarmRowAsync(db, Fm(2));
+            await SeedEntryRowAsync(db, Fm(2), Ist(11, 9, 10));
+        }
+
+        var provider = BuildProvider();
+
+        // The control: before the policy is narrowed, both routes measure.
+        (await HistoryAsync(provider)).NotMeasuredReason.Should().BeNull();
+
+        await ExecAsSuperuserAsync($"""
+            ALTER POLICY p_tenant_farms ON ssf.farms
+            USING ("Id" = current_setting('agrisync.farm_id', true)::uuid AND "Id" <> '{Fm(2)}'::uuid);
+            """);
+
+        var dto = await HistoryAsync(provider);
+        Output.WriteLine($"[EVIDENCE] reason={dto.NotMeasuredReason} headline={dto.CurrentWvfd?.ToString() ?? "null"}");
+        AssertNotMeasured(dto, "farm_list_unreadable");
+
+        await using var scope = AdminScope(provider);
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+        result.IsSuccess.Should().BeTrue("one unreadable farm never makes All Farms answer 500");
+        var items = result.Value!.Data.Items;
+        var hidden = items.Single(f => f.FarmId == Fm(2));
+        hidden.ConfirmedDaysNotMeasuredReason.Should().Be("farm_unreadable");
+        hidden.Wvfd7d.Should().BeNull();
+        items.Single(f => f.FarmId == Fm(1)).Wvfd7d.Should().Be(1, "the readable farm is still counted");
+    }
+
     // ── the route, row-level security and failures ──────────────────────────
 
     /// <summary>
