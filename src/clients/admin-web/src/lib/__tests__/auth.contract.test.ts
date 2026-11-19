@@ -3,8 +3,8 @@ import { act } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authStore, decodeJwt, type AdminSession } from '@/lib/auth';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
-import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
-import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
+import { queryClient as sharedQueryClient } from '@/lib/queryClient';
+import { renderWithProviders } from '@/test/renderWithProviders';
 
 /**
  * CHARACTERISATION TEST — Preservation Register A10.
@@ -17,6 +17,11 @@ import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
  * them looks like a tidy-up and is not: an invalidate-on-logout leaves the
  * previous admin's resolved grants sitting in the cache of a shared browser tab,
  * where the next sign-in can read them before the refetch lands.
+ *
+ * CR-2d JOIN (plan D14 (3)): the expiry rule and the asymmetry above are the September
+ * console's, and PR 95 (the SMS sign-in) replaced both; the tests that pinned them are retired
+ * below by name, each with the PR 95 test that pins the rule that replaced it. A10 is now a
+ * `changed` row of the Preservation Register.
  */
 
 const SCOPE_KEY = ['admin', 'me', 'scope', 'org-1'];
@@ -50,11 +55,7 @@ function Probe() {
   return null;
 }
 
-let stub: StubbedAdapter | null = null;
-
 afterEach(() => {
-  stub?.restore();
-  stub = null;
   seen.length = 0;
   captured.ctx = null;
   localStorage.clear();
@@ -69,43 +70,23 @@ describe('authStore persistence (A10)', () => {
     expect((authStore.get()?.accessToken ?? null)).toBe('access-token');
   });
 
-  it('reads an expired session as null WITHOUT a network round trip', () => {
-    // lib/auth.ts:30. Expiry is decided client-side from expiresAtUtc, so a
-    // stale tab knows it is signed out before it asks anyone.
-    stub = installAdapter(async () => ({ status: 200, data: {} }));
-    localStorage.setItem(
-      'admin.session.v1',
-      JSON.stringify(futureSession({ expiresAtUtc: new Date(Date.now() - 1_000).toISOString() })),
-    );
-
-    expect(authStore.get()).toBeNull();
-    expect((authStore.get()?.accessToken ?? null)).toBeNull();
-    expect(stub.requests).toHaveLength(0);
-  });
-
-  it('treats an expiry exactly at now as expired', () => {
-    // `<=` at lib/auth.ts:30, not `<`.
-    const now = Date.now();
-    localStorage.setItem(
-      'admin.session.v1',
-      JSON.stringify(futureSession({ expiresAtUtc: new Date(now).toISOString() })),
-    );
-    expect(authStore.get()).toBeNull();
-  });
-
-  it('leaves the expired blob in localStorage rather than self-cleaning', () => {
-    // Current behaviour, recorded as-is: read() returns null but does not
-    // remove. Only an explicit clear() (logout, or the 401 interceptor) removes
-    // the key.
-    const expired = futureSession({ expiresAtUtc: new Date(Date.now() - 1_000).toISOString() });
-    localStorage.setItem('admin.session.v1', JSON.stringify(expired));
-
-    expect(authStore.get()).toBeNull();
-    expect(localStorage.getItem('admin.session.v1')).not.toBeNull();
-
-    authStore.clear();
-    expect(localStorage.getItem('admin.session.v1')).toBeNull();
-  });
+  /*
+   * RETIRED IN THE CR-2d JOIN (plan D14 (3)), three tests that pinned the September console's
+   * rule "the session is over when its ACCESS TOKEN expires, decided in the browser":
+   *   - "reads an expired session as null WITHOUT a network round trip"
+   *   - "treats an expiry exactly at now as expired"
+   *   - "leaves the expired blob in localStorage rather than self-cleaning"
+   * PR 95 (the SMS sign-in) replaced that rule and the join keeps it (plan Task 2 Step 1): an
+   * expired access token is RENEWED from the refresh cookie, and a sign-in is over only at its
+   * sign-in time plus MAX_SESSION_HOURS (12), or when the server refuses it. Pinned by PR 95's own
+   * tests (`npm run test:session`):
+   *   src/test/lib/auth.test.ts             "how long a sign-in lasts" ("lasts 12 hours", "is over
+   *                                         age at sign-in time plus 12 hours exactly"); "whether
+   *                                         the access token runs out within a given time"
+   *   src/test/lib/api.requests.test.ts     "a data request whose token has a minute or less left"
+   *   src/test/lib/sessionRenewal.answers.test.ts "a renewal the server refuses", "a renewal that
+   *                                         gets no verdict"
+   */
 
   it('reads corrupt storage as null instead of throwing', () => {
     localStorage.setItem('admin.session.v1', 'not-json');
@@ -149,60 +130,46 @@ describe('AdminAuthProvider three-state machine (A10)', () => {
     expect(captured.ctx?.session?.userId).toBe('user-1');
   });
 
-  it('settles to anonymous when the stored session has expired', () => {
-    stub = installAdapter(async () => ({ status: 200, data: {} }));
-    localStorage.setItem(
-      'admin.session.v1',
-      JSON.stringify(futureSession({ expiresAtUtc: new Date(Date.now() - 1_000).toISOString() })),
-    );
-
-    renderWithProviders(createElement(Probe));
-
-    expect(seen[seen.length - 1]).toBe('anonymous');
-    expect(stub.requests).toHaveLength(0);
-  });
+  /*
+   * RETIRED IN THE CR-2d JOIN (plan D14 (3)): "settles to anonymous when the stored session has
+   * expired" (an expired ACCESS TOKEN meant anonymous, with no request). PR 95's rule: on start
+   * the console renews an expired access token from the refresh cookie; it is anonymous only when
+   * the server refuses (or the sign-in is over 12 hours old), and "the server could not be
+   * reached" when the renewal gets no verdict. Pinned by src/test/lib/sessionRenewal.answers.test.ts
+   * ("a renewal the server refuses", "a renewal that gets no verdict") and
+   * src/test/lib/sessionRenewal.needs-renewal.test.ts.
+   */
 });
 
-describe('login invalidates and logout removes — not the other way round (A10)', () => {
-  it('login() marks the scope query stale but KEEPS the cached entry', () => {
-    const queryClient = makeTestQueryClient();
-    renderWithProviders(createElement(Probe), { queryClient });
-    queryClient.setQueryData(SCOPE_KEY, { outcome: 'Resolved' });
+/*
+ * RETIRED IN THE CR-2d JOIN (plan D14 (3)), three tests of the September console's
+ * "login invalidates and logout removes — not the other way round (A10)":
+ *   - "login() marks the scope query stale but KEEPS the cached entry"
+ *   - "logout() REMOVES the scope query so the next user cannot inherit the grants"
+ *   - "both operations match the scope key by prefix, whatever org is appended" (and that other
+ *     cached surfaces SURVIVE a logout)
+ * PR 95 replaced the asymmetry with something stronger, and the join keeps it: there is one
+ * shared cache (lib/queryClient.ts), and every end of a session EMPTIES it, scope and every
+ * screen's rows alike, before the login page is loaded afresh. Pinned by PR 95's own tests:
+ *   src/test/lib/api.signOut.server-answers.test.ts "empties the shared data cache", "a data
+ *                                                   request made after the sign-out is done never
+ *                                                   reaches the server"
+ *   src/test/lib/api.endSession.ended.test.ts       "empties the shared data cache"
+ * and, through the console's own Sign out button, by src/app/__tests__/AdminShell.signOutEmpties.test.tsx.
+ * The sign-in half has no PR 95 test (its suite does not mount the React provider), so it is
+ * pinned here, as the joined console does it.
+ */
+describe('sign-in empties the shared cache (PR 95, kept by the CR-2d join; A10 changed)', () => {
+  it('login() empties the one shared cache, so nobody inherits the grants or rows of the person before', () => {
+    renderWithProviders(createElement(Probe));
+    sharedQueryClient.setQueryData(SCOPE_KEY, { outcome: 'Resolved' });
+    sharedQueryClient.setQueryData(['farms', 'list', 1], { rows: ['a previous admin’s farm'] });
 
     act(() => captured.ctx?.login(futureSession()));
 
-    expect(queryClient.getQueryData(SCOPE_KEY)).toEqual({ outcome: 'Resolved' });
-    expect(queryClient.getQueryState(SCOPE_KEY)?.isInvalidated).toBe(true);
+    expect(sharedQueryClient.getQueryData(SCOPE_KEY)).toBeUndefined();
+    expect(sharedQueryClient.getQueryData(['farms', 'list', 1])).toBeUndefined();
     expect(captured.ctx?.status).toBe('authenticated');
     expect(authStore.get()?.userId).toBe('user-1');
-  });
-
-  it('logout() REMOVES the scope query so the next user cannot inherit the grants', () => {
-    const queryClient = makeTestQueryClient();
-    renderWithProviders(createElement(Probe), { queryClient });
-    queryClient.setQueryData(SCOPE_KEY, { outcome: 'Resolved' });
-
-    act(() => captured.ctx?.logout());
-
-    expect(queryClient.getQueryData(SCOPE_KEY)).toBeUndefined();
-    expect(queryClient.getQueryCache().find({ queryKey: SCOPE_KEY })).toBeUndefined();
-    expect(captured.ctx?.status).toBe('anonymous');
-    expect(captured.ctx?.session).toBeNull();
-    expect(localStorage.getItem('admin.session.v1')).toBeNull();
-  });
-
-  it('both operations match the scope key by prefix, whatever org is appended', () => {
-    const queryClient = makeTestQueryClient();
-    renderWithProviders(createElement(Probe), { queryClient });
-    queryClient.setQueryData(['admin', 'me', 'scope', 'none'], { outcome: 'Ambiguous' });
-    queryClient.setQueryData(['admin', 'me', 'scope', 'org-2'], { outcome: 'Resolved' });
-    queryClient.setQueryData(['ops', 'health'], { untouched: true });
-
-    act(() => captured.ctx?.logout());
-
-    expect(queryClient.getQueryData(['admin', 'me', 'scope', 'none'])).toBeUndefined();
-    expect(queryClient.getQueryData(['admin', 'me', 'scope', 'org-2'])).toBeUndefined();
-    // Only the scope key is swept — other cached surfaces survive a logout.
-    expect(queryClient.getQueryData(['ops', 'health'])).toEqual({ untouched: true });
   });
 });

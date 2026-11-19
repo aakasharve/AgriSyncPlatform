@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeEach } from 'vitest';
+import { afterAll, afterEach, beforeEach, expect } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import axios, { type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import { adminApi } from '@/lib/api';
+import { armRealHostTripwire, takeRealHostAttempts } from '@/test/realHostTripwire';
 
 /**
  * Per-test isolation.
@@ -108,4 +109,32 @@ axios.defaults.adapter = UNSTUBBED;
 beforeEach(() => {
   adminApi.defaults.adapter = UNSTUBBED;
   axios.defaults.adapter = UNSTUBBED;
+});
+
+/* ══ AND NO TEST REACHES A REAL HOST — PLAN CR-2d D14 (4) ════════════════
+ *
+ * The block above closes the two clients we know of. The tripwire closes the
+ * wire under every client (src/test/realHostTripwire.ts): a connection any
+ * test opens is refused without dialling, and the test during which it was
+ * attempted fails here, naming the address. A request still in the air when a
+ * file's last test ends is caught by the afterAll. Pinned by
+ * src/test/realHost.contract.test.ts. */
+armRealHostTripwire();
+
+function failOnRealHostAttempts(when: string) {
+  const reached = takeRealHostAttempts();
+  if (reached.length > 0) {
+    throw new Error(
+      `[admin-web tests] ${when} tried to reach a real host: ${reached.join(', ')}. ` +
+        'Tests never talk to a real server; stub the call with installAdapter() (src/test/stubAdapter.ts).',
+    );
+  }
+}
+
+afterEach(() => {
+  failOnRealHostAttempts(`the test "${expect.getState().currentTestName ?? 'unnamed'}"`);
+});
+
+afterAll(() => {
+  failOnRealHostAttempts('a request still in the air after the last test of this file');
 });

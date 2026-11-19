@@ -153,12 +153,13 @@ const REGISTER: Record<string, Row> = {
       shipped:
         'ten of thirteen in-shell routes are guarded and ModuleKeys holds 36 keys — ' +
         'the register prose said nine of twelve and 33. CR-2b (2026-11-15) adds the seven ' +
-        'Company MIS routes, each behind EntitlementGuard on metrics.nsm: 17 guards; B24 (2026-11-17) removes the /ops/voice route (the Voice Pipeline page V1-V5 is a double of Company MIS Quality #43-#45): 16 guards',
-      decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose); CR-2b plan Task 4 (10 -> 17 guarded)',
+        'Company MIS routes, each behind EntitlementGuard on metrics.nsm: 17 guards; B24 (2026-11-17) removes the /ops/voice route (the Voice Pipeline page V1-V5 is a double of Company MIS Quality #43-#45): 16 guards; ' +
+        'the CR-2d join (2026-11-19) ports /ops/app-versions (ops.live) and the go-live line\'s /schedules/check (schedules.review, the 37th key): 18 guards, 37 keys',
+      decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose); CR-2b plan Task 4 (10 -> 17 guarded); CR-2d plan Task 3, D3, D14 (3)',
       assert: () => {
-        expect(Object.keys(ModuleKeys)).toHaveLength(36);
+        expect(Object.keys(ModuleKeys)).toHaveLength(37); // CR-2d join: 36 -> 37, ScheduleReview from the go-live line.
         const app = code('/src/App.tsx');
-        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(16); // B24 (founder, 2026-11-17): 17 -> 16, /ops/voice is gone (V1-V5 are doubles; keeper: Company MIS Quality).
+        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(18); // B24: 17 -> 16 (/ops/voice gone); CR-2d join: 16 -> 18 (the two ports).
       },
     },
   },
@@ -232,26 +233,57 @@ const REGISTER: Record<string, Row> = {
     }, '/src/lib/__tests__/returnTo.test.ts', '/src/__tests__/deepLink.contract.test.tsx'),
   },
 
+  /*
+   * A10 AND A11 MOVED FROM `kept` TO `changed` IN THE CR-2d JOIN (plan D14 (3)). Both described
+   * the September console's sign-in rules, and PR 95 (the SMS sign-in) replaced them; the join
+   * keeps PR 95's sign-in files (plan Task 2 Step 1). The new rules are pinned by PR 95's own
+   * tests, `npm run test:session` (src/test/lib), named in each row.
+   */
   A10: {
     what: 'session persistence with client-side expiry, and cache hygiene on login/logout',
-    verdict: kept(() => {
-      const auth = code('/src/lib/auth.ts');
-      expect(auth).toContain("const STORAGE_KEY = 'admin.session.v1'");
-      expect(auth).toContain('new Date(s.expiresAtUtc).getTime() <= Date.now()');
-      const provider = code('/src/app/AdminAuthProvider.tsx');
-      expect(provider).toContain('qc.invalidateQueries');
-      expect(provider).toContain('qc.removeQueries');
-    }, '/src/lib/__tests__/auth.contract.test.ts'),
+    verdict: {
+      kind: 'changed',
+      shipped:
+        'the session is still stored under admin.session.v1, but it is no longer over when the ' +
+        'ACCESS TOKEN expires: a sign-in lasts MAX_SESSION_HOURS (12) from its sign-in time, and ' +
+        'an expiring access token is renewed from the refresh cookie. Cache hygiene is stronger ' +
+        'than invalidate-on-login / remove-on-logout: login() and every end of a session EMPTY the ' +
+        'one shared cache (lib/queryClient.ts). Pinned by src/test/lib/auth.test.ts ("how long a ' +
+        'sign-in lasts"), sessionRenewal.answers.test.ts, api.signOut.server-answers.test.ts and ' +
+        'api.endSession.ended.test.ts ("empties the shared data cache"), and by auth.contract.test.ts',
+      decidedBy: 'PR 95 (fix/admin-sms-code-sign-in, f1a69077), kept by the CR-2d join (plan Task 2 Step 1, D14 (3))',
+      assert: () => {
+        const auth = code('/src/lib/auth.ts');
+        expect(auth).toContain("const STORAGE_KEY = 'admin.session.v1'");
+        expect(auth).toContain('export const MAX_SESSION_HOURS = 12');
+        expect(auth).toContain('export function isSessionOverAge');
+        const provider = code('/src/app/AdminAuthProvider.tsx');
+        expect(provider).toContain('queryClient.clear()');
+        expect(code('/src/lib/api.ts')).toContain('queryClient.clear()');
+      },
+    },
   },
 
   A11: {
     what: 'the global 401 interceptor, with its redirect-loop guard',
-    verdict: kept(() => {
-      const api = code('/src/lib/api.ts');
-      expect(api).toContain('if (status === 401)');
-      expect(api).toContain('authStore.clear()');
-      expect(api).toContain("!window.location.pathname.startsWith('/login')");
-    }, '/src/lib/__tests__/api.contract.test.ts'),
+    verdict: {
+      kind: 'changed',
+      shipped:
+        'a 401 on a data route no longer clears the session at once: it asks for ONE renewal and ' +
+        'sends the request again; a refused renewal, or a second 401 after a renewal, ends the ' +
+        'session (forgotten, then /login?signedOut=ended loaded afresh). The loop guard survives in ' +
+        'a new form: with nobody signed in and the page already on /login, a 401 is handed back as ' +
+        'it is, with no renewal and no redirect. Pinned by src/test/lib/api.requests.test.ts, ' +
+        'api.requests.renewal-refused-after-401.test.ts and api.requests.second-refusal.test.ts',
+      decidedBy: 'PR 95 (fix/admin-sms-code-sign-in, f1a69077), kept by the CR-2d join (plan Task 2 Step 1, D14 (3))',
+      assert: () => {
+        const api = code('/src/lib/api.ts');
+        expect(api).toContain('if (status === 401 && isAxiosError(err)) return retryAfterRenewal(err);');
+        expect(api).toContain("if (!stored && window.location.pathname.startsWith('/login')) throw err;");
+        expect(api).toContain("await endSession('ended');");
+        expect(api).toContain('authStore.clear()');
+      },
+    },
   },
 
   A12: {
@@ -279,12 +311,18 @@ const REGISTER: Record<string, Row> = {
       shipped:
         'the page and both branches survive, but it is NO LONGER "the ONLY sign-out ' +
         'control in the app" — B3 put one in the shell, because a signed-in admin on a ' +
-        'working screen had no way out',
-      decidedBy: 'Task 10, satisfying register row B3',
+        'working screen had no way out. CR-2d join (plan Task 2 Step 1, D14 (3)): the page is ' +
+        'now PR 95\'s no-access page, three cases chosen by noAccessView (not on the team / this ' +
+        'one page is closed / no reason), a reason shown only in the sign-in it was found in, no ' +
+        'module named, Sign out and the way back; a scope check with no verdict never lands here ' +
+        '(ServerUnreachable). Pinned by src/test/lib/noAccessView.test.ts and deepLink.contract.test.tsx',
+      decidedBy: 'Task 10, satisfying register row B3; PR 95 (f1a69077), kept by the CR-2d join',
       assert: () => {
         const page = code('/src/pages/ForbiddenPage.tsx');
-        expect(page).toContain('scopeUnavailable');
+        expect(page).toContain('noAccessView(location.state, signInKey(session))');
+        for (const view of ["'not-on-team'", "'one-page'", "'no-reason'"]) expect(page).toContain(view);
         expect(page).toContain('Sign out');
+        expect(code('/src/App.tsx')).toContain('<ServerUnreachable');
         expect(code('/src/App.tsx')).toMatch(/path="\/403"/);
         // The second one, which is what makes this row "changed".
         expect(code('/src/app/AdminShell.tsx')).toContain("aria-label=\"Sign out\"");
@@ -423,10 +461,14 @@ const REGISTER: Record<string, Row> = {
   A23: {
     what: 'per-surface polling cadences plus the React Query global defaults',
     verdict: kept(() => {
-      const app = code('/src/App.tsx');
-      expect(app).toContain('staleTime: 60_000');
-      expect(app).toContain('refetchOnWindowFocus: false');
-      expect(app).toContain('retry: 1');
+      // CR-2d join: the one QueryClient moved from App.tsx to lib/queryClient.ts with PR 95 (so
+      // that every end of a session can empty it); the defaults are unchanged, and App.tsx hands
+      // that same client to its provider (routes.contract.test.ts reads them off the instance).
+      const client = code('/src/lib/queryClient.ts');
+      expect(client).toContain('staleTime: 60_000');
+      expect(client).toContain('refetchOnWindowFocus: false');
+      expect(client).toContain('retry: 1');
+      expect(code('/src/App.tsx')).toContain('<QueryClientProvider client={queryClient}>');
       expect(code('/src/hooks/useOpsHealth.ts')).toContain('refetchInterval: 30_000');
       expect(code('/src/hooks/useOpsErrors.ts')).toContain('refetchInterval: 30_000');
     }, '/src/hooks/__tests__/queryContracts.contract.test.tsx'),
@@ -844,8 +886,12 @@ const REGISTER: Record<string, Row> = {
       assert: () => {
         const api = code('/src/lib/api.ts');
         expect(api).toContain('timeout: 20_000');
-        expect(api).toContain("const DEV_API_FALLBACK = 'http://localhost:5048'");
+        // CR-2d join: the fallback moved, unchanged, to lib/sessionRenewal.ts, so that the
+        // renewal client and adminApi share one address (api.ts re-exports it).
+        const renewal = code('/src/lib/sessionRenewal.ts');
+        expect(renewal).toContain("const DEV_API_FALLBACK = 'http://localhost:5048'");
         expect(api).not.toContain('localhost:5001');
+        expect(renewal).not.toContain('localhost:5001');
       },
     },
   },
@@ -944,10 +990,12 @@ describe('the register is exhaustive — a gap is visible, not assumed', () => {
    * numbers below are a measurement of what this migration actually did, and
    * changing one has to be a deliberate edit with a reason beside it.
    */
-  it('counts 41 kept, 16 changed, 1 manual and 1 awaiting a signature', () => {
+  // CR-2d join (plan D14 (3)): 41 kept -> 39, 16 changed -> 18. A10 and A11 described the
+  // September sign-in rules that PR 95 replaced; they are `changed`, never dropped.
+  it('counts 39 kept, 18 changed, 1 manual and 1 awaiting a signature', () => {
     const tally = { kept: 0, changed: 0, manual: 0, unsigned: 0 };
     for (const id of IDS) tally[REGISTER[id].verdict.kind] += 1;
-    expect(tally).toEqual({ kept: 41, changed: 16, manual: 1, unsigned: 1 });
+    expect(tally).toEqual({ kept: 39, changed: 18, manual: 1, unsigned: 1 });
   });
 
   /**
@@ -960,7 +1008,7 @@ describe('the register is exhaustive — a gap is visible, not assumed', () => {
   it('names the rows that cannot be ticked as written', () => {
     const changed = IDS.filter((id) => REGISTER[id].verdict.kind === 'changed');
     expect(changed).toEqual([
-      'A3', 'A5', 'A13', 'A16', 'A17', 'A24', 'A27', 'A33',
+      'A3', 'A5', 'A10', 'A11', 'A13', 'A16', 'A17', 'A24', 'A27', 'A33',
       'A38', 'A41', 'A43', 'A46', 'A47', 'A53', 'A54', 'A55',
     ]);
   });
@@ -1139,7 +1187,9 @@ describe('what still needs the founder’s signature', () => {
       .map(([p]) => p);
 
     // B24 (founder, 2026-11-17): 6 -> 5: FarmerHealthPage.tsx no longer uses font-mono (FH1-FH5 are ideas).
-    expect(users.length).toBe(5);
+    // CR-2d join (plan D14 (3), the joined files): 5 -> 6. ForbiddenPage.tsx left the list (PR 95's
+    // no-access page has none); the two ports joined it (AppVersionsPage.tsx, ScheduleCheckPage.tsx).
+    expect(users.length).toBe(6);
   });
 
   it('records that @tanstack/react-table is gone and unsigned', () => {

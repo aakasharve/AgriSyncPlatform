@@ -91,6 +91,25 @@ function server({ modules = [], dataStatus = 200, dataBody = emptyList }: Server
     if (req.url.includes('/user/auth/login')) {
       return { status: 200, data: { ...SESSION, refreshToken: 'refresh-1' } };
     }
+    /* The SMS code way (plan CR-2d D14 (1)-(3)): the code is sent, then checked. Made-up
+       answers in the shape User.Api sends on the web (no refresh token in the body). */
+    if (req.url.includes('/user/auth/start-otp')) {
+      return {
+        status: 200,
+        data: { expiresAtUtc: new Date(Date.now() + 300_000).toISOString(), resendAfterSeconds: 30, provider: 'stub' },
+      };
+    }
+    if (req.url.includes('/user/auth/verify-otp')) {
+      return {
+        status: 200,
+        data: {
+          userId: SESSION.userId,
+          accessToken: SESSION.accessToken,
+          expiresAtUtc: SESSION.expiresAtUtc,
+          createdNewUser: false,
+        },
+      };
+    }
     /* The templates feed is a RAW array, not an envelope, and its path changed
        in Task 24 — `/reference/schedule-templates`, not the
        `/reference-data/crop-schedule-templates` the console used to 404 on. */
@@ -118,13 +137,31 @@ function go(url: string) {
   window.history.replaceState({}, '', url);
 }
 
+/**
+ * CHANGED IN THE CR-2d JOIN (plan D14 (1) and (3)), WITH THE SIGN-IN IT DRIVES.
+ *
+ * The console's sign-in is now the SMS sign-in (PR 95): it opens on the SMS code way, and the
+ * password way stays only until Task S2 retires it with the founder's written approval (D14 (2)).
+ * So these journeys sign in through the primary door: the phone number, "Send me a code", the
+ * code from the SMS, "Sign in". What they assert after the sign-in is unchanged: A9, the return
+ * to the page that was asked for.
+ */
 async function signIn() {
   await userEvent.type(
     await screen.findByLabelText('Phone number', undefined, { timeout: WAIT }),
-    '8888888888',
+    '9000000001',
   );
-  await userEvent.type(screen.getByLabelText('Password'), 'Testuser@123');
-  await userEvent.click(screen.getByRole('button', { name: /Sign in/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Send me a code/ }));
+  await userEvent.type(
+    await screen.findByLabelText('Code from the SMS', undefined, { timeout: WAIT }),
+    '123456',
+  );
+  await userEvent.click(screen.getByRole('button', { name: /^Sign in/ }));
+}
+
+/** The sign-in page, as the SMS sign-in draws it: its heading, before any step is taken. */
+async function signInPage() {
+  return screen.findByRole('heading', { name: 'Sign in' }, { timeout: WAIT });
 }
 
 let stub: StubbedAdapter | null = null;
@@ -147,7 +184,7 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
     render(<App />);
 
     // Signed out: the guard sent us to /login and kept where we were going.
-    await screen.findByRole('button', { name: /Sign in/ }, { timeout: WAIT });
+    await signInPage();
     expect(at()).toBe('/login');
 
     await signIn();
@@ -184,31 +221,25 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
   });
 });
 
-describe('a token that expires mid-session keeps the deep link (A11, Step 7)', () => {
-  it('routes to /login through the router and returns to the exact url afterwards', async () => {
-    // The old code called window.location.assign('/login'): a full reload,
-    // and a reload cannot carry router state, so the url died on the way to
-    // the login form. The redirect-loop guard is kept — see the 401 tests in
-    // api.contract.test.ts, which pin it and the hard fallback.
-    authStore.set(SESSION);
-    stub = server({ modules: readOnly(ModuleKeys.AdminUsers), dataStatus: 401, dataBody: {} });
-    go('/users?page=4&search=ram');
-
-    render(<App />);
-
-    // The users query 401s; the interceptor clears the session and the bridge
-    // navigates — no reload.
-    await screen.findByRole('button', { name: /Sign in/ }, { timeout: WAIT });
-    expect(at()).toBe('/login');
-    expect(localStorage.getItem('admin.session.v1')).toBeNull();
-
-    stub.restore();
-    stub = server({ modules: readOnly(ModuleKeys.AdminUsers) });
-    await signIn();
-
-    await waitFor(() => expect(at()).toBe('/users?page=4&search=ram'), { timeout: WAIT });
-  });
-});
+/*
+ * RETIRED IN THE CR-2d JOIN (plan D14 (3)): "a token that expires mid-session keeps the deep
+ * link (A11, Step 7) — routes to /login through the router and returns to the exact url
+ * afterwards".
+ *
+ * It pinned the September console's 401 rule: a 401 cleared the session at once and the router
+ * carried the url to the login form, with no reload. PR 95 (the SMS sign-in) replaced that rule.
+ * A 401 now asks for ONE renewal and sends the request again; only when the server refuses the
+ * renewal does the session end, and every end of a session forgets the person and loads
+ * /login?signedOut=ended AFRESH, holding no router state, so that no page of one person is ever
+ * handed to the next. The new rule is pinned by PR 95's own tests (`npm run test:session`):
+ *   src/test/lib/api.requests.test.ts                         "a 401 on a data route causes one
+ *                                                              renewal and one re-send"
+ *   src/test/lib/api.requests.renewal-refused-after-401.test.ts "clears the session",
+ *                                                              "opens /login?signedOut=ended"
+ *   src/test/lib/api.endSession.ended.test.ts                 "opens /login?signedOut=ended",
+ *                                                              "empties the shared data cache"
+ * A9 (a deep link opened while signed OUT survives the sign-in) is unchanged and pinned above.
+ */
 
 describe('the three deliberately ungated routes really do open (A4, Step 4)', () => {
   /*
@@ -240,18 +271,36 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
   it('and a GUARDED route still turns that same scope away', async () => {
     // Without this, the test above would also pass if every guard in the
     // console had been deleted.
+    //
+    // CHANGED IN THE CR-2d JOIN (plan D14 (3), Task 2 Step 1): the guard and the landing on
+    // /403 are unchanged; the WORDS on /403 are now the SMS sign-in's no-access page (PR 95's
+    // ForbiddenPage, chosen by `noAccessView`, pinned by src/test/lib/noAccessView.test.ts
+    // "says 'this one page is closed' for a matching account with a module and no reason"),
+    // which replaced the September console's "403 · Access denied".
     authStore.set(SESSION);
     stub = server({ modules: [] });
     go('/farms');
 
     render(<App />);
 
-    expect(await screen.findByText('403 · Access denied', undefined, { timeout: WAIT })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'You do not have access to this page.' }, { timeout: WAIT }),
+    ).toBeInTheDocument();
+    expect(at()).toBe('/403');
   });
 });
 
 describe('RequireScope tells a broken CHECK apart from a denial (Step 3)', () => {
-  it('a 500 on /admin/me/scope lands on /403 saying the check failed, not that access was denied', async () => {
+  /*
+   * CHANGED IN THE CR-2d JOIN (plan D14 (3), Task 2 Step 1), WITH THE PAGE IT DESCRIBES.
+   * It was "a 500 on /admin/me/scope lands on /403 saying the check failed, not that access was
+   * denied". The SMS sign-in (PR 95) keeps the distinction and moves it: a scope check the server
+   * gave no verdict on (no answer, 429, 5xx) refuses nobody, so it never lands on /403 at all; it
+   * shows "The server could not be reached" where the person is (App.tsx RequireScope,
+   * `ServerUnreachable`). What this test protects is unchanged: a server that is down is never
+   * told to an admin as "you have no access".
+   */
+  it('a 500 on /admin/me/scope says the server could not be reached, and never that access was denied', async () => {
     // Three of RequireScope's outcomes have no url of their own and appear in
     // no screenshot. This is the one that used to lie: an unreachable resolver
     // produced a page headed "403 · Access denied", telling an admin their
@@ -263,13 +312,10 @@ describe('RequireScope tells a broken CHECK apart from a denial (Step 3)', () =>
     render(<App />);
 
     expect(
-      await screen.findByRole(
-        'heading',
-        { name: 'We could not check your access' },
-        { timeout: WAIT },
-      ),
+      await screen.findByText('The server could not be reached. Try again.', undefined, { timeout: WAIT }),
     ).toBeInTheDocument();
-    expect(at()).toBe('/403');
+    expect(screen.queryByText(/You do not have access/)).not.toBeInTheDocument();
+    expect(at()).toBe('/farms');
   });
 });
 

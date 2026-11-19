@@ -34,6 +34,8 @@ const ROUTE_GUARDS: Record<string, string | null> = {
   '/home': null,                      // B24 (founder, 2026-11-17): Home moved here; two ideas, no request, so no guard
   '/ops/live': ModuleKeys.OpsLive,
   '/ops/errors': ModuleKeys.OpsErrors,
+  // CR-2d join, Task 3 Step 1: the app-versions page of the recording lane, on the key its server route checks.
+  '/ops/app-versions': ModuleKeys.OpsLive,
   // B24 (founder, 2026-11-17): /ops/voice is gone: V1-V5 are doubles of Company MIS Quality #43-#45.
   '/metrics/nsm': ModuleKeys.MetricsNsm,
   '/farms': ModuleKeys.FarmsList,
@@ -52,6 +54,8 @@ const ROUTE_GUARDS: Record<string, string | null> = {
   '/MIS/operations': ModuleKeys.MetricsNsm,
   '/MIS': null,                       // a redirect to /MIS/overview, which is guarded
   '/schedules/templates': null,       // deliberate — no ModuleKey exists yet
+  // CR-2d join, Task 3 Step 2: the go-live line's schedule check, on its own key (schedules.review).
+  '/schedules/check': ModuleKeys.ScheduleReview,
   '/settings/admins': null,           // deliberate — no ModuleKey exists yet
 };
 
@@ -108,12 +112,14 @@ afterEach(() => {
 });
 
 describe('route to module-key map (A3)', () => {
-  it('declares exactly the twenty-four routes the console has today', () => {
+  // CR-2d join (plan D3, D14 (3)): 24 -> 26, the two ports (/ops/app-versions, /schedules/check).
+  // The lane-by-lane union is pinned in joinRoutes.contract.test.ts.
+  it('declares exactly the twenty-six routes the console has today', () => {
     const paths = declaredRoutes.map((r) => r.path);
     expect(paths.slice().sort()).toEqual(
       [...Object.keys(ROUTE_GUARDS), ...PUBLIC_ROUTES, CATCH_ALL].sort(),
     );
-    expect(paths).toHaveLength(24);
+    expect(paths).toHaveLength(26);
   });
 
   it('gives every guarded route its exact module key', () => {
@@ -125,9 +131,10 @@ describe('route to module-key map (A3)', () => {
     expect(actual).toEqual(ROUTE_GUARDS);
   });
 
-  it('guards sixteen routes and no more', () => {
+  it('guards eighteen routes and no more', () => {
     // B24 (founder, 2026-11-17): 17 -> 16, the /ops/voice route is removed (V1-V5 are doubles of Company MIS Quality).
-    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(16);
+    // CR-2d join (plan D3, D14 (3)): 16 -> 18, /ops/app-versions (ops.live) and /schedules/check (schedules.review).
+    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(18);
   });
 
   it('uses only module keys that exist in the ModuleKeys registry', () => {
@@ -140,8 +147,9 @@ describe('route to module-key map (A3)', () => {
   it('keeps the ModuleKeys registry at its current size', () => {
     // Mirrors ShramSafal.Domain.Organizations.ModuleKey (moduleKeys.ts:9). A key
     // silently dropped here becomes a route that can never be entered.
-    expect(Object.keys(ModuleKeys)).toHaveLength(36);
-    expect(new Set(Object.values(ModuleKeys)).size).toBe(36);
+    // CR-2d join (plan D14 (3)): 36 -> 37, the go-live line's ScheduleReview ('schedules.review').
+    expect(Object.keys(ModuleKeys)).toHaveLength(37);
+    expect(new Set(Object.values(ModuleKeys)).size).toBe(37);
   });
 
   it('gates the drilldown on the same key as the farmer-health landing page', () => {

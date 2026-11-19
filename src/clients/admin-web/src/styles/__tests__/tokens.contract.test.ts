@@ -466,9 +466,12 @@ describe('--font-mono outlived its deletion date, and says so (Task 27)', () => 
   const MONO_FILES = [
     '/src/features/farmer-health/components/FarmerSearchBox.tsx',
     // B24 (founder, 2026-11-17): FH1, FH2, FH4 and FH5 are ideas shown as Not built yet, so FarmerHealthPage.tsx no longer uses font-mono.
-    '/src/pages/ForbiddenPage.tsx',
+    // CR-2d join (plan D14 (3), "the font-mono list follows the joined files"): ForbiddenPage.tsx is
+    // PR 95's no-access page now and uses none; the two ports use it for version numbers and codes.
     '/src/pages/LoginPage.tsx',
+    '/src/pages/ops/AppVersionsPage.tsx',
     '/src/pages/ops/OpsErrorsPage.tsx',
+    '/src/pages/schedules/ScheduleCheckPage.tsx',
     '/src/pages/schedules/ScheduleTemplatesPage.tsx',
   ];
 

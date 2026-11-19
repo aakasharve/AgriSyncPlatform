@@ -27,54 +27,30 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('the two original message variants are unchanged (A13)', () => {
-  it('names the module when EntitlementGuard refused one', async () => {
-    renderForbidden({ from: '/ops/live', module: 'ops.live' });
-
-    expect(await screen.findByText(/Your admin scope does not grant access to/)).toBeInTheDocument();
-    expect(screen.getByText('ops.live')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '403 · Access denied' })).toBeInTheDocument();
-  });
-
-  it('falls back to the no-membership copy, with the pointer to /settings/admins', async () => {
-    renderForbidden(null);
-
-    expect(
-      await screen.findByText(/Your account does not have an admin membership for this console/),
-    ).toBeInTheDocument();
-    expect(screen.getByText('/settings/admins')).toBeInTheDocument();
-  });
-});
-
-describe('a failed CHECK is not a denial (Task 11)', () => {
-  it('says so, and does not accuse the account of losing its access', async () => {
-    // RequireScope sends this when /admin/me/scope errors. The page used to
-    // greet a 500 with "403 · Access denied", which tells an admin their
-    // permissions were revoked when the truth is that the question could not
-    // be asked — the most alarming possible way to be wrong.
-    renderForbidden({ scopeUnavailable: true });
-
-    expect(
-      await screen.findByRole('heading', { name: 'We could not check your access' }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('403 · Access denied')).toBeNull();
-    expect(screen.getByText(/not a permissions problem/)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing about your account has changed/)).toBeInTheDocument();
-  });
-});
-
-describe('both actions survive on every variant (A13)', () => {
-  it.each([
-    ['a module denial', { module: 'ops.live' }],
-    ['no membership', null],
-    ['an unavailable scope check', { scopeUnavailable: true }],
-  ])('%s keeps Sign out and Go to login', async (_case, state) => {
-    renderForbidden(state);
-
-    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to login' })).toHaveAttribute('href', '/login');
-  });
-
+/*
+ * RETIRED IN THE CR-2d JOIN (plan D14 (3), Task 2 Step 1): six tests of the September console's
+ * /403 page, which PR 95 (the SMS sign-in) replaced with its no-access page; the join keeps PR 95's
+ * ForbiddenPage (one of the ten files both lanes changed, kept on the sign-in side):
+ *   - "the two original message variants are unchanged (A13) names the module when
+ *     EntitlementGuard refused one" ("403 · Access denied", the module key shown)
+ *   - "... falls back to the no-membership copy, with the pointer to /settings/admins"
+ *   - "a failed CHECK is not a denial (Task 11) says so, and does not accuse the account of
+ *     losing its access" (the /403 "We could not check your access" state)
+ *   - "both actions survive on every variant (A13) %s keeps Sign out and Go to login", its three
+ *     cases (a module denial, no membership, an unavailable scope check)
+ * PR 95's page: three cases chosen by `noAccessView` (not on the team / this one page is closed /
+ * no reason), a reason shown only to the sign-in it was found in, no module key on screen, Sign
+ * out, and "Back to the home page" where the rest of the console still opens; it has no "Go to
+ * login" (Sign out is the way to the login page). A scope check with no verdict never comes here:
+ * it shows "The server could not be reached" in place. Pinned by PR 95's own tests
+ * (`npm run test:session`): src/test/lib/noAccessView.test.ts ("the no-access page gives no
+ * reason ...", "... gives a reason to the account it is true for", "a 'not on the team' entry
+ * left by one sign-in"), src/test/lib/api.signOut.server-answers.test.ts ("the login page opens,
+ * with no reason"); and through the whole console by deepLink.contract.test.tsx ("a GUARDED route
+ * still turns that same scope away", "a 500 on /admin/me/scope says the server could not be
+ * reached").
+ */
+describe('sign out on /403 (A13)', () => {
   it('sign out really clears the stored session', async () => {
     authStore.set({
       accessToken: 't',

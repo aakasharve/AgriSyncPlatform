@@ -10,7 +10,6 @@ import shellSource from '../AdminShell.tsx?raw';
 // A53 slot and its REASON moved with the list; the assertion below follows
 // them rather than being deleted.
 import navSource from '../nav.ts?raw';
-import ForbiddenPage from '@/pages/ForbiddenPage';
 import { adminApi } from '@/lib/api';
 import { authStore } from '@/lib/auth';
 import type { MeScopeResponse } from '@/hooks/useAdminScope';
@@ -449,7 +448,7 @@ describe('the shortcut badges are gone (D4, founder 2026-08-31)', () => {
 });
 
 describe('the sidebar (A53, A58)', () => {
-  it('renders seven groups and eighteen destinations', async () => {
+  it('renders seven groups and nineteen destinations', async () => {
     serve();
     signIn({ display_name: 'Test Admin' });
     renderShell();
@@ -462,7 +461,8 @@ describe('the sidebar (A53, A58)', () => {
       expect(within(sidebar).getByText(group, { selector: 'div' })).toBeInTheDocument();
     }
     // B24 (founder, 2026-11-17): the whole Voice Pipeline page (V1-V5) is a double of Company MIS Quality, so its menu entry is gone: 19 -> 18.
-    expect(within(sidebar).getAllByRole('link')).toHaveLength(18);
+    // CR-2d join (plan Task 3 Step 1, D14 (3)): 18 -> 19, "App Versions" under Operations. The schedule check has no entry (D3).
+    expect(within(sidebar).getAllByRole('link')).toHaveLength(19);
   });
 
   it('marks exactly one item current, and Home is not current on /farms (A58)', async () => {
@@ -549,44 +549,20 @@ describe('the sidebar (A53, A58)', () => {
   });
 });
 
-describe('sign out (B3, A13)', () => {
-  it('is in the shell — an admin on a working screen can now leave', async () => {
-    serve();
-    signIn({ display_name: 'Test Admin' });
-    renderShell();
-
-    const signOut = await screen.findByRole('button', { name: 'Sign out' });
-    await userEvent.click(signOut);
-
-    expect(authStore.get()).toBeNull();
-  });
-
-  it('empties this tab of the previous admin, not just of their permissions', async () => {
-    /*
-     * `logout()` removes ONLY the scope query. Farm lists, users and farmer
-     * names would sit in the cache of a shared browser for another 60 seconds
-     * (App.tsx staleTime), where the next sign-in reads them before a refetch.
-     */
-    serve();
-    signIn({ display_name: 'Test Admin' });
-    const { queryClient } = renderShell();
-
-    await screen.findByText(ORG_A_NAME);
-    queryClient.setQueryData(['farms', 'list', 1], { rows: ['a previous admin’s farms'] });
-
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-
-    expect(queryClient.getQueryData(['farms', 'list', 1])).toBeUndefined();
-  });
-
-  it('leaves the /403 sign-out in place — a denied admin still needs one', () => {
-    // A13. The shell's control is an ADDITION; the console had exactly one
-    // sign-out anywhere and /403 is outside the shell by design.
-    signIn({ display_name: 'Test Admin' });
-    renderWithProviders(<ForbiddenPage />);
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-  });
-});
+/*
+ * SIGN OUT (B3, A13) MOVED, IN THE CR-2d JOIN (plan D14 (3)). In the SMS sign-in (PR 95) a press
+ * of Sign out ends the page: no data request leaves after it, and the login page is loaded
+ * afresh. jsdom cannot load a page afresh and vitest gives each FILE a fresh page, so a press here
+ * left the tests below it (B14 refresh, B14 freshness, B15 toast host) on a page that had already
+ * signed out, waiting for answers that could not come. The presses now have files of their own
+ * and the tests below are unchanged:
+ *   AdminShell.signOut.test.tsx         "is in the shell — an admin on a working screen can now
+ *                                       leave", "leaves the /403 sign-out in place"
+ *   AdminShell.signOutEmpties.test.tsx  "empties this tab of the previous admin, not just of their
+ *                                       permissions", adapted to PR 95's guarantee: the shared
+ *                                       cache emptied at the press, no data request after it, the
+ *                                       login page asked for afresh
+ */
 
 describe('manual refresh and the freshness chip (B14)', () => {
   it('refetches what THIS screen is subscribed to', async () => {

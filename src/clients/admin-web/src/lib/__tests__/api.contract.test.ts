@@ -179,21 +179,27 @@ describe('adminApi typed error contract (A12)', () => {
 });
 
 describe('adminApi 401 contract (A11)', () => {
-  it('clears the stored session and redirects to /login', async () => {
-    authStore.set({
-      accessToken: 't', refreshToken: null, userId: 'u1',
-      expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
-      signedInAtUtc: new Date(Date.now()).toISOString(),
-    });
-    const assigns = stubLocation('/farms');
-    stub = fails(401, {});
-
-    await adminApi.get('/x').catch(() => undefined);
-
-    expect(localStorage.getItem('admin.session.v1')).toBeNull();
-    expect(assigns).toEqual(['/login']);
-  });
-
+  /*
+   * RETIRED IN THE CR-2d JOIN (plan D14 (3)), two tests that pinned the September console's 401
+   * rule, "a 401 clears the stored session at once":
+   *   - "clears the stored session and redirects to /login"
+   *   - "still clears the session on a 401 raised from the login page"
+   * PR 95 (the SMS sign-in) replaced that rule and the join keeps it (plan Task 2 Step 1): a 401
+   * on a data route asks for ONE renewal and sends the request again; the session is cleared,
+   * and /login?signedOut=ended opened, only when the server refuses the renewal or refuses the
+   * renewed token. A renewal that gets no verdict keeps the session. Pinned by PR 95's own tests
+   * (`npm run test:session`):
+   *   src/test/lib/api.requests.test.ts                          "a 401 on a data route causes
+   *                                                               one renewal and one re-send"
+   *   src/test/lib/api.requests.renewal-refused-after-401.test.ts "clears the session",
+   *                                                               "opens /login?signedOut=ended"
+   *   src/test/lib/api.requests.second-refusal.test.ts           "is not re-sent again after the
+   *                                                               second 401"
+   *   src/test/lib/sessionRenewal.answers.test.ts                "a renewal that gets no verdict:
+   *                                                               rejects, and the stored session
+   *                                                               is untouched"
+   * The two tests below still hold under the new rule and stay.
+   */
   it('does NOT redirect when the page is already under /login', async () => {
     // The redirect-loop guard at lib/api.ts:65. Without it a 401 raised BY the
     // login request navigates to /login, which re-issues the request, which
@@ -204,20 +210,6 @@ describe('adminApi 401 contract (A11)', () => {
     await adminApi.get('/x').catch(() => undefined);
 
     expect(assigns).toEqual([]);
-  });
-
-  it('still clears the session on a 401 raised from the login page', async () => {
-    authStore.set({
-      accessToken: 't', refreshToken: null, userId: 'u1',
-      expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
-      signedInAtUtc: new Date(Date.now()).toISOString(),
-    });
-    stubLocation('/login');
-    stub = fails(401, {});
-
-    await adminApi.get('/x').catch(() => undefined);
-
-    expect(localStorage.getItem('admin.session.v1')).toBeNull();
   });
 
   it('rejects with the raw axios error, not a typed one', async () => {

@@ -179,21 +179,10 @@ describe('states that show no number (CR-2b Task 4)', () => {
     expect(container.querySelectorAll('[data-mis-item]').length).toBeGreaterThan(3);
   });
 
-  it('No_session_leaves_no_numbers', async () => {
-    authStore.set({
-      accessToken: 'token-mis',
-      refreshToken: null,
-      userId: '00000000-0000-0000-0000-0000000000bb',
-      expiresAtUtc: new Date(MIS_NOW.getTime() + 3_600_000).toISOString(),
-      signedInAtUtc: new Date(MIS_NOW.getTime()).toISOString(),
-    });
-    stub = serveMis(async () => ({ status: 401, data: {} }));
-    const { container } = renderMis('quality');
-    await waitFor(() => expect(misCalls(stub!)).toHaveLength(1));
-    await waitFor(() => expect(localStorage.getItem('admin.session.v1')).toBeNull());
-    expect(container.querySelectorAll('[data-mis-item]')).toHaveLength(0);
-    expect(pageTextWithoutRange()).not.toMatch(/\d/);
-  });
+  /* No_session_leaves_no_numbers MOVED, IN THE CR-2d JOIN (plan D14 (3)), to
+     MisPages.noSession.test.tsx: under the SMS sign-in (PR 95) a 401 ends the session only when the
+     server also refuses the renewal, and an ended session ends the page (no data request leaves
+     after it), so that test needs a page, a file, of its own. */
 });
 
 describe('words on the pages (CR-2b Task 4)', () => {
