@@ -1,6 +1,6 @@
 /// <reference types="vitest" />
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 /**
@@ -28,6 +28,14 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    /**
+     * TWO TEST SET-UPS (plan CR-2d D1). The SMS sign-in's session tests in
+     * `src/test/lib` (and their helpers in `src/test/support`) are written for
+     * Node's own test runner with a pretend browser, and run by
+     * `npm run test:session` (scripts/run-tests.mjs). vitest leaves them out;
+     * vitest's own defaults (node_modules, dist, …) still apply.
+     */
+    exclude: [...configDefaults.exclude, 'src/test/lib/**', 'src/test/support/**'],
     css: false,
     /**
      * RAISED FROM VITEST'S 5s DEFAULT IN TASK 12, and this is a measurement

@@ -597,7 +597,9 @@ function ScreenRefresh() {
  * letters.
  */
 function SignedIn() {
-  const { session, logout } = useAdminAuth();
+  // SMS sign-in (CR-2d join): `signingOut` is true from the first press of any Sign out control
+  // until the page leaves, and disables them all, so a second press changes nothing.
+  const { session, logout, signingOut } = useAdminAuth();
   const qc = useQueryClient();
 
   const claims = useMemo(() => (session ? decodeJwt(session.accessToken) : {}), [session]);
@@ -607,13 +609,13 @@ function SignedIn() {
 
   const signOut = () => {
     /*
-     * `logout()` removes ONLY the scope query (AdminAuthProvider.tsx:50).
-     * Every other admin query — farm lists, users, farmer names, phone
-     * numbers — stays in this tab's cache, and the application staleTime is
-     * 60s (App.tsx:35), so the next admin to sign in on the same machine
-     * inside the minute renders the previous admin's rows before any refetch
-     * lands. Purge first, while the token is still valid, so nothing
-     * re-fetches against a cleared session on the way out.
+     * Purge first, so the next admin to sign in on the same machine cannot be
+     * shown the previous admin's rows (pinned by `tenancy.contract.test.tsx`).
+     * Since the SMS sign-in (CR-2d join) `logout()` also forgets everything at
+     * the press — the stored session, every request in the air and the whole
+     * query cache (`forgetSession` in lib/api.ts) — then tells the server and
+     * opens the login page afresh. Both clear the same client in the console;
+     * this line is what clears the one in context.
      */
     qc.clear();
     logout();
@@ -642,11 +644,12 @@ function SignedIn() {
       <button
         type="button"
         onClick={signOut}
+        disabled={signingOut}
         aria-label="Sign out"
-        className="glass-quiet inline-flex h-10 items-center gap-2 rounded-chip border-control-edge px-3.5 text-caption font-medium text-text-1 hover:bg-wash"
+        className="glass-quiet inline-flex h-10 items-center gap-2 rounded-chip border-control-edge px-3.5 text-caption font-medium text-text-1 hover:bg-wash disabled:pointer-events-none disabled:opacity-50"
       >
         <LogOut size={14} className="flex-none" aria-hidden="true" />
-        <span className="hidden lg:inline">Sign out</span>
+        <span className="hidden lg:inline">{signingOut ? 'Signing out…' : 'Sign out'}</span>
       </button>
     </>
   );

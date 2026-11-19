@@ -219,6 +219,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Unit tests (vitest)
         run: npm run test
+      # The SMS sign-in's session tests (sign-in, session renewal, sign-out) run
+      # on Node's own test runner, not vitest: the console's second test set-up
+      # (plan CR-2d D1). It exits non-zero when no test file is found.
+      - name: Session tests (node --test)
+        run: npm run test:session
 
   gate:
     name: gate

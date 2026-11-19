@@ -92,6 +92,7 @@ const SESSION = {
   refreshToken: null,
   userId: '00000000-0000-0000-0000-0000000000aa',
   expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+  signedInAtUtc: new Date(Date.now()).toISOString(),
 };
 
 const MEMBERSHIPS = [

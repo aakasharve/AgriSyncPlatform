@@ -185,6 +185,7 @@ describe('states that show no number (CR-2b Task 4)', () => {
       refreshToken: null,
       userId: '00000000-0000-0000-0000-0000000000bb',
       expiresAtUtc: new Date(MIS_NOW.getTime() + 3_600_000).toISOString(),
+      signedInAtUtc: new Date(MIS_NOW.getTime()).toISOString(),
     });
     stub = serveMis(async () => ({ status: 401, data: {} }));
     const { container } = renderMis('quality');
@@ -273,6 +274,7 @@ describe('the console frame on a Company MIS page (CR-2b Task 4)', () => {
     refreshToken: null,
     userId: '00000000-0000-0000-0000-0000000000cc',
     expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+    signedInAtUtc: new Date(Date.now()).toISOString(),
   };
 
   function appQueryClient(): QueryClient {

@@ -77,6 +77,7 @@ function signIn(claims: Record<string, unknown>) {
     refreshToken: null,
     userId: String(claims.sub ?? 'user-1'),
     expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+    signedInAtUtc: new Date(Date.now()).toISOString(),
   });
 }
 

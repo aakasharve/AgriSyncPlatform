@@ -35,6 +35,7 @@ const SESSION = {
   refreshToken: null,
   userId: '00000000-0000-0000-0000-0000000000b2',
   expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+  signedInAtUtc: new Date(Date.now()).toISOString(),
 };
 const WAIT = 15_000;
 

@@ -81,6 +81,7 @@ describe('both actions survive on every variant (A13)', () => {
       refreshToken: null,
       userId: 'u1',
       expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+      signedInAtUtc: new Date(Date.now()).toISOString(),
     });
     renderForbidden(null);
 

@@ -2,65 +2,65 @@ import { Link, useLocation } from 'react-router-dom';
 import { ShieldOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
+import { noAccessView, signInKey, type NoAccessView } from '@/lib/noAccessView';
+
+// Everything the page can say about why. `wayBack` is the button to the home page: it is left
+// out when nothing in the console will open for the account.
+const SAYS: Record<NoAccessView, { heading: string; sentence: string; wayBack: boolean }> = {
+  'not-on-team': {
+    heading: 'You do not have access to the control room.',
+    sentence:
+      "This account is not on the control room's team. Ask the owner to add you, then sign in again.",
+    wayBack: false,
+  },
+  'one-page': {
+    heading: 'You do not have access to this page.',
+    sentence:
+      "This account is on the control room's team, but this page is not open to it. Ask the owner to open it for you.",
+    wayBack: true,
+  },
+  'no-reason': {
+    heading: 'You do not have access to this page.',
+    sentence: 'This page is not open to this account.',
+    wayBack: true,
+  },
+};
 
 /**
- * /403 — where a denial lands, and the only page in the console DELIBERATELY
- * outside RequireScope (App.tsx). Put it inside and an unresolved scope would
- * redirect to a page that redirects. It is also, until Task 10 put one in the
- * shell, the only place in the whole console that could sign a person out; it
- * keeps that control because a denied user still needs it.
+ * The page for a signed-in person the console will not let in. Plain words only: no status
+ * number, no address and no internal name is ever shown.
  *
- * Three states, from three different gates:
- *   `module`           — EntitlementGuard refused one specific module.
- *   `scopeUnavailable` — RequireScope could not GET AN ANSWER. New in Task 11:
- *                        a 500 or a dropped connection on /admin/me/scope used
- *                        to land here under the heading "403 · Access denied",
- *                        which tells an admin their access was taken away when
- *                        the truth is that the question could not be asked.
- *                        That is a lie in the most alarming direction, and it
- *                        is the same defect class as a failed request drawn as
- *                        a clean bill of health.
- *   nothing            — no admin membership at all.
+ * Three cases (chosen by `noAccessView`). The account is not on the team at all: nothing here
+ * will open for it, so the page offers Sign out. Or the account is on the team but one page is
+ * closed to it (the page gate sends its module along): the rest of the console still works, so
+ * the page offers the way back as well. Which module it was is not shown. Or the page was
+ * opened with no reason it can trust: it then says only that the page is not open to this
+ * account, and offers both buttons.
  *
- * Both original message variants are unchanged, word for word. The new one
- * sits in front of them and claims less, not more.
+ * A reason is trusted only in the sign-in the gate found it in (`signInKey`). The browser keeps
+ * what a gate sent in its history: after a sign-out and a new sign-in on the same tab, by
+ * somebody else or by the same person, "Back" opens this page with the old reason, and it is
+ * not shown.
  *
- * ── RESTYLED OFF THE LEGACY LAYER, 2026-09-02 ─────────────────────────────
- * This page was the last consumer of `.glass-panel` — a translucent panel
- * under a 30px backdrop blur, with a three-stop gradient bar across its top
- * edge, plus a red-to-amber gradient behind the shield. CONTRACT.md
- * §8 bans glassmorphism, translucency and gradients, so /403 was a live
- * violation on three counts at once. Task 27 FOUND it, named it in the
- * stylesheet, and left it standing because no screen task owned this page and
- * restyling it changes what the founder sees on one of the two routes he can
- * reach on this machine. This pass owned it, so it is fixed: a flat white
- * panel at the float depth, and the shield in `tint-red` + `red`.
+ * From the press of Sign out the page gives no reason at all: "Signing out…" and nothing else.
+ * A browser may keep a copy of the page it leaves, exactly as it looked, and show that copy for
+ * a moment when the next person goes "Back", before the console can load the page afresh. A
+ * kept copy of this page must therefore carry nobody's reason.
  *
- * The colour is not decoration and it did not change meaning. Red is §A.4's
- * "needs a person, or a failure", which is exactly what a denial is; the old
- * gradient said failure AND warning at once, which are two different things.
+ * It stays DELIBERATELY outside RequireScope (App.tsx): inside it, an unresolved scope would
+ * redirect to a page that redirects. A scope check the server gave no verdict on (no answer,
+ * 429, 5xx) is not sent here: `ServerUnreachable` says so instead (App.tsx RequireScope).
  *
- * `.glass-panel`, its `::before`, `--radius-card` and five §B tokens were
- * deleted in the same commit, because a class kept alive by one file is dead
- * CSS the moment that file moves.
- *
- * The five server denial codes are NOT branched on here. /403 has no producer
- * that carries one, and a branch with no producer is exactly the dead code
- * that gets deleted next year as unused. They are spent where they arrive
- * instead: `formatError` (components/state/honestState.ts) turns each into a
- * sentence, and every LoadFailed and ErrorState panel in the console renders
- * through it.
+ * Styling is the September console's token layer (restyled 2026-09-02): a panel at the float
+ * depth and the shield in `tint-red` + `red` — red is "needs a person, or a failure", which is
+ * what a denial is.
  */
-interface ForbiddenState {
-  module?: string;
-  from?: string;
-  scopeUnavailable?: boolean;
-}
-
 export default function ForbiddenPage() {
-  const { logout } = useAdminAuth();
+  // Sign out here ends on the login page like everywhere else: it used to leave the person on
+  // this page, signed out, with nothing to tell them so.
+  const { logout, signingOut, session } = useAdminAuth();
   const location = useLocation();
-  const state = location.state as ForbiddenState | null;
+  const says = signingOut ? null : SAYS[noAccessView(location.state, signInKey(session))];
 
   return (
     <div className="grid min-h-screen place-items-center p-6">
@@ -71,34 +71,23 @@ export default function ForbiddenPage() {
         <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-panel bg-tint-red text-red">
           <ShieldOff size={28} strokeWidth={2.4} aria-hidden="true" />
         </div>
-        <h1 className="mb-2 text-h2 font-bold text-text-1">
-          {state?.scopeUnavailable ? 'We could not check your access' : '403 · Access denied'}
-        </h1>
-        <p className="mb-6 text-body text-text-2">
-          {state?.scopeUnavailable ? (
-            <>
-              This is not a permissions problem — the check itself failed to answer. Nothing about
-              your account has changed. Try again in a moment.
-            </>
-          ) : state?.module ? (
-            <>
-              Your admin scope does not grant access to{' '}
-              <code className="font-mono">{state.module}</code>.
-            </>
-          ) : (
-            <>
-              Your account does not have an admin membership for this console. Ask a Platform owner to
-              invite you via <code className="font-mono">/settings/admins</code>.
-            </>
-          )}
-        </p>
+        {says ? (
+          <>
+            <h1 className="mb-2 text-h2 font-bold text-text-1">{says.heading}</h1>
+            <p className="mb-6 text-body text-text-2">{says.sentence}</p>
+          </>
+        ) : (
+          <h1 className="mb-6 text-h2 font-bold text-text-1">Signing out…</h1>
+        )}
         <div className="flex justify-center gap-2">
-          <Button variant="outline" onClick={logout}>
-            Sign out
+          <Button variant="outline" disabled={signingOut} onClick={logout}>
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
-          <Link to="/login">
-            <Button>Go to login</Button>
-          </Link>
+          {says?.wayBack && (
+            <Link to="/">
+              <Button>Back to the home page</Button>
+            </Link>
+          )}
         </div>
       </div>
     </div>

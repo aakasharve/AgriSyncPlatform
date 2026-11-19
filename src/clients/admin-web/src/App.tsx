@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
 import { AdminShell } from '@/app/AdminShell';
@@ -9,9 +9,11 @@ import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
 import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { ServerUnreachable } from '@/components/ServerUnreachable';
+import { gotNoVerdict } from '@/lib/api';
 import { ModuleKeys } from '@/lib/moduleKeys';
-import { describeAdminDenial } from '@/lib/adminErrors';
-import { currentPathWithQuery, setLoginRedirectHandler } from '@/lib/returnTo';
+import { signInKey, type NoAccessState } from '@/lib/noAccessView';
+import { queryClient } from '@/lib/queryClient';
 
 const HomePage               = lazy(() => import('@/pages/HomePage'));
 const LoginPage               = lazy(() => import('@/pages/LoginPage'));
@@ -33,123 +35,57 @@ const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/Farm
 const FarmerHealthDrilldown   = lazy(() => import('@/features/farmer-health/FarmerHealthDrilldown'));
 const MisPage                 = lazy(() => import('@/features/mis/MisPage'));
 
-/**
- * THE ONLY CATCH SITE THAT SEES EVERY QUERY.
- *
- * `AdminScopeAmbiguousError` and `AdminModuleForbiddenError` had zero catch
- * sites in this console. They still have to be *acted* on somewhere, and the
- * action is the same for both, for one reason: each of them is the server
- * contradicting the scope this client is currently gating on.
- *
- * The client caches `/admin/me/scope` for 60s and decides what to show from
- * that cache. If a data request comes back `admin_module_forbidden` for a
- * module the cached scope says is readable, the cache is wrong — the grant was
- * revoked, or the active org moved underneath it. Re-asking makes the console
- * gate on the truth within one request instead of within a minute. Doing
- * nothing leaves a revoked admin looking at a nav item they may no longer open.
- *
- * It cannot recurse: `/admin/me/scope` never returns 428 or 403. It answers
- * 200 with an `outcome` precisely so the client does not have to read error
- * codes to decide what to render (AdminEndpoints.cs:36-40, verified). So there
- * is no loop guard here, and that absence is deliberate rather than forgotten.
- *
- * It does NOT navigate. A background refetch failing is not a reason to yank a
- * working screen out from under someone; the four outcomes below, and the
- * panel's own honest-state, are where a denial becomes visible.
- */
-const queryCache = new QueryCache({
-  onError: (error) => {
-    if (!describeAdminDenial(error)) return;
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'me', 'scope'] });
-  },
-});
+/* THE ONLY CATCH SITE THAT SEES EVERY QUERY (the QueryCache that re-asks the
+   scope when the server contradicts it) now lives with the console's one
+   QueryClient in `lib/queryClient.ts`, unchanged: the SMS sign-in keeps that
+   client in its own module so api.ts can empty it at every end of a session. */
 
-const queryClient = new QueryClient({
-  queryCache,
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
-
-function Fallback() {
+function Fallback({ text = 'Loading…' }: { text?: string }) {
   return (
-    <div className="grid min-h-[400px] place-items-center text-body text-text-2">Loading…</div>
+    <div className="grid min-h-[400px] place-items-center text-body text-text-2">{text}</div>
   );
 }
 
 /**
  * Authentication gate — JWT must exist. No scope check here.
+ *   loading     → spinner. A sign-out takes the screens down at the press, and the page then
+ *                 stays here while the server is told: it says so.
+ *   unreachable → the stored session could not be renewed for want of an answer: say so
+ *   anonymous   → /login. The page that was asked for is not remembered: whoever signs in next
+ *                 always starts on the home page, never on the page of the person before.
  *
- * `state.from` carries the WHOLE url, not the pathname. It used to be
- * `location.pathname`, which threw away the query string — and the query
- * string is where every piece of this console's url state lives: `page`,
- * `search`, `tier`, `weeks`, `days`, and `org`, which decides whose data the
- * page shows. A bookmarked `/farms?page=7&tier=B&org=<uuid>` came back as
- * `/farms` after signing in: page one, no filter, and possibly a different
- * organisation. See `lib/returnTo.ts` for why the browser url is reconciled
- * with the router's.
+ * CR-2d join: this is the SMS sign-in's gate. The September console's deep-link return
+ * (`state.from` = the whole url, spent by the old LoginPage; Preservation Register A9) is not
+ * carried: the SMS sign-in decides the first page after a sign-in, and it is always the home
+ * page, because the last person to use this tab may have been somebody else.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { status } = useAdminAuth();
-  const location = useLocation();
-  if (status === 'loading') return <Fallback />;
-  if (status === 'anonymous')
-    return <Navigate to="/login" state={{ from: currentPathWithQuery(location) }} replace />;
+  const { status, retry, signingOut } = useAdminAuth();
+  if (status === 'loading') return <Fallback text={signingOut ? 'Signing out…' : undefined} />;
+  if (status === 'unreachable') return <ServerUnreachable onRetry={retry} />;
+  if (status === 'anonymous') return <Navigate to="/login" replace />;
   return <>{children}</>;
-}
-
-/**
- * Hands the router to the module-scoped axios interceptor.
- *
- * The interceptor cannot call hooks, so a 401 could only reach for
- * `window.location.assign('/login')` — a full reload, which cannot carry
- * router state, which means the url the user was on is gone by the time
- * LoginPage renders. This is the same bridge pattern, and the same reason, as
- * `getActiveOrgIdSnapshot()` in ActiveOrgProvider.
- *
- * `logout()` runs alongside the navigation because the interceptor has already
- * cleared the stored session: without it this provider still reports
- * `authenticated`, and the browser Back button walks straight back into a
- * shell with no token. The hard reload used to do that reset by accident.
- */
-function LoginRedirectBridge() {
-  const navigate = useNavigate();
-  const { logout } = useAdminAuth();
-
-  useEffect(
-    () =>
-      setLoginRedirectHandler((returnTo) => {
-        logout();
-        navigate('/login', { state: { from: returnTo }, replace: true });
-      }),
-    [navigate, logout],
-  );
-
-  return null;
 }
 
 /**
  * Scope gate — must live inside <RequireAuth> and <ActiveOrgProvider>.
  *   loading   → the fallback
- *   isError   → /403, saying the check FAILED rather than that it denied
+ *   no verdict (no answer, 429, 5xx) → "The server could not be reached" (never /403)
+ *   other error → /403, not on the team
  *   unresolved (Unauthorized) → /403 (no memberships — never going to work)
  *   ambiguous → full-page OrgSwitcher, "Choose your active organization"
  *   notInOrg  → full-page OrgSwitcher, "That organization is not in your memberships"
  *   resolved  → render children
  *
- * THREE OF THESE SIX HAVE NO URL OF THEIR OWN and appear in no screenshot.
+ * THREE OF THESE HAVE NO URL OF THEIR OWN and appear in no screenshot.
  * This is not a screen in the design; it is a gate above every screen, and a
  * design-led port rebuilds it as "if signed in, show the app".
  *
- * `scopeUnavailable` is the one addition. A 500 or a dropped connection on
- * `/admin/me/scope` used to land on a page headed "403 · Access denied",
- * which is a lie in the most alarming possible direction: it tells an admin
- * their access was taken away when the truth is that the question could not be
- * asked. The route is unchanged — only what /403 is allowed to claim.
+ * Both ways to /403 say why, and in which sign-in that was found (`signInKey`): the no-access
+ * page shows a reason only in that sign-in, never to whoever signs in next (see `noAccessView`).
+ * A server that gave no verdict has refused nobody, so it never lands on /403: that is the
+ * SMS sign-in's `ServerUnreachable`, which replaces the September console's "We could not
+ * check your access" /403 state for the same cases (a 500 or a dropped connection).
  *
  * TASK 12 STEP 5 — THE NotInOrg SENTENCE IS NOW TRUE.
  *
@@ -168,9 +104,14 @@ function LoginRedirectBridge() {
  * `Ambiguous` until a new organisation is actually selected.
  */
 export function RequireScope({ children }: { children: ReactNode }) {
-  const { isLoading, isError, outcome, memberships } = useAdminScope();
+  const { session } = useAdminAuth();
+  const { isLoading, isFetching, isError, error, refetch, outcome, memberships } = useAdminScope();
   const { activeOrgId, clear } = useActiveOrg();
   const [rejectedOrg, setRejectedOrg] = useState<string | null>(null);
+  const notOnTeam: NoAccessState = {
+    reason: 'not-on-team',
+    account: signInKey(session) ?? undefined,
+  };
 
   useEffect(() => {
     if (outcome !== 'NotInOrg' || !activeOrgId) return;
@@ -179,9 +120,13 @@ export function RequireScope({ children }: { children: ReactNode }) {
   }, [outcome, activeOrgId, clear]);
 
   if (isLoading) return <Fallback />;
-  if (isError) return <Navigate to="/403" state={{ scopeUnavailable: true }} replace />;
+  if (isError) {
+    // A server that did not answer has refused nobody: "Access denied" would be untrue.
+    if (gotNoVerdict(error)) return <ServerUnreachable onRetry={refetch} retrying={isFetching} />;
+    return <Navigate to="/403" state={notOnTeam} replace />;
+  }
 
-  if (outcome === 'Unauthorized') return <Navigate to="/403" replace />;
+  if (outcome === 'Unauthorized') return <Navigate to="/403" state={notOnTeam} replace />;
 
   // Checked BEFORE Ambiguous: after the clear above, the server answers
   // Ambiguous, and the generic headline would bury the reason.
@@ -233,6 +178,10 @@ export function RequireScope({ children }: { children: ReactNode }) {
  * <html data-mode="light">, so there is nothing left for a theme context to
  * hold, and `useTheme` — which Step 1 also asks to keep failing fast — no
  * longer exists. `useAdminAuth` and `useActiveOrg` still throw by name.
+ *
+ * CR-2d join: since the SMS sign-in, AdminAuthProvider reaches the one client
+ * through `lib/queryClient.ts` (login() and every end of a session EMPTY it)
+ * rather than through useQueryClient(); the order is kept as it was.
  */
 export default function App() {
   return (
@@ -240,7 +189,6 @@ export default function App() {
       <BrowserRouter>
         <ActiveOrgProvider>
           <AdminAuthProvider>
-            <LoginRedirectBridge />
             {/* TASK 26 STEP 7 — THE BOOT-FAILURE STATE.
 
                 Every screen below is a `lazy()` import. `<Suspense>` covers a

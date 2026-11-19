@@ -27,6 +27,7 @@ function futureSession(overrides: Partial<AdminSession> = {}): AdminSession {
     refreshToken: 'refresh-token',
     userId: 'user-1',
     expiresAtUtc: new Date(Date.now() + 3_600_000).toISOString(),
+    signedInAtUtc: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -65,7 +66,7 @@ describe('authStore persistence (A10)', () => {
     authStore.set(session);
     expect(JSON.parse(localStorage.getItem('admin.session.v1') ?? 'null')).toEqual(session);
     expect(authStore.get()).toEqual(session);
-    expect(authStore.getAccessToken()).toBe('access-token');
+    expect((authStore.get()?.accessToken ?? null)).toBe('access-token');
   });
 
   it('reads an expired session as null WITHOUT a network round trip', () => {
@@ -78,7 +79,7 @@ describe('authStore persistence (A10)', () => {
     );
 
     expect(authStore.get()).toBeNull();
-    expect(authStore.getAccessToken()).toBeNull();
+    expect((authStore.get()?.accessToken ?? null)).toBeNull();
     expect(stub.requests).toHaveLength(0);
   });
 
@@ -118,7 +119,7 @@ describe('client-side authorization stays out of the auth path (A10 / D15)', () 
     // read(). A token that is not even a JWT still authenticates, because the
     // server is the authority (GET /admin/me/scope).
     authStore.set(futureSession({ accessToken: 'not-a-jwt' }));
-    expect(authStore.getAccessToken()).toBe('not-a-jwt');
+    expect((authStore.get()?.accessToken ?? null)).toBe('not-a-jwt');
     expect(decodeJwt('not-a-jwt')).toEqual({});
   });
 

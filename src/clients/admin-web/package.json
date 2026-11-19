@@ -10,6 +10,7 @@
     "lint": "eslint --max-warnings 9999 .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:session": "node scripts/run-tests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

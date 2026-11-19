@@ -106,6 +106,7 @@ describe('adminApi request contract (A1)', () => {
       refreshToken: null,
       userId: 'u1',
       expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+      signedInAtUtc: new Date(Date.now()).toISOString(),
     });
     await adminApi.get('/authenticated');
     expect(stub.requests[1].headers['Authorization']).toBe('Bearer token-123');
@@ -182,6 +183,7 @@ describe('adminApi 401 contract (A11)', () => {
     authStore.set({
       accessToken: 't', refreshToken: null, userId: 'u1',
       expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+      signedInAtUtc: new Date(Date.now()).toISOString(),
     });
     const assigns = stubLocation('/farms');
     stub = fails(401, {});
@@ -208,6 +210,7 @@ describe('adminApi 401 contract (A11)', () => {
     authStore.set({
       accessToken: 't', refreshToken: null, userId: 'u1',
       expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+      signedInAtUtc: new Date(Date.now()).toISOString(),
     });
     stubLocation('/login');
     stub = fails(401, {});
