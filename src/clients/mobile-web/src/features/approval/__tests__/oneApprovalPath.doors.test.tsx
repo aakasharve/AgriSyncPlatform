@@ -148,7 +148,7 @@ describe('one approval path — no second sheet, no second write', () => {
         const doors = [
             'features/context/components/AppHeader.tsx', // the waiting drawer's approval row
             'features/oversight/components/StripSignals.tsx', // the strip
-            'features/reflect/ReflectPage.tsx', // आढावा
+            // (founder 2026-11-19: the आढावा page no longer draws its own approval block; the header chip above it is the same door)
             'features/labour/components/LabourFeature.tsx', // हजेरी तपासा + the dashboard's तपासायचं
             'features/work/pages/JobCardDetailPage.tsx', // a task card's linked record
         ];

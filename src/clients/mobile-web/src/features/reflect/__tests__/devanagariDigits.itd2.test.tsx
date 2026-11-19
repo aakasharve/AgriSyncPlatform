@@ -107,12 +107,12 @@ const renderPage = () => {
 
 /**
  * EXCEPTIONS - on the same page, not changed by this lane (D-128). Each is a test id (or prefix) and WHY it keeps its digits:
- *   day-label, day-quick-*            the page's day chips ("25 ऑक्टो"): the shared reflect date formatter
+ *   day-label                         the page's day label ("25 ऑक्टो"): the shared reflect date formatter
  *   farm-crop-*, activity-feed-count  the page's own crop / recording counters
  *   vr-day-*                          the day view's rows (`DayParts`, shared with the check and correction screens)
  *   rf-time-*                         the day view's time chips (`formatFarmerLogTime`, the app's fixed Marathi time words)
  */
-const EXCEPTIONS = ['day-label', 'day-quick-0', 'activity-feed-count', 'farm-crop-all', 'vr-day-head-labour', 'rf-time-g1-me'];
+const EXCEPTIONS = ['day-label', 'activity-feed-count', 'farm-crop-all', 'vr-day-head-labour', 'rf-time-g1-me'];
 
 describe('IT-D2 - पूर्ण शेतीचा आढावा: the plot card in Marathi mode', () => {
     it('every plot card and the day view header hold no Latin digit', async () => {

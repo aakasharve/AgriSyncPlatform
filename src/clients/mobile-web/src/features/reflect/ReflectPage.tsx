@@ -45,7 +45,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarRange, LayoutGrid, ListChecks, PieChart, StickyNote } from 'lucide-react';
 import type { DailyLog } from '../../types';
-import { ApprovalChip } from '../approval/ApprovalChip';
 import { isWholeFarmSelection } from '../analysis/components/costAnalysisHelpers';
 import { getHarvestSessions } from '../../services/harvestService';
 import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
@@ -78,7 +77,6 @@ import { useDayListen } from './day/useDayListen';
 import { ActivityCalendar, type CalendarMode } from './overview/ActivityCalendar';
 import { buildCalendarDay } from './overview/calendarModel';
 import { CostSection, InHandCard, MoneyStripFace } from './overview/CostSection';
-import { DayBar } from './overview/DayBar';
 import { PastDayTell } from './overview/PastDayTell';
 import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
 import { FarmStatus } from './overview/FarmStatus';
@@ -89,7 +87,7 @@ import { buildDayCardCore, buildPlotDayCard, placeDayLogs, withNextHint } from '
 import { usePlotUnderstanding } from './overview/usePlotUnderstanding';
 import { ownNameOf } from '../../shared/utils/ownName';
 import { PlotDayCards } from './overview/PlotDayCards';
-import { atNoon, relLabel } from './overview/reflectDates';
+import { atNoon, dateLabel, relLabel, weekdayOf } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
 import { buildTodoList, mergeTasks, newTodoTask, tickableIds, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
 import { spokenTaskId } from '../plannedWork/data/plannedWorkIds';
@@ -98,8 +96,6 @@ import { Num, SANS, SectionBlock, Tap } from './overview/ui';
 import { useMoneyLedger } from './overview/useMoneyLedger';
 import { useSectionLayout } from './overview/useSectionLayout';
 import { FIXED_FIRST, type SectionId } from './overview/sectionLayout';
-import { LayoutPreviewSwitch } from './overview/LayoutPreviewSwitch';
-import { AttentionStrip } from '../attention/components/AttentionStrip';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { cropNameIn } from '../logs/components/voiceResult/partNames';
 
@@ -126,7 +122,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     navigate,
     focusPlotId,
     onFocusPlotConsumed,
-    onOpenAttention,
 }) => {
     const { currentFarmId, currentFarm } = useFarmContext();
     // lane IT5 (Task 2b) - "औषधं तपासा" is offered to whoever the server says may confirm records (owner or a trusted person), by authority, not label
@@ -357,7 +352,13 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             <InHandCard figure={money.inHand} onOpen={navigate ? () => navigate('income') : undefined} />
                             {/* DWC v2 §2.9 — renders nothing unless FEATURE_FLAGS.DwcChip is on. */}
                             {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
-                            <DayBar date={date} onDate={pickDay} />
+                            {/* Founder 2026-11-19: the day is chosen in the calendar above; here is only which day is on show, and one way back to today. */}
+                            <div data-testid="day-bar" className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2 ring-1 ring-stone-200">
+                                <span className="min-w-0 text-[17px] font-extrabold text-stone-900" data-testid="day-label">{weekdayOf(date)}, {dateLabel(date)}{isToday ? ' · आज' : ''}</span>
+                                {!isToday && (
+                                    <Tap onClick={() => pickDay(new Date())} data-testid="day-today" className="flex min-h-[44px] shrink-0 items-center rounded-full bg-emerald-700 px-4 text-[15px] font-extrabold text-white">आजचा दिवस</Tap>
+                                )}
+                            </div>
                             {tellPastDay && <PastDayTell dateKey={dateKey} onTell={tellPastDay} />}
                             {cards.length > 0
                                 ? <PlotDayCards cards={hintedCards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
@@ -406,12 +407,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 <DayFeedSheet blocks={feedBlocks} isToday={isToday} dayLabel={dayLabel} listen={listen} onEdit={onOpenLog ? openLog : undefined} onClose={() => setFeedOpen(false)} />
             )}
 
-            {/* spec: plr-d10 (I28, lane L4b; founder D-3 / D-40) — the आढावा door of the ONE approval path: "मंजुरीसाठी N"
-                from the server's list for this farm, one tap to the one review sheet. It replaces the read-only inbox
-                that listed only PENDING records (a status the pull never produces) and approved nothing. */}
-            <div className="px-3">
-                <ApprovalChip farmId={currentFarmId} language={language === 'en' ? 'en' : 'mr'} data-testid="reflect-approval-chip" />
-            </div>
 
             {/* LABOUR_PHASE2 P2.4 — the whole-farm day. Only when the chosen day IS today: its line reads "आज: …". */}
             {isToday && (
@@ -422,17 +417,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 </div>
             )}
 
-            {/* spec: plr-d10 (I22, D-1) — लक्ष द्या's preview: the most urgent item and the count; a tap opens it. */}
-            {onOpenAttention && (
-                <div className="px-3">
-                    <AttentionStrip tasks={tasks} crops={crops} onOpen={onOpenAttention} />
-                </div>
-            )}
 
             <div className="space-y-3 px-3">
-                {layout.preview && (
-                    <LayoutPreviewSwitch version={layout.version} onVersion={layout.preview.setVersion} onFirstVisit={layout.preview.resetFirstVisit} />
-                )}
                 {[FIXED_FIRST, ...layout.order].map(id => {
                     const at = layout.order.indexOf(id);
                     const reorder = reordering && layout.move && id !== FIXED_FIRST ? {

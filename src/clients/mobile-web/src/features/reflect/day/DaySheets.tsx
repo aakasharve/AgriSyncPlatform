@@ -104,6 +104,7 @@ export const PlotDayView: React.FC<{
                 </div>
             ) : (
                 <>
+                    <p className="m-0 text-[18px] font-extrabold text-stone-900" data-testid="rf-day-synopsis">{copy.timesTold(logsCount, isToday)}</p>
                     <div data-testid="rf-day-parts">
                         <p className="m-0 mb-2 text-[13px] font-semibold text-stone-600">{copy.dayViewHint(isToday)}</p>
                         <div className="space-y-2">
