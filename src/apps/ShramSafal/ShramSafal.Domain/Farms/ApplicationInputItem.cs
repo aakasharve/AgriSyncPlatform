@@ -52,20 +52,32 @@ public sealed class ApplicationInputItem : Entity<Guid>
     /// <summary>His own words for the dose ("अंदाजे ५०० मिली"), kept verbatim beside it.</summary>
     public string? DoseSpokenText { get; private set; }
 
+    // ── spec: facts-card-input-truth-2026-11-19 (lane FACTS) — how he applied it, as the record states it ──
+    /// <summary>How it was applied (<c>Spray</c>, <c>Drench</c>, ...), exactly as the record states it. NULL = not stated, never defaulted (P4).</summary>
+    public string? Method { get; private set; }
+
+    /// <summary>The carrier water of the record's input row in litres (the phone's own count of tanks or blowers times their size). NULL = not stated.</summary>
+    public decimal? CarrierWaterLitres { get; private set; }
+
     public static ApplicationInputItem Create(
         Guid id, Guid operationId, string productName, string? productType, string? npkGrade,
         decimal? doseAmount, string? doseUnit, decimal? doseBasisQty, string? doseBasisUnit,
         int ordinal, DateTime createdAtUtc,
         // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
         // compiling and keeps writing NULL, which is exactly "not asked, not stated".
-        NumericCertainty? doseCertainty = null, string? doseSpokenText = null)
+        NumericCertainty? doseCertainty = null, string? doseSpokenText = null,
+        // lane FACTS — the same rule: trailing, optional, NULL when the record does not say.
+        string? method = null, decimal? carrierWaterLitres = null)
     {
         if (string.IsNullOrWhiteSpace(productName))
             throw new ArgumentException("productName must be non-blank.", nameof(productName));
 
-        return new ApplicationInputItem(
+        var item = new ApplicationInputItem(
             id, operationId, productName.Trim(), productType, npkGrade,
             doseAmount, doseUnit, doseBasisQty, doseBasisUnit, ordinal, createdAtUtc,
             doseCertainty, doseSpokenText);
+        item.Method = string.IsNullOrWhiteSpace(method) ? null : method.Trim();
+        item.CarrierWaterLitres = carrierWaterLitres is > 0 ? carrierWaterLitres : null;
+        return item;
     }
 }

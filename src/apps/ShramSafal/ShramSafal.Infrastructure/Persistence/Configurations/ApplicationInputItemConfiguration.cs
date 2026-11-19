@@ -37,6 +37,11 @@ internal sealed class ApplicationInputItemConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.DoseSpokenText)
             .HasColumnName("dose_spoken_text").HasMaxLength(200);
 
+        // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - additive, nullable: how it was applied and the carrier water, as the
+        // record states them. NULL on every row written before this migration and wherever the record is silent (P4).
+        builder.Property(x => x.Method).HasColumnName("method").HasMaxLength(40);
+        builder.Property(x => x.CarrierWaterLitres).HasColumnName("carrier_water_litres").HasPrecision(12, 2);
+
         builder.HasIndex(x => x.OperationId).HasDatabaseName("ix_application_input_items_operation_id");
         builder.Ignore(x => x.DomainEvents);
     }

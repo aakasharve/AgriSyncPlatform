@@ -1874,6 +1874,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("CarrierWaterLitres")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("carrier_water_litres");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -1905,6 +1910,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("dose_unit");
+
+                    b.Property<string>("Method")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("method");
 
                     b.Property<string>("NpkGrade")
                         .HasMaxLength(20)
@@ -4388,6 +4398,164 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_input_library_source_refs_source_id");
 
                     b.ToTable("input_library_source_refs", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputUseFact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CropName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("crop_name");
+
+                    b.Property<int?>("DayOfSeason")
+                        .HasColumnType("integer")
+                        .HasColumnName("day_of_season");
+
+                    b.Property<DateOnly?>("DayZeroDate")
+                        .HasColumnType("date")
+                        .HasColumnName("day_zero_date");
+
+                    b.Property<string>("DayZeroSource")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("day_zero_source");
+
+                    b.Property<DateTime>("DerivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("derived_at_utc");
+
+                    b.Property<string>("FactsVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("facts_version");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("GroupCodes")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("group_codes");
+
+                    b.Property<Guid>("InputItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("input_item_id");
+
+                    b.Property<string>("LibraryProductId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("library_product_id");
+
+                    b.Property<string>("LibraryVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("library_version");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<Guid?>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<string>("ProductSaid")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("product_said");
+
+                    b.Property<Guid?>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<string>("StageName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("stage_name");
+
+                    b.Property<DateOnly>("UseDate")
+                        .HasColumnType("date")
+                        .HasColumnName("use_date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InputItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_input_use_facts_item");
+
+                    b.HasIndex("FarmId", "UseDate")
+                        .HasDatabaseName("ix_input_use_facts_farm_date");
+
+                    b.ToTable("input_use_facts", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_use_facts_day_of_season", "day_of_season IS NULL OR day_of_season >= 0");
+
+                            t.HasCheckConstraint("ck_input_use_facts_day_zero_source", "day_zero_source IS NULL OR day_zero_source IN ('schedule', 'crop-cycle-start')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputUseIngredient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("GroupCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("group_code");
+
+                    b.Property<string>("IngredientKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("ingredient_key");
+
+                    b.Property<string>("IngredientName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("ingredient_name");
+
+                    b.Property<string>("IngredientNameMr")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("ingredient_name_mr");
+
+                    b.Property<Guid>("InputUseFactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("input_use_fact_id");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordinal");
+
+                    b.Property<string>("Percent")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("percent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InputUseFactId")
+                        .HasDatabaseName("ix_input_use_ingredients_fact");
+
+                    b.HasIndex("FarmId", "IngredientKey")
+                        .HasDatabaseName("ix_input_use_ingredients_farm_key");
+
+                    b.ToTable("input_use_ingredients", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_use_ingredients_ordinal", "ordinal >= 0");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Labour.AttendanceMark", b =>
