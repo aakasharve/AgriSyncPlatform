@@ -8,7 +8,7 @@ import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { useListUrlState } from '@/lib/useListUrlState';
-import { isTierFilterTooManyFarms, useFarmsList } from '@/hooks/useFarms';
+import { isTierFilterNotMeasured, isTierFilterTooManyFarms, useFarmsList } from '@/hooks/useFarms';
 import type { FarmSummary } from '@/hooks/useFarms';
 
 /**
@@ -111,9 +111,11 @@ function ownerPhoneOf(farm: FarmSummary): string | null {
 }
 
 const NO_ENTRY_LAST_WEEK = 'No entry last week';
+const NOT_MEASURED_WORDS = 'Not measured';
 
 /** Checked days, with self-confirmed days beside them (never summed). Null means no counted entry last week. */
 function checkedDaysWords(f: FarmSummary): string {
+  if (f.confirmedDaysNotMeasuredReason) return NOT_MEASURED_WORDS;
   if (f.wvfd7d === null || f.wvfd7d === undefined) return NO_ENTRY_LAST_WEEK;
   const checked = `${f.wvfd7d} checked`;
   return typeof f.selfOnlyDays7d === 'number' ? `${checked}, ${f.selfOnlyDays7d} self-confirmed` : checked;
@@ -173,7 +175,8 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     /* F4: the A to D group from checked days last week; a farm with no counted entry that week has none. */
     key: 'tier',
     label: 'Tier',
-    render: (f) => f.engagementTier ?? NO_ENTRY_LAST_WEEK,
+    render: (f) =>
+      f.confirmedDaysNotMeasuredReason ? NOT_MEASURED_WORDS : (f.engagementTier ?? NO_ENTRY_LAST_WEEK),
     sortType: 'text',
     sortValue: (f) => f.engagementTier,
     defaultDir: 'asc',
@@ -276,6 +279,7 @@ export default function FarmsListPage() {
     tier,
   );
   const tierTooMany = isError && isTierFilterTooManyFarms(error);
+  const tierNotMeasured = isError && isTierFilterNotMeasured(error);
 
   const items = data?.data?.items ?? [];
   const totalCount = data?.data?.totalCount ?? 0;
@@ -353,7 +357,16 @@ export default function FarmsListPage() {
         </p>
       )}
 
-      {tierTooMany ? (
+      {tierNotMeasured ? (
+        <p
+          role="status"
+          data-state="tier-filter-not-measured"
+          className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2"
+        >
+          The tier filter could not count every farm, so no farms are listed for it. Clear the tier to see
+          all farms.
+        </p>
+      ) : tierTooMany ? (
         <p
           role="status"
           data-state="tier-filter-too-many"

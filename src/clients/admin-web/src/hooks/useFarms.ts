@@ -8,6 +8,8 @@ export interface FarmSummary {
   wvfd7d: number | null;
   /** Days last week confirmed only by the person who saved them; null with wvfd7d. */
   selfOnlyDays7d?: number | null;
+  /** Set ("farm_unreadable") when the server could not count this farm's days: the cells say not measured. */
+  confirmedDaysNotMeasuredReason?: string | null;
   engagementTier: string | null;
   errors24h: number; lastLogAt: string | null; createdAt: string;
 }
@@ -16,6 +18,16 @@ export function isTierFilterTooManyFarms(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const r = (error as { response?: { status?: unknown; data?: { code?: unknown } } }).response;
   return r?.status === 409 && r?.data?.code === "tier_filter_too_many_farms";
+}
+function errorBody(error: unknown): { status?: unknown; code?: unknown } {
+  if (typeof error !== 'object' || error === null) return {};
+  const r = (error as { response?: { status?: unknown; data?: { code?: unknown } } }).response;
+  return { status: r?.status, code: r?.data?.code };
+}
+/** 409 `tier_filter_not_measured`: the server could not count every farm for the tier filter. */
+export function isTierFilterNotMeasured(error: unknown): boolean {
+  const b = errorBody(error);
+  return b.status === 409 && b.code === 'tier_filter_not_measured';
 }
 export interface FarmsList { items: FarmSummary[]; totalCount: number; page: number; pageSize: number; }
 export type SilentBand = '7-13' | '14-29' | '30+' | 'never';
