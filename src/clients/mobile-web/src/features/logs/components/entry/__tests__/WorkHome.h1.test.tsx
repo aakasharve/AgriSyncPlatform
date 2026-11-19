@@ -5,7 +5,7 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane UI-6; founder D-150, notes 1.2 and 2.4) - the Home is the approved picture H1:
  * two big doors (solid green record door, solid blue plan door under it), the हजेरी card only when a head count was said, and the
- * money as a full-width dark card. The WorkHome is drawn alone here, with its real children (`PlanDoor`, `TodayAttendanceCard`,
+ * money as a full-width light card. The WorkHome is drawn alone here, with its real children (`PlanDoor`, `TodayAttendanceCard`,
  * `RunningCostCard`); only the language, the update card and the planned-work store are stubbed.
  */
 import React from 'react';
@@ -256,14 +256,18 @@ describe('the हजेरी card only when a head count was said (founder D-15
     });
 });
 
-describe('the money as a full-width dark card (founder D-150, note 1.2)', () => {
-    it('is stone-900 with white text, a 44 px amber circle with the rupee at left, and the label, the big amount and the small line', () => {
+describe('the money as a full-width LIGHT card (founder D-150, note 1.2; 2026-11-19: not in dark colour)', () => {
+    it('is amber-50 with dark text, a 44 px amber circle with the rupee at left, and the label, the big amount and the small line', () => {
         render(<WorkHome {...full({ cost: { today: 1200, yesterday: 0, soFar: 45000, scopeLabel: 'संपूर्ण शेत' } })} />);
         const card = screen.getByTestId('running-cost-card');
-        expect(card.className).toContain('bg-stone-900');
-        expect(card.className).toContain('text-white');
+        expect(card.className).toContain('bg-amber-50');
+        expect(card.className).toContain('border-amber-300');
+        expect(card.className).toContain('text-stone-900');
         expect(card.className).toContain('w-full');
-        expect(card.className).not.toContain('bg-white');
+        // nothing dark and no white-on-dark text on the money card any more
+        expect(card.className).not.toContain('bg-stone-900');
+        expect(card.className).not.toContain('text-white');
+        expect(card.innerHTML).not.toMatch(/text-white|text-stone-200|text-amber-300/);
         const circle = card.querySelector('span.rounded-full') as HTMLElement;
         expect(circle.className).toContain('bg-amber-500');
         expect(circle.className).toContain('h-11');
@@ -275,7 +279,7 @@ describe('the money as a full-width dark card (founder D-150, note 1.2)', () => 
         expect(amount).toHaveTextContent('₹ 45,000');
         expect(amount.className).toContain('text-[26px]');
         expect(amount.className).toContain('font-extrabold');
-        expect(amount.className).toContain('text-amber-300');
+        expect(amount.className).toContain('text-stone-900');
         // the small line carries the real figures; nothing recorded is the app's own "—", never "₹ 0"
         expect(within(card).getByTestId('running-cost-recent').textContent).toBe('आज ₹ 1,200 · काल —');
         expect(within(card).getByTestId('running-cost-today')).toHaveTextContent('₹ 1,200');
@@ -307,8 +311,8 @@ describe('the money as a full-width dark card (founder D-150, note 1.2)', () => 
 
 describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the picture puts on solid colours', () => {
     const HEX: Record<string, string> = {
-        'text-white': '#ffffff', 'text-stone-200': '#e7e5e4', 'text-amber-300': '#fcd34d', 'text-emerald-50': '#ecfdf5',
-        'bg-stone-900': '#1c1917', 'bg-emerald-700': '#047857', 'bg-[#1448E6]': '#1448e6', 'bg-amber-500': '#f59e0b', 'text-stone-900': '#1c1917',
+        'text-white': '#ffffff', 'text-stone-700': '#44403c', 'text-emerald-50': '#ecfdf5',
+        'bg-amber-50': '#fffbeb', 'bg-emerald-700': '#047857', 'bg-[#1448E6]': '#1448e6', 'bg-amber-500': '#f59e0b', 'text-stone-900': '#1c1917',
     };
     const lin = (c: number) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
     const lum = (hex: string) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255); };
@@ -317,12 +321,12 @@ describe('contrast (WCAG AA, 4.5 : 1 for the small lines) of the text the pictur
     // text/90 on a solid: the picture's own "opacity .9" white, mixed into the blue
     const white90OnBlue = () => { const f = [255, 255, 255].map((c, i) => Math.round(0.9 * c + 0.1 * [20, 72, 230][i])); return '#' + f.map(c => c.toString(16).padStart(2, '0')).join(''); };
 
-    it('the money card: the label, the small line and the amber figure on stone-900', () => {
+    it('the money card: the label, the small line and the big figure on amber-50', () => {
         render(<WorkHome {...full()} />);
         for (const id of ['running-cost-scope', 'running-cost-recent', 'running-cost-so-far']) {
             const cls = textClass(screen.getByTestId(id));
             expect(cls, `${id} must use a colour this table knows`).toBeTruthy();
-            expect(ratio(HEX[cls as string], HEX['bg-stone-900'])).toBeGreaterThanOrEqual(4.5);
+            expect(ratio(HEX[cls as string], HEX['bg-amber-50'])).toBeGreaterThanOrEqual(4.5);
         }
     });
 

@@ -180,14 +180,15 @@ describe('ATT-LOG on the result screen after he speaks', { timeout: 60_000 }, ()
     });
 });
 
-describe('the money card on the work home (lane UI-6, founder D-150: the full-width dark card; who sees it is unchanged)', { timeout: 60_000 }, () => {
+describe('the money card on the work home (lane UI-6, founder D-150: the full-width light card, not dark; who sees it is unchanged)', { timeout: 60_000 }, () => {
     const COST = { costSnapshot: { today: 1200, cropSoFar: 45000, unverifiedToday: 0, scopeLabel: 'संपूर्ण शेत' }, yesterdayCost: 300 };
 
-    it('the owner sees it, dark, with the real figures', async () => {
+    it('the owner sees it, in light colour, with the real figures', async () => {
         const { renderLogView } = await load();
         render(<>{renderLogView(ctx({ ...COST } as Partial<AppRouterContext>))}</>);
         const card = screen.getByTestId('running-cost-card');
-        expect(card.className).toContain('bg-stone-900');
+        expect(card.className).toContain('bg-amber-50');
+        expect(card.className).not.toContain('bg-stone-900');
         expect(screen.getByTestId('running-cost-scope')).toHaveTextContent('खर्च — संपूर्ण शेत · आजपर्यंत');
         expect(screen.getByTestId('running-cost-so-far')).toHaveTextContent('₹ 45,000');
         expect(screen.getByTestId('running-cost-recent')).toHaveTextContent('आज ₹ 1,200 · काल ₹ 300');

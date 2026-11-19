@@ -29,7 +29,7 @@
  * bottom: the update card; the question "काय करायचं आहे?" as one small line (the big Sathi banner is gone - the picture has none);
  * the solid green record door (the biggest block); the solid blue "नियोजन करा" door under it (`PlanDoor`); the हजेरी card, only
  * when a head count was said - and until then a small note that says when हजेरी works (work first, then the head count),
- * never nothing (founder follow-up 2026-11-19); the money as a full-width dark card.
+ * never nothing (founder follow-up 2026-11-19); the money as a full-width light card (not dark: founder 2026-11-19).
  */
 import React from 'react';
 import { ChevronRight, Mic, Users } from 'lucide-react';
