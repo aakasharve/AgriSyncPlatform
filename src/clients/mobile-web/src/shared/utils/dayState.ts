@@ -12,6 +12,7 @@ import {
     getStageStartDay,
     scheduleTemplateForPlot
 } from '../../features/scheduler/planning/ClientPlanEngine';
+import { isRealPlan } from '../../features/scheduler/planning/followableDefault';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 // spec: dfes-companion-2026-07-11 (Task 3A) — exported minimally so
@@ -22,7 +23,7 @@ export type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 
 
 export type DayRiskStatus = 'stable' | 'risk_rising';
 
-/** Days since the last spray / irrigation after which `computeDayState` raises a risk signal (one rule, read by the शेड्यूल page too). */
+/** Days since the last spray / irrigation after which `computeDayState` raises a risk signal. HONESTY-1 (H10): the शेड्यूल page no longer reads them - it shows the last-spray / last-water facts without a verdict. */
 export const SPRAY_RISK_DAYS = 10;
 export const IRRIGATION_RISK_DAYS = 3;
 
@@ -47,6 +48,12 @@ export interface DayState {
      * formula; this ties them to the fact.
      */
     hasStarted: boolean;
+    /**
+     * spec: plr-d10 lane HONESTY-1 (H1; P4) - false when ANY planned item in the counts above came from a schedule that is not a
+     * real plan (the app's invented stand-in, or an unchecked sample nobody chose): then "{done} पूर्ण, {left} बाकी" would count
+     * work nobody really planned, and the screens that print those two numbers draw nothing. The counts themselves are unchanged.
+     */
+    planIsReal: boolean;
     riskStatus: DayRiskStatus;
     riskSignals: string[];
     lastActions: {
@@ -503,6 +510,7 @@ export const computeDayState = ({
     const scopedPlots = getScopePlots(crops, scope);
     const plannedByKey = new Map<string, number>();
     const executedByKey = new Map<string, number>();
+    let planIsReal = true;
 
     scopedPlots.forEach(item => {
         const { crop, plot } = item;
@@ -515,6 +523,8 @@ export const computeDayState = ({
         const referenceDate = plot.schedule.referenceDate || plot.startDate || dateKey;
         const dayNumber = calculateDayNumber(referenceDate, dateKey);
         const dailyPlan = derivePlannedItemsForDay(template, plot.schedule, dayNumber);
+        // H1: only a plan that put items INTO the counts can taint them.
+        if (dailyPlan.plannedItems.length > 0 && !isRealPlan(template)) planIsReal = false;
 
         dailyPlan.plannedItems.forEach(planItem => {
             const category = (planItem.category || 'ACTIVITY') as OperationCategory;
@@ -660,6 +670,7 @@ export const computeDayState = ({
         closurePercent,
         isClosed,
         hasStarted: dayHasSubstance,
+        planIsReal,
         riskStatus: riskSignals.length > 0 ? 'risk_rising' : 'stable',
         riskSignals,
         lastActions: {

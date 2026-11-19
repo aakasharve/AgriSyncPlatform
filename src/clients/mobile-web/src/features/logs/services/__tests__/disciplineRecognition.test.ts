@@ -25,12 +25,20 @@ describe('disciplineRecognition', () => {
         expect(buildRecognitionLine({ ...base, currentStreak: 1 })).toBe('आजचं काम सांगितलं. उद्याही भेटूया.');
     });
 
-    it('gives a gentle restart line at streak 0', () => {
-        expect(buildRecognitionLine({ ...base, currentStreak: 0 })).toBe('पुन्हा सुरुवात करूया — आजचं काम सांगणं मोलाचं आहे.');
+    // HONESTY-1 (H7, P4): the "start again" variant is dropped. The strip shows right after a save from a snapshot read when the screen
+    // opened, which can miss the record just made; a streak of 0 there is stale, so no line is better than "पुन्हा सुरुवात करूया".
+    it.each([0, -1, Number.NaN])('has NO line at streak %s - never "start again"', (currentStreak) => {
+        expect(buildRecognitionLine({ ...base, currentStreak })).toBeNull();
+    });
+
+    it('never says पुन्हा सुरुवात at any streak', () => {
+        for (const currentStreak of [-3, 0, 1, 2, 7, 40]) {
+            expect(buildRecognitionLine({ ...base, currentStreak }) ?? '').not.toContain('पुन्हा सुरुवात');
+        }
     });
 
     // PLR-D5 (lane AI-1): the result screen never says नोंद.
-    it.each([0, 1, 2, 7])('says no नोंद at streak %i', (currentStreak) => {
+    it.each([1, 2, 7])('says no नोंद at streak %i', (currentStreak) => {
         expect(buildRecognitionLine({ ...base, currentStreak })).not.toContain('नोंद');
     });
 });

@@ -115,15 +115,18 @@ export function DisciplineStrip({
                 {t('dfes.streakTomorrow')}
             </p>
 
-            <p
-                data-testid="discipline-recognition"
-                style={{
-                    margin: '7px 0 0', fontFamily: "'Noto Sans Devanagari', sans-serif",
-                    fontWeight: 700, fontSize: 13.5, lineHeight: 1.45, color: '#292524',
-                }}
-            >
-                {recognition}
-            </p>
+            {/* H7 (HONESTY-1): no line at all when there is no streak to recognise - never "start again" from a snapshot that may predate his save. */}
+            {recognition && (
+                <p
+                    data-testid="discipline-recognition"
+                    style={{
+                        margin: '7px 0 0', fontFamily: "'Noto Sans Devanagari', sans-serif",
+                        fontWeight: 700, fontSize: 13.5, lineHeight: 1.45, color: '#292524',
+                    }}
+                >
+                    {recognition}
+                </p>
+            )}
 
             {/* Quiet footnote — the points total stays auditable without competing
                 with the streak for attention. */}
