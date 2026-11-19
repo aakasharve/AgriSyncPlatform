@@ -118,13 +118,20 @@ public sealed class LiveAlertRulesRealPostgresTests(Xunit.Abstractions.ITestOutp
         before.AlertR9.Counted.Should().Be(30, "the five errors 61 minutes ago are outside the 60-minute window");
         before.AlertR9.State.Should().Be("clear");
 
-        // The control: one error 59 minutes ago is inside the window and tips it over.
+        // The control: one error 59 minutes ago is inside the window and tips it over. "59 minutes ago" is
+        // read from the clock NOW, after the seeding and the first read, not from `Now` (the moment the test
+        // started): on a slow run the scratch database and the first read can take over a minute, and a
+        // control placed 59 minutes before the test started would by then be more than 60 minutes old and
+        // fall out of the window for a reason that has nothing to do with the rule (plan CR-2d, test-writer).
+        var controlAtUtc = Micro(DateTime.UtcNow).AddMinutes(-59);
         await using (var db = await OpenSuperuserAsync())
         {
-            await EventAsync(db, ApiError, Now.AddMinutes(-59));
+            await EventAsync(db, ApiError, controlAtUtc);
         }
 
         var after = await HealthAsync(provider);
+        AsUtc(after.AlertR9.WindowStartUtc).Should().BeBefore(controlAtUtc,
+            "the control must sit inside the window it is meant to tip; if this fails, the run was too slow to judge");
         after.AlertR9.Counted.Should().Be(31);
         after.AlertR9.State.Should().Be("breach");
     }
