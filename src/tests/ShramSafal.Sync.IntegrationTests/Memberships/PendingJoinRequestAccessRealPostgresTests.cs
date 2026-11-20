@@ -610,6 +610,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
         // snapshot, not on Down(). Re-Up recreates all of it.
         "20261119105639_AddInputUseFacts",
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - Up() and Down() read in full: Up() creates ssf.control_room_people only, with no row-level security and no
+        // policy of any kind (it holds no farm's data), so nothing here reads farm_memberships or farm_join_requests. No audit_events object, no ssf.farms policy, no seat touched.
+        // Down() raises while a row exists, else drops the table. Re-Up recreates it.
+        "20261121090000_AddControlRoomPeople",
     ];
 
     /// <summary>

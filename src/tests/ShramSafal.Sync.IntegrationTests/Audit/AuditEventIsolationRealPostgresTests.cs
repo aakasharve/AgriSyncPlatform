@@ -1421,6 +1421,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
         // snapshot, not on Down(). Re-Up recreates all of it.
         "20261119105639_AddInputUseFacts",
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - Reviewed 2026-11-21; Up() and Down() read in full: Up() creates ssf.control_room_people only (no row-level
+        // security by design, SELECT + INSERT + UPDATE for the app role and a revoke of DELETE and TRUNCATE with its own effective-privilege guard); it adds no column to any
+        // existing table and never touches ssf.audit_events, its policies or its grants. Down() raises while a row exists (the proof's data has none), else drops only the table.
+        // Safe mid-proof.
+        "20261121090000_AddControlRoomPeople",
     ];
 
     /// <summary>

@@ -1472,6 +1472,91 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("terms_acceptance_events", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.ControlRoom.ControlRoomPerson", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at_utc");
+
+                    b.Property<Guid>("AddedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by_user_id");
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at_utc");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTime?>("KeptAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("kept_at_utc");
+
+                    b.Property<Guid?>("MembershipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("membership_id");
+
+                    b.Property<string>("PhoneE164")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("phone_e164");
+
+                    b.Property<DateTime?>("RemovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at_utc");
+
+                    b.Property<Guid?>("RemovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("removed_by_user_id");
+
+                    b.Property<string>("StartingRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("starting_role");
+
+                    b.PrimitiveCollection<string[]>("Ticks")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("ticks")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PhoneE164")
+                        .IsUnique()
+                        .HasDatabaseName("ux_control_room_people_active_phone")
+                        .HasFilter("is_active");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_control_room_people_active_user")
+                        .HasFilter("is_active AND user_id IS NOT NULL");
+
+                    b.ToTable("control_room_people", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_control_room_people_starting_role", "starting_role IN ('admin','field_operator','viewer')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Corrections.CorrectionEvent", b =>
                 {
                     b.Property<Guid>("Id")

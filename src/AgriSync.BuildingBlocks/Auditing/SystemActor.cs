@@ -85,4 +85,13 @@ public static class SystemActor
     /// </summary>
     public static readonly System.Guid ErasedFarmer =
         new("ffffffff-ffff-ffff-ffff-fffffffffffd");
+
+    /// <summary>
+    /// Trusted control room (spec: trusted-control-room-2026-11-20) — stamped as the subject of a History row
+    /// about the sign-in door when no person matches the number (a refused number, a code that was not sent).
+    /// <c>AuditEventFactory</c> refuses <see cref="System.Guid.Empty"/>, so the door needs a constant of its own.
+    /// Byte-8 stays at <c>0xff</c> like its siblings, so an RFC 4122 v4 id cannot collide with it.
+    /// </summary>
+    public static readonly System.Guid ControlRoomDoor =
+        new("ffffffff-ffff-ffff-ffff-fffffffffffc");
 }

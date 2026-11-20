@@ -304,6 +304,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    rebuildable rows, not a ledger). It grants or revokes nothing on any append-only ledger. Down() drops the four policies, both tables and the two
         //    columns - only what Up() added. Safe to revert and re-apply mid-proof.
         "20261119105639_AddInputUseFacts",
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - Reviewed 2026-11-21; Up() and Down() read in full: Up() creates ssf.control_room_people only (no RLS by design;
+        //    SELECT + INSERT + UPDATE for the app role on THIS new table - current state, not a ledger - and a DELETE and TRUNCATE revoke on it with its own effective-privilege
+        //    guard); it adds no column to any existing table and grants or revokes nothing on any ledger. Down() raises while a row exists (the proof's data has none), else drops
+        //    only the table. Safe to revert and re-apply mid-proof.
+        "20261121090000_AddControlRoomPeople",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -307,6 +307,13 @@ public sealed class RlsExemptionAllowlistTests
         // SELECT + INSERT only, with the effective-privilege guard in migration AddScheduleCheckAndStoredDays).
         "schedule_checks",
 
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - ShramSafal's own list of approved control-room numbers with the per-person
+        // ticks. Staff access data: it holds no farm's own data, no farmer path reads it, and every door that reads or writes it is gated in the
+        // application (the Platform seat plus the module key). No farm_id column, so there is nothing for a farm policy to key on. The app role
+        // gets SELECT, INSERT, UPDATE and no DELETE or TRUNCATE (removal is a flag), with the effective-privilege guard in migration
+        // AddControlRoomPeople. (organization_memberships and schedule_checks are exempt for the same kind of reason.)
+        "control_room_people",
+
         // The idempotency store: keyed on (device id, client request id); written and read by the sync layer inside the
         // caller's request. No farm dimension.
         "sync_mutations",

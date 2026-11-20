@@ -255,6 +255,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
+    public DbSet<ShramSafal.Domain.ControlRoom.ControlRoomPerson> ControlRoomPeople => Set<ShramSafal.Domain.ControlRoom.ControlRoomPerson>();
     public DbSet<OrganizationFarmScope> OrganizationFarmScopes => Set<OrganizationFarmScope>();
 
     // spec: correctionevent-server-persistence

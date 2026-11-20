@@ -435,6 +435,11 @@ public static class DependencyInjection
             ShramSafal.Infrastructure.Admin.EntitlementResolver>();
         services.AddScoped<ShramSafal.Application.Admin.Ports.IOrgFarmScopeProjector,
             ShramSafal.Infrastructure.Admin.OrgFarmScopeProjector>();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - the approved-numbers list and its History.
+        services.AddScoped<ShramSafal.Application.Ports.IControlRoomStore,
+            ShramSafal.Infrastructure.Persistence.Repositories.ControlRoomStore>();
+        services.AddScoped<ShramSafal.Application.Ports.IControlRoomHistory,
+            ShramSafal.Infrastructure.Persistence.Repositories.ControlRoomHistory>();
         services.AddSingleton<ShramSafal.Application.Admin.Ports.IResponseRedactor,
             ShramSafal.Infrastructure.Admin.ResponseRedactor>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();

@@ -546,6 +546,15 @@
 //     The opaque checker id, decision, note, version and time stay. Idempotent (a second run changes 0 rows).
 //     KEEP the check; SCRUB the name (S001).
 //
+//   - ssf.control_room_people (trusted-control-room-2026-11-20, plan CR-3 Task A2) - KEEP. One row is one team member the founder approved
+//     to sign in to the control room: the approved number, the name the founder typed, the starting role, the per-person ticks, the
+//     account and seat it is bound to as opaque ids, and who added or removed it and when. It is ShramSafal's OWN staff access record,
+//     never a farmer's data: no farm id, no farmer path reads it, and a farm owner's erasure touches none of it. The founder removes a
+//     person by a flag (is_active = false); the row stays as the record that History explains. The app role can read, add and change
+//     it but cannot delete or truncate it. DISCLOSED: it holds a staff member's phone number and name; erasing a staff member's own
+//     account is a separate, founder-led step that is not built here. No action, no ScrubbedColumnsFor entry.
+//     KEEP - conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the
