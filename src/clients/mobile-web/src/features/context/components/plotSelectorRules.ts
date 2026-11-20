@@ -81,7 +81,7 @@ export function plotShortName(plotName: string, cropNames: readonly (string | un
     return name;
 }
 
-/** The plot's place in its crop as the farmer reads it (1 for the first plot): the same number the calendar prints. */
+/** A place number from a 0-based place in a list (the first is 1). Callers pass the plot's place in NATURAL number order, never its stored place. */
 export const plotPosition = (index: number): number => index + 1;
 
 // ── natural number order (CTO ruling 2026-11-20: G2 before G10 everywhere plots are listed) ──────────
@@ -124,6 +124,17 @@ export const naturalOrder = (names: readonly string[]): number[] =>
 /** The items in natural order of their plot names, stable: the one sort every list of plots uses. A new array; the input is not touched. */
 export const sortedNaturally = <T>(items: readonly T[], nameOf: (item: T) => string): T[] =>
     naturalOrder(items.map(nameOf)).map(i => items[i]);
+
+/**
+ * The number printed next to a plot's name: the plot's place among ALL of its crop's plots in natural number order (G1 gets 1 ... G15 gets 15),
+ * so a name and its number never disagree, whatever order the farm stored the plots in (CTO ruling 2026-11-20). It is the crop's whole list,
+ * not the plots in view: narrowing 15 plots to 3 leaves G3 still 3. Display only; the stored order and the calendar are untouched.
+ */
+export function plotNumbers(plots: readonly { id: string; name: string }[]): Map<string, number> {
+    const numbers = new Map<string, number>();
+    naturalOrder(plots.map(p => p.name)).forEach((i, rank) => numbers.set(plots[i].id, plotPosition(rank)));
+    return numbers;
+}
 
 /**
  * Does this plot answer the search? A search of only digits matches the plot's place number, or a whole run of digits in its name

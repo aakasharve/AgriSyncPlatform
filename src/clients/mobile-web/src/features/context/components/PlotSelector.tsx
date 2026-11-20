@@ -127,7 +127,6 @@ export const PlotGroupHeader: React.FC<{
                 <span className="block truncate text-[16px] font-extrabold leading-tight text-stone-900">{cropNameIn(crop.name, language, crop.masterId)}</span>
                 {sub !== undefined && sub !== null && <span className="block text-[12.5px] font-bold leading-snug text-stone-600">{sub}</span>}
             </span>
-            <span aria-hidden="true" data-part="accent" className={`h-8 w-1.5 shrink-0 rounded-full ${cropColorOf(crop.color)}`} />
             {right}
         </div>
     );
@@ -162,7 +161,7 @@ export const cropWordsOf = (crop: { name: string; masterId?: string }): string[]
 // ── the selector ─────────────────────────────────────────────────────────────────────────────────────
 
 export interface PlotSelectorProps {
-    /** The crop's plots, in the farm's own order (the number on a box is the plot's place in this list). */
+    /** The crop's plots, in the farm's own order (the list is drawn, and its boxes numbered, in natural number order). */
     plots: readonly { id: string; name: string }[];
     /** The chosen plots (of these plots). */
     chosen: readonly string[];
@@ -204,8 +203,8 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const nameOf = (name: string) => (short ? plotShortName(name, cropNames ?? []) : name);
     const change = onChange ?? (() => undefined);
     const tap = (id: string) => (onTapPlot ? onTapPlot(id) : change(toggleId(chosen, id)));
-    // Natural number order (G2 before G10); a box keeps its place number in the crop's own list, the number the calendar prints.
-    const entries = naturalOrder(plots.map(p => p.name)).map(i => ({ p: plots[i], position: plotPosition(i) }));
+    // Natural number order (G2 before G10), and the number on a box is its place in that same order (G3 reads 3), so a name and its number agree.
+    const entries = naturalOrder(plots.map(p => p.name)).map((i, rank) => ({ p: plots[i], position: plotPosition(rank) }));
     const ids = entries.map(e => e.p.id);
 
     if (mode === 'chips') {

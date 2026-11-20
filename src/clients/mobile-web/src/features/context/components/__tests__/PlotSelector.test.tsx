@@ -14,6 +14,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PickedCountLine, PlotGroupHeader, PlotQuickRow, PlotSelector, type PlotSelectorProps } from '../PlotSelector';
 import { buildQuickButtons } from '../plotSelectorRules';
+import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 afterEach(cleanup);
 
@@ -55,14 +56,34 @@ describe('natural number order: G2 before G10, in the grid and in the chips', ()
     const shuffled = (n: number) => ['G10', 'G2', 'G1', 'G11', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'].slice(0, n).map((name, i) => ({ id: `s${i}`, name: `द्राक्ष ${name}` }));
     const idsInOrder = (testId: string) => [...screen.getByTestId(testId).children].map(c => c.getAttribute('data-testid'));
 
-    it('the grid lists G1, G2, G3 ... G10, G11; each box keeps its place number in the crop\'s own list (the number the calendar prints)', () => {
+    it('the grid lists G1, G2, G3 ... G10, G11 and each box\'s number is its place in that order, so the name and the number agree (CTO ruling 2026-11-20)', () => {
         const plots = shuffled(11); // stored order: G10, G2, G1, G11, G3 ...
         render(<PlotSelector plots={plots} chosen={[]} onChange={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
         const names = [...screen.getByTestId('pl-grid').children].map(c => part(c as HTMLElement, 'name')?.textContent);
         expect(names).toEqual(['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11']);
-        // G1 is the third plot of the stored list: its box says ३, the number the calendar shows for it
-        expect(part(screen.getByTestId('pl-s2'), 'number')).toHaveTextContent('३');
-        expect(part(screen.getByTestId('pl-s0'), 'number')).toHaveTextContent('१'); // G10 is stored first
+        const numbers = [...screen.getByTestId('pl-grid').children].map(c => part(c as HTMLElement, 'number')?.textContent);
+        expect(numbers).toEqual(['१', '२', '३', '४', '५', '६', '७', '८', '९', '१०', '११']);
+        // G1 is the third plot of the STORED list but its box says १; G10 is stored first but its box says १०
+        expect(part(screen.getByTestId('pl-s2'), 'number')).toHaveTextContent('१');
+        expect(part(screen.getByTestId('pl-s0'), 'number')).toHaveTextContent('१०');
+    });
+
+    it('with 15 plots stored in a scrambled order every box reads G<n> with the number n, two-digit ones included (the CTO\'s G3 with १४ case)', () => {
+        const order = [3, 4, 7, 14, 1, 9, 12, 2, 15, 5, 11, 6, 13, 10, 8]; // arbitrary stored order
+        const plots = order.map(n => ({ id: `g${n}`, name: `द्राक्ष G${n}` }));
+        render(<PlotSelector plots={plots} chosen={['g14', 'g11']} onChange={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        for (let n = 1; n <= 15; n += 1) {
+            const box = screen.getByTestId(`pl-g${n}`);
+            expect(part(box, 'name')).toHaveTextContent(`G${n}`);
+            expect(part(box, 'number')?.textContent).toBe(toDevanagariDigits(String(n)));
+        }
+    });
+
+    it('English mode: the same numbers in Latin digits', () => {
+        const plots = [{ id: 'a', name: 'G10' }, { id: 'b', name: 'G2' }, { id: 'c', name: 'G1' }, { id: 'd', name: 'G3' }, { id: 'e', name: 'G4' }, { id: 'f', name: 'G5' }, { id: 'g', name: 'G6' }];
+        render(<PlotSelector plots={plots} chosen={[]} onChange={vi.fn()} testIds={IDS} language="en" />);
+        expect(part(screen.getByTestId('pl-a'), 'number')?.textContent).toBe('7');
+        expect(part(screen.getByTestId('pl-b'), 'number')?.textContent).toBe('2');
     });
 
     it('the chips are in number order too (full names, as before)', () => {
@@ -248,11 +269,21 @@ describe('the count line and the header', () => {
         expect(screen.getByTestId('cnt')).toHaveTextContent('१५ पैकी ४ निवडले');
     });
 
-    it('the header says the crop once, in his language, with its colour', () => {
+    it('the header says the crop once, in his language, and draws nothing else: no stray colour bar at its end (CTO defect 4)', () => {
         render(<PlotGroupHeader crop={{ name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500' }} sub="१५ पैकी २ निवडले" testId="hd" language="mr" />);
-        expect(screen.getByTestId('hd')).toHaveTextContent('द्राक्ष');
-        expect(screen.getByTestId('hd')).toHaveTextContent('१५ पैकी २ निवडले');
-        expect(part(screen.getByTestId('hd'), 'accent')?.className).toContain('bg-purple-500');
+        const hd = screen.getByTestId('hd');
+        expect(hd).toHaveTextContent('द्राक्ष');
+        expect(hd).toHaveTextContent('१५ पैकी २ निवडले');
+        expect(part(hd, 'accent')).toBeNull();
+        expect(hd.innerHTML).not.toContain('bg-purple-500');
+        // its parts are the photo and the words, nothing after the words
+        expect(hd.lastElementChild?.tagName).toBe('SPAN');
+        expect(hd.lastElementChild?.querySelector('span')).not.toBeNull();
+    });
+
+    it('what a caller puts in `right` is the last thing in the header', () => {
+        render(<PlotGroupHeader crop={{ name: 'Grapes', iconName: 'Grape' }} right={<b data-testid="r">x</b>} testId="hd" language="mr" />);
+        expect(screen.getByTestId('hd').lastElementChild).toBe(screen.getByTestId('r'));
     });
 
     it('a quick row with nothing to draw draws nothing', () => {
