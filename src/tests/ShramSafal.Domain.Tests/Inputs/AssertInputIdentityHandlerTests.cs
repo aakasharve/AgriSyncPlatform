@@ -221,6 +221,30 @@ public sealed class AssertInputIdentityHandlerTests
         Assert.Equal("ShramSafal.SyncInvalidPayload", missing.Error.Code);
     }
 
+    // Founder walk 2026-11-20: "कराटे" said on its own is stored on the event itself with an EMPTY mix.
+    private const string SingleProductDocument = """
+        {"inputs":[{"id":"one","method":"Spray","productName":"Karate","rawProductName":"कराटे","mix":[]},
+                   {"id":"none","method":"Spray","mix":[]},
+                   {"id":"nomix","method":"Spray","productName":"Ethrel"}]}
+        """;
+
+    [Fact]
+    public void SpokenNameOf_ReadsAProductSaidOnItsOwnAsSlotZeroOfItsEvent()
+    {
+        Assert.Equal("Karate", AssertInputIdentityHandler.SpokenNameOf(SingleProductDocument, "one", 0).Value);
+        Assert.Equal("Ethrel", AssertInputIdentityHandler.SpokenNameOf(SingleProductDocument, "nomix", 0).Value);
+        Assert.True(AssertInputIdentityHandler.SpokenNameOf(SingleProductDocument, "one", 1).IsFailure);   // there is no second product
+        Assert.True(AssertInputIdentityHandler.SpokenNameOf(SingleProductDocument, "none", 0).IsFailure);  // no words, no answer
+    }
+
+    [Fact]
+    public void SpokenNameOf_AMixStillReadsTheMixSlotsAndNothingElse()
+    {
+        // the existing document: e1 holds a mix; slot 1 is 19:19:19, and a slot beyond the mix is not there
+        Assert.Equal("19:19:19", AssertInputIdentityHandler.SpokenNameOf(Document, "e1", 1).Value);
+        Assert.True(AssertInputIdentityHandler.SpokenNameOf(Document, "e1", 9).IsFailure);
+    }
+
     [Fact]
     public async Task Assert_ItemRemovedByALaterVersion_IsRejected_NotAppliedToTheOldOne()
     {

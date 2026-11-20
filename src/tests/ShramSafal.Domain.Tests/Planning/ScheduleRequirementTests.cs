@@ -377,6 +377,10 @@ public sealed class ScheduleRequirementTests
             // spec: plr-d10 lane CMP-D2 - the farm's तुलना read is the third READER (it counts nothing after the trial with no schedule, and
             // never refuses a record): it is a read route, not a record door, so the guard still holds for every door that writes.
             Path.Combine("ShramSafal.Application", "Services", "FarmCompareService.cs"),
+            // spec: facts-card-input-truth-2026-11-19 - lane FACTS: the fourth READER, for the day and stage of a stored input use. It asks no decision
+            // (Decide is never called) and is reached only AFTER a record is saved, by the input-use derivation in its own savepoint (a failure there is
+            // swallowed and the record is exactly as it was), and by the owner rebuild. A record door still never waits for a schedule.
+            Path.Combine("ShramSafal.Application", "Services", "PlotSeasonReader.cs"),
             Path.Combine("ShramSafal.Application", "UseCases", "Sync", "PullSyncChanges", "PullSyncChangesHandler.cs"),
             Path.Combine("ShramSafal.Api", "DependencyInjection.cs"),
         }.Select(p => Path.GetFullPath(Path.Combine(root, p))).ToHashSet(StringComparer.OrdinalIgnoreCase);

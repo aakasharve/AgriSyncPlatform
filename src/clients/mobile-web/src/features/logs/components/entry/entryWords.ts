@@ -145,7 +145,7 @@ export const COST_WORDS = {
     soFar: 'आतापर्यंत',
     /** Doctrine P4: nothing recorded shows a dash, never "₹ 0". */
     none: '—',
-    // Lane UI-6 (picture H1, founder D-150): the dark card's one small label "खर्च — <what it covers> · आजपर्यंत".
+    // Lane UI-6 (picture H1, founder D-150): the money card's one small label "खर्च — <what it covers> · आजपर्यंत".
     // PROPOSED (Marathi) - the picture's own words
     title: 'खर्च',
     // PROPOSED (Marathi) - the picture's own word ("आजपर्यंत"; the three-box card said "आतापर्यंत")

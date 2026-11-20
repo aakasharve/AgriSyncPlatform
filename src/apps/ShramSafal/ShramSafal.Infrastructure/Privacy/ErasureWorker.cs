@@ -477,6 +477,19 @@
 //     GO-LIVE-REGISTER F98 and not closed here by assertion.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.input_use_facts and ssf.input_use_ingredients (facts-card-input-truth-2026-11-19, lane FACTS slice B) — KEEP. One
+//     input_use_facts row is what the server worked out about one product of one saved application record of a FARM: the farm, plot,
+//     record and item, the date, a copy of the product words he said (product_said, a value copied from application_input_items), the
+//     library product it came to and the library / facts-file versions it was derived with, the crop, the day zero and where it came
+//     from, the day of the season, the stage and the ingredient group codes; input_use_ingredients holds that product's library
+//     ingredients, one row each. NO user id, name, phone or free text of a person on either table: the only actor linkage of the use
+//     is through the parent farm_operations.created_by_user_id, which AnonymizeFarmOperationsAsync already scrubs. The rows are DERIVED
+//     and rebuildable from the saved records (P10), so they carry no fact that is not already in application_input_items and the
+//     schedule; doctrine P6 (anonymise the person, never the work) is met by the parent scrub. DISCLOSED: product_said is a copy of a
+//     product name as it was spoken, like input_identity_assertions.spoken_name above; the same surgical scrub through the privileged
+//     admin context applies if account erasure ever needs to remove product names too (GO-LIVE-REGISTER F98).
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.planned_work and ssf.planned_work_plots (plr-d10 lane L8c-1, founder D-24c) — KEEP. One planned_work row is one task or
 //     reminder of a FARM: the work instruction in his words (title, note, crew words, quantity words), the date or loose
 //     "when", the place (scope; plots on planned_work_plots), who it was given to, its status, and the people who made, saw,

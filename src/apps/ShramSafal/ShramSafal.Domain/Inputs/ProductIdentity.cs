@@ -62,7 +62,9 @@ public sealed record ProductJudgement(
 public static class ProductIdentity
 {
     /// <summary>The products named in a stored content document: every <c>inputs[].mix[]</c> slot with a non-blank
-    /// <c>productName</c>, in document order. A document that is not the expected shape names none.</summary>
+    /// <c>productName</c>, in document order. A product said on its own is stored on the event itself with an EMPTY mix
+    /// (founder walk 2026-11-20: "कराटे" alone); it is slot 0 of its event, so it can be answered about and counts like any
+    /// other product. An event whose mix names something keeps the mix only. A document that is not the expected shape names none.</summary>
     public static IReadOnlyList<ProductItem> ItemsOf(string? documentJson)
     {
         if (string.IsNullOrWhiteSpace(documentJson))
@@ -92,14 +94,22 @@ public static class ProductIdentity
             var items = new List<ProductItem>();
             foreach (var ev in inputs.EnumerateArray())
             {
-                if (ev.ValueKind != JsonValueKind.Object
-                    || !ev.TryGetProperty("mix", out var mix)
-                    || mix.ValueKind != JsonValueKind.Array)
+                if (ev.ValueKind != JsonValueKind.Object)
                 {
                     continue;
                 }
 
                 var eventId = StringOf(ev, "id") ?? string.Empty;
+                if (!ev.TryGetProperty("mix", out var mix) || mix.ValueKind != JsonValueKind.Array || mix.GetArrayLength() == 0)
+                {
+                    if (StringOf(ev, "productName") is { } own && !string.IsNullOrWhiteSpace(own))
+                    {
+                        items.Add(new ProductItem(eventId, 0, own, StringOf(ev, "npkGrade")));
+                    }
+
+                    continue;
+                }
+
                 var slot = 0;
                 foreach (var m in mix.EnumerateArray())
                 {

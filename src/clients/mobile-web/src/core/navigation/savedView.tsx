@@ -60,6 +60,7 @@ import { logger } from '../../infrastructure/observability/Logger';
 import { AppRouterContext } from './routeContext';
 import { requestSpeak } from '../speak/speakStore';
 import { cropNameIn } from '../../shared/names/namesIn';
+import { sumLabourHeadcount } from '../../domain/logs/labourHeadcount';
 // Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
 // नाही ("hide it for this render") can use real React state. `renderLogView`
 // below is a plain function invoked directly inside AppRouter's JSX (see
@@ -178,7 +179,9 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                                     if (!savedLog) return null;
                                                     const buckets = [
                                                         { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'पाणी', color: 'bg-blue-100 text-blue-700' },
-                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'जण', color: 'bg-amber-100 text-amber-700' },
+                                                        // H3 (HONESTY-1, P7): "जण" counts PEOPLE. It used to count labour ROWS (three rows with no number said = "जण ×३").
+                                                        // Now the head count that was said or recorded (the app's one rule); none said = no chip.
+                                                        { key: 'labour', count: sumLabourHeadcount(savedLog.labour) ?? 0, icon: <Users size={13} />, label: 'जण', color: 'bg-amber-100 text-amber-700' },
                                                         { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'औषध/खत', color: 'bg-purple-100 text-purple-700' },
                                                         { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'यंत्र', color: 'bg-stone-100 text-stone-700' },
                                                         { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'पीक काम', color: 'bg-emerald-100 text-emerald-700' },
@@ -211,7 +214,8 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                             it (reward = clarity + one question, never points). Decision 3B: NO
                             fact/insight fallback in v1; on a no-question day this line stands
                             alone (the question self-gates on its own flags + content gate). */}
-                        {FEATURE_FLAGS.dailyLoop && (
+                        {/* H1 (HONESTY-1, P4): drawn only when the count stands on a real plan (never a stand-in or an unchecked default). */}
+                        {FEATURE_FLAGS.dailyLoop && todayDayState.planIsReal === true && (
                             <DailyLoopClarity
                                 done={todayDayState.completedCount}
                                 left={todayDayState.pendingCount}

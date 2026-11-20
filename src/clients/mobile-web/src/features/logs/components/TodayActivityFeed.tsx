@@ -35,6 +35,8 @@ export interface FeedEntry {
     timeLabel: string;
     statusLabel: string;
     statusTone: 'pending' | 'rejected' | 'approved';
+    /** HONESTY-1 (H8): a person other than the author approved it. Absent = not known = the card says "पक्कं केलं", never "तपासलं". */
+    checkedByOther?: boolean;
     counts?: Partial<TodayCounts>;
     summaryLines?: string[];
     /** What he said (two lines) and the recording behind this card, when there is one. */
@@ -91,7 +93,7 @@ export const TodayActivityFeed: React.FC<{ entries: readonly FeedEntry[]; dateLa
             <div className="space-y-2">
                 {entries.map(e => (
                     <ActivityFeedCard key={e.id} logId={e.logId} workDone={e.workDone} plotName={e.plotName} cropName={e.cropName} cropColor={e.cropColor}
-                        loggedBy={e.loggedBy} timeLabel={e.timeLabel} statusTone={e.statusTone}
+                        loggedBy={e.loggedBy} timeLabel={e.timeLabel} statusTone={e.statusTone} checkedByOther={e.checkedByOther}
                         counts={e.counts} summaryLines={e.summaryLines} snippet={e.snippet} audio={e.audio} chips={e.chips}
                         attachmentCount={e.logId ? undefined : 0} onClick={e.onOpen} />
                 ))}

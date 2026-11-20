@@ -10,6 +10,8 @@
 //   • dailyLoop ON  → the "{done} पूर्ण, {left} बाकी" clarity line renders,
 //     positioned ABOVE the DFES recognition panel (which hosts the one question),
 //     driven by todayDayState.completedCount / .pendingCount.
+//   • HONESTY-1 (H1, P4): dailyLoop ON but the count stands on a stand-in / unchecked
+//     default (planIsReal false, or not said) → NO clarity line at all.
 //   • Decision 3B: there is NO fact/insight fallback element in either state — on
 //     a no-question day (panel yields nothing) the clarity line stands alone.
 //
@@ -81,6 +83,8 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
         // wave-2.4 follow-up: this day HAS begun (5 planned, 3 done) — the
         // not-started state is exercised in mainView.dailyLoop.test.tsx.
         hasStarted: true,
+        // HONESTY-1 (H1): the line is drawn only when the count stands on a real plan; the cases that are not real are below.
+        planIsReal: true,
         completedCount: 3,
         plannedCount: 5,
         pendingCount: 2,
@@ -186,5 +190,23 @@ describe('renderLogView — Daily Clarity Loop v1 REWARD line (success card)', (
 
         // Decision 3B: still no fact/insight fallback element — reward = clarity + question only.
         expect(screen.queryByTestId('daily-loop-fact')).toBeNull();
+    });
+
+    it('HONESTY-1 H1: ON but the count is built on a stand-in or an unchecked default (planIsReal false) - NO clarity line', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        const base = makeCtx();
+        render(<>{renderLogView(makeCtx({ todayDayState: { ...base.todayDayState, planIsReal: false } }))}</>);
+
+        expect(screen.queryByTestId('daily-loop-clarity')).toBeNull();
+        // Nothing else on the card moved: Sathi's question host is still there.
+        expect(screen.getByTestId('ledger-recognition-panel')).toBeInTheDocument();
+    });
+
+    it('HONESTY-1 H1: a snapshot that does not say whether its plan is real draws no line either (fails closed)', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        const { planIsReal: _omit, ...withoutFlag } = makeCtx().todayDayState;
+        render(<>{renderLogView(makeCtx({ todayDayState: withoutFlag }))}</>);
+
+        expect(screen.queryByTestId('daily-loop-clarity')).toBeNull();
     });
 });

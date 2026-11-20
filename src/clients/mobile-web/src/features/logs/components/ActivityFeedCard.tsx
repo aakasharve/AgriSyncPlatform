@@ -28,7 +28,9 @@ const SANS = "'Noto Sans Devanagari', sans-serif";
 const SERIF = "'Noto Serif Devanagari', serif";
 
 export const CARD_STR = {
-    status: { pending: 'तपासणी बाकी', rejected: 'दुरुस्ती हवी', approved: 'तपासलं' },
+    // HONESTY-1 (H8): `approved` ("checked") is said only when ANOTHER person approved it; an owner's own record is approved at creation
+    // and nobody checked it, so it says `confirmed` - the word the overview and the result screen use ("पक्कं केलं").
+    status: { pending: 'तपासणी बाकी', rejected: 'दुरुस्ती हवी', approved: 'तपासलं', confirmed: 'पक्कं केलं' },
     by: 'कोणी',
     attachments: (n: number) => `जोडलेले फोटो ${n}`,
     play: 'ऐका',
@@ -52,6 +54,8 @@ export interface ActivityFeedCardProps {
     loggedBy: string;
     timeLabel: string;
     statusTone: 'pending' | 'rejected' | 'approved';
+    /** HONESTY-1 (H8): another person than the author approved it. Not said = not known: "पक्कं केलं", never "तपासलं". */
+    checkedByOther?: boolean;
     counts?: Partial<TodayCounts>;
     summaryLines?: string[];
     location?: LocationDto | null;
@@ -78,7 +82,7 @@ const Count: React.FC<{ icon: React.ReactNode; count: number; label: string }> =
 );
 
 const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
-    logId, workDone, plotName, cropName, cropColor, loggedBy, timeLabel, statusTone, counts, summaryLines = [], location,
+    logId, workDone, plotName, cropName, cropColor, loggedBy, timeLabel, statusTone, checkedByOther, counts, summaryLines = [], location,
     verificationStatus, attachmentCount, snippet, audio, chips, onClick,
 }) => {
     const playbackOff = usePlaybackSwitch() === false; // fix round 3 (M1): OFF - no ▶, the founder's words instead
@@ -124,7 +128,7 @@ const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
                             {audio && !playbackOff && <span className="text-[12px] font-bold tabular-nums text-stone-700" data-testid="card-duration">{audio.durationLabel}</span>}
                             {verificationStatus
                                 ? <VerificationStatusBadge status={verificationStatus} size="sm" />
-                                : <span className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${TONE[statusTone]}`} data-testid="card-status">{CARD_STR.status[statusTone]}</span>}
+                                : <span className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${TONE[statusTone]}`} data-testid="card-status">{statusTone === 'approved' && checkedByOther !== true ? CARD_STR.status.confirmed : CARD_STR.status[statusTone]}</span>}
                         </span>
                         <span className="mt-1 block text-[17px] font-extrabold leading-tight text-stone-900" data-testid="card-work">{workDone}</span>
                         <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] font-bold text-stone-800">

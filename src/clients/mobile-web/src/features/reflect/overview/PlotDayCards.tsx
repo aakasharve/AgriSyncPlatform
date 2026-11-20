@@ -22,7 +22,8 @@ import { StatusChip, useReflectCopy } from '../day/RecordingParts';
 import { WATER_LABEL, type DayCardCore, type DayChip, type PlotDayCard, type WaterState } from './plotDayModel';
 import { rupees } from './reflectDates';
 import type { PlotRef } from './reflectSelection';
-import { CropPhoto, Num, Tap } from './ui';
+import { CropBanner, Num, Tap } from './ui';
+import { inkOnColour } from '../../context/components/cropColourInk';
 import { useLogAttachmentCount } from './useLogAttachmentCount';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 
@@ -162,13 +163,14 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
     const realVariety = variety && variety.toLowerCase() !== ref.cropName.trim().toLowerCase() && cropNameIn(variety, language) !== cropName ? variety : undefined;
     return (
         <CardButton testId={`plot-card-${ref.key}`} status={card.status} onOpen={() => onOpen(ref)} edge={ref.cropColor}>
-            <span className="flex items-center gap-2.5">
-                <CropPhoto iconName={ref.crop.iconName} name={ref.cropName} px={44} />
-                <span className="min-w-0 flex-1">
-                    <span className="block text-[18px] font-extrabold leading-tight text-stone-900">{ref.plotName ?? (cropName || ref.cropName)}</span>
-                    <span className="block text-[13px] font-bold text-stone-500">{[cropName, realVariety, card.area, card.dayLabel].filter(Boolean).join(' · ')}</span>
+            <span className="flex flex-col gap-2">
+                <CropBanner iconName={ref.crop.iconName} name={ref.cropName} />
+                {/* Founder 2026-11-20 (option Q): the crop's own colour carries the plot's name, so the photo stays clean. */}
+                <span data-part="title-bar" className={`block rounded-xl px-3 py-2 ${ref.cropColor || 'bg-stone-300'} ${inkOnColour(ref.cropColor)}`}>
+                    <span className="block text-[18px] font-extrabold leading-tight">{ref.plotName ?? (cropName || ref.cropName)}</span>
+                    <span className="block text-[13px] font-bold opacity-90">{[cropName, realVariety, card.area, card.dayLabel].filter(Boolean).join(' · ')}</span>
                 </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
+                <span className="flex items-center justify-end gap-2 empty:hidden">
                     {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId={`plot-state-${ref.key}`} />}
                     {files > 0 && <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[12px] font-bold text-blue-700 ring-1 ring-blue-100" aria-label={`जोडलेल्या फाइल ${digitsFor(files, language)}`} data-testid={`plot-files-${ref.key}`}><Paperclip size={12} aria-hidden="true" /><Digits language={language}>{files}</Digits></span>}
                 </span>

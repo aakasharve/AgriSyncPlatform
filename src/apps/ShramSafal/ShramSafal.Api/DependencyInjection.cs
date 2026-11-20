@@ -273,6 +273,11 @@ public static class DependencyInjection
         // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
         services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
+        // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - what the server works out about each used product, and its rebuild.
+        services.AddScoped<ShramSafal.Application.Services.IInputUseDerivation, ShramSafal.Application.Services.InputUseDerivation>();
+        services.AddScoped<ShramSafal.Application.Services.IPlotSeasonReader, ShramSafal.Application.Services.PlotSeasonReader>();
+        services.AddScoped<ShramSafal.Application.UseCases.Inputs.InputUseLedger.GetInputUseLedgerHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Inputs.InputUseLedger.RebuildInputUseHandler>();
         services.AddScoped<ShramSafal.Application.Services.FarmCompareService>();
         // spec: plr-d10 lane SCH-ADV - what each followed schedule asks for one work in the stage (a read of schedules only).
         services.AddScoped<ShramSafal.Application.Services.ScheduleAdvice>();

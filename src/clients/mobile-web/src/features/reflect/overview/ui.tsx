@@ -115,11 +115,19 @@ export const SectionBlock: React.FC<{
     );
 };
 
-/** The crop's real photo, round; a plain leaf when the crop has none. */
+/** The crop's real photo, a rounded square (founder 2026-11-20); a plain leaf when the crop has none. */
 export const CropPhoto: React.FC<{ iconName: string; name: string; px: number; className?: string }> = ({ iconName, name, px, className = '' }) => {
     // spec I18 — the crop master's picture by MHCR id, then the app's photo of the same crop, then a leaf.
     const { src, onError } = useCropPicture({ name, iconName }, 480);
     return src
-        ? <img src={src} alt="" width={px} height={px} style={{ width: px, height: px }} className={`shrink-0 rounded-full object-cover shadow-sm ${className}`} draggable={false} loading="lazy" onError={onError} />
-        : <span style={{ width: px, height: px }} className={`grid shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 ${className}`} aria-hidden="true"><Sprout size={Math.round(px * 0.5)} /></span>;
+        ? <img src={src} alt="" width={px} height={px} style={{ width: px, height: px }} className={`shrink-0 rounded-xl object-cover shadow-sm ${className}`} draggable={false} loading="lazy" onError={onError} />
+        : <span style={{ width: px, height: px }} className={`grid shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700 ${className}`} aria-hidden="true"><Sprout size={Math.round(px * 0.5)} /></span>;
+};
+
+/** The crop's photo as a banner across the top of a plot card (founder 2026-11-20, option Q): the whole width, a rounded square's top, nothing on it. */
+export const CropBanner: React.FC<{ iconName: string; name: string; heightPx?: number }> = ({ iconName, name, heightPx = 132 }) => {
+    const { src, onError } = useCropPicture({ name, iconName }, 960);
+    return src
+        ? <img src={src} alt="" style={{ height: heightPx }} className="block w-full select-none rounded-2xl object-cover" draggable={false} loading="lazy" onError={onError} data-part="banner" />
+        : <span style={{ height: heightPx }} className="grid w-full place-items-center rounded-2xl bg-emerald-100 text-emerald-700" aria-hidden="true" data-part="banner"><Sprout size={40} /></span>;
 };

@@ -53,7 +53,23 @@ describe('productModel — only what was said', () => {
             irrigation: [{ id: 'f', role: 'fertigation', durationHours: 2 }],
         }));
         expect(boxes.map(b => [b.kind, b.water])).toEqual([['drip', [{ hours: 2 }]], ['other', []]]);
-        expect(boxes[1].items).toEqual([{ id: 's:0', label: 'खत', said: undefined, amount: undefined }]);
+        expect(boxes[1].items).toEqual([{ id: 's:0', ref: { eventId: 's', mixIndex: 0 }, matchName: 'खत', label: 'खत', said: undefined, amount: undefined }]);
+    });
+
+    // Founder walk 2026-11-20: "कराटे" said on its own is stored on the event with an empty mix. It gets slot 0 of its event, the address the
+    // server reads, so the हो / नाही / फोटो question can be asked about it like a product in a mix.
+    it('a product said on its own is addressable: slot 0 of its event (the same address the server reads)', () => {
+        const [box] = productBoxesOf(day({ inputs: [{ id: 'k', method: 'Spray', productName: 'Karate', rawProductName: 'कराटे', mix: [] }] }));
+        expect(box.items).toHaveLength(1);
+        expect(box.items[0].ref).toEqual({ eventId: 'k', mixIndex: 0 });
+        expect(box.items[0].matchName).toBe('Karate');
+    });
+
+    it('a product with no event id has no address (nothing the server could read), and an event with a mix keeps its mix slots', () => {
+        const [noId] = productBoxesOf(day({ inputs: [{ method: 'Spray', productName: 'Karate', mix: [] } as never] }));
+        expect(noId.items[0].ref).toBeUndefined();
+        const [mixed] = productBoxesOf(day({ inputs: [{ id: 'm', method: 'Spray', productName: 'Tank', mix: [{ id: 'a', productName: 'Karate' }, { id: 'b', productName: 'Ethrel' }] }] }));
+        expect(mixed.items.map(i => i.ref)).toEqual([{ eventId: 'm', mixIndex: 0 }, { eventId: 'm', mixIndex: 1 }]);
     });
 
     it('names follow the language strictly: Marathi = his word, never an English-only label; English = the label', () => {

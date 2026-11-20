@@ -125,6 +125,9 @@ const inputCopies = [
   ['mix-rules.json', '../../src/clients/mobile-web/src/domain/inputs/generated/mixRules.json'],
   ['catalog.json', '../../src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/catalog.json'],
   ['mix-rules.json', '../../src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/mix-rules.json'],
+  // lane FACTS-1: ingredient facts for the farmer product card (every line sourced and ticked by an agronomist).
+  ['ingredient-facts.json', '../../src/clients/mobile-web/src/domain/inputs/generated/ingredientFacts.json'],
+  ['ingredient-facts.json', '../../src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/ingredient-facts.json'],
 ];
 for (const [ref, out] of inputCopies) {
   const bytes = await readFile(new URL(`../reference/inputs/${ref}`, import.meta.url));

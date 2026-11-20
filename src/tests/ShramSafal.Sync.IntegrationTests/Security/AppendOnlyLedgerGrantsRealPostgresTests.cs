@@ -298,6 +298,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    adds no column to any existing table and grants or revokes nothing on any ledger. Down() REFUSES while a picture row exists (the proof's data has
         //    none), else drops its four policies and the table - only what Up() added. Safe to revert and re-apply mid-proof.
         "20261117041736_AddPictures",
+        // ── Reviewed 2026-11-19 (spec: facts-card-input-truth-2026-11-19, lane FACTS slice B); Up() and Down() read in full: Up() adds two NULLABLE columns
+        //    (method, carrier_water_litres) to ssf.application_input_items and creates ssf.input_use_facts and ssf.input_use_ingredients (FORCE RLS on their own
+        //    farm_id, a read policy, SELECT + INSERT + DELETE for the app role and a revoke of UPDATE and TRUNCATE with its own effective-privilege guard - derived,
+        //    rebuildable rows, not a ledger). It grants or revokes nothing on any append-only ledger. Down() drops the four policies, both tables and the two
+        //    columns - only what Up() added. Safe to revert and re-apply mid-proof.
+        "20261119105639_AddInputUseFacts",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

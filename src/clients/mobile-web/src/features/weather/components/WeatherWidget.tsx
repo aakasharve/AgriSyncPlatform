@@ -4,18 +4,30 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle, Check } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import WeatherFallbackCard from './WeatherFallbackCard';
 import type { WeatherStatus } from '../useWeatherMonitor';
-import { DISPLAY_TIME_ZONE, formatDisplayTime } from '../../../shared/utils/displayTime';
 
 // Feature-local strings (like WeatherFallbackCard) — not the translations.ts cap.
 const CAUTION_STRINGS = {
     en: { text: 'Boundary not set — set it for accurate weather', cta: 'Set' },
     mr: { text: 'सीमा आखलेली नाही — अचूक हवामानासाठी आखा', cta: 'आखा' },
+} as const;
+
+// Lane HONESTY-2 (H6) — what a drawn farm centre really means, said in words (the green "Boundary verified" tick said more).
+const PLACE_SET_STRINGS = {
+    en: 'Farm location is set', // PROPOSED (English)
+    mr: 'शेताचं ठिकाण ठरलं आहे', // PROPOSED (Marathi)
+} as const;
+
+// Lane HONESTY-2 (H6) — the forecast list's heading, counted from the list (Devanagari digits in Marathi).
+const FORECAST_STRINGS = {
+    en: { heading: (n: number) => `Next ${n} day${n === 1 ? '' : 's'}` }, // the old tab's words, with the real count
+    mr: { heading: (n: number) => `पुढचे ${toDevanagariDigits(n)} दिवस` }, // PROPOSED (Marathi)
 } as const;
 
 interface WeatherWidgetProps {
@@ -61,9 +73,9 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
 
 const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, onAddLocation, boundaryUnset, onOpenBoundary }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'prev' | 'next'>('next');
     const { language } = useLanguage();
     const caution = CAUTION_STRINGS[language] ?? CAUTION_STRINGS.en;
+    const forecastStrings = FORECAST_STRINGS[language] ?? FORECAST_STRINGS.en;
     const cautionFont = language === 'mr' ? "'Noto Sans Devanagari', sans-serif" : "'DM Sans', sans-serif";
 
     // Cause-aware states first: a missing farm centre is user-actionable, a
@@ -80,28 +92,15 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
         );
     }
 
-    const { current, locationName, history, forecast } = data;
-    const displayList = activeTab === 'next' ? forecast : history;
-
-    // Format Date for Header
-    const today = new Date();
-    // REVIEW I-3 — BOTH HALVES ARE PINNED TO IST, OR NEITHER.
-    //
-    // The time was `en-GB` (a 24-hour locale) and read `14:30`. Fixing only the
-    // time created a worse fault than the one it fixed: `dateStr` and `timeStr`
-    // are rendered together on ONE LINE below (search for `{dateStr}`), so a
-    // device in UTC at 20:00 showed
-    // `16 August 2026 | 1:30 AM` — a date and time pair that never existed,
-    // because 1:30 AM IST is already the 17th. Before, both halves were
-    // device-local: wrong format, but internally consistent.
-    //
-    // And it lands on exactly the population the IST pinning exists to serve —
-    // on an IST handset the pinning is a no-op. The date KEEPS its en-GB long
-    // form; only its timezone is pinned, so this is not a date restyle.
-    const dateStr = today.toLocaleDateString('en-GB', {
-        day: 'numeric', month: 'long', year: 'numeric', timeZone: DISPLAY_TIME_ZONE,
-    });
-    const timeStr = formatDisplayTime(today);
+    const { current, locationName, forecast } = data;
+    // Lane HONESTY-2 (H6): the "<phone's date> | <phone's time>" line that sat above the temperature is gone. It was
+    // `new Date()` — the moment the card was DRAWN — printed beside a reading cached for up to an hour (and measured
+    // earlier still by the provider), so it presented "now" as the time of a measurement. The data this card receives
+    // carries no observation time it can vouch for (`timestampProvider` is the server's observed time on one path and
+    // the phone's own clock on another), so nothing is printed: no time is better than a made-up one (P4).
+    // The "Previous 5 days" tab is gone too: `history` is always `[]` (useWeatherMonitor), so it opened an empty list.
+    const forecastHeading = forecast.length > 0 ? forecastStrings.heading(forecast.length) : null;
+    const placeSet = PLACE_SET_STRINGS[language] ?? PLACE_SET_STRINGS.en;
 
     const getIcon = (condition: string, size: number) => {
         const c = condition.toLowerCase();
@@ -127,7 +126,6 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
 
                 <div className="relative z-10 flex justify-between items-center">
                     <div className="text-left space-y-1">
-                        <p className="text-xs font-medium text-blue-50 opacity-90">{dateStr} | {timeStr}</p>
                         {/* WAVE 2.3 (spec: dfes-companion-2026-07-11) — one temperature,
                             and it is measured. A `/ 31.5°C` literal used to sit here in
                             matched typography, reading as a second real figure. It was not
@@ -140,15 +138,16 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
                             <MapPin size={14} />
                             {locationName}
-                            {/* Boundary drawn → farm-anchored: symbol-only verified mark
-                                (bright filled green check circle, no text). */}
+                            {/* H6: a farm centre exists, so this weather is the farm's own place. That is all the green
+                                "Boundary verified" tick knew — it proved nothing about the boundary — so it says only that,
+                                in words. */}
                             {boundaryUnset === false && (
                                 <span
-                                    data-testid="weather-verified"
-                                    aria-label="Boundary verified"
-                                    className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 shadow-md ring-2 ring-white/70"
+                                    data-testid="weather-place-set"
+                                    className="ml-1.5 inline-flex items-center rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold leading-snug text-white"
+                                    style={{ fontFamily: cautionFont }}
                                 >
-                                    <Check size={13} className="text-white" strokeWidth={4} />
+                                    {placeSet}
                                 </span>
                             )}
                         </div>
@@ -196,9 +195,8 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
 
                             <div className="flex justify-between items-start mb-6">
                                 <div>
-                                    <p className="text-xs font-medium text-blue-50 opacity-80">{dateStr} | {timeStr}</p>
                                     {/* WAVE 2.3 — the same invented figure, second copy. */}
-                                    <div className="flex items-baseline gap-2 mt-1">
+                                    <div className="flex items-baseline gap-2">
                                         <span className="text-4xl font-bold">{formatTemperature(current.current.tempC)}</span>
                                     </div>
                                     <p className="text-sm font-medium mt-1 flex items-center gap-1">
@@ -238,31 +236,17 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         {/* Content Body */}
                         <div className="p-5 overflow-y-auto flex-1">
 
-                            {/* Tabs */}
-                            <div className="flex gap-3 mb-5">
-                                <button
-                                    onClick={() => setActiveTab('prev')}
-                                    className={`flex-1 py-3 rounded-xl text-sm font-bold border transition-all ${activeTab === 'prev'
-                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
-                                        : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'
-                                        }`}
-                                >
-                                    Previous 5 days
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('next')}
-                                    className={`flex-1 py-3 rounded-xl text-sm font-bold border transition-all ${activeTab === 'next'
-                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
-                                        : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'
-                                        }`}
-                                >
-                                    Next 5 days
-                                </button>
-                            </div>
+                            {/* H6: one heading, not two tabs — the other tab ("Previous 5 days") was always empty. The
+                                count is the number of days the list really holds, so the heading never says 5 over 7 cards. */}
+                            {forecastHeading && (
+                                <p data-testid="weather-forecast-heading" className="mb-4 text-sm font-bold text-stone-700" style={{ fontFamily: cautionFont }}>
+                                    {forecastHeading}
+                                </p>
+                            )}
 
                             {/* Horizontal List */}
                             <div className="flex overflow-x-auto gap-3 pb-4 scrollbar-hide -mx-2 px-2">
-                                {displayList.map((day, idx) => (
+                                {forecast.map((day, idx) => (
                                     <MiniCard key={idx} day={day} />
                                 ))}
                             </div>

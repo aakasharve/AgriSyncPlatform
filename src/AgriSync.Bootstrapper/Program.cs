@@ -124,7 +124,11 @@ try
                     // auth response that includes the refresh token in the body (Keystore
                     // storage). Must be in the CORS allow-list so browser preflight passes
                     // even if the web client ever sets it for diagnostics.
-                    "X-Client-Platform")
+                    "X-Client-Platform",
+                    // The phone revalidates what it holds with a conditional GET (the input library, the schedule
+                    // pictures). A browser or WebView refuses that request in preflight unless the header is listed here,
+                    // so without it the phone keeps the first copy it ever got and never learns of a newer one.
+                    "If-None-Match")
                 .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .AllowCredentials();
         });

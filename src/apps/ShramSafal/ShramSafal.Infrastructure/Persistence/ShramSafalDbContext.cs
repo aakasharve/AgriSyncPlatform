@@ -220,6 +220,12 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // FORCE-RLS on its own farm_id (F8). An overlay: the record is never touched.
     public DbSet<InputIdentityAssertion> InputIdentityAssertions => Set<InputIdentityAssertion>();
 
+    // spec: facts-card-input-truth-2026-11-19 (lane FACTS, slice B) - what the server worked out about each used product (library
+    // product, ingredients, crop, day of the season, stage). DERIVED and rebuildable (P10): FORCE-RLS on its own farm_id, the app role
+    // may SELECT / INSERT / DELETE and never UPDATE (migration AddInputUseFacts). What he said stays in application_input_items.
+    public DbSet<InputUseFact> InputUseFacts => Set<InputUseFact>();
+    public DbSet<InputUseIngredient> InputUseIngredients => Set<InputUseIngredient>();
+
     // spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (migration AddPlannedWork): two tables, FORCE-RLS on
     // their own farm_id, SELECT / INSERT / UPDATE for the app role and never DELETE. Row version = xmin.
     public DbSet<PlannedWork> PlannedWork => Set<PlannedWork>();

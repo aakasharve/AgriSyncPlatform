@@ -63,6 +63,9 @@ function mount() {
             handleExitMembership={vi.fn(async () => undefined)}
             isWorkerOnAnyFarm={false}
             workerProfile={null}
+            // lane HONESTY-2 (H4): the "सत्यापित" chip now belongs to the number the account signed in with, so this
+            // test says which number that is (the layout contract below is unchanged).
+            signedInPhone={{ masked: '******9999', verified: true }}
         />,
     );
 }
