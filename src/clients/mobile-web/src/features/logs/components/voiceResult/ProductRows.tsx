@@ -157,7 +157,11 @@ export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen
     const rawStatus = statusOf(identity, item, answers, kit.canCheck);
     // Lane FACTS-2: library names that sound like his word exist - the row says so (the card shows them), instead of "could not identify".
     const hasNear = rawStatus.kind === 'notFound' && !rawStatus.photo && isAnswerable(item) && nearProducts(nameForMatching(item)).length > 0;
-    const status = hasNear ? { text: copy.didYouMeanRow, tone: 'text-sky-800', icon: 'ask' as const } : statusWords(rawStatus, kit, language);
+    // ... and a product he picked from them says he CHOSE it (not "said yes"): the record still holds his own word.
+    const chose = identity.state === 'found' && identity.byPick && rawStatus.kind === 'said' && rawStatus.verdict === 'confirmed';
+    const status = hasNear ? { text: copy.didYouMeanRow, tone: 'text-sky-800', icon: 'ask' as const }
+        : chose && rawStatus.kind === 'said' ? { text: copy.speakerChose(kit.nameOfUser(rawStatus.byUserId)), tone: 'text-sky-800', icon: 'user' as const }
+            : statusWords(rawStatus, kit, language);
     const Icon = status ? STATUS_ICON[status.icon] : null;
     const name = productName(item, language) || (item.matchName ?? '');
     const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);

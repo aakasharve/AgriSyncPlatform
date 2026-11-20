@@ -56,14 +56,29 @@ describe('product card: did you mean (lane FACTS-2)', () => {
         show(log, kitFor(log));
         expect(screen.getByTestId('vr-near-question').textContent).toBe('तुम्हाला हे म्हणायचं होतं का?');
         const button = screen.getByTestId(`vr-near-${KARATE}`);
-        expect(button.textContent).toContain('कराटे');
-        expect(button.textContent).toContain('लॅम्बडा');
+        // Before his tap a candidate is its brand and its company, nothing else (CTO 2026-11-20).
+        expect(button.textContent).toBe('कराटेसिंजेंटा');
         expect(screen.getByTestId('vr-near-hint').textContent).toContain('फोटो');
         // He is still shown to have said what he said, the photo is still offered, and NOTHING was chosen for him.
         expect(screen.getByTestId('vr-card-name').textContent).toBe('Karatay');
         expect(screen.getByTestId('vr-card-photo')).toBeTruthy();
         expect(screen.queryByTestId('vr-card-facts')).toBeNull();
         expect(screen.queryByTestId('vr-card-picked')).toBeNull();
+    });
+
+    it('BeforeAnyTap_NothingIsWritten_AndNothingFromTheLibraryAboutTheGuessIsShownButItsBrandAndCompany', () => {
+        vi.stubEnv('VITE_FACTS_SHOW_UNTICKED', '1'); // even the test build, which shows unchecked lines, shows none for a guess
+        const log = logWith('Karatay');
+        const kit = kitFor(log);
+        const { container } = show(log, kit);
+        expect(kit.onAnswer).not.toHaveBeenCalled();
+        expect(kit.onPhoto).not.toHaveBeenCalled();
+        for (const id of ['vr-card-facts', 'vr-fact-ingredient', 'vr-fact-company', 'vr-card-does', 'vr-card-stage-lines', 'vr-fact-when', 'vr-fact-benefit', 'vr-card-picked', 'vr-card-speaker-said']) {
+            expect(screen.queryByTestId(id), id).toBeNull();
+        }
+        // the guess's ingredient (Marathi and English) and its strength appear nowhere on the card
+        expect(container.textContent).not.toMatch(/लॅम्बडा|सायहॅलोथ्रिन|Lambda|cyhalothrin|५%/i);
+        vi.unstubAllEnvs();
     });
 
     it('TappingOne_IsTheSameYesThisAnswer_NamingThatProduct_NothingElse', async () => {
@@ -80,10 +95,21 @@ describe('product card: did you mean (lane FACTS-2)', () => {
         const log = logWith('Karatay', [answer('confirmed')]);
         show(log, kitFor(log));
         expect(screen.getByTestId('vr-card-name').textContent).toBe('Karatay');
-        expect(screen.getByTestId('vr-card-picked').textContent).toBe('तुम्ही “Karatay” म्हणालात; लायब्ररीतलं “कराटे” तुम्ही निवडलं.');
+        expect(screen.getByTestId('vr-card-picked').textContent).toBe('तुम्ही “Karatay” म्हणालात; लायब्ररीतलं “कराटे” तुम्ही निवडलं. नोंदीत तुमचे शब्द “Karatay” तसेच राहतात.');
         expect(screen.getByTestId('vr-fact-ingredient').textContent).toContain('लॅम्बडा');
+        expect(screen.getByTestId('vr-card-source').textContent).toBe('माहिती: श्रमसफल लायब्ररी');
         expect(screen.queryByTestId('vr-card-near')).toBeNull();
-        expect(screen.getByTestId('vr-card-speaker-said').textContent).toContain('सुनील');
+        // He CHOSE it: the line never says he said "yes, this one" as if the library had matched his word.
+        const line = screen.getByTestId('vr-card-speaker-said').textContent ?? '';
+        expect(line).toBe('सुनीलने हे नाव निवडलं');
+        expect(line).not.toMatch(/सांगितलं|हो, हेच/);
+    });
+
+    it('AnExactMatchWithAYes_KeepsTheOldWords_SaidYes_NotChose', () => {
+        const log = logWith('Karate', [answer('confirmed')]);
+        show(log, kitFor(log));
+        expect(screen.getByTestId('vr-card-speaker-said').textContent).toBe('सुनीलने सांगितलं: हो, हेच');
+        expect(screen.queryByTestId('vr-card-picked')).toBeNull();
     });
 
     it('ARejectedAnswer_IsNoPick_TheNamesAreOfferedAgain', () => {
@@ -129,8 +155,16 @@ describe('product card: did you mean (lane FACTS-2)', () => {
         const log = logWith('Karatay');
         show(log, kitFor(log));
         expect(screen.getByTestId('vr-near-question').textContent).toBe('Did you mean one of these?');
-        expect(screen.getByTestId(`vr-near-${KARATE}`).textContent).toContain('Karate');
+        expect(screen.getByTestId(`vr-near-${KARATE}`).textContent).toBe('KarateSyngenta');
         expect(screen.getByTestId('vr-near-hint').textContent).toContain('photo');
+    });
+
+    it('English_AfterTheTap_SaysHeChoseIt_AndTheRecordKeepsHisWords', () => {
+        setLang('en');
+        const log = logWith('Karatay', [answer('confirmed')]);
+        show(log, kitFor(log));
+        expect(screen.getByTestId('vr-card-picked').textContent).toBe('You said “Karatay”; you chose “Karate” from the library. The record keeps your words “Karatay” as said.');
+        expect(screen.getByTestId('vr-card-speaker-said').textContent).toBe('सुनील chose this name');
     });
 });
 
@@ -178,9 +212,17 @@ describe('the product row (lane FACTS-2)', () => {
         expect(screen.getByTestId('vr-prow-status').textContent).toBe('हे औषध ओळखता आलं नाही');
     });
 
-    it('AfterHisTap_TheRowShowsTheIngredientAndHisAnswer', () => {
+    it('AfterHisTap_TheRowShowsTheIngredient_AndSaysHeChoseIt_NotThatHeSaidYes', () => {
         row(logWith('Karatay', [answer('confirmed')]));
         expect(screen.getByTestId('vr-prow-ingredient').textContent).toContain('लॅम्बडा');
-        expect(screen.getByTestId('vr-prow-status').getAttribute('data-status')).toBe('said');
+        const status = screen.getByTestId('vr-prow-status');
+        expect(status.getAttribute('data-status')).toBe('said');
+        expect(status.textContent).toBe('सुनीलने हे नाव निवडलं');
+        expect(status.textContent).not.toMatch(/सांगितलं|हो, हेच/);
+    });
+
+    it('AnExactMatchWithAYes_KeepsTheOldRowWords', () => {
+        row(logWith('Karate', [answer('confirmed')]));
+        expect(screen.getByTestId('vr-prow-status').textContent).toBe('सुनील: हो, हेच');
     });
 });

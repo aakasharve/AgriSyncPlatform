@@ -89,6 +89,8 @@ export interface ResultCopy {
     didYouMeanHint: string;
     /** On the card of a product he picked from those names: his word and the library's name differ, and he chose. */
     pickedNote: (said: string, picked: string) => string;
+    /** The speaker line and the row status of a product he picked from those names: he chose it; he did not say it was a library match. */
+    speakerChose: (name: string) => string;
     notThis: string;
     answerNo: string;
     answerPhoto: string;
@@ -182,7 +184,8 @@ const mr: ResultCopy = {
     didYouMean: 'तुम्हाला हे म्हणायचं होतं का?', // PROPOSED (Marathi)
     didYouMeanRow: 'जवळची नावं सापडली — दाबून निवडा', // PROPOSED (Marathi)
     didYouMeanHint: 'यातलं नसेल तर फोटो घ्या — आम्ही आपणहून काही निवडत नाही.', // PROPOSED (Marathi)
-    pickedNote: (said: string, picked: string) => `तुम्ही “${said}” म्हणालात; लायब्ररीतलं “${picked}” तुम्ही निवडलं.`, // PROPOSED (Marathi)
+    pickedNote: (said: string, picked: string) => `तुम्ही “${said}” म्हणालात; लायब्ररीतलं “${picked}” तुम्ही निवडलं. नोंदीत तुमचे शब्द “${said}” तसेच राहतात.`, // PROPOSED (Marathi)
+    speakerChose: (name: string) => `${name}ने हे नाव निवडलं`, // PROPOSED (Marathi)
     notThis: 'हे नाही',
     answerNo: 'नाही',
     answerPhoto: 'फोटो',
@@ -256,7 +259,8 @@ const en: ResultCopy = {
     didYouMean: 'Did you mean one of these?', // PROPOSED (English)
     didYouMeanRow: 'Names that sound like it were found — tap to choose', // PROPOSED (English)
     didYouMeanHint: 'If none is right, take a photo — nothing is chosen for you.', // PROPOSED (English)
-    pickedNote: (said: string, picked: string) => `You said “${said}”; you chose “${picked}” from the library.`, // PROPOSED (English)
+    pickedNote: (said: string, picked: string) => `You said “${said}”; you chose “${picked}” from the library. The record keeps your words “${said}” as said.`, // PROPOSED (English)
+    speakerChose: (name: string) => `${name} chose this name`, // PROPOSED (English)
     notThis: 'not this one',
     answerNo: 'No',
     answerPhoto: 'Photo',

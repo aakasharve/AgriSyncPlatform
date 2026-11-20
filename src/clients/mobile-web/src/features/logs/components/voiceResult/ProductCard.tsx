@@ -109,6 +109,13 @@ export function nearBrandName(n: NearProduct, language: string | undefined): str
     return brandIn(n.brand, language) || n.matchedName;
 }
 
+/** The company shown under a "did you mean" name: the matched brand's own company in this language, else the product's first company. */
+export function nearCompanyName(n: NearProduct, product: CatalogProduct, language: string | undefined): string {
+    const en = language === 'en';
+    return inLanguage(en ? n.brand?.company : n.brand?.companyMr, language)
+        || companyLine({ state: 'found', product }, language);
+}
+
 const Fact: React.FC<{ label: string; children: React.ReactNode; testId?: string }> = ({ label, children, testId }) => (
     <div className="flex gap-2 py-1" data-testid={testId}>
         <span className="w-[104px] shrink-0 text-[13.5px] font-bold text-stone-500">{label}</span>
@@ -181,6 +188,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
 
     const said = (a: InputIdentityAnswer | undefined): string | null => {
         if (!a) return null;
+        // A product he picked from the sound-alike names: he CHOSE it, he did not say it was a library match.
+        if (identity.state === 'found' && identity.byPick && a.verdict === 'confirmed') return copy.speakerChose(kit.nameOfUser(a.assertedByUserId));
         const what = a.verdict === 'confirmed' ? copy.yesThis : a.verdict === 'rejected' ? copy.notThis : words.photoKept;
         return copy.speakerSaid(kit.nameOfUser(a.assertedByUserId), what);
     };
@@ -260,8 +269,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                                     {near.map(n => {
                                         const product = getProduct(n.productId);
                                         if (!product) return null;
+                                        // Before his tap: the brand and its company, nothing else. The ingredient and the facts box come only after he chooses.
                                         const brand = nearBrandName(n, language);
-                                        const line = [ingredientLine({ state: 'found', product }, language), companyLine({ state: 'found', product }, language)].filter(Boolean).join(' · ');
+                                        const line = nearCompanyName(n, product, language);
                                         return (
                                             <button key={n.productId} type="button" disabled={busy} data-testid={`vr-near-${n.productId}`}
                                                 onClick={() => void run('answer', () => kit.onAnswer({ logId, item, verdict: 'confirmed', catalogProductId: n.productId }))}
