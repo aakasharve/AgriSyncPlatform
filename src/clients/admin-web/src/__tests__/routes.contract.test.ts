@@ -148,8 +148,9 @@ describe('route to module-key map (A3)', () => {
     // Mirrors ShramSafal.Domain.Organizations.ModuleKey (moduleKeys.ts:9). A key
     // silently dropped here becomes a route that can never be entered.
     // CR-2d join (plan D14 (3)): 36 -> 37, the go-live line's ScheduleReview ('schedules.review').
-    expect(Object.keys(ModuleKeys)).toHaveLength(37);
-    expect(new Set(Object.values(ModuleKeys)).size).toBe(37);
+    // CR-3 Task A1: 37 -> 41 (farms.phones, visits.assign, visits.mine, exports.day-sheet).
+    expect(Object.keys(ModuleKeys)).toHaveLength(41);
+    expect(new Set(Object.values(ModuleKeys)).size).toBe(41);
   });
 
   it('gates the drilldown on the same key as the farmer-health landing page', () => {

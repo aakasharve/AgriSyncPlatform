@@ -157,7 +157,7 @@ const REGISTER: Record<string, Row> = {
         'the CR-2d join (2026-11-19) ports /ops/app-versions (ops.live) and the go-live line\'s /schedules/check (schedules.review, the 37th key): 18 guards, 37 keys',
       decidedBy: 'measurement, 2026-08-31 (the plan corrected its own prose); CR-2b plan Task 4 (10 -> 17 guarded); CR-2d plan Task 3, D3, D14 (3)',
       assert: () => {
-        expect(Object.keys(ModuleKeys)).toHaveLength(37); // CR-2d join: 36 -> 37, ScheduleReview from the go-live line.
+        expect(Object.keys(ModuleKeys)).toHaveLength(41); // CR-2d join: 36 -> 37, ScheduleReview; CR-3 A1: 37 -> 41 (the four control-room keys).
         const app = code('/src/App.tsx');
         expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(18); // B24: 17 -> 16 (/ops/voice gone); CR-2d join: 16 -> 18 (the two ports).
       },

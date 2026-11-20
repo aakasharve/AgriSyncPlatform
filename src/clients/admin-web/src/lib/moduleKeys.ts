@@ -67,6 +67,12 @@ export const ModuleKeys = {
 
   // spec: plr-d10 lane SCH-A - ShramSafal's schedule check (a platform act). See EntitlementMatrix.Lookup.
   ScheduleReview: 'schedules.review',
+
+  // spec: trusted-control-room-2026-11-20 (CR-3, Task A1) - the control-room per-person ticks. See ControlRoomTicks.
+  FarmsPhones: 'farms.phones',
+  VisitsAssign: 'visits.assign',
+  VisitsMine: 'visits.mine',
+  ExportsDaySheet: 'exports.day-sheet',
 } as const;
 
 export type ModuleKey = (typeof ModuleKeys)[keyof typeof ModuleKeys];

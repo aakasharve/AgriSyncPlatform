@@ -61,4 +61,34 @@ public sealed class EntitlementMatrixTests
                     $"({t}, {r}) missing module entries");
             }
     }
+
+    [Fact]
+    public void Platform_owner_writes_visits_and_reads_phones_and_day_sheets()
+    {
+        var result = EntitlementMatrix.For(OrganizationType.Platform, OrganizationRole.Owner);
+        foreach (var key in new[] { ModuleKey.VisitsAssign, ModuleKey.VisitsMine })
+        {
+            var e = result.Single(x => x.ModuleKey == key);
+            e.CanRead.Should().BeTrue(key);
+            e.CanWrite.Should().BeTrue(key);
+        }
+        foreach (var key in new[] { ModuleKey.FarmsPhones, ModuleKey.ExportsDaySheet })
+            result.Single(x => x.ModuleKey == key).CanRead.Should().BeTrue(key);
+    }
+
+    [Theory]
+    [InlineData(OrganizationType.FPO)]
+    [InlineData(OrganizationType.FPC)]
+    [InlineData(OrganizationType.ConsultingFirm)]
+    [InlineData(OrganizationType.Lab)]
+    public void No_other_organisation_type_holds_a_control_room_key(OrganizationType type)
+    {
+        string[] keys = [ModuleKey.FarmsPhones, ModuleKey.VisitsAssign, ModuleKey.VisitsMine, ModuleKey.ExportsDaySheet];
+        foreach (var role in Enum.GetValues<OrganizationRole>())
+            foreach (var key in keys)
+            {
+                var e = EntitlementMatrix.For(type, role).Single(x => x.ModuleKey == key);
+                (e.CanRead || e.CanExport || e.CanWrite).Should().BeFalse($"({type}, {role}) must not hold {key}");
+            }
+    }
 }

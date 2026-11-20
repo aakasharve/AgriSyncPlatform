@@ -70,7 +70,9 @@ public static class EntitlementMatrix
         key == ModuleKey.AdminOrgsWrite
         || key == ModuleKey.OrgSettings
         || key == ModuleKey.OrgMembers
-        || key == ModuleKey.OrgFarmScope;
+        || key == ModuleKey.OrgFarmScope
+        || key == ModuleKey.VisitsAssign
+        || key == ModuleKey.VisitsMine;
 
     private static bool IsExportableByAnalyst(string key) =>
         key.StartsWith("cei.")

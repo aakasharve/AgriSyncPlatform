@@ -68,6 +68,13 @@ public static class ModuleKey
     // nothing here.
     public const string ScheduleReview = "schedules.review";
 
+    // spec: trusted-control-room-2026-11-20 (CR-3, Task A1) - the control-room per-person ticks. Platform Owner only in the
+    // matrix; a team member holds them through ControlRoomTicks, never through an organisation role.
+    public const string FarmsPhones = "farms.phones";
+    public const string VisitsAssign = "visits.assign";
+    public const string VisitsMine = "visits.mine";
+    public const string ExportsDaySheet = "exports.day-sheet";
+
     public static readonly IReadOnlySet<string> All = typeof(ModuleKey)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral && f.FieldType == typeof(string))
