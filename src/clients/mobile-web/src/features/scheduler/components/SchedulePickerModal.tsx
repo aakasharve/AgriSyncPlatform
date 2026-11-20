@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, ChevronRight, Loader2, X } from 'lucide-react';
 import { agriSyncClient, CropScheduleTemplateDto } from '../../../infrastructure/api/AgriSyncClient';
+import { scheduleNameMr } from '../schedulePage/scheduleNames';
 
 interface SchedulePickerModalProps {
     isOpen: boolean;
@@ -8,7 +9,7 @@ interface SchedulePickerModalProps {
     plotId: string;
     cycleId: string;
     farmId: string;
-    onClose: (didAdopt: boolean, subscription?: any) => void;
+    onClose: (didAdopt: boolean, subscription?: unknown) => void;
 }
 
 export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
@@ -61,7 +62,7 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
             });
             onClose(true, result);
         } catch {
-            setFetchError('वेळापत्रक सुरू करण्यात अडचण आली. पुन्हा प्रयत्न करा.');
+            setFetchError('शेड्यूल सुरू करण्यात अडचण आली. पुन्हा प्रयत्न करा.'); // draft Marathi - needs review (UI-9a item 9: "शेड्यूल", not "वेळापत्रक")
         } finally {
             setIsSubmitting(false);
         }
@@ -74,7 +75,8 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
                 <div>
                     <h1 className="text-3xl font-bold text-[#145225] leading-tight"
                         style={{ fontFamily: '"Noto Serif Devanagari", serif' }}>
-                        कोणता वेळापत्रक<br />वापरायचे?
+                        {/* draft Marathi - needs review (UI-9a item 9; was "कोणता वेळापत्रक वापरायचे?") */}
+                        कोणतं शेड्यूल<br />वापरायचं?
                     </h1>
                     <p className="text-[#2f6b3b] mt-2 text-sm font-medium opacity-70"
                        style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
@@ -105,7 +107,7 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
                     <div className="text-center py-12">
                         <p className="text-stone-400 text-sm"
                            style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
-                            या पिकासाठी वेळापत्रक उपलब्ध नाही.
+                            या पिकासाठी शेड्यूल उपलब्ध नाही.
                         </p>
                     </div>
                 ) : (
@@ -123,7 +125,7 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
                                         <div className="flex-1 min-w-0">
                                             <p className={`font-bold text-base leading-snug ${isSelected ? 'text-[#145225]' : 'text-stone-800'}`}
                                                style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
-                                                {t.name}
+                                                {scheduleNameMr(t.name)}
                                             </p>
                                             <div className="flex items-center gap-3 mt-2">
                                                 <span className="text-xs font-semibold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">
@@ -166,7 +168,7 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
                 )}
                 {selectedTemplate && !isLoading && (
                     <p className="text-xs text-center text-stone-400 mb-2">
-                        निवडले: <span className="font-semibold text-[#2f6b3b]">{selectedTemplate.name}</span>
+                        निवडले: <span className="font-semibold text-[#2f6b3b]">{scheduleNameMr(selectedTemplate.name)}</span>
                     </p>
                 )}
                 <button
@@ -175,7 +177,7 @@ export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#145225] text-white rounded-2xl font-bold text-base shadow-lg shadow-[#145225]/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
                     {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <ChevronRight size={20} />}
-                    हे वेळापत्रक सुरू करा
+                    हे शेड्यूल सुरू करा
                 </button>
                 <button
                     disabled={isSubmitting}

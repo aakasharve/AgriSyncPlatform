@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { agriSyncClient, CropScheduleTemplateDto, MigrateScheduleRequest } from '../../../infrastructure/api/AgriSyncClient';
+import { agriSyncClient, MigrateScheduleRequest } from '../../../infrastructure/api/AgriSyncClient';
 import ScheduleSelector from './ScheduleSelector';
 
 interface MigrationSheetProps {
@@ -10,7 +10,7 @@ interface MigrationSheetProps {
     cycleId: string;
     farmId: string;
     currentTemplateId?: string;
-    onClose: (didMigrate: boolean, result?: any) => void;
+    onClose: (didMigrate: boolean, result?: unknown) => void;
 }
 
 const REASON_OPTIONS = [
@@ -27,7 +27,6 @@ export const MigrationSheet: React.FC<MigrationSheetProps> = ({
     plotId,
     cycleId,
     farmId,
-    currentTemplateId,
     onClose
 }) => {
     const [selectedReason, setSelectedReason] = useState<string>('');
@@ -81,7 +80,7 @@ export const MigrationSheet: React.FC<MigrationSheetProps> = ({
                 
                 <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: '"Noto Serif Devanagari", serif' }}>
-                        वेळापत्रक बदला
+                        शेड्यूल बदला
                     </h2>
                     <button 
                         onClick={() => !isSubmitting && onClose(false)}
@@ -117,7 +116,7 @@ export const MigrationSheet: React.FC<MigrationSheetProps> = ({
                     {/* Section 2: Template Selector */}
                     <div>
                         <h3 className="text-sm font-bold text-gray-700 mb-3" style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
-                            नवीन वेळापत्रक निवडा
+                            नवीन शेड्यूल निवडा
                         </h3>
                         {/* We use ScheduleSelector. It will query the template catalog internally. 
                             Wait, in the design, it just embeds the component. We can pass the cropKey to it.
@@ -150,7 +149,7 @@ export const MigrationSheet: React.FC<MigrationSheetProps> = ({
                         className="w-full flex items-center justify-center py-3.5 bg-[#145225] text-white rounded-xl font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
                         {isSubmitting ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
-                        वेळापत्रक बदला
+                        शेड्यूल बदला
                     </button>
                 </div>
             </div>

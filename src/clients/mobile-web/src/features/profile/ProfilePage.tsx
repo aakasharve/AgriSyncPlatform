@@ -90,6 +90,8 @@ interface ProfilePageProps {
     waterResources?: unknown;
     electricity?: unknown;
     onOpenScheduleLibrary?: (cropId?: string) => void;
+    /** UI-9a (redesign item 7): Setup's "शेड्यूल बघा" - the शेड्यूल tab on this crop (home view). Absent: the library door is used. */
+    onOpenSchedule?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
     onOpenLabour?: () => void;
     /** The ONE "गोपनीयता व संमती" place: consents + a copy of my data + erase (plr-d10 I17). */
@@ -115,7 +117,7 @@ interface ProfilePageProps {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
-    onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour,
+    onOpenScheduleLibrary, onOpenSchedule, onOpenFinanceManager, onOpenLabour,
     onOpenConsent, onOpenAiDrafts, onOpenSettings, onOpenVoiceDiary,
     onExit,
     initialTab,
@@ -354,6 +356,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 setWizardCropId={cropPlot.setWizardCropId}
                                 canAddPlot={canEditFarmSetup}
                                 onOpenScheduleLibrary={onOpenScheduleLibrary}
+                                onOpenSchedule={onOpenSchedule}
                             />
                         ),
                     },

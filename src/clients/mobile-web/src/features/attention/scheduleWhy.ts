@@ -20,6 +20,7 @@
 import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 import { fromDateKey, offsetOf } from '../reflect/overview/reflectDates';
 import { stepLabelMr, type ScheduledWorkItem } from './scheduledWork';
+import { scheduleNameMr } from '../scheduler/schedulePage/scheduleNames';
 
 /** "दर ५ दिवसांनी" / "आठवड्यात २ वेळा" from the server's repeat code; `null` for none stored or a code this phone does not know. PROPOSED (Marathi) */
 export function repeatLineMr(code: string | null | undefined): string | null {
@@ -58,13 +59,15 @@ function whoSaysMr(names: readonly string[]): string {
 export function scheduleWhyLineMr(step: ScheduledWorkItem, todayKey: string): string | null {
     if (!step.subscriptionId || !step.scheduleName || typeof step.scheduleDay !== 'number') return null;
     const label = stepLabelMr(step);
+    // UI-9a item 9: a schedule the app ships is named in Marathi ("द्राक्ष — फवारणी शेड्यूल"); a name a person wrote is shown as written.
+    const scheduleName = scheduleNameMr(step.scheduleName);
     const parts: string[] = [];
 
     if (step.alsoAskedBy && step.alsoAskedBy.length > 0) {
-        parts.push(whoSaysMr([step.scheduleName, ...step.alsoAskedBy]));
+        parts.push(whoSaysMr([scheduleName, ...step.alsoAskedBy.map(scheduleNameMr)]));
     } else {
         const repeat = repeatLineMr(step.repeatText);
-        parts.push(`${step.scheduleName} नुसार दिवस ${toDevanagariDigits(step.scheduleDay)} ला ${label}${repeat ? ` (${repeat})` : ''}`);
+        parts.push(`${scheduleName} नुसार दिवस ${toDevanagariDigits(step.scheduleDay)} ला ${label}${repeat ? ` (${repeat})` : ''}`);
     }
 
     if (step.lastSameWorkDate === null) {

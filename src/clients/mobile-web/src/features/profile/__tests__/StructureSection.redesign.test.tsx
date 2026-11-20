@@ -86,10 +86,12 @@ describe('StructureSection (redesigned)', () => {
         expect(p.setIsAddingCrop).toHaveBeenCalledWith(false);
     });
 
-    it('no schedule yet → "आता निवडा" opens the schedule library for that crop', () => {
+    it('no plot follows a schedule → the orange "शेड्यूल नाही" and "निवडा" open the schedule library for that crop (redesign item 7)', () => {
         const p = props();
         render(<StructureSection {...p} />);
-        expect(screen.getByTestId('schedule-missing-c1')).toHaveTextContent('अजून वेळापत्रक निवडलेलं नाही');
+        expect(screen.getByTestId('schedule-missing-c1')).toHaveTextContent('शेड्यूल नाही');
+        expect(screen.getByTestId('schedule-missing-c1')).not.toHaveTextContent('वेळापत्रक');
+        expect(screen.getByTestId('schedule-open-c1')).toHaveTextContent('निवडा');
         fireEvent.click(screen.getByTestId('schedule-open-c1'));
         expect(p.onOpenScheduleLibrary).toHaveBeenCalledWith('c1');
     });
@@ -97,9 +99,9 @@ describe('StructureSection (redesigned)', () => {
     it('shows each plot in plain words; draw and redraw the boundary are visible buttons', () => {
         const p = props();
         render(<StructureSection {...p} />);
-        expect(screen.getByTestId('plot-p1')).toHaveTextContent('2 एकर');
+        expect(screen.getByTestId('plot-p1')).toHaveTextContent('२ एकर'); // UI-9a item 9: Marathi digits
         expect(screen.getByTestId('plot-p1')).toHaveTextContent('ठिबक');
-        expect(screen.getByTestId('plot-p2')).toHaveTextContent('10 गुंठे');
+        expect(screen.getByTestId('plot-p2')).toHaveTextContent('१० गुंठे');
         expect(screen.getByTestId('plot-p2')).toHaveTextContent('नकाशावर आखलेला');
         expect(screen.getByTestId('plot-map-p1')).toHaveTextContent('नकाशावर हद्द आखा');
         expect(screen.getByTestId('plot-map-p2')).toHaveTextContent('हद्द पुन्हा आखा');

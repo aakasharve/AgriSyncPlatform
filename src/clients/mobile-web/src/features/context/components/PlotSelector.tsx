@@ -117,8 +117,10 @@ export const PlotGroupHeader: React.FC<{
     sub?: React.ReactNode;
     right?: React.ReactNode;
     testId?: string;
+    /** A page that already has a test on the crop's name (Setup's `crop-name-<id>`) keeps it on the name line. */
+    nameTestId?: string;
     language?: Language;
-}> = ({ crop, sub, right, testId, language: languageProp }) => {
+}> = ({ crop, sub, right, testId, nameTestId, language: languageProp }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
     // Founder 2026-11-20 (fix round, header A): the crop's own colour is a thin strip under the photo it belongs to - not a bar floating at the
@@ -130,7 +132,7 @@ export const PlotGroupHeader: React.FC<{
                 <span aria-hidden="true" data-part="strip" className={`mt-1 block h-1 rounded-full ${cropColorOf(crop.color)}`} />
             </span>
             <span className="flex min-h-[40px] min-w-0 flex-1 flex-col justify-center">
-                <span className="block truncate text-[18px] font-extrabold leading-tight text-stone-900">{cropNameIn(crop.name, language, crop.masterId)}</span>
+                <span className="block truncate text-[18px] font-extrabold leading-tight text-stone-900" data-testid={nameTestId}>{cropNameIn(crop.name, language, crop.masterId)}</span>
                 {sub !== undefined && sub !== null && <span className="block text-[14px] font-bold leading-snug text-stone-700">{sub}</span>}
             </span>
             {right}

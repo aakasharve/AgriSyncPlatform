@@ -19,6 +19,7 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 }));
 
 import AddPlotWizard from '../AddPlotWizard';
+import { SC } from '../../../scheduler/schedulePage/scheduleCopy';
 import { setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
 import { SERVER_TEMPLATE } from '../../../scheduler/schedulePage/__tests__/scheduleFixtures';
 import type { CropProfile, FarmerProfile, Plot } from '../../../../types';
@@ -166,7 +167,10 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         const card = byId('plot-start-schedule');
         expect(card).toHaveTextContent('शेड्यूल आपोआप लागेल');
         expect(card).toHaveTextContent('द्राक्ष');            // the schedule's name in Marathi (scheduleNameMr)
-        expect(card).toHaveTextContent('ShramSafal ने तपासलेलं');
+        // UI-9a item 9: the SAME words as the schedule page's check badge, not the Latin brand name
+        expect(card).toHaveTextContent(SC.checkedByShramSafal);
+        expect(card).toHaveTextContent('श्रमसफलने तपासलेलं');
+        expect(card.textContent).not.toContain('ShramSafal');
         expect(card).toHaveTextContent('बदलायचं असेल तर नंतर शेड्यूल टॅबमध्ये');
         expect(screen.queryByTestId('plot-start-no-schedule')).toBeNull();
     });

@@ -11,24 +11,31 @@
  *     name, or a crop he types that the list does not have), the same duplicate rule (a crop already on the farm
  *     cannot be chosen again), save, cancel. The chosen crop is stored by its English name (the server keeps crop
  *     names in English) with its MHCR id; every crop name is SHOWN in the app's language (`cropNameIn`);
- *   - per crop: the active schedule (or "not chosen") → the schedule library;
+ *   - per crop (redesign item 7, UI-9a): the crop's photo once, "<N> प्लॉट", one sentence COUNTED FROM THE PLOTS ("१५ पैकी १३ प्लॉटवर शेड्यूल")
+ *     with "शेड्यूल बघा" (opens the schedule tab on this crop), or the orange "शेड्यूल नाही" with "निवडा" (the schedule library) when no plot
+ *     follows one. From 4 plots the plots are the shared grid (`SinglePlotSection`) and the tapped plot's card opens under it; up to 3 plots
+ *     keep one card each, as before;
  *   - per plot: area + unit, irrigation, "mapped"; draw / redraw its boundary; remove it — the redraw
  *     and remove buttons used to appear only on mouse hover, so a phone could not see them; they are
  *     now always shown, and removing asks first;
  *   - add a plot → the 3-step AddPlotWizard (rendered by ProfilePage, unchanged).
  */
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, MapPin, Plus, Sprout, Trash2 } from 'lucide-react';
+import { AlertTriangle, MapPin, Plus, Sprout, Trash2 } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { cropById, cropLabel, normName } from '../../../domain/crops/cropMaster';
-import { cropNameIn } from '../../../shared/names/namesIn';
-import { cropMasterIdOf, useCropPicture } from '../../context/components/cropImage';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
+import { cropMasterIdOf } from '../../context/components/cropImage';
 import CropMasterPicker, { CropPicture, type PickedCrop } from '../components/CropMasterPicker';
-import type { CropProfile } from '../../../domain/types/farm.types';
-import { CropSymbol } from '../../context/components/CropSelector';
-import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
+import type { CropProfile, Plot } from '../../../domain/types/farm.types';
+import { PlotCount } from '../../context/components/CropPlotPicker';
+import { PlotGroupHeader, SinglePlotSection } from '../../context/components/PlotSelector';
+import { photoOnceFor } from '../../context/components/plotSelectorRules';
+import { usePlotScheduleChoices } from '../../scheduler/schedulePage/usePlotScheduleChoices';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { BigButton, GlassCard, IconDot, Tap } from '../../../shared/components/ui/placeUi';
 import { IRRIGATION_LABEL, LAND_UNIT_LABEL } from '../components/setupLabels';
+import { SCHEDULE_LINE_WORDS, plotsFollowingCount, scheduleLineText } from './cropScheduleLine';
 
 interface StructureSectionProps {
     crops: CropProfile[];
@@ -51,11 +58,16 @@ interface StructureSectionProps {
      */
     canAddPlot?: boolean;
     onOpenScheduleLibrary?: (cropId?: string) => void;
+    /**
+     * Redesign item 7 - "शेड्यूल बघा": open the शेड्यूल tab on this crop (its home view, not the library). Absent = the nearest door the page
+     * has, `onOpenScheduleLibrary` (it opens the same tab on the same crop, on its library view).
+     */
+    onOpenSchedule?: (cropId?: string) => void;
 }
 
 /** The hook's error strings are English; the farmer reads one of these two instead. */
 const DUPLICATE_CROP = 'हे पीक आधीच जोडलेलं आहे — एक पीक एकदाच जोडता येतं.';
-const CROP_NAME_NEEDED = 'पिकाचं नाव लिहा (किमान 2 अक्षरं).';
+const CROP_NAME_NEEDED = 'पिकाचं नाव लिहा (किमान २ अक्षरं).'; // UI-9a item 9: Marathi digit
 // PROPOSED (English) — the same two reasons in English mode (spec I18: English mode shows English only).
 const DUPLICATE_CROP_EN = 'This crop is already added — a crop can be added only once.';
 const CROP_NAME_NEEDED_EN = 'Write the crop name (at least 2 letters).';
@@ -65,39 +77,27 @@ const FORM_WORDS = {
     en: { change: 'Change', save: 'Save crop', cancel: 'Cancel', typed: 'The name you typed' },
 } as const;
 
-/** The farm crop's own picture (spec I18: by the crop master), else its old symbol on the crop's colour. */
-const FarmCropMark: React.FC<{ crop: CropProfile }> = ({ crop }) => {
-    const { src, onError } = useCropPicture({ name: crop.name, iconName: crop.iconName, masterId: crop.masterId }, 480);
-    return src
-        ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={onError} className="h-12 w-12 shrink-0 select-none rounded-xl object-cover shadow-sm" />
-        : <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-sm ${crop.color}`}><CropSymbol name={crop.iconName} size="md" /></span>;
-};
-
-const ScheduleBox: React.FC<{ crop: CropProfile; onOpen: () => void }> = ({ crop, onOpen }) => {
-    const activeSchedule = crop.activeScheduleId ? getScheduleById(crop.activeScheduleId) : null;
-    const altCount = Math.max(0, getSchedulesForCrop(crop.name).length - 1);
-    if (!activeSchedule) {
+/**
+ * The crop's one schedule line, counted from its plots (never from the crop-level field). Some plots follow a schedule: a calm box with the
+ * sentence and "शेड्यूल बघा" (the शेड्यूल tab on this crop). None does: the orange "शेड्यूल नाही" with "निवडा" (the schedule library for this crop).
+ */
+const CropScheduleLine: React.FC<{ crop: CropProfile; following: number; language: 'mr' | 'en'; onSee: () => void; onChoose: () => void }> = ({ crop, following, language, onSee, onChoose }) => {
+    const w = SCHEDULE_LINE_WORDS[language];
+    if (following === 0) {
         return (
-            <div className="flex items-center gap-2 rounded-2xl bg-orange-50 p-3 ring-1 ring-orange-200" data-testid={`schedule-missing-${crop.id}`}>
-                <AlertTriangle size={18} className="shrink-0 text-orange-600" aria-hidden="true" />
-                <p className="m-0 min-w-0 flex-1 text-[14px] font-extrabold text-orange-800">अजून वेळापत्रक निवडलेलं नाही</p>
-                <Tap onClick={onOpen} data-testid={`schedule-open-${crop.id}`} className="min-h-[44px] shrink-0 rounded-full bg-orange-600 px-3.5 text-[14px] font-extrabold text-white">आता निवडा</Tap>
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-orange-50 p-3 ring-1 ring-orange-300" data-testid={`schedule-missing-${crop.id}`}>
+                <AlertTriangle size={18} className="shrink-0 text-orange-700" aria-hidden="true" />
+                <p className="m-0 min-w-0 flex-1 basis-[7rem] text-[15px] font-extrabold text-orange-900">{w.none}</p>
+                <Tap onClick={onChoose} data-testid={`schedule-open-${crop.id}`} className="min-h-[44px] shrink-0 rounded-full bg-orange-700 px-4 text-[15px] font-extrabold text-white">{w.choose}</Tap>
             </div>
         );
     }
     return (
-        <div className="rounded-2xl bg-emerald-50/70 p-3 ring-1 ring-emerald-100" data-testid={`schedule-${crop.id}`}>
-            <p className="m-0 text-[12.5px] font-extrabold text-emerald-800">पिकाचं वेळापत्रक</p>
-            <div className="mt-1 flex items-center gap-2.5">
-                <CalendarDays size={18} className="shrink-0 text-emerald-700" aria-hidden="true" />
-                <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[15px] font-extrabold leading-tight text-stone-900">{activeSchedule.name}</p>
-                    <p className="m-0 text-[13px] font-semibold text-stone-600">
-                        {activeSchedule.totalDurationDays ? `${activeSchedule.totalDurationDays} दिवस` : '—'}{altCount > 0 ? ` · आणखी ${altCount} पर्याय` : ''}
-                    </p>
-                </div>
-                <Tap onClick={onOpen} data-testid={`schedule-open-${crop.id}`} className="min-h-[44px] shrink-0 rounded-full bg-white px-3.5 text-[14px] font-extrabold text-emerald-800 ring-1 ring-emerald-300">बदला</Tap>
-            </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-emerald-50/70 p-3 ring-1 ring-emerald-200" data-testid={`schedule-${crop.id}`}>
+            <p className="m-0 min-w-0 flex-1 basis-[10rem] text-[15px] font-extrabold leading-snug text-stone-900" data-testid={`schedule-line-${crop.id}`}>
+                {scheduleLineText(crop.plots.length, following, language)}
+            </p>
+            <Tap onClick={onSee} data-testid={`schedule-see-${crop.id}`} className="min-h-[44px] shrink-0 rounded-full bg-white px-4 text-[15px] font-extrabold text-emerald-800 ring-1 ring-emerald-400">{w.see}</Tap>
         </div>
     );
 };
@@ -105,11 +105,17 @@ const ScheduleBox: React.FC<{ crop: CropProfile; onOpen: () => void }> = ({ crop
 const StructureSection: React.FC<StructureSectionProps> = ({
     crops, isAddingCrop, setIsAddingCrop, newCropData, setNewCropData, cropNameError, setCropNameError,
     normalizedNewCropName, isDuplicateCropName, handleAddCrop,
-    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, canAddPlot = true,
+    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, onOpenSchedule, canAddPlot = true,
 }) => {
     const [confirmPlot, setConfirmPlot] = useState<string | null>(null);
+    // From 4 plots a crop's plots are the shared grid and ONE plot's card is open under it (by crop id); a crop with up to 3 plots shows every card.
+    const [openPlotByCrop, setOpenPlotByCrop] = useState<Record<string, string | null>>({});
+    // What each plot follows, live (the schedule tab reads the same); the schedule sentence is counted from it, never from the crop-level field.
+    const scheduleChoices = usePlotScheduleChoices();
+    const todayKey = getDateKey();
 
     const language = useOptionalLanguage()?.language ?? 'mr';
+    const lineLanguage: 'mr' | 'en' = language === 'en' ? 'en' : 'mr';
     const words = language === 'en' ? FORM_WORDS.en : FORM_WORDS.mr;
     // The crops already on this farm, as crop master ids and as names: neither can be chosen again.
     const onFarm = useMemo(() => new Set(crops.map(c => cropMasterIdOf(c)).filter((id): id is string => !!id)), [crops]);
@@ -128,6 +134,43 @@ const StructureSection: React.FC<StructureSectionProps> = ({
         ? (isDuplicateCropName ? (language === 'en' ? DUPLICATE_CROP_EN : DUPLICATE_CROP) : (language === 'en' ? CROP_NAME_NEEDED_EN : CROP_NAME_NEEDED))
         : undefined;
     const chosenName = picked ? cropLabel(picked, language) : (newCropData.name ?? '').trim();
+
+    /** One plot's card, as it always was: area, irrigation, "mapped"; draw / redraw its boundary; remove it (asks first). */
+    const renderPlotCard = (crop: CropProfile, p: Plot) => {
+        const irrigation = p.infrastructure?.irrigationMethod ? IRRIGATION_LABEL[p.infrastructure.irrigationMethod] : null;
+        const confirming = confirmPlot === p.id;
+        return (
+            <div key={p.id} className="space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`plot-${p.id}`}>
+                <div className="min-w-0">
+                    <p className="m-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{p.name}</p>
+                    <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-stone-600">
+                        <span>{digitsFor(p.baseline.totalArea ?? '', language)} {LAND_UNIT_LABEL[p.baseline.unit] ?? p.baseline.unit}</span>
+                        {irrigation && <span>· {irrigation}</span>}
+                        {p.geoData && <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[12px] font-extrabold text-emerald-800"><MapPin size={12} aria-hidden="true" />नकाशावर आखलेला</span>}
+                    </p>
+                </div>
+                {confirming ? (
+                    <div className="rounded-xl bg-rose-50 p-2.5 ring-1 ring-rose-200" data-testid={`plot-remove-confirm-${p.id}`}>
+                        <p className="m-0 text-[14px] font-extrabold text-rose-900">हा प्लॉट यादीतून काढायचा?</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                            <Tap onClick={() => setConfirmPlot(null)} className="min-h-[44px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">नको</Tap>
+                            <Tap onClick={() => { deletePlot(crop.id, p.id); setConfirmPlot(null); }} data-testid={`plot-remove-yes-${p.id}`}
+                                className="min-h-[44px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">हो, काढा</Tap>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex gap-2">
+                        <Tap onClick={() => setMappingPlotId({ cropId: crop.id, plotId: p.id })} data-testid={`plot-map-${p.id}`}
+                            className={`flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full text-[14px] font-extrabold ${p.geoData ? 'bg-white text-emerald-800 ring-1 ring-emerald-300' : 'bg-emerald-700 text-white'}`}>
+                            <MapPin size={16} aria-hidden="true" />{p.geoData ? 'हद्द पुन्हा आखा' : 'नकाशावर हद्द आखा'}
+                        </Tap>
+                        <Tap onClick={() => setConfirmPlot(p.id)} aria-label="प्लॉट काढा" data-testid={`plot-remove-${p.id}`}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-rose-600 ring-1 ring-rose-200"><Trash2 size={18} aria-hidden="true" /></Tap>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-3" data-testid="hub-crops">
@@ -169,61 +212,42 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                 </GlassCard>
             )}
 
-            {crops.map(crop => (
-                <GlassCard key={crop.id} testId={`crop-${crop.id}`}>
-                    <div className="flex items-center gap-3">
-                        <FarmCropMark crop={crop} />
-                        <div className="min-w-0 flex-1">
-                            <p className="m-0 text-[18px] font-extrabold text-stone-900" data-testid={`crop-name-${crop.id}`}>{cropNameIn(crop.name, language, crop.masterId)}</p>
-                            <p className="m-0 text-[13.5px] font-semibold text-stone-600">{crop.plots.length} प्लॉट</p>
+            {crops.map(crop => {
+                const following = plotsFollowingCount(crop, scheduleChoices, todayKey);
+                const manyPlots = photoOnceFor(crop.plots.length);
+                const openPlot = crop.plots.find(p => p.id === openPlotByCrop[crop.id]) ?? null;
+                const tapPlot = (plotId: string) => {
+                    setConfirmPlot(null);
+                    setOpenPlotByCrop(prev => ({ ...prev, [crop.id]: prev[crop.id] === plotId ? null : plotId }));
+                };
+                return (
+                    <GlassCard key={crop.id} testId={`crop-${crop.id}`}>
+                        <PlotGroupHeader crop={crop} testId={`crop-header-${crop.id}`} nameTestId={`crop-name-${crop.id}`} language={lineLanguage}
+                            sub={<span data-testid={`crop-count-${crop.id}`}><PlotCount total={crop.plots.length} language={lineLanguage} /></span>} />
+                        <div className="mt-2.5 space-y-2">
+                            <CropScheduleLine crop={crop} following={following} language={lineLanguage}
+                                onSee={() => (onOpenSchedule ?? onOpenScheduleLibrary)?.(crop.id)}
+                                onChoose={() => onOpenScheduleLibrary?.(crop.id)} />
+                            {manyPlots ? (
+                                <>
+                                    <SinglePlotSection crop={crop} plotId={openPlot?.id ?? null} onPickPlot={tapPlot} language={lineLanguage}
+                                        sectionTestId={`plots-${crop.id}`}
+                                        testIds={{ plot: id => `plot-pick-${id}`, grid: `plot-grid-${crop.id}` }} />
+                                    {openPlot
+                                        ? renderPlotCard(crop, openPlot)
+                                        : <p className="m-0 text-[14px] font-bold text-stone-700" data-testid={`plot-hint-${crop.id}`}>{SCHEDULE_LINE_WORDS[lineLanguage].hint}</p>}
+                                </>
+                            ) : crop.plots.map(p => renderPlotCard(crop, p))}
+                            {canAddPlot && (
+                                <Tap onClick={() => setWizardCropId(crop.id)} data-testid={`plot-add-${crop.id}`}
+                                    className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-emerald-400 text-[15px] font-extrabold text-emerald-800">
+                                    <Plus size={18} aria-hidden="true" />या पिकात प्लॉट जोडा
+                                </Tap>
+                            )}
                         </div>
-                    </div>
-                    <div className="mt-2.5 space-y-2">
-                        <ScheduleBox crop={crop} onOpen={() => onOpenScheduleLibrary?.(crop.id)} />
-                        {crop.plots.map(p => {
-                            const irrigation = p.infrastructure?.irrigationMethod ? IRRIGATION_LABEL[p.infrastructure.irrigationMethod] : null;
-                            const confirming = confirmPlot === p.id;
-                            return (
-                                <div key={p.id} className="space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`plot-${p.id}`}>
-                                    <div className="min-w-0">
-                                        <p className="m-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{p.name}</p>
-                                        <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-stone-600">
-                                            <span>{p.baseline.totalArea} {LAND_UNIT_LABEL[p.baseline.unit] ?? p.baseline.unit}</span>
-                                            {irrigation && <span>· {irrigation}</span>}
-                                            {p.geoData && <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[12px] font-extrabold text-emerald-800"><MapPin size={12} aria-hidden="true" />नकाशावर आखलेला</span>}
-                                        </p>
-                                    </div>
-                                    {confirming ? (
-                                        <div className="rounded-xl bg-rose-50 p-2.5 ring-1 ring-rose-200" data-testid={`plot-remove-confirm-${p.id}`}>
-                                            <p className="m-0 text-[14px] font-extrabold text-rose-900">हा प्लॉट यादीतून काढायचा?</p>
-                                            <div className="mt-2 grid grid-cols-2 gap-2">
-                                                <Tap onClick={() => setConfirmPlot(null)} className="min-h-[44px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">नको</Tap>
-                                                <Tap onClick={() => { deletePlot(crop.id, p.id); setConfirmPlot(null); }} data-testid={`plot-remove-yes-${p.id}`}
-                                                    className="min-h-[44px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">हो, काढा</Tap>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex gap-2">
-                                            <Tap onClick={() => setMappingPlotId({ cropId: crop.id, plotId: p.id })} data-testid={`plot-map-${p.id}`}
-                                                className={`flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full text-[14px] font-extrabold ${p.geoData ? 'bg-white text-emerald-800 ring-1 ring-emerald-300' : 'bg-emerald-700 text-white'}`}>
-                                                <MapPin size={16} aria-hidden="true" />{p.geoData ? 'हद्द पुन्हा आखा' : 'नकाशावर हद्द आखा'}
-                                            </Tap>
-                                            <Tap onClick={() => setConfirmPlot(p.id)} aria-label="प्लॉट काढा" data-testid={`plot-remove-${p.id}`}
-                                                className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-rose-600 ring-1 ring-rose-200"><Trash2 size={18} aria-hidden="true" /></Tap>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {canAddPlot && (
-                            <Tap onClick={() => setWizardCropId(crop.id)} data-testid={`plot-add-${crop.id}`}
-                                className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-emerald-400 text-[15px] font-extrabold text-emerald-800">
-                                <Plus size={18} aria-hidden="true" />या पिकात प्लॉट जोडा
-                            </Tap>
-                        )}
-                    </div>
-                </GlassCard>
-            ))}
+                    </GlassCard>
+                );
+            })}
         </div>
     );
 };

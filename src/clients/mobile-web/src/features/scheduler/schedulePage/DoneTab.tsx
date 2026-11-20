@@ -14,7 +14,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, Mic } from 'lucide-react';
 import { dayDateLabel } from './scheduleDates';
-import { SC } from './scheduleCopy';
+import { SC, mrNum } from './scheduleCopy';
 import { PART_LABEL, PARTS, dayVerdict, extrasOn, type ScheduleDay, type Tally, type Part } from './scheduleModel';
 import { GLASS, PART_TINT, PartIcon, StatusChip } from './scheduleUi';
 
@@ -28,8 +28,8 @@ export const CompareCard: React.FC<{ total: Tally; byPart: Record<Part, Tally>; 
         <p className="m-0 mt-1 text-[15px] font-bold text-stone-700" data-testid="compare-summary">
             {total.expected === 0
                 ? `${SC.expectedWord} —`
-                : `${SC.expectedWord} ${total.expected} · ${SC.doneWord} ${total.done} · ${SC.missedWord} ${total.missed}`}
-            {total.extra ? ` · ${SC.extraWord} ${total.extra}` : ''}
+                : `${SC.expectedWord} ${mrNum(total.expected)} · ${SC.doneWord} ${mrNum(total.done)} · ${SC.missedWord} ${mrNum(total.missed)}`}
+            {total.extra ? ` · ${SC.extraWord} ${mrNum(total.extra)}` : ''}
         </p>
         <div className="mt-3 space-y-3">
             {PARTS.map(p => {
@@ -39,7 +39,7 @@ export const CompareCard: React.FC<{ total: Tally; byPart: Record<Part, Tally>; 
                         <div className="flex items-center justify-between gap-2 text-[16px] font-extrabold text-stone-900">
                             <span className="inline-flex items-center gap-2"><PartIcon part={p} />{PART_LABEL[p]}</span>
                             <span className="text-stone-700" data-testid={`cmp-${p}-text`}>
-                                {t.expected === 0 ? '—' : `${t.done}/${t.expected} ${SC.doneWord}`}{t.extra ? ` · +${t.extra} ${SC.extraWord}` : ''}
+                                {t.expected === 0 ? '—' : `${mrNum(t.done)}/${mrNum(t.expected)} ${SC.doneWord}`}{t.extra ? ` · +${mrNum(t.extra)} ${SC.extraWord}` : ''}
                             </span>
                         </div>
                         <div className="mt-1.5 flex h-4 gap-[2px] overflow-hidden rounded-full bg-stone-200" aria-hidden="true" data-testid={`cmp-${p}-bar`}>
@@ -60,7 +60,7 @@ export const CompareCard: React.FC<{ total: Tally; byPart: Record<Part, Tally>; 
                         return (
                             <button key={d.key} type="button" onClick={() => onDay(d.key)} data-testid={`strip-${d.key}`} data-verdict={v} aria-label={`${SC.dayN(d.day)} · ${dayDateLabel(d.key)}`}
                                 className={`flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl text-[15px] font-extrabold ${cls}`}>
-                                {d.day}{clipCount(d.key) > 0 && <Mic size={12} aria-hidden="true" />}
+                                {mrNum(d.day)}{clipCount(d.key) > 0 && <Mic size={12} aria-hidden="true" />}
                             </button>
                         );
                     })}
@@ -76,12 +76,12 @@ export const PastDayRow: React.FC<{ day: ScheduleDay; clips: number; onOpen: (ke
     return (
         <li className="list-none" data-testid={`past-${day.key}`}>
             <button type="button" onClick={() => onOpen(day.key)} data-testid={`open-day-${day.key}`} className={`flex w-full items-start gap-3 rounded-2xl p-3 text-left active:bg-white ${GLASS}`}>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-stone-800 text-[18px] font-extrabold text-white">{day.day}</span>
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-stone-800 text-[18px] font-extrabold text-white">{mrNum(day.day)}</span>
                 <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2 text-[15px] font-extrabold text-stone-800">
                         {dayDateLabel(day.key)}
                         {day.prep && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[13px] text-amber-900" data-testid={`prep-${day.key}`}>{SC.prep}</span>}
-                        {clips > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[14px] text-emerald-900" data-testid={`clipcount-${day.key}`}><Mic size={13} aria-hidden="true" />{clips}</span>}
+                        {clips > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[14px] text-emerald-900" data-testid={`clipcount-${day.key}`}><Mic size={13} aria-hidden="true" />{mrNum(clips)}</span>}
                     </span>
                     <span className="mt-1.5 flex flex-wrap gap-1.5">
                         {expected.map(p => (

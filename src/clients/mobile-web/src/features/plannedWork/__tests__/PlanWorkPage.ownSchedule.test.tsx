@@ -279,7 +279,8 @@ describe('Task 4: the library of the person, under planning', () => {
         fireEvent.click(await screen.findByTestId('own-who-link'));
         const sheet = await screen.findByTestId('own-who-sheet');
         expect(sheet).toHaveTextContent('स्वतःचं शेड्यूल: कोण बनवू शकतं?');
-        expect(sheet).toHaveTextContent('पीक वेळापत्रकाचे नमुने');
+        expect(sheet).toHaveTextContent('पीक शेड्यूलचे नमुने'); // UI-9a item 9: one word, never "वेळापत्रक"
+        expect(sheet.textContent).not.toContain('वेळापत्रक');
         expect(sheet).toHaveTextContent('श्रमसफलची तपासणी लागत नाही');
         fireEvent.click(screen.getByTestId('own-who-close'));
         await waitFor(() => expect(screen.queryByTestId('own-who-sheet')).toBeNull());

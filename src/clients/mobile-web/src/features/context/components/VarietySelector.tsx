@@ -1,40 +1,94 @@
-import React from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The variety list of the add-plot wizard (step 1).
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane UI-9a, redesign item 10; founder 2026-11-21): the chips are 48 px high (they were about
+ * 30 px, under the 44 px thumb rule) in the ONE chosen look every plot and crop picker uses - dark green (emerald-800), white letters, a white tick
+ * (a shape, so it reads in sunlight); not chosen: white with a grey border. The last chip, "Other", reads "अन्य" in Marathi mode and the typing box's
+ * placeholder is Marathi there too (draft Marathi - needs review). The variety names themselves are the farmer's crop's own names and are shown as
+ * stored. The last chip is a CHOICE, not a value: its box holds the farmer's own variety text (see the state below).
+ */
+import React, { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 import { getVarietiesForCrop } from '../data/varietyCatalog';
+
+/** The two words this list says in the screen's language (draft Marathi - needs review, except "अन्य", approved 2026-11-21). */
+const VARIETY_WORDS = {
+    mr: { other: 'अन्य', typed: 'वाणाचं नाव लिहा' },
+    en: { other: 'Other', typed: 'Enter variety name' },
+} as const;
 
 interface VarietySelectorProps {
     cropName: string;
     value: string;
     onChange: (variety: string) => void;
     error?: string;
+    /** The screen's language (the wizard passes its own); Marathi when not given, as everywhere in the app. */
+    language?: string | null;
 }
 
-export const VarietySelector: React.FC<VarietySelectorProps> = ({ cropName, value, onChange, error }) => {
+export const VarietySelector: React.FC<VarietySelectorProps> = ({ cropName, value, onChange, error, language }) => {
     const varieties = getVarietiesForCrop(cropName);
-    const isCustom = !varieties.includes(value) && value !== '';
+    const w = VARIETY_WORDS[language === 'en' ? 'en' : 'mr'];
+    // The last chip ("Other") is its own state, not a value: a farmer whose variety is not in the list taps it, the typing box opens, and what he types
+    // is his own variety text - saved exactly as typed, never rewritten and never matched to a list entry (typing the name of a list variety does not
+    // flip the choice back to that chip or close the box). Before this, tapping "Other" set the value to '' - the chip never showed chosen and the box
+    // never appeared, so a variety outside the list could not be entered (CTO ruling 2026-11-21).
+    const [otherOpen, setOtherOpen] = useState(() => value === 'Other' || (value !== '' && !varieties.includes(value)));
+    const boxRef = useRef<HTMLInputElement>(null);
+    const justOpened = useRef(false);
+    useEffect(() => {
+        if (otherOpen && justOpened.current) {
+            justOpened.current = false;
+            boxRef.current?.focus();
+        }
+    }, [otherOpen]);
 
     return (
         <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
-                {varieties.map(v => (
-                    <button
-                        key={v}
-                        type="button"
-                        onClick={() => onChange(v === 'Other' ? '' : v)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors ${
-                            value === v || (v === 'Other' && isCustom)
-                                ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                                : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300'
-                        }`}
-                    >
-                        {v}
-                    </button>
-                ))}
+                {varieties.map(v => {
+                    const on = v === 'Other' ? otherOpen : !otherOpen && value === v;
+                    return (
+                        <button
+                            key={v}
+                            type="button"
+                            data-testid={`variety-chip-${v}`}
+                            aria-pressed={on}
+                            onClick={() => {
+                                if (v === 'Other') {
+                                    if (!otherOpen) {
+                                        justOpened.current = true;
+                                        setOtherOpen(true);
+                                        // a list variety picked before is not "his own text": start the box empty; text he already typed stays.
+                                        if (varieties.includes(value)) onChange('');
+                                    }
+                                    return;
+                                }
+                                setOtherOpen(false);
+                                onChange(v);
+                            }}
+                            className={`inline-flex min-h-[48px] items-center gap-1.5 rounded-xl border-2 px-4 text-[15px] font-bold transition-colors active:scale-95 ${
+                                on
+                                    ? 'border-emerald-800 bg-emerald-800 text-white'
+                                    : 'border-stone-400 bg-white text-stone-800'
+                            }`}
+                        >
+                            {on && <Check size={16} strokeWidth={3} className="shrink-0 text-white" aria-hidden="true" data-part="tick" />}
+                            <span>{v === 'Other' ? w.other : v}</span>
+                        </button>
+                    );
+                })}
             </div>
-            
-            {(value === 'Other' || isCustom) && (
+
+            {otherOpen && (
                 <input
+                    ref={boxRef}
                     type="text"
-                    placeholder="Enter variety name"
+                    data-testid="variety-other-input"
+                    placeholder={w.typed}
                     value={value === 'Other' ? '' : value}
                     onChange={(e) => onChange(e.target.value)}
                     className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 mt-2 ${
@@ -42,7 +96,7 @@ export const VarietySelector: React.FC<VarietySelectorProps> = ({ cropName, valu
                     }`}
                 />
             )}
-            
+
             {error && (
                 <p className="text-red-500 text-xs mt-1">{error}</p>
             )}
