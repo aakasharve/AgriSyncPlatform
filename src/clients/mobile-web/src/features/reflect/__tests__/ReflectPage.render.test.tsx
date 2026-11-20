@@ -195,7 +195,7 @@ describe('ReflectPage (redesigned, real data)', () => {
     it('picking a crop narrows every section', () => {
         renderPage();
         openAll();
-        fireEvent.click(screen.getByTestId('farm-crop-cane'));
+        fireEvent.click(screen.getByTestId('farm-crop-all-photo-cane'));
         expect(screen.getAllByTestId(/^plot-card-/).map(c => c.getAttribute('data-testid'))).toEqual(['plot-card-cane:c1']);
         expect(screen.getByTestId('notes-empty')).toBeInTheDocument();
         expect(screen.queryByTestId('cal-chip-g1-today')).toBeNull();

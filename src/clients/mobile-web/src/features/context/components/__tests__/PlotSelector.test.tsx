@@ -118,6 +118,54 @@ describe('the number box', () => {
         expect(box.textContent).not.toMatch(/[0-9]{2}/);
     });
 
+    it('tile A (founder 2026-11-20): no dot on any box; the number is 24 px, the name 13 px, the box 64 px tall - and a two-digit number reads whole, chosen or not', () => {
+        render(<Harness n={15} start={['p10', 'p11', 'p14']} />);
+        for (let n = 1; n <= 15; n++) expect(part(screen.getByTestId(`pl-p${n}`), 'dot')).toBeNull();
+        const on = screen.getByTestId('pl-p10'); // two digits, chosen
+        const off = screen.getByTestId('pl-p12'); // two digits, not chosen
+        expect(part(on, 'number')?.textContent).toBe('१०'); // the tick adds no text, nothing covers the digits
+        expect(part(off, 'number')?.textContent).toBe('१२');
+        expect(part(screen.getByTestId('pl-p11'), 'number')?.textContent).toBe('११');
+        expect(part(screen.getByTestId('pl-p14'), 'number')?.textContent).toBe('१४');
+        for (const b of [on, off]) {
+            expect(b.className).toContain('h-[64px]');
+            expect(b.className).toContain('rounded-[14px]');
+            expect(part(b, 'number')?.className).toContain('text-[24px]');
+            expect(part(b, 'number')?.className).toContain('leading-[26px]');
+            expect(part(b, 'name')?.className).toContain('text-[13px]');
+        }
+        expect(part(on, 'name')?.className).toContain('text-white'); // chosen: white letters
+        expect(part(off, 'name')?.className).toContain('text-stone-900'); // not chosen: near black
+        expect(part(off, 'tick')).toBeNull();
+        expect(part(on, 'tick')).toBeTruthy();
+        // the tick is NOT inside the number's text and owns the top-right corner
+        expect(part(on, 'number')?.contains(part(on, 'tick') as Node)).toBe(false);
+    });
+
+    it('the tick and the number never touch: the tick (top 2 + 14 px) ends where the number\'s own glyph space begins (padding 15 px + half the 2 px line gap)', () => {
+        render(<Harness n={15} start={['p10']} />);
+        const box = screen.getByTestId('pl-p10');
+        const px = (cls: string, re: RegExp) => Number(re.exec(cls)?.[1]);
+        const tickCls = part(box, 'tick')!.className;
+        const tickBottom = px(tickCls, /top-\[(\d+)px\]/) + px(tickCls, /h-\[(\d+)px\]/);
+        const numCls = part(box, 'number')!.className;
+        const glyphTop = px(box.className, /pt-\[(\d+)px\]/) + (px(numCls, /leading-\[(\d+)px\]/) - px(numCls, /text-\[(\d+)px\]/)) / 2;
+        expect(tickBottom).toBeLessThanOrEqual(glyphTop);
+        expect(px(tickCls, /h-\[(\d+)px\]/)).toBe(px(tickCls, /w-\[(\d+)px\]/)); // a round 14 px badge
+        expect(tickCls).toContain('right-[2px]');
+    });
+
+    it('five boxes across (four below 340 px) - 49 px and 53 px wide, both above the 44 px thumb', () => {
+        render(<Harness n={15} />);
+        const grid = screen.getByTestId('pl-grid');
+        expect(grid.className).toContain('grid-cols-5');
+        expect(grid.className).toContain('max-[339px]:grid-cols-4');
+        expect(grid.className).toContain('gap-2');
+        // 277 px of card at 360 px: (277 - 4 x 8) / 5 = 49; 236 px at 320 px: (236 - 3 x 8) / 4 = 53
+        expect((277 - 4 * 8) / 5).toBeGreaterThanOrEqual(44);
+        expect((236 - 3 * 8) / 4).toBeGreaterThanOrEqual(44);
+    });
+
     it('English keeps Latin digits', () => {
         render(<Harness n={8} language="en" />);
         expect(part(screen.getByTestId('pl-p7'), 'number')).toHaveTextContent('7');
@@ -128,7 +176,7 @@ describe('the number box', () => {
         render(<Harness n={8} start={['p2']} />);
         const on = screen.getByTestId('pl-p2');
         const off = screen.getByTestId('pl-p3');
-        for (const b of [on, off]) expect(b.className).toMatch(/min-h-\[(4[4-9]|[5-9]\d)px\]/);
+        for (const b of [on, off]) expect(b.className).toMatch(/(^|\s)h-\[(4[4-9]|[5-9]\d)px\]/);
         expect(on).toHaveAttribute('aria-pressed', 'true');
         expect(on.className).toContain('bg-emerald-800');
         expect(on.className).toContain('text-white');
@@ -269,16 +317,33 @@ describe('the count line and the header', () => {
         expect(screen.getByTestId('cnt')).toHaveTextContent('१५ पैकी ४ निवडले');
     });
 
-    it('the header says the crop once, in his language, and draws nothing else: no stray colour bar at its end (CTO defect 4)', () => {
+    it('the header says the crop once, in his language; its colour is a thin strip UNDER the photo, not a bar at the far end (CTO defect 4, header A)', () => {
         render(<PlotGroupHeader crop={{ name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500' }} sub="१५ पैकी २ निवडले" testId="hd" language="mr" />);
         const hd = screen.getByTestId('hd');
         expect(hd).toHaveTextContent('द्राक्ष');
         expect(hd).toHaveTextContent('१५ पैकी २ निवडले');
-        expect(part(hd, 'accent')).toBeNull();
-        expect(hd.innerHTML).not.toContain('bg-purple-500');
-        // its parts are the photo and the words, nothing after the words
-        expect(hd.lastElementChild?.tagName).toBe('SPAN');
+        expect(part(hd, 'accent')).toBeNull(); // the floating bar is gone
+        const strip = part(hd, 'strip');
+        expect(strip?.className).toContain('bg-purple-500');
+        expect(strip?.className).toMatch(/(^|\s)h-1(\s|$)/); // 4 px
+        // the strip sits in the photo's own column, the FIRST part of the header; the words are the last part and carry no colour
+        expect(hd.firstElementChild).toBe(part(hd, 'photo-column'));
+        expect(part(hd, 'photo-column')?.contains(strip as Node)).toBe(true);
+        expect(hd.lastElementChild?.innerHTML).not.toContain('bg-purple-500');
         expect(hd.lastElementChild?.querySelector('span')).not.toBeNull();
+    });
+
+    it('the crop name is 18 px and the count line 14 px in the darker grey; the row lines the words up with the photo', () => {
+        render(<PlotGroupHeader crop={{ name: 'Grapes', iconName: 'Grape' }} sub="१५ पैकी २ निवडले" testId="hd" language="mr" />);
+        const hd = screen.getByTestId('hd');
+        expect(hd.className).toContain('items-start');
+        const words = hd.lastElementChild as HTMLElement;
+        expect(words.className).toContain('min-h-[40px]');
+        const [name, sub] = [...words.children] as HTMLElement[];
+        expect(name.className).toContain('text-[18px]');
+        expect(sub.className).toContain('text-[14px]');
+        expect(sub.className).toContain('text-stone-700');
+        expect(sub.className).not.toMatch(/text-\[12/);
     });
 
     it('what a caller puts in `right` is the last thing in the header', () => {

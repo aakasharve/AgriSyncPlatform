@@ -74,7 +74,10 @@ describe('आढावा page — starts on every crop and every plot', () => {
         // UI-9a: the all-crops card says how many crops and plots the farm has (Marathi digits), above the crop cards
         expect(screen.getByTestId('farm-crop-all-line')).toHaveTextContent('२ पिकं · ३ प्लॉट');
         for (const id of ['g1', 'g2', 'c1']) expect(screen.getByTestId(`farm-plot-${id}`)).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('farm-crop-all-photo-grape')).toHaveAttribute('aria-pressed', 'false');
+        // fix round item 6: the card's photos stand for the crops, the crop cards are not drawn again below it
+        expect(screen.queryByTestId('farm-crop-grape')).toBeNull();
+        expect(screen.queryByTestId('farm-crop-cane')).toBeNull();
         expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(3);
     });
 
@@ -82,7 +85,7 @@ describe('आढावा page — starts on every crop and every plot', () => {
         renderPage([GRAPE]);
         expect(screen.queryByTestId('farm-crop-all')).toBeNull();
         expect(screen.getByTestId('farm-crop-grape')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('२ पैकी २ प्लॉट');
+        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('२ पैकी २ निवडले'); // fix round item 4: one sentence, total first
         for (const id of ['g1', 'g2']) expect(screen.getByTestId(`farm-plot-${id}`)).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(2);
     });
@@ -96,7 +99,7 @@ describe('आढावा page — starts on every crop and every plot', () => {
 
     it('choosing a crop narrows the page to it; "सर्व पिकं" widens it back to everything', () => {
         renderPage(CROPS);
-        fireEvent.click(screen.getByTestId('farm-crop-cane'));
+        fireEvent.click(screen.getByTestId('farm-crop-all-photo-cane'));
         expect(screen.queryByTestId('farm-plot-g1')).toBeNull();
         expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(1);
         fireEvent.click(screen.getByTestId('farm-crop-all'));
@@ -107,8 +110,8 @@ describe('आढावा page — starts on every crop and every plot', () => {
 
     it('the picker is the shared one: tiles and chips wear the crop\'s own colour', () => {
         renderPage(CROPS);
-        expect(part(screen.getByTestId('farm-crop-grape'), 'accent')?.className).toContain('bg-purple-500');
-        expect(part(screen.getByTestId('farm-crop-cane'), 'accent')?.className).toContain('bg-emerald-500');
+        expect(part(screen.getByTestId('farm-crop-all-photo-grape'), 'accent')?.className).toContain('bg-purple-500');
+        expect(part(screen.getByTestId('farm-crop-all-photo-cane'), 'accent')?.className).toContain('bg-emerald-500');
         expect(part(screen.getByTestId('farm-plot-g1'), 'dot')?.className).toContain('bg-purple-500');
         expect(part(screen.getByTestId('farm-plot-c1'), 'dot')?.className).toContain('bg-emerald-500');
     });
@@ -181,7 +184,7 @@ describe('आढावा page — the money strip', () => {
         expect(screen.getByTestId('season-cost')).toHaveTextContent('₹ 1,500');
         expect(screen.getByTestId('cost-strip-amount')).toHaveTextContent('₹ 1,500');
         // narrowed to the cane crop: that plot spent nothing, so no amount (a dash), never ₹ 0
-        fireEvent.click(screen.getByTestId('farm-crop-cane'));
+        fireEvent.click(screen.getByTestId('farm-crop-all-photo-cane'));
         expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
         expect(screen.getByTestId('cost-strip-amount')).toHaveTextContent('—');
     });

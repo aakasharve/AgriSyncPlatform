@@ -94,11 +94,11 @@ export const FarmStatus: React.FC<{
                         <PickedCountLine total={viewPlotIds.length} picked={picked.length} testId="farm-picked-count" language={language} />
                     )}
                     {many && picked.length === viewPlotIds.length && (
-                        <p className="m-0 text-[12.5px] font-bold text-stone-500" data-testid="farm-tap-hint">{HINT[language === 'en' ? 'en' : 'mr']}</p>
+                        <p className="m-0 text-[14px] font-bold text-stone-700" data-testid="farm-tap-hint">{HINT[language === 'en' ? 'en' : 'mr']}</p>
                     )}
                 </div>
             )}
-            <p className="m-0 mt-2 text-[12.5px] font-semibold text-stone-500">खालचं सगळं (कामं, प्लॉटचं काम, नोंदी, कॅलेंडर, खर्च) याच प्लॉटचं दिसतं.</p>
+            <p className="m-0 mt-2 text-[14px] font-semibold text-stone-700" data-testid="farm-below-note">खालचं सगळं (कामं, प्लॉटचं काम, नोंदी, कॅलेंडर, खर्च) याच प्लॉटचं दिसतं.</p>
         </div>
     );
 };

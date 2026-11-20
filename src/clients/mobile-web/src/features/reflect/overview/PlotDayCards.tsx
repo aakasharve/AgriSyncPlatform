@@ -142,9 +142,9 @@ const SmallPlotCard: React.FC<{ card: PlotDayCard; number?: number; isToday: boo
             <span className={`block min-h-[64px] ${mic ? 'pb-11' : ''}`} data-part="small-card">
                 <span className="flex items-baseline gap-1.5">
                     <span className="min-w-0 truncate text-[18px] font-extrabold leading-tight text-stone-900" data-part="name">{name}</span>
-                    {number !== undefined && <span className="shrink-0 text-[12.5px] font-bold text-stone-600" data-part="number">{digitsFor(number, language)}</span>}
+                    {number !== undefined && <span className="shrink-0 text-[14px] font-bold text-stone-700" data-part="number">{digitsFor(number, language)}</span>}
                 </span>
-                <span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[12.5px] font-extrabold leading-snug ${tone}`} data-testid={`plot-status-${ref.key}`} data-status={status}>
+                <span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-extrabold leading-snug ${tone}`} data-testid={`plot-status-${ref.key}`} data-status={status}>
                     {status === 'told' && <Check size={13} strokeWidth={3} className="shrink-0" aria-hidden="true" />}
                     <span className="min-w-0">{status === 'problem' ? w.problem : status === 'told' ? copy.timesTold(card.recordings, isToday) : copy.nothingTold(isToday)}</span>
                 </span>

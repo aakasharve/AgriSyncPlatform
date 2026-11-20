@@ -33,7 +33,7 @@ import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, useCropPicture } 
 import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
-import { CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
+import { ChosenCropStrip, CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
 import { PickedCountLine, PlotGroupHeader, PlotSelector, cropWordsOf } from './PlotSelector';
 import { buildQuickButtons, photoOnceFor, pickedCountText, plotPickMode, sortedNaturally, type PlotWorkFacts } from './plotSelectorRules';
 import { usePlotWorkFacts } from './usePlotWorkFacts';
@@ -52,7 +52,7 @@ export interface StepperLabels {
     allCrops?: string;
     /** Select every plot of the chosen crops. Hidden when absent. */
     allPlots?: string;
-    /** Written on the chosen crop's card ("the crop you chose"). Hidden when absent. */
+    /** Written on the chosen crop's card ("the crop you chose") in the classic look only; the shared look's strip is the photo and the name. Hidden when absent. */
     selectedCrop?: string;
     /** Written under the "+" that adds another crop. Hidden when absent. */
     addCrop?: string;
@@ -288,12 +288,11 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                                     photo={<PickerCropPhoto crop={c} px={28} />} onClick={remove}
                                     className={`h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 ${ring}`} />
                             ) : (
-                                <CropTile key={c.id} wide testId={`flow-sel-${c.id}`} name={c.name} on disabled={disabled} color={cropColorOf(c.color)}
-                                    photo={<PickerCropPhoto crop={c} px={46} />} onClick={remove}
-                                    count={<>
-                                        {labels?.selectedCrop && <span className="block text-[11.5px] font-bold text-emerald-700 max-[339px]:hidden">{labels.selectedCrop}</span>}
-                                        <PlotCount total={c.plots.length} picked={plotsOf(sel, c.id).length} language={countLanguage} />
-                                    </>}
+                                // Founder 2026-11-20 (fix round, strip A): ONE crop chosen = the dark "chosen" look, the photo and the name only. The
+                                // "chosen crop" label and the count are gone - they did not fit the 154 px (120 px at 320) box and the count is already
+                                // one sentence under the grid. The ring still says whether this crop has a plot yet (amber) or has (green).
+                                <ChosenCropStrip key={c.id} testId={`flow-sel-${c.id}`} name={c.name} disabled={disabled}
+                                    photo={<PickerCropPhoto crop={c} px={40} />} onClick={remove}
                                     className={`h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 ${ring}`} />
                             );
                         })}

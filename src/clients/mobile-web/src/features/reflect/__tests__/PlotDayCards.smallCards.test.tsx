@@ -69,6 +69,20 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
         for (const id of ['cane:c1', 'cane:c2', 'cane:c3']) expect(part(screen.getByTestId(`plot-card-${id}`), 'banner')).toBeTruthy();
     });
 
+    it('item 5 (founder 2026-11-20): on a small card the number is 14 px in the darker grey and the status words 13 px (they were 12.5 px, paler)', () => {
+        render(<PlotDayCards cards={cardsOf()} isToday onOpen={vi.fn()} />);
+        const card = screen.getByTestId('plot-card-grape:g7');
+        const number = part(card, 'number') as HTMLElement;
+        expect(number.className).toContain('text-[14px]');
+        expect(number.className).toContain('text-stone-700');
+        expect(number.className).not.toMatch(/text-\[12/);
+        expect(screen.getByTestId('plot-status-grape:g7').className).toContain('text-[13px]');
+        // the group's header: its colour is a strip under the photo, the count line is 14 px
+        const header = screen.getByTestId('plot-group-header-grape');
+        expect(part(header, 'strip')?.className).toContain('bg-green-500');
+        expect(part(header, 'accent')).toBeNull();
+    });
+
     it('a small card carries the crop\'s colour edge, the plot\'s name without the crop word, its number in Devanagari digits, and nothing else but one status', () => {
         render(<PlotDayCards cards={cardsOf()} isToday onOpen={vi.fn()} />);
         const card = screen.getByTestId('plot-card-grape:g7');

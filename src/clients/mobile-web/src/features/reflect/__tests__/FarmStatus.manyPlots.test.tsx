@@ -32,13 +32,18 @@ const pressed = (id: string) => screen.getByTestId(id).getAttribute('aria-presse
 const ids = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
 
 describe('the overview picker with 15 plots', () => {
-    it('draws the 15 grape plots as a number grid in place (Devanagari numbers, "G7" under each), under the crop cards', () => {
+    it('draws the 15 grape plots as a number grid in place (Devanagari numbers, "G7" under each), under the all-crops card', () => {
         render(<Harness crops={FARM} />);
         const grid = screen.getByTestId('farm-grid-grape');
         expect(grid.children.length).toBe(15);
         expect(part(screen.getByTestId('farm-plot-g7'), 'number')).toHaveTextContent('७');
         expect(part(screen.getByTestId('farm-plot-g7'), 'name')).toHaveTextContent('G7');
-        expect(screen.getByTestId('farm-crop-grape').compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByTestId('farm-crop-all-card').compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.queryByTestId('farm-crop-grape')).toBeNull(); // item 6: the crop cards are not drawn a second time under the card
+        // item 1 (tile A): no dot on a number box, the boxes are 64 px tall, the tick has its own corner
+        expect(part(screen.getByTestId('farm-plot-g7'), 'dot')).toBeNull();
+        expect(screen.getByTestId('farm-plot-g7').className).toContain('h-[64px]');
+        expect(part(screen.getByTestId('farm-plot-g7'), 'tick')).toBeTruthy();
         // everything starts chosen, in the one dark-green look
         for (const id of ids('g', 15)) expect(pressed(`farm-plot-${id}`)).toBe('true');
         expect(screen.getByTestId('farm-plot-g7').className).toContain('bg-emerald-800');
@@ -57,6 +62,25 @@ describe('the overview picker with 15 plots', () => {
         render(<Harness crops={[GRAPES]} />);
         expect(screen.queryByTestId('farm-crop-header-grape')).toBeNull();
         expect(part(screen.getByTestId('farm-plot-g3'), 'name')).toHaveTextContent('G3');
+    });
+
+    it('item 5 (founder 2026-11-20): the two hint lines under the grid are 14 px in the darker grey (they were 12.5 px, pale stone-500)', () => {
+        render(<Harness crops={FARM} />);
+        for (const id of ['farm-tap-hint', 'farm-below-note']) {
+            const el = screen.getByTestId(id);
+            expect(el.className, id).toContain('text-[14px]');
+            expect(el.className, id).toContain('text-stone-700');
+            expect(el.className, id).not.toContain('text-stone-500');
+        }
+    });
+
+    it('item 3 (header A): the crop header carries the crop\'s colour as a strip under its photo and its count line at 14 px', () => {
+        render(<Harness crops={FARM} />);
+        const header = screen.getByTestId('farm-crop-header-grape');
+        expect(part(header, 'strip')?.className).toContain('bg-green-500');
+        expect(part(header, 'accent')).toBeNull();
+        expect(header).toHaveTextContent('१५ पैकी १५ निवडले');
+        expect(header.lastElementChild?.lastElementChild?.className).toContain('text-[14px]');
     });
 
     it('there is no "none" button on the overview (the page is never empty), and no word for it', () => {
@@ -121,7 +145,7 @@ describe('one tap on a number shows only that plot', () => {
 
     it('picking one crop first keeps the rule: the crop\'s plots are all chosen and one tap shows one plot', () => {
         render(<Harness crops={FARM} />);
-        fireEvent.click(screen.getByTestId('farm-crop-grape'));
+        fireEvent.click(screen.getByTestId('farm-crop-all-photo-grape'));
         expect(screen.queryByTestId('farm-plot-c1')).toBeNull();
         fireEvent.click(screen.getByTestId('farm-plot-g12'));
         expect(screen.getByTestId('farm-solo-line')).toHaveTextContent('फक्त G12 दिसतो');
