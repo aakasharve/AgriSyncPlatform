@@ -109,6 +109,11 @@ export interface Plot {
     variety?: string;
     startDate?: string; // Cycle Start Date
     createdAt?: string;
+    /**
+     * spec: plr-d10 lane GRP-1a - the owner's group label for this plot, copied from the server's plot on every pull (never typed
+     * into this record by hand). Absent or null = no group. Display only: it is never an access list.
+     */
+    groupName?: string | null;
     landPrep?: LandPrepInfo;
     baseline: PlotBaseline;
 
