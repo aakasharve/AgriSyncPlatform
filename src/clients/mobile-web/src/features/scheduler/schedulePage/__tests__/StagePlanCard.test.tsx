@@ -115,8 +115,8 @@ describe('layout B (D-99)', () => {
         expect(get).toHaveBeenCalledWith(PATH); // the stage-plan door, for this plot (the server answers for today)
         expect(within(panel).getByTestId('stage-plan-title')).toHaveTextContent('या स्टेजमध्ये शेड्यूल काय सांगतात');
         expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('छाटणीनंतर');
-        expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('दिवस 0–14');
-        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('तुम्ही दिवस 9 वर');
+        expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('दिवस ०–१४'); // UI-9a item 9: Marathi digits
+        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('तुम्ही दिवस ९ वर');
         const order = [...panel.querySelectorAll('[data-testid^="stage-plan-schedule-"]')].map(e => [e.getAttribute('data-slot'), e.getAttribute('data-origin')]);
         expect(order).toEqual([['1', 'Outside'], ['2', 'Outside'], ['0', 'Own']]);
         // parts in the app's order inside schedule 1: सिंचन, फवारणी, कामे (खत is empty and named in one line)
@@ -162,7 +162,7 @@ describe('the numbers (P3, P4)', () => {
         serves({ ...PLAN, schedules: [schedule({ items: [{ ...water, days: [0, 3, 6, 9, 12], timesInStage: 7 }] })] });
         mount();
         const panel = await card();
-        expect(within(panel).getByTestId(`stage-plan-times-${water.activityId}`)).toHaveTextContent('या स्टेजमध्ये 7 वेळा');
+        expect(within(panel).getByTestId(`stage-plan-times-${water.activityId}`)).toHaveTextContent('या स्टेजमध्ये ७ वेळा');
     });
 
     it('A_tap_on_the_count_lists_its_days: closed at first, a second tap closes it', async () => {
@@ -172,9 +172,9 @@ describe('the numbers (P3, P4)', () => {
         const panel = await card();
         expect(within(panel).queryByTestId(`stage-plan-days-${water.activityId}`)).toBeNull();
         const times = within(panel).getByTestId(`stage-plan-times-${water.activityId}`);
-        expect(times).toHaveTextContent('या स्टेजमध्ये 5 वेळा');
+        expect(times).toHaveTextContent('या स्टेजमध्ये ५ वेळा');
         fireEvent.click(times);
-        expect(within(panel).getByTestId(`stage-plan-days-${water.activityId}`)).toHaveTextContent('दिवस: 0, 3, 6, 9, 12');
+        expect(within(panel).getByTestId(`stage-plan-days-${water.activityId}`)).toHaveTextContent('दिवस: ०, ३, ६, ९, १२');
         fireEvent.click(times);
         expect(within(panel).queryByTestId(`stage-plan-days-${water.activityId}`)).toBeNull();
     });
@@ -187,20 +187,21 @@ describe('the numbers (P3, P4)', () => {
         const line = within(panel).getByTestId(`stage-plan-item-${feed.activityId}`);
         expect(within(line).getByTestId(`stage-plan-nodays-${feed.activityId}`)).toHaveTextContent('दिवस शेड्यूलमध्ये लिहिलेले नाहीत');
         expect(line.textContent).not.toMatch(/वेळा/);
-        expect(line.textContent).not.toMatch(/\d{2,}|\b[1-9]\b.*वेळा/);
+        // no recounted number (the repeat "दर २ दिवसांनी" is the schedule's own); Latin OR Marathi digits (UI-9a item 9: the regex class \d is Latin only)
+        expect(line.textContent).not.toMatch(/[0-9०-९]{2,}|[1-9१-९]\s*वेळा/);
         expect(within(line).queryByTestId(`stage-plan-times-${feed.activityId}`)).toBeNull();
         expect(within(line).queryByTestId(`stage-plan-days-${feed.activityId}`)).toBeNull();
         expect(line.querySelector('button')).toBeNull();
     });
 
-    it('The_repeat_and_the_order: "दर 3 दिवसांनी", "एकदाच", "आठवड्यातून 1 वेळा" and "क्रम: ‹काम› झाल्यावर" only where the schedule stores an order (R34)', async () => {
+    it('The_repeat_and_the_order: "दर ३ दिवसांनी", "एकदाच", "आठवड्यातून १ वेळा" and "क्रम: ‹काम› झाल्यावर" only where the schedule stores an order (R34)', async () => {
         await seedFollowing();
         serves(PLAN);
         mount();
         const panel = await card();
-        expect(within(panel).getByTestId(`stage-plan-item-${water.activityId}`)).toHaveTextContent('दर 3 दिवसांनी');
+        expect(within(panel).getByTestId(`stage-plan-item-${water.activityId}`)).toHaveTextContent('दर ३ दिवसांनी');
         expect(within(panel).getByTestId(`stage-plan-item-${spray.activityId}`)).toHaveTextContent('एकदाच');
-        expect(within(panel).getByTestId(`stage-plan-item-${weeding.activityId}`)).toHaveTextContent('आठवड्यातून 1 वेळा');
+        expect(within(panel).getByTestId(`stage-plan-item-${weeding.activityId}`)).toHaveTextContent('आठवड्यातून १ वेळा');
         expect(within(panel).getByTestId(`stage-plan-after-${spray.activityId}`)).toHaveTextContent('क्रम: ठिबक सिंचन झाल्यावर');
         expect(within(panel).queryByTestId(`stage-plan-after-${water.activityId}`)).toBeNull();
     });
@@ -248,7 +249,7 @@ describe('no net, refusals and bad answers (P10)', () => {
         online.mockRejectedValue(new Error('Network Error'));
         mount();
         const panel = await card();
-        expect(within(panel).getByTestId(`stage-plan-times-${water.activityId}`)).toHaveTextContent('या स्टेजमध्ये 5 वेळा');
+        expect(within(panel).getByTestId(`stage-plan-times-${water.activityId}`)).toHaveTextContent('या स्टेजमध्ये ५ वेळा');
         expect(within(panel).getByTestId('stage-plan-asof')).toHaveTextContent('मिळालेली वेळ:');
         expect(within(panel).queryByTestId('stage-plan-offline')).toBeNull();
     });

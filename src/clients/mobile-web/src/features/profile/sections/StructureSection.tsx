@@ -24,6 +24,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, MapPin, Plus, Sprout, Trash2 } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { cropById, cropLabel, normName } from '../../../domain/crops/cropMaster';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { cropMasterIdOf } from '../../context/components/cropImage';
 import CropMasterPicker, { CropPicture, type PickedCrop } from '../components/CropMasterPicker';
 import type { CropProfile, Plot } from '../../../domain/types/farm.types';
@@ -66,7 +67,7 @@ interface StructureSectionProps {
 
 /** The hook's error strings are English; the farmer reads one of these two instead. */
 const DUPLICATE_CROP = 'हे पीक आधीच जोडलेलं आहे — एक पीक एकदाच जोडता येतं.';
-const CROP_NAME_NEEDED = 'पिकाचं नाव लिहा (किमान 2 अक्षरं).';
+const CROP_NAME_NEEDED = 'पिकाचं नाव लिहा (किमान २ अक्षरं).'; // UI-9a item 9: Marathi digit
 // PROPOSED (English) — the same two reasons in English mode (spec I18: English mode shows English only).
 const DUPLICATE_CROP_EN = 'This crop is already added — a crop can be added only once.';
 const CROP_NAME_NEEDED_EN = 'Write the crop name (at least 2 letters).';
@@ -143,7 +144,7 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                 <div className="min-w-0">
                     <p className="m-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{p.name}</p>
                     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-stone-600">
-                        <span>{p.baseline.totalArea} {LAND_UNIT_LABEL[p.baseline.unit] ?? p.baseline.unit}</span>
+                        <span>{digitsFor(p.baseline.totalArea ?? '', language)} {LAND_UNIT_LABEL[p.baseline.unit] ?? p.baseline.unit}</span>
                         {irrigation && <span>· {irrigation}</span>}
                         {p.geoData && <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[12px] font-extrabold text-emerald-800"><MapPin size={12} aria-hidden="true" />नकाशावर आखलेला</span>}
                     </p>

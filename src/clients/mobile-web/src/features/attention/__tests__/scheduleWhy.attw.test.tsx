@@ -65,6 +65,14 @@ describe('the "का दिसतंय" line, one case at a time', () => {
         expect(line).toBe('विद्यापीठ शेड्यूल आणि कृषी विभाग दोघे सांगतात · शेवटची फवारणी ६ दिवसांपूर्वी');
     });
 
+    it('a schedule the app ships is named in Marathi (UI-9a item 9: scheduleNameMr); a name a person wrote stays as written', () => {
+        expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Spray' }), TODAY))
+            .toBe('द्राक्ष — फवारणी शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी) · शेवटची फवारणी ६ दिवसांपूर्वी');
+        expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Spray', alsoAskedBy: ['Grapes - Standard Seasonal Template', 'माझं'] }), TODAY))
+            .toBe('द्राक्ष — फवारणी शेड्यूल, द्राक्ष — हंगामी शेड्यूल आणि माझं सगळे सांगतात · शेवटची फवारणी ६ दिवसांपूर्वी');
+        expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Our Own Plan' }), TODAY)).toContain('Grapes - Our Own Plan नुसार');
+    });
+
     it('three schedules: "सगळे सांगतात"', () => {
         expect(scheduleWhyLineMr(stepOf({ alsoAskedBy: ['कृषी विभाग', 'माझं'] }), TODAY))
             .toBe('विद्यापीठ शेड्यूल, कृषी विभाग आणि माझं सगळे सांगतात · शेवटची फवारणी ६ दिवसांपूर्वी');

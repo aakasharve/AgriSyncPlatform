@@ -99,9 +99,9 @@ describe('StructureSection (redesigned)', () => {
     it('shows each plot in plain words; draw and redraw the boundary are visible buttons', () => {
         const p = props();
         render(<StructureSection {...p} />);
-        expect(screen.getByTestId('plot-p1')).toHaveTextContent('2 एकर');
+        expect(screen.getByTestId('plot-p1')).toHaveTextContent('२ एकर'); // UI-9a item 9: Marathi digits
         expect(screen.getByTestId('plot-p1')).toHaveTextContent('ठिबक');
-        expect(screen.getByTestId('plot-p2')).toHaveTextContent('10 गुंठे');
+        expect(screen.getByTestId('plot-p2')).toHaveTextContent('१० गुंठे');
         expect(screen.getByTestId('plot-p2')).toHaveTextContent('नकाशावर आखलेला');
         expect(screen.getByTestId('plot-map-p1')).toHaveTextContent('नकाशावर हद्द आखा');
         expect(screen.getByTestId('plot-map-p2')).toHaveTextContent('हद्द पुन्हा आखा');

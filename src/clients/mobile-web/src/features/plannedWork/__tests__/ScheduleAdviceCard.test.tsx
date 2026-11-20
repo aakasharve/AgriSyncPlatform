@@ -154,8 +154,8 @@ describe('what the card shows', () => {
         setup();
         chooseAll();
         const panel = await card();
-        expect(within(panel).getByTestId('schedule-advice-stage')).toHaveTextContent('दिवस 13–40');
-        expect(within(panel).getByTestId('schedule-advice-day')).toHaveTextContent('तुम्ही दिवस 20 वर');
+        expect(within(panel).getByTestId('schedule-advice-stage')).toHaveTextContent('दिवस १३–४०'); // UI-9a item 9: Marathi digits
+        expect(within(panel).getByTestId('schedule-advice-day')).toHaveTextContent('तुम्ही दिवस २० वर');
         const lines = [...panel.querySelectorAll('[data-testid^="schedule-advice-line-"]')];
         expect(lines.map(l => [l.getAttribute('data-slot'), l.getAttribute('data-origin')])).toEqual([['1', 'Outside'], ['2', 'Outside']]);
         const first = within(lines[0] as HTMLElement);
@@ -163,10 +163,10 @@ describe('what the card shows', () => {
         expect(lines[0]).toHaveTextContent('द्राक्ष विद्यापीठ शेड्यूल');
         // the panel's own item line: the same testids and the same words
         expect(first.getByTestId(`stage-plan-item-${A1}`)).toHaveTextContent('बुरशीनाशक फवारणी');
-        expect(first.getByTestId(`stage-plan-repeat-${A1}`)).toHaveTextContent('दर 5 दिवसांनी');
-        expect(first.getByTestId(`stage-plan-times-${A1}`)).toHaveTextContent('या स्टेजमध्ये 6 वेळा');
+        expect(first.getByTestId(`stage-plan-repeat-${A1}`)).toHaveTextContent('दर ५ दिवसांनी');
+        expect(first.getByTestId(`stage-plan-times-${A1}`)).toHaveTextContent('या स्टेजमध्ये ६ वेळा');
         fireEvent.click(first.getByTestId(`stage-plan-times-${A1}`));
-        expect(first.getByTestId(`stage-plan-days-${A1}`)).toHaveTextContent('दिवस: 13, 18, 23, 28, 33, 38');
+        expect(first.getByTestId(`stage-plan-days-${A1}`)).toHaveTextContent('दिवस: १३, १८, २३, २८, ३३, ३८');
         const second = within(lines[1] as HTMLElement);
         expect(second.getByTestId('stage-plan-chip')).toHaveTextContent('2');
     });
@@ -189,7 +189,7 @@ describe('what the card shows', () => {
         const panel = await card();
         expect(within(panel).getByTestId(`stage-plan-nodays-${A2}`)).toHaveTextContent('दिवस शेड्यूलमध्ये लिहिलेले नाहीत');
         expect(within(panel).queryByTestId(`stage-plan-times-${A2}`)).toBeNull();
-        expect(panel.textContent).not.toMatch(/\d+ वेळा/);
+        expect(panel.textContent).not.toMatch(/[0-9०-९]+ वेळा/); // a count in Latin OR Marathi digits (UI-9a item 9: Marathi digits; `\d` is Latin only)
     });
 
     it('his own schedule has the pencil chip and no number', async () => {
@@ -288,7 +288,7 @@ describe('no net, a refusal, a bad answer', () => {
         let panel = await card();
         expect(panel.getAttribute('data-source')).toBe('cache');
         expect(within(panel).getByTestId('schedule-advice-asof')).toHaveTextContent('मिळालेली वेळ: 08-11');
-        expect(within(panel).getByTestId(`stage-plan-times-${A1}`)).toHaveTextContent('या स्टेजमध्ये 6 वेळा');
+        expect(within(panel).getByTestId(`stage-plan-times-${A1}`)).toHaveTextContent('या स्टेजमध्ये ६ वेळा');
         cleanup();
 
         await getDatabase().appMeta.clear();

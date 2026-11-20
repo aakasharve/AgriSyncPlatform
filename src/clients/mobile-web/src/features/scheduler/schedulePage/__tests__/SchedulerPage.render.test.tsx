@@ -83,11 +83,12 @@ describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', ()
         // in the app's own words (the old black pill said "कोणी बनवलं: ...").
         expect(text('sched-owner')).toContain('शेड्यूल बनवणारे');
         expect(text('sched-owner-name')).toBe('ॲपमधलं मूळ शेड्यूल');
-        expect(text('day-now')).toBe('9');
-        expect(text('day-total')).toBe('40');
-        expect(text('stage-count')).toBe('2');
-        expect(text('stage-line')).toContain('स्टेज 1 · छाटणीनंतर');
-        expect(text('stage-line')).toContain('दिवस 0–14');
+        // UI-9a item 9: every number on the page is in Marathi digits
+        expect(text('day-now')).toBe('९');
+        expect(text('day-total')).toBe('४०');
+        expect(text('stage-count')).toBe('२');
+        expect(text('stage-line')).toContain('स्टेज १ · छाटणीनंतर');
+        expect(text('stage-line')).toContain('दिवस ०–१४');
         expect(text('here-pin')).toContain('तुम्ही इथे आहात');
         expect(screen.getByTestId('stage-row-1')).toHaveAttribute('data-current', 'yes');
         expect(screen.getByTestId('ribbon-1')).toHaveAttribute('data-filled', '67');
@@ -103,9 +104,9 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
         mount();
         expect(screen.getByTestId('today-card')).toBeInTheDocument();
         expect(screen.getByTestId('fold-owed-toggle')).toHaveAttribute('data-count', '3');
-        expect(text('fold-owed-toggle')).toContain('राहिलेलं 3');
+        expect(text('fold-owed-toggle')).toContain('राहिलेलं ३');
         expect(screen.getByTestId('fold-done-toggle')).toHaveAttribute('data-count', '2');
-        expect(text('fold-done-toggle')).toContain('राहिलं 4');
+        expect(text('fold-done-toggle')).toContain('राहिलं ४');
         expect(screen.getByTestId('fold-ahead-toggle')).toHaveAttribute('data-count', '4');
         expect(screen.queryByTestId('tab-today')).toBeNull(); // the three big buttons are gone: rows replaced them
     });
@@ -116,12 +117,12 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
         expect(owed).toHaveAttribute('data-count', '3');
         expect(within(owed).getByText('आधी राहिलेलं काम')).toBeInTheDocument();
         expect(text('owed-irrigation')).toContain('ठिबक सिंचन');
-        expect(text('owed-irrigation')).toContain('दिवस 6'); // day 3's miss was made up on day 4
+        expect(text('owed-irrigation')).toContain('दिवस ६'); // day 3's miss was made up on day 4
         expect(text('owed-irrigation')).toContain('सिंचन');
         expect(text('owed-spray')).toContain('फवारणी');
         expect(text('owed-spray')).toContain('बुरशीनाशक फवारणी'); // the schedule's "Fungicide spray"
         expect(text('owed-work')).toContain('खुरपणी');
-        expect(text('today-card')).toContain('दिवस 9 / 40');
+        expect(text('today-card')).toContain('दिवस ९ / ४०');
         expect(text('today-parts-irrigation')).toContain('ठिबक सिंचन');
         expect(text('tomorrow-peek')).toContain('या दिवशी शेड्यूलमध्ये काही नव्हतं');
         expect(screen.getByTestId('ahead')).toBeInTheDocument(); // the "पुढचे दिवस" row holds tomorrow and the 8-day list
@@ -141,8 +142,8 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
 describe('झालं: expected vs done (S7), past days (S8) and the day sheet (S10, S11)', () => {
     it('one bar per part made ONLY of done and missed, a summary line, "—" for a part never expected, a strip of 8 days', () => {
         mount();
-        expect(text('compare-summary')).toBe('अपेक्षित 6 · झालं 2 · राहिलं 4 · जास्तीचं 1');
-        expect(text('cmp-irrigation-text')).toBe('1/3 झालं · +1 जास्तीचं');
+        expect(text('compare-summary')).toBe('अपेक्षित ६ · झालं २ · राहिलं ४ · जास्तीचं १');
+        expect(text('cmp-irrigation-text')).toBe('१/३ झालं · +१ जास्तीचं');
         expect(text('cmp-nutrition-text')).toBe('—');
         // "Partly" is open (decision A): no bar has a third kind of segment.
         const segs = (p: string) => [...screen.getByTestId(`cmp-${p}-bar`).querySelectorAll('[data-seg]')].map(s => s.getAttribute('data-seg'));
@@ -164,13 +165,13 @@ describe('झालं: expected vs done (S7), past days (S8) and the day sheet 
         expect(screen.queryByTestId(`past-${k(0)}`)).toBeNull();
         fireEvent.click(screen.getByTestId('show-older'));
         expect(screen.getByTestId(`past-${k(4)}-irrigation`)).toHaveAttribute('data-status', 'extra');
-        expect(text(`clipcount-${k(0)}`)).toBe('2');
+        expect(text(`clipcount-${k(0)}`)).toBe('२');
         expect(text(`prep-${k(-1)}`)).toBe('तयारी');
         expect(screen.queryByTestId(`prep-${k(0)}`)).toBeNull();
 
         fireEvent.click(screen.getByTestId(`open-day-${k(0)}`));
         const sheet = screen.getByTestId('day-sheet');
-        expect(text('day-sheet-title')).toContain('दिवस 0');
+        expect(text('day-sheet-title')).toContain('दिवस ०');
         expect(screen.getByTestId('day-clips')).toHaveAttribute('data-count', '2');
         expect(within(sheet).getByText('फक्त या फोनवरचं रेकॉर्डिंग दिसतं')).toBeInTheDocument();
         expect(text('typed-tag')).toBe('लिहिलेलं');
@@ -223,5 +224,40 @@ describe('LineageRibbon (S15) in Marathi', () => {
         expect(r).toContain('यावरून बनवलं: Base · आवृत्ती 2 · डॉ. पाटील');
         expect(r).toContain('प्रकाशित: 3 दिवसांपूर्वी');
         expect(r).not.toMatch(/Derived|Published|Draft/);
+    });
+});
+
+describe('Marathi digits on the schedule tab (UI-9a item 9; founder 2026-11-21)', () => {
+    const NO_LATIN_DIGIT = /^[^0-9]*$/;
+
+    it('every counted line on the page is in Devanagari digits: the three tiles, the stage line, the closed rows, the compare lines, the strip', () => {
+        mount();
+        for (const id of ['day-now', 'day-total', 'stage-count', 'stage-line', 'today-pill', 'compare-summary', 'cmp-irrigation-text', 'cmp-spray-text', 'cmp-work-text']) {
+            expect(text(id), id).toMatch(NO_LATIN_DIGIT);
+        }
+        for (const row of ['owed', 'ahead', 'done', 'stages']) expect(text(`fold-${row}-toggle`), row).toMatch(NO_LATIN_DIGIT);
+        expect(text('fold-ahead-toggle')).toContain('पुढच्या ८ दिवसांत');
+        expect(text('fold-stages-toggle')).toContain('२ स्टेज');
+        // the progress percentage, the stage rows and the strip's day numbers
+        expect(text('progress-pct')).toMatch(/^[०-९]+%$/);
+        expect(text('stage-row-1')).toMatch(/^[०-९]/); // the stage's number in its circle
+        expect(text('stage-row-1')).toContain('दिवस ०–१४');
+        expect(text(`strip-${k(8)}`)).toBe('८');
+        // a missing number is still a dash, never a digit (P4)
+        expect(text('day-now')).not.toBe('—');
+    });
+
+    it('the day sheet and the ahead list say their day numbers in Marathi digits; their dates are untouched', () => {
+        mount();
+        fireEvent.click(screen.getByTestId(`strip-${k(8)}`));
+        expect(text('day-sheet-title').startsWith('दिवस ८ · ')).toBe(true);
+        expect(screen.getByTestId('day-sheet').getAttribute('aria-label')).toBe('दिवस ८');
+        expect(text('day-clips')).toContain('(०)');
+    });
+
+    it('the "next 3 / 8 days" switch is in Marathi digits', () => {
+        mount();
+        expect(text('win-3')).toBe('३ दिवस');
+        expect(text('win-8')).toBe('८ दिवस');
     });
 });

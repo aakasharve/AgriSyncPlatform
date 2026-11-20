@@ -113,7 +113,7 @@ const mr: InvitationCopy = {
         ManageReminders: 'आठवणींची मांडणी बदलू शकतात', // PROPOSED (Marathi) — lane REM-1, the card's form of "आठवणींची मांडणी बदलणे"
         EditFarmSetup: 'शेताची रचना बदलू शकतात', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी करू शकतात', // PROPOSED (Marathi)
-        ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने बनवू शकतात', // PROPOSED (Marathi)
+        ScheduleTemplates: 'पीक शेड्यूलचे नमुने बनवू शकतात', // PROPOSED (Marathi); draft Marathi - needs review (UI-9a item 9: "शेड्यूल", not "वेळापत्रक")
     } satisfies Record<AuthorityWithWords, string>,
     noMoney: 'पैसे दिसत नाहीत', // the design's words (MU §6)
     allPlots: 'सर्व प्लॉट', // the design's words (MU §6)

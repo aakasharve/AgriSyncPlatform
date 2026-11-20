@@ -14,6 +14,10 @@
  * No emoji. Nothing here says "AI". Nothing promises what is not built (P10): the maker of an own schedule is only named as "can be
  * made in planning", and no line says a record is held back (D-83: records always open).
  */
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
+
+/** UI-9a item 9: the Marathi entries below write every count and day number in Devanagari digits; the English twins keep 0-9. */
+const md = toDevanagariDigits;
 
 export type GateLanguage = 'mr' | 'en';
 
@@ -66,11 +70,11 @@ export const SCHEDULE_GATE_WORDS: Readonly<Record<GateLanguage, GateWords>> = {
         trialHeading: 'चाचणी', // PLAN WORD LIST
         trialRule: 'श्रमसफलच्या नियमानुसार चाचणीच्या काळात आजची स्टेज पूर्ण दिसते', // PLAN WORD LIST (R10)
         trialToday: 'आजची स्टेज — वर पूर्ण दिसते', // PLAN WORD LIST
-        dayRange: (from, to) => `दिवस ${from}–${to}`, // PROPOSED (Marathi)
+        dayRange: (from, to) => `दिवस ${md(from)}–${md(to)}`, // PROPOSED (Marathi)
         panelTitle: 'या स्टेजमध्ये शेड्यूल काय सांगतात', // PLAN WORD LIST
-        onDay: n => `तुम्ही दिवस ${n} वर`, // PLAN WORD LIST
-        times: n => `या स्टेजमध्ये ${n} वेळा`, // PLAN WORD LIST
-        daysList: days => `दिवस: ${days}`, // PLAN WORD LIST
+        onDay: n => `तुम्ही दिवस ${md(n)} वर`, // PLAN WORD LIST
+        times: n => `या स्टेजमध्ये ${md(n)} वेळा`, // PLAN WORD LIST
+        daysList: days => `दिवस: ${md(days)}`, // PLAN WORD LIST
         daysNotWritten: 'दिवस शेड्यूलमध्ये लिहिलेले नाहीत', // PLAN WORD LIST
         nothingInStage: parts => `या स्टेजमध्ये यात नाही: ${parts}`, // PLAN WORD LIST (layout B)
         afterWork: title => `क्रम: ${title} झाल्यावर`, // PLAN WORD LIST (R34)
@@ -81,8 +85,8 @@ export const SCHEDULE_GATE_WORDS: Readonly<Record<GateLanguage, GateWords>> = {
         ownShort: 'स्वतःचं', // PROPOSED (Marathi)
         scheduleShort: 'शेड्यूल', // PROPOSED (Marathi)
         once: 'एकदाच', // PROPOSED (Marathi) - the page's own word for a one-time work (`SC.once`)
-        everyNDays: n => `दर ${n} दिवसांनी`, // the page's own phrasing (`frequencyMr`)
-        perWeek: n => `आठवड्यातून ${n} वेळा`, // the page's own phrasing (`frequencyMr`)
+        everyNDays: n => `दर ${md(n)} दिवसांनी`, // the page's own phrasing (`frequencyMr`)
+        perWeek: n => `आठवड्यातून ${md(n)} वेळा`, // the page's own phrasing (`frequencyMr`)
         parts: { irrigation: 'सिंचन', nutrition: 'खत', spray: 'फवारणी', work: 'कामे' }, // the app's four parts (`PART_LABEL`)
     },
     en: {

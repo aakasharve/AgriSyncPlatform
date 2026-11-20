@@ -303,3 +303,33 @@ describe('the count and its words (pure)', () => {
         expect(scheduleLineText(1, 1, 'en')).toBe('1 of 1 plot has a schedule');
     });
 });
+
+describe('the plot card\'s area and the form\'s reason in Marathi digits (UI-9a item 9)', () => {
+    const sized = () => grapes(3, { plots: [plot('g1', 'G1'), plot('g2', 'G2', { baseline: { totalArea: 10, unit: 'Guntha' } }), plot('g3', 'G3', { baseline: { totalArea: 2.5, unit: 'Acre' } })] });
+
+    it('"२ एकर", "१० गुंठे", "२.५ एकर" in Marathi; no Latin digit on the three cards', () => {
+        render(<StructureSection {...props([sized()])} />);
+        expect(screen.getByTestId('plot-g1')).toHaveTextContent('२ एकर');
+        expect(screen.getByTestId('plot-g2')).toHaveTextContent('१० गुंठे');
+        expect(screen.getByTestId('plot-g3')).toHaveTextContent('२.५ एकर');
+        for (const id of ['plot-g1', 'plot-g2', 'plot-g3']) {
+            // the plot's own name ("G1") is the farmer's and stays as he wrote it; only the number words are Devanagari
+            expect((screen.getByTestId(id).textContent ?? '').replace(/G\d/g, '')).not.toMatch(/[0-9]/);
+        }
+    });
+
+    it('English mode keeps Latin digits for the area', () => {
+        state.language = 'en';
+        render(<StructureSection {...props([sized()])} />);
+        expect(screen.getByTestId('plot-g1')).toHaveTextContent('2');
+        expect(screen.getByTestId('plot-g2')).toHaveTextContent('10');
+        expect(screen.getByTestId('plot-g3')).toHaveTextContent('2.5');
+        expect(screen.getByTestId('plot-g3').textContent).not.toMatch(/[०-९]/);
+    });
+
+    it('the "name needed" reason names its number in Marathi digits', () => {
+        const p = props([grapes(1)], { isAddingCrop: true, newCropData: { name: 'x' }, normalizedNewCropName: 'x', cropNameError: 'Crop name must be at least 2 characters.' });
+        render(<StructureSection {...p} />);
+        expect(screen.getByTestId('crop-name-error')).toHaveTextContent('पिकाचं नाव लिहा (किमान २ अक्षरं).');
+    });
+});

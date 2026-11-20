@@ -16,7 +16,7 @@ import { Info, Layers, Pin } from 'lucide-react';
 import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing/CategoryIcon';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import type { CropScheduleTemplate } from '../scheduler.types';
-import { SC } from './scheduleCopy';
+import { SC, mrNum } from './scheduleCopy';
 import type { ScheduleModel } from './scheduleModel';
 import { GLASS } from './scheduleUi';
 import type { FollowedCheckNote } from './followedCheck';
@@ -44,9 +44,9 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
     const stage = model.currentStage;
     const started = model.todayDay >= 0;
     const tiles: ReadonlyArray<readonly [string, string, string]> = [
-        [started ? String(model.todayDay) : '—', SC.dayNow, 'day-now'],
-        [model.totalDays !== null ? String(model.totalDays) : '—', SC.dayTotal, 'day-total'],
-        [String(model.stages.length), SC.stageCount, 'stage-count'],
+        [started ? mrNum(model.todayDay) : '—', SC.dayNow, 'day-now'],
+        [model.totalDays !== null ? mrNum(model.totalDays) : '—', SC.dayTotal, 'day-total'],
+        [mrNum(model.stages.length), SC.stageCount, 'stage-count'],
     ];
     // UI-8 (D-148 layout C, D-150): which plot this is, then the WHITE owner bar (the maker's picture place, real name, schedule name), the three
     // numbers as white tiles and the stage line. Same facts as the old black card; only the look and the order of the first lines changed.
@@ -70,7 +70,7 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
                     <CategoryIcon name="sprout" size={22} className="shrink-0" />
                     <span className="text-[16px] font-black leading-snug text-emerald-800" data-testid="stage-line">
-                        {SC.stage} {stage.index + 1} · {stage.name} <span className="text-[14px] font-bold text-emerald-700">({SC.dayN(stage.from)}–{stage.to})</span>
+                        {SC.stage} {mrNum(stage.index + 1)} · {stage.name} <span className="text-[14px] font-bold text-emerald-700">({SC.dayN(stage.from)}–{mrNum(stage.to)})</span>
                     </span>
                 </div>
             )}
@@ -86,7 +86,7 @@ export const StageProgress: React.FC<{ model: ScheduleModel }> = ({ model }) => 
             <div className="mb-3 flex items-center gap-2">
                 <Layers size={22} className="text-indigo-500" aria-hidden="true" />
                 <h3 className="m-0 text-[20px] font-black text-stone-900">{SC.progress}</h3>
-                <span className="ml-auto text-[18px] font-black text-emerald-700" data-testid="progress-pct">{pct === null ? '—' : `${pct}%`}</span>
+                <span className="ml-auto text-[18px] font-black text-emerald-700" data-testid="progress-pct">{pct === null ? '—' : `${mrNum(pct)}%`}</span>
             </div>
             {pct !== null && (
                 <div className={`relative ${model.todayDay >= 0 ? 'pt-9' : ''}`}>
@@ -106,10 +106,10 @@ export const StageProgress: React.FC<{ model: ScheduleModel }> = ({ model }) => 
                 {model.stages.map(s => (
                     <li key={s.id} data-testid={`stage-row-${s.index + 1}`} data-current={s.current ? 'yes' : 'no'} className={`rounded-2xl px-3 py-2.5 ${s.current ? 'border-2 border-emerald-300 bg-emerald-50/80' : 'border border-transparent'}`}>
                         <div className="flex items-center gap-3">
-                            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[16px] font-black ${s.current ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : s.past ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-500'}`}>{s.past ? '✓' : s.index + 1}</span>
+                            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[16px] font-black ${s.current ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : s.past ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-500'}`}>{s.past ? '✓' : mrNum(s.index + 1)}</span>
                             <span className="min-w-0 flex-1">
                                 <span className={`block text-[18px] font-extrabold leading-snug ${s.current ? 'text-emerald-900' : s.past ? 'text-stone-700' : 'text-stone-500'}`}>{s.name}</span>
-                                <span className="block text-[14px] font-bold text-stone-600">{SC.dayN(s.from)}–{s.to}</span>
+                                <span className="block text-[14px] font-bold text-stone-600">{SC.dayN(s.from)}–{mrNum(s.to)}</span>
                             </span>
                             {s.current && <span className="shrink-0 rounded-full bg-[#1448E6] px-2.5 py-1 text-[13px] font-extrabold text-white">{SC.here}</span>}
                         </div>

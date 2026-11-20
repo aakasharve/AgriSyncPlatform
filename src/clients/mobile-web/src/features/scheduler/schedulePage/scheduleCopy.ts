@@ -15,6 +15,14 @@
  */
 import type { ScheduleOwnerType } from '../scheduler.types';
 import { stageNameMr as sharedStageNameMr } from '../../../shared/utils/stageNameMr';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (UI-9a, item 9; founder 2026-11-21: "Marathi digits") - every word in this file is
+ * Marathi only (no language argument), so every count it draws is written in Devanagari digits (०-९). Display only: the number that is
+ * stored, compared or sent is never run through this. A missing number is "—" (P4), which has no digit.
+ */
+export const mrNum = (n: number | string): string => toDevanagariDigits(n);
 
 export const SC = {
     // FOUNDER / INVENTORY
@@ -42,28 +50,28 @@ export const SC = {
     showOlder: 'आणखी जुने दिवस दाखवा',
     today: 'आज',
     ahead: 'पुढचे दिवस',
-    // The preview's words; its digits written as every other number on the page (Latin), V2-10.
-    next3: '3 दिवस',
-    next8: '8 दिवस',
-    in8: '8 दिवसांत',
+    // The preview's words; digits in Marathi (item 9; they were Latin, V2-10).
+    next3: '३ दिवस',
+    next8: '८ दिवस',
+    in8: '८ दिवसांत',
     // UI-4 (D-146): the closed rows of the शेड्यूल tab.
     doneTitle: 'झालेलं काम',
     toolsLine: 'लायब्ररी, बदला, दिवसवार तक्ता',
-    aheadLine: (n: number) => `पुढच्या 8 दिवसांत ${n} कामं`,
-    stagesLine: (n: number) => `${n} स्टेज`,
-    followedLine: (n: number) => `${n} शेड्यूल`,
+    aheadLine: (n: number) => `पुढच्या ८ दिवसांत ${mrNum(n)} कामं`,
+    stagesLine: (n: number) => `${mrNum(n)} स्टेज`,
+    followedLine: (n: number) => `${mrNum(n)} शेड्यूल`,
     owedSub: 'हे अजून झालेलं नाही',
     nothingOwed: 'आधीचं काहीही राहिलेलं नाही',
     tomorrow: 'उद्या',
     seeAhead: 'पुढचे सगळे दिवस पाहा',
-    leftCount: (n: number) => `राहिलं ${n}`,
-    owedCount: (n: number) => `राहिलेलं ${n}`,
+    leftCount: (n: number) => `राहिलं ${mrNum(n)}`,
+    owedCount: (n: number) => `राहिलेलं ${mrNum(n)}`,
     expectsToday: 'या शेड्यूलनुसार या दिवशी हे करणं अपेक्षित आहे',
     voiceTalk: 'त्या दिवशीचं बोलणं',
     vsTitle: 'शेड्यूल आणि प्रत्यक्ष',
     nothingToday: 'आज यात काही नाही',
-    dayN: (d: number) => `दिवस ${d}`,
-    dayOf: (d: number, total: number) => `दिवस ${d} / ${total}`,
+    dayN: (d: number) => `दिवस ${mrNum(d)}`,
+    dayOf: (d: number, total: number) => `दिवस ${mrNum(d)} / ${mrNum(total)}`,
 
     // PROPOSED (Marathi) — everything below was written for this page.
     thisPhoneClips: 'फक्त या फोनवरचं रेकॉर्डिंग दिसतं', // PROPOSED (Marathi)
@@ -73,10 +81,10 @@ export const SC = {
     noExpectation: 'या दिवशी शेड्यूलमध्ये काही नव्हतं', // PROPOSED (Marathi)
     nothingAhead: 'पुढच्या दिवसांत शेड्यूलमध्ये काही नाही', // PROPOSED (Marathi)
     noPastDays: 'अजून मागचे दिवस नाहीत', // PROPOSED (Marathi)
-    since: (d: number) => `दिवस ${d} पासून`, // PROPOSED (Marathi)
-    times: (n: number) => `${n} वेळा`, // PROPOSED (Marathi)
-    notStarted: (n: number) => `शेड्यूल ${n} दिवसांनी सुरू होईल`, // PROPOSED (Marathi)
-    clipsCount: (n: number) => `${n} रेकॉर्डिंग`, // PROPOSED (Marathi)
+    since: (d: number) => `दिवस ${mrNum(d)} पासून`, // PROPOSED (Marathi)
+    times: (n: number) => `${mrNum(n)} वेळा`, // PROPOSED (Marathi)
+    notStarted: (n: number) => `शेड्यूल ${mrNum(n)} दिवसांनी सुरू होईल`, // PROPOSED (Marathi)
+    clipsCount: (n: number) => `${mrNum(n)} रेकॉर्डिंग`, // PROPOSED (Marathi)
     noCrops: 'अजून एकही पीक नाही', // PROPOSED (Marathi)
     // Said to everyone who opens the page (owner, worker, मुकादम…), so it names no one who must add them.
     noCropsHint: 'पीक आणि प्लॉट जोडल्यावर इथे शेड्यूल दिसेल.', // PROPOSED (Marathi)
@@ -93,24 +101,24 @@ export const SC = {
     sampleWillHide: (crop: string) => `${crop}साठी पहिलं तपासलेलं शेड्यूल आलं की नवीन निवडीसाठी हे दिसणार नाही. आधीपासून पाळत असाल तर तसंच राहील.`, // PROPOSED (Marathi)
     takeNewChecked: 'नवीन तपासलेलं शेड्यूल घ्या', // PROPOSED (Marathi)
     checkWithdrawn: (reason: string) => (reason ? `श्रमसफलने तपासणी मागे घेतली: ${reason}` : 'श्रमसफलने तपासणी मागे घेतली'), // PROPOSED (Marathi)
-    behind: (n: number) => `शेड्यूल ${n} दिवस मागे चाललं आहे`, // PROPOSED (Marathi)
-    behindLine: (calendar: string, plant: string) => `कॅलेंडरप्रमाणे दिवस ${calendar} · पिकासाठी दिवस ${plant}`, // PROPOSED (Marathi)
+    behind: (n: number) => `शेड्यूल ${mrNum(n)} दिवस मागे चाललं आहे`, // PROPOSED (Marathi)
+    behindLine: (calendar: string, plant: string) => `कॅलेंडरप्रमाणे दिवस ${mrNum(calendar)} · पिकासाठी दिवस ${mrNum(plant)}`, // PROPOSED (Marathi)
     toolsTitle: 'आजचं आणि बाकीचं', // PROPOSED (Marathi)
     lastSpray: 'शेवटची फवारणी', // PROPOSED (Marathi)
     lastWater: 'शेवटचं पाणी', // PROPOSED (Marathi)
     noRecordYet: 'अजून नोंद नाही', // PROPOSED (Marathi)
-    daysAgo: (n: number) => (n === 0 ? 'आज' : n === 1 ? 'काल' : `${n} दिवसांपूर्वी`), // PROPOSED (Marathi)
+    daysAgo: (n: number) => (n === 0 ? 'आज' : n === 1 ? 'काल' : `${mrNum(n)} दिवसांपूर्वी`), // PROPOSED (Marathi)
     todaySpend: 'आजचा खर्च', // PROPOSED (Marathi)
-    pendingToday: (n: number) => `आज ${n} कामं बाकी`, // existing app line ("आज N कामं बाकी", oneAllClearSurface)
+    pendingToday: (n: number) => `आज ${mrNum(n)} कामं बाकी`, // existing app line ("आज N कामं बाकी", oneAllClearSurface)
     // The farmer's own to-do tasks still open (the to-do page is "करायची कामे", reflect/todoModel).
-    tasksOpen: (n: number) => `करायच्या यादीत ${n} कामं बाकी`, // PROPOSED (Marathi)
+    tasksOpen: (n: number) => `करायच्या यादीत ${mrNum(n)} कामं बाकी`, // PROPOSED (Marathi)
     // Shortened from the app's own close-day line "दिवस पूर्ण करण्यासाठी क्लिक करा" (dfesTranslations clickToClose).
     closeDay: 'दिवस पूर्ण करा', // PROPOSED (Marathi)
     // spec: plr-d10 lane L8b-2 - said only when a choice could not be sent to the server yet (the plot's crop season has not
     // reached it). The choice is shown as made; it goes to the other phones once the season is there.
     choiceNotSent: 'या प्लॉटचा हंगाम अजून सर्व्हरवर नाही, म्हणून ही निवड फक्त या फोनवर आहे. हंगाम सर्व्हरवर पोचल्यावर पुन्हा निवडा.', // PROPOSED (Marathi) (B009: it promises no later send; none happens)
     library: 'शेड्यूल लायब्ररी', // PROPOSED (Marathi)
-    libraryLine: (n: number) => `तुमच्या पिकांसाठी ${n} शेड्यूल`, // PROPOSED (Marathi)
+    libraryLine: (n: number) => `तुमच्या पिकांसाठी ${mrNum(n)} शेड्यूल`, // PROPOSED (Marathi)
     editor: 'शेड्यूल बदला', // PROPOSED (Marathi)
     editorLine: 'कोणतं शेड्यूल आणि पहिल्या दिवसाची तारीख', // PROPOSED (Marathi)
     grid: 'दिवसवार तक्ता', // PROPOSED (Marathi)
@@ -129,10 +137,10 @@ export const SC = {
     edNone: 'या पिकासाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.', // PROPOSED (Marathi) — same line as the library's
     // spec: plr-d10 lane L8b-2 (founder C2) - the editor's choice is for this plot only; the library is the door for the whole crop.
     edThisPlotOnly: 'हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.', // PROPOSED (Marathi)
-    edDayZero: 'दिवस 0', // preview word ("दिवस")
-    edTodayIs: (d: number) => `म्हणजे आज दिवस ${d}`, // PROPOSED (Marathi)
+    edDayZero: 'दिवस ०', // preview word ("दिवस")
+    edTodayIs: (d: number) => `म्हणजे आज दिवस ${mrNum(d)}`, // PROPOSED (Marathi)
     edSave: 'जतन करा', // app word (translations `save`)
-    edMeta: (days: number | null, stages: number) => `एकूण दिवस ${days ?? '—'} · स्टेज ${stages}`, // preview words
+    edMeta: (days: number | null, stages: number) => `एकूण दिवस ${days === null ? '—' : mrNum(days)} · स्टेज ${mrNum(stages)}`, // preview words
 } as const;
 
 /** The day-0 date's name, by what the schedule counts from (`ScheduleReferenceType`). */
@@ -185,4 +193,4 @@ export const stageNameMr = (name: string): string => sharedStageNameMr(name) ?? 
 
 /** "दर 3 दिवसांनी" / "आठवड्यातून 2 वेळा" — the preview's own phrasing of how often. */
 export const frequencyMr = (mode: string, value: number): string =>
-    mode === 'PER_WEEK' ? `आठवड्यातून ${value} वेळा` : `दर ${value} दिवसांनी`;
+    mode === 'PER_WEEK' ? `आठवड्यातून ${mrNum(value)} वेळा` : `दर ${mrNum(value)} दिवसांनी`;

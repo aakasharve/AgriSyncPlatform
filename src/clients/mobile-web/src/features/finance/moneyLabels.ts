@@ -44,7 +44,8 @@ export const categoryLabel = (category: string): string => CATEGORY_LABEL[catego
  * it "हातानं लिहिलेली" would be a claim nobody made.
  */
 export const SOURCE_LABEL: Record<MoneySourceType, string> = {
-    Manual: '', VoiceLog: 'बोलून सांगितलेली', Procurement: 'खरेदी', Income: 'उत्पन्न', ScheduleAuto: 'वेळापत्रकातून', Adjustment: 'दुरुस्ती',
+    // ScheduleAuto: draft Marathi - needs review (was "वेळापत्रकातून"; UI-9a item 9: one word, "शेड्यूल")
+    Manual: '', VoiceLog: 'बोलून सांगितलेली', Procurement: 'खरेदी', Income: 'उत्पन्न', ScheduleAuto: 'शेड्यूलमधून', Adjustment: 'दुरुस्ती',
 };
 
 /** The four piles on the पैसे व हिशोब home (`financeSelectors.getPipelineBuckets`). */

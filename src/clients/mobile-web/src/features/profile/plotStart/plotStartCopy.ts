@@ -8,7 +8,7 @@
  * the founder's reviewer reads it; the English twin is PROPOSED too. The date's own name per crop ("छाटणीची तारीख" ...) is the schedule
  * editor's own (`DAY_ZERO_LABEL`), reused so the two screens call the same day by the same name.
  */
-import { DAY_ZERO_LABEL } from '../../scheduler/schedulePage/scheduleCopy';
+import { DAY_ZERO_LABEL, SC } from '../../scheduler/schedulePage/scheduleCopy';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 import type { PlantingDateProblem, PlantingWordKey } from './plotStartChoice';
 import { MAX_YEARS_BACK } from './plotStartChoice';
@@ -62,7 +62,8 @@ export function plotStartWords(language: string | null | undefined, word: Planti
             return en ? 'Pick a complete date' : 'पूर्ण तारीख निवडा';
         },
         scheduleTitle: en ? 'Schedule will start by itself' : 'शेड्यूल आपोआप लागेल',
-        checkedBy: en ? 'Checked by ShramSafal' : 'ShramSafal ने तपासलेलं',
+        // UI-9a item 9: Marathi mode reads the SAME words as the schedule page's check badge (`SC.checkedByShramSafal`), not the Latin brand name.
+        checkedBy: en ? 'Checked by ShramSafal' : SC.checkedByShramSafal,
         changeLater: en ? 'To change it, use the Schedule tab later' : 'बदलायचं असेल तर नंतर शेड्यूल टॅबमध्ये',
         noChecked: en
             ? 'No checked schedule for this crop yet; the plot will be made without a schedule'
