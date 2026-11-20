@@ -35,7 +35,7 @@ describe('CropSelector layout="stepper"', () => {
         expect(screen.getByTestId('the-lead').getAttribute('data-step')).toBe('crop');
         expect(screen.getByTestId('flow-crop-cane').textContent).toContain('ऊस');
         // UI-7: the shared tile says how many plots, not their names (the names are the next question)
-        expect(screen.getByTestId('flow-crop-cane').textContent).toContain('2 प्लॉट');
+        expect(screen.getByTestId('flow-crop-cane').textContent).toContain('२ प्लॉट');
         expect(screen.getByTestId('flow-crop-cane').querySelector('img')?.getAttribute('src')).toBe('/images/crops/Sugarcane.jpg');
         expect(screen.getByTestId('flow-crop-whole-farm').textContent).toContain('Entire Farm');
         expect(screen.queryByTestId('flow-plot-cane-1')).toBeNull();

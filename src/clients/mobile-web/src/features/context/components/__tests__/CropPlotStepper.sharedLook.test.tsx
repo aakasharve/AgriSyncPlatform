@@ -40,7 +40,7 @@ describe('the stepper in the shared look', () => {
         render(<Harness />);
         expect(screen.getByTestId('the-lead').getAttribute('data-step')).toBe('crop');
         expect(screen.getByTestId('flow-crop-cane')).toHaveTextContent('ऊस');
-        expect(screen.getByTestId('flow-crop-cane')).toHaveTextContent('2 प्लॉट');
+        expect(screen.getByTestId('flow-crop-cane')).toHaveTextContent('२ प्लॉट');
         expect(part(screen.getByTestId('flow-crop-cane'), 'accent')?.className).toContain('bg-pink-500');
         expect(part(screen.getByTestId('flow-crop-grape'), 'accent')?.className).toContain('bg-purple-500');
         expect(screen.getByTestId('flow-crop-cane').querySelector('img')?.getAttribute('src')).toBe('/images/crops/Sugarcane.jpg');
@@ -120,11 +120,11 @@ describe('the stepper in the shared look', () => {
         fireEvent.click(screen.getByTestId('flow-crop-cane'));
         const card = screen.getByTestId('flow-sel-cane');
         expect(card).toHaveTextContent('CHOSEN-CROP');
-        expect(card).toHaveTextContent('0 पैकी 2 प्लॉट');
+        expect(card).toHaveTextContent('० पैकी २ प्लॉट');
         expect(card.className).toContain('ring-amber-300');
         fireEvent.click(screen.getByTestId('flow-plot-cane-1'));
         expect(screen.getByTestId('flow-sel-cane').className).toContain('ring-emerald-300');
-        expect(screen.getByTestId('flow-sel-cane')).toHaveTextContent('1 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('flow-sel-cane')).toHaveTextContent('१ पैकी २ प्लॉट');
     });
 
     it('marked plots still carry their short tag, and nothing is chosen for him', () => {

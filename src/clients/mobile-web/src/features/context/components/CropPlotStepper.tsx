@@ -34,6 +34,9 @@ import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
 import { CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
+import { PickedCountLine, PlotGroupHeader, PlotSelector } from './PlotSelector';
+import { buildQuickButtons, photoOnceFor, pickedCountText, plotPickMode, type PlotWorkFacts } from './plotSelectorRules';
+import { usePlotWorkFacts } from './usePlotWorkFacts';
 import {
     EMPTY_SELECTION, allCropsSelected, allPlotsSelected, isGlobal, isReady, pendingCrops,
     plotsOf, selectAllPlots, selectEverything, toggleCrop, toggleGlobal, togglePlot, type Selection,
@@ -99,6 +102,12 @@ export interface StepperExtras {
      * waits for its own lane, so it keeps the classic look until then (it passes no `look`; it is not edited).
      */
     look?: 'shared' | 'classic';
+    /**
+     * Lane UI-9a — what the phone knows about work on yesterday and today per plot, for the true quick buttons ("कालचेच", "आज बाकी") of a crop
+     * with many plots. Omit it and the stepper reads the phone's own work records itself (`usePlotWorkFacts`), only when a chosen crop has 7 or
+     * more plots. A day that is `null` draws no button that needs it.
+     */
+    workFacts?: PlotWorkFacts | null;
 }
 export interface CropPlotStepperProps extends StepperExtras {
     crops: readonly StepperCrop[];
@@ -123,7 +132,7 @@ const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'image
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false, look,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false, look, workFacts: workFactsProp,
 }) => {
     const languageContext = useOptionalLanguage();
     const language = languageContext?.language ?? 'en';
@@ -139,7 +148,11 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const [innerStep, setInnerStep] = useState<StepperStep>(sel.crops.length > 0 ? 'plot' : 'crop');
     const [adding, setAdding] = useState(false);
     const step: StepperStep = (stepProp ?? innerStep) === 'plot' && sel.crops.length > 0 ? 'plot' : 'crop';
-    const go = (s: StepperStep) => { setInnerStep(s); onStepChange?.(s); };
+    // Lane UI-9a — a chosen crop with many plots gets the number grid and its true quick buttons; the facts are read only then.
+    const manyChosen = !classic && step === 'plot' && crops.some(c => sel.crops.includes(c.id) && plotPickMode(c.plots.length) === 'grid');
+    const readFacts = usePlotWorkFacts(manyChosen && workFactsProp === undefined);
+    const workFacts = workFactsProp === undefined ? readFacts : workFactsProp;
+    const go =(s: StepperStep) => { setInnerStep(s); onStepChange?.(s); };
     const emit = (n: Selection) => { if (!disabled) onSelectionChange(n.crops, n.plots); };
 
     const entireFarm = labels?.entireFarm ?? resolveOversightString(language, 'entireFarmLabel');
@@ -210,6 +223,38 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const showAllCrops = !!labels?.allCrops && crops.length > 1 && !allCropsSelected(sel, crops);
     const nameSize = chosen.length === 1 ? 'text-[24px]' : chosen.length === 2 ? 'text-[16px]' : 'text-[14px]';
     const goBack = () => { emit(EMPTY_SELECTION); go('crop'); };
+    // Lane UI-9a — the founder's rule for many plots (`plotSelectorRules`): from 7 plots of a crop a number grid with true quick buttons; with
+    // several crops on screen a crop of 4 or more plots gets its photo ONCE in a header and its plots carry only its colour and name. A crop
+    // of 1 to 6 plots on its own screen is drawn exactly as before.
+    const sectioned = !classic && chosen.some(c => plotPickMode(c.plots.length) === 'grid' || (multiCrop && photoOnceFor(c.plots.length)));
+    const gridPlots = chosen.filter(c => plotPickMode(c.plots.length) === 'grid').reduce((n, c) => n + c.plots.length, 0);
+    const wordsOfCrop = (c: StepperCrop) => {
+        const stored = storedCrops.find(s => s.id === c.id)?.name;
+        return [c.name, stored, stored ? cropNameIn(stored, 'mr', c.masterId) : undefined, stored ? cropNameIn(stored, 'en', c.masterId) : undefined];
+    };
+    const sectionOf = (c: StepperCrop) => {
+        const many = plotPickMode(c.plots.length) === 'grid';
+        const header = multiCrop && photoOnceFor(c.plots.length);
+        const picked = plotsOf(sel, c.id);
+        const suffix = multiCrop ? `-${c.id}` : '';
+        return (
+            <section key={c.id} className="space-y-2" data-testid={`flow-crop-section-${c.id}`} data-header={header ? 'yes' : 'no'}>
+                {header && (
+                    <PlotGroupHeader crop={c} testId={`flow-crop-header-${c.id}`} language={countLanguage}
+                        sub={many ? <span data-testid={`flow-crop-count-${c.id}`}>{pickedCountText(c.plots.length, picked.length, countLanguage)}</span> : undefined} />
+                )}
+                <PlotSelector plots={c.plots} chosen={picked} color={c.color} cropNames={wordsOfCrop(c)} underHeader={header || (!multiCrop && photoOnceFor(c.plots.length))}
+                    chipSize="lg" disabled={disabled} language={countLanguage}
+                    lead={multiCrop && !photoOnceFor(c.plots.length) ? <PickerCropPhoto crop={c} px={22} /> : undefined}
+                    quickButtons={many ? buildQuickButtons({ plotIds: c.plots.map(p => p.id), facts: workFacts, kinds: ['yesterday', 'todayLeft'], language: countLanguage }) : undefined}
+                    mark={(id, mode) => (marked?.plotIds.includes(id)
+                        ? <span data-testid={`flow-plot-mark-${id}`} className={`absolute rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-extrabold leading-none text-amber-900 ${mode === 'grid' ? '-top-2 left-1/2 -translate-x-1/2 whitespace-nowrap' : '-right-1 -top-2'}`}>{marked.label}</span>
+                        : undefined)}
+                    onChange={next => emit({ crops: sel.crops, plots: { ...sel.plots, [c.id]: next } })}
+                    testIds={{ plot: id => `flow-plot-${id}`, all: `flow-plots-all${suffix}`, quick: id => `flow-quick${suffix}-${id}`, search: `flow-plot-search${suffix}`, grid: `flow-plot-grid${suffix}` }} />
+            </section>
+        );
+    };
 
     return (
         <div className="px-3 pb-3 pt-2" style={{ fontFamily: SANS }} data-testid="flow-step-plot" data-ready={isReady(sel) ? 'yes' : 'no'}>
@@ -312,8 +357,9 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
 
                     <div className="mt-3.5">{renderLead(chosen.map(c => c.name))}</div>
 
-                    <div className={classic ? `grid gap-2 ${cols}` : 'flex flex-wrap gap-2'} data-testid="flow-plot-list">
-                        {shown.map(({ crop, plot }) => {
+                    <div className={classic ? `grid gap-2 ${cols}` : sectioned ? 'space-y-3' : 'flex flex-wrap gap-2'} data-testid="flow-plot-list" data-layout={sectioned ? 'sections' : undefined}>
+                        {sectioned && chosen.map(sectionOf)}
+                        {!sectioned && shown.map(({ crop, plot }) => {
                             const on = plotsOf(sel, crop.id).includes(plot.id);
                             if (!classic) {
                                 // Lane UI-7 — the shared look: a chip with the crop's colour dot; several crops on screen: a small crop photo says which.
@@ -356,6 +402,11 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                             </button>
                         )}
                     </div>
+                    {/* UI-9a — one count sentence, always the same words, right above the mic (the confirm). Only where a number grid is drawn. */}
+                    {sectioned && gridPlots > 0 && (
+                        <PickedCountLine className="mt-2.5" testId="flow-picked-count" language={countLanguage}
+                            total={chosen.reduce((n, c) => n + c.plots.length, 0)} picked={chosen.reduce((n, c) => n + plotsOf(sel, c.id).length, 0)} />
+                    )}
                 </>
             )}
             </div>
