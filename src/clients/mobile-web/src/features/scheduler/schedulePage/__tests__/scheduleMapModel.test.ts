@@ -71,6 +71,25 @@ describe('who follows what', () => {
         expect(m.schedules.map(s => s.key)).toEqual([T.university, T.expert]);
     });
 
+    it('inside each schedule and inside the dashed group the plots are in natural number order (G2 before G10), whatever order the farm stored them in (CTO finding 2026-11-21)', () => {
+        const grape = (name: string) => plot({ id: name, name, schedule: { ...plot().schedule, id: `s-${name}`, plotId: name } });
+        const stored = ['G10', 'G2', 'G13', 'G1', 'G12', 'G5', 'G3', 'G9', 'G11', 'G4'];
+        const crops = [crop(stored.map(grape), { activeScheduleId: null })];
+        const university = ['G10', 'G13', 'G1', 'G5'];
+        const expert = ['G2', 'G12', 'G3'];
+        const m = buildScheduleMap({
+            crops, todayKey: TODAY, cropName,
+            choices: choices([
+                ...university.map(id => [id, choiceOf(sub(T.university))] as [string, ScheduleChoice]),
+                ...expert.map(id => [id, choiceOf(sub(T.expert))] as [string, ScheduleChoice]),
+            ]),
+        });
+        // the rows still group by schedule (a schedule's card spans consecutive rows), the first schedule being the one its lowest-numbered plot follows
+        expect(m.plots.map(p => p.plotId)).toEqual(['G1', 'G5', 'G10', 'G13', 'G2', 'G3', 'G12']);
+        expect(m.schedules.map(s => [s.key, s.plotIds])).toEqual([[T.university, ['G1', 'G5', 'G10', 'G13']], [T.expert, ['G2', 'G3', 'G12']]]);
+        expect(m.unscheduled.map(p => p.plotId)).toEqual(['G4', 'G9', 'G11']);
+    });
+
     it('the day on a plot\'s card is the schedule\'s day (days since its day 0, less the recorded shifts) - the same number the page shows', () => {
         const m = model();
         expect(m.plots.find(p => p.plotId === P.g1)?.day).toBe(9);
