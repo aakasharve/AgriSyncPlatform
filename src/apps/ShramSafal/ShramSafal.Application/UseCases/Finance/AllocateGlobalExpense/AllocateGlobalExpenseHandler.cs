@@ -313,7 +313,7 @@ public sealed class AllocateGlobalExpenseHandler(
         decimal totalAmount,
         string currencyCode,
         IReadOnlyList<Plot> farmPlots,
-        IReadOnlyList<AllocateGlobalExpenseAllocationCommand> requestedAllocations,
+        IReadOnlyList<AllocateGlobalExpenseAllocationCommand>? requestedAllocations,
         DateTime allocatedAtUtc)
     {
         if (requestedAllocations is null || requestedAllocations.Count == 0)

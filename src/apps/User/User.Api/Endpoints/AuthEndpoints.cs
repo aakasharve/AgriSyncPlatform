@@ -316,7 +316,7 @@ public static class AuthEndpoints
             }
 
             var result = await handler.HandleAsync(new AnswerDeviceCheckCommand(refreshToken, ItIsMe: answer == "yes"), ct);
-            if (result.IsFailure)
+            if (!result.IsSuccess)
             {
                 if (result.Error.Kind == ErrorKind.Conflict)
                 {
