@@ -57,7 +57,11 @@ public static class InputUseEndpoints
         return group;
     }
 
-    private static IResult ToErrorResult(Error error) =>
+    // CR-2d join refresh: stamped like every other mapper, so a refused input-use call is recorded under its own code.
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error) =>
         error.Code.Contains("NotFound") ? Results.NotFound(error.Description)
         : error.Code.Contains("Forbidden") ? Results.Forbid()
         : Results.BadRequest(error.Description);
