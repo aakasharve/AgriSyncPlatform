@@ -106,6 +106,8 @@ export interface ResultCopy {
     seeWords: string;
     /** Lane RWF: his words are open when the screen comes; the line under the title says a tap closes them. */
     hideWords: string;
+    /** Lane RWF: under the part tiles - a word with no colour was not placed in any part (so what he said but was not noted shows). */
+    plainWordsNote: string;
 }
 
 const mr: ResultCopy = {
@@ -193,6 +195,7 @@ const mr: ResultCopy = {
     yourWords: 'तुमचं बोलणं',
     seeWords: 'शब्द पाहण्यासाठी दाबा',
     hideWords: 'लपवण्यासाठी दाबा', // PROPOSED (Marathi)
+    plainWordsNote: 'रंग नसलेले शब्द कोणत्याही भागात घेतलेले नाहीत.', // PROPOSED (Marathi)
 };
 
 const en: ResultCopy = {
@@ -264,6 +267,7 @@ const en: ResultCopy = {
     yourWords: 'Your words',
     seeWords: 'Tap to see the words',
     hideWords: 'Tap to hide', // PROPOSED (English)
+    plainWordsNote: 'Words without a colour were not placed in any part.', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

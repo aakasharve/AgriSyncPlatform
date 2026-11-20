@@ -153,10 +153,11 @@ describe('the real typed Marathi entry, after the first sync pull', () => {
         // Why-tiles: in the order he said them; the first open; his phrase marked.
         expect(screen.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
         const tiles = within(screen.getByTestId('vr-links')).getAllByRole('button', { pressed: undefined }).filter(b => b.dataset.testid?.startsWith('vr-link-'));
-        expect(tiles.map(t => t.dataset.testid)).toEqual(['vr-link-inputs', 'vr-link-crop']);
+        expect(tiles.map(t => t.dataset.testid)).toEqual(['vr-link-inputs', 'vr-link-crop', 'vr-link-labour']); // lane RWF: the women's words are the work AND the people - each part is flagged
         expect(screen.getByTestId('vr-link-card').getAttribute('data-part')).toBe('inputs');
         expect(screen.getByTestId('vr-why-cue-inputs-0').textContent).toBe('इथरेल अडीचशे मिली पाचशे लिटर पाण्यात मिसळून फवारणी केली');
-        expect(screen.getByTestId('vr-link-card').textContent).toContain('श्रम साथीने लिहिलेइथरेल');
+        expect(screen.getByTestId('vr-link-card').textContent).toContain('श्रम साथीने लिहिले'); // lane RWF: how Sathi understood it - the method, the product and the amount he said
+        expect(screen.getByTestId('vr-why-wrote-inputs-0').textContent).toContain('फवारणी · इथरेल');
         fireEvent.click(screen.getByTestId('vr-link-crop'));
         expect(screen.getByTestId('vr-why-cue-crop-0').textContent).toBe('पाच बायकांनी खुरपणी केली');
         expect(screen.getByTestId('vr-link-card').textContent).toContain('श्रम साथीने लिहिलेखुरपणी');

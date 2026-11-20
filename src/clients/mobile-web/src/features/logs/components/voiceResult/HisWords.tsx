@@ -14,9 +14,10 @@ import React, { useState } from 'react';
 import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { CategoryIcon } from '../shramsathi/understandingRing';
-import { resultCopy } from './resultCopy';
+import { resultCopy, type ResultCopy } from './resultCopy';
 import { partMeta, phrasesByPart, type PartEntry, type PartKey, type WordRun } from './resultModel';
 import { partNameIn } from './partNames';
+import { amountText, productName } from './productModel';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 
@@ -24,28 +25,55 @@ export const PartIcon: React.FC<{ part: PartKey; size?: number }> = ({ part, siz
     <CategoryIcon name={partMeta(part).icon} size={size} />
 );
 
-/** His words; a verified phrase carries its part's tint (and icon when `tags`); `focus` keeps one part bright. */
+/** Every part a run of his words stands for: its own, then the others that share the same words (lane RWF). */
+const partsOfRun = (r: WordRun | undefined): PartKey[] => (r?.part ? [r.part, ...(r.also ?? [])] : []);
+
+/**
+ * His words; a verified phrase carries its part's tint (and icon when `tags`); `focus` keeps one part bright. Words that made Sathi
+ * understand more than one part show the first part's tint with a thin bar in the next part's, and every part gets its icon after its
+ * last word (lane RWF: each part is flagged).
+ */
 export const Words: React.FC<{ runs: readonly WordRun[]; tags?: boolean; focus?: PartKey | null; size?: string; testId?: string }> = ({
     runs, tags = false, focus = null, size = 'text-[18px]', testId = 'vr-words',
 }) => (
     <p className={`my-1 mb-2 ${size} leading-[1.75] text-stone-800`} style={{ fontFamily: SERIF }} data-testid={testId}>
         {runs.map((r, i) => {
+            const parts = partsOfRun(r);
             if (!r.part) return <React.Fragment key={i}>{r.text}</React.Fragment>;
             const m = partMeta(r.part);
-            const dim = focus != null && focus !== r.part;
+            const dim = focus != null && !parts.includes(focus);
+            const second = r.also?.[0] ? partMeta(r.also[0]) : null;
+            const next = partsOfRun(runs[i + 1]);
+            const tagParts = tags ? parts.filter(p => !next.includes(p)) : [];
             return (
                 <React.Fragment key={i}>
-                    <mark data-part={r.part} data-dim={dim ? 'yes' : 'no'} className={`rounded px-0.5 text-inherit transition-opacity ${dim ? 'opacity-30' : ''} ${focus === r.part ? 'outline outline-2 outline-stone-700' : ''}`}
-                        style={{ background: m.tint }}>{r.text}</mark>
-                    {tags && (
-                        <span aria-hidden="true" data-testid="vr-word-tag" className={`mx-0.5 inline-grid h-[26px] w-[26px] place-items-center rounded-full align-middle ${dim ? 'opacity-30' : ''}`}
-                            style={{ background: m.tint }}><PartIcon part={r.part} size={18} /></span>
-                    )}
+                    <mark data-part={r.part} data-parts={parts.join(' ')} data-dim={dim ? 'yes' : 'no'} className={`rounded px-0.5 text-inherit transition-opacity ${dim ? 'opacity-30' : ''} ${focus != null && parts.includes(focus) ? 'outline outline-2 outline-stone-700' : ''}`}
+                        style={{ background: m.tint, ...(second ? { boxShadow: `inset 0 -5px 0 ${second.tint}, 0 1px 0 rgba(0,0,0,0.18)` } : {}) }}>{r.text}</mark>
+                    {tagParts.map(p => (
+                        <span key={p} aria-hidden="true" data-testid="vr-word-tag" data-part={p} className={`mx-0.5 inline-grid h-[26px] w-[26px] place-items-center rounded-full align-middle ${dim ? 'opacity-30' : ''}`}
+                            style={{ background: partMeta(p).tint }}><PartIcon part={p} size={18} /></span>
+                    ))}
                 </React.Fragment>
             );
         })}
     </p>
 );
+
+/**
+ * How Sathi understood an item, in the words of the screen (lane RWF: "how Shram Safal understood the input too"): for sprays and
+ * fertilisers the method, the product and the amount he said ("फवारणी · Karate २५० मिली"); for every other part what was noted.
+ */
+export function wroteOf(entry: PartEntry, language: string | undefined, copy: ResultCopy): string {
+    if (entry.part === 'inputs' && entry.products) {
+        const kind = entry.products.kind === 'spray' ? copy.spray : entry.products.kind === 'drip' ? copy.drip : '';
+        const what = entry.products.items
+            .map(i => [productName(i, language), amountText(i.amount, language, true)].filter(Boolean).join(' '))
+            .filter(Boolean).join(' + ');
+        const text = [kind, what].filter(Boolean).join(' · ');
+        if (text) return text;
+    }
+    return entry.value ?? '';
+}
 
 /** More phrases than this in one part fold behind "आणखी N दाखवा", so a long recording never makes a long page (design). */
 export const SHOWN_PHRASES = 2;
@@ -69,7 +97,11 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
     const shown = groups.find(g => g.part === open) ?? groups[0];
     const tint = partMeta(shown.part).tint;
     const expanded = !!all[shown.part];
-    const phrases = expanded ? shown.phrases : shown.phrases.slice(0, SHOWN_PHRASES);
+    // One card item per ENTRY of this part (not per colour run): his deciding words whole - a phrase with a gap as "A … B" - and how Sathi understood them.
+    const said = runs.map(r => r.text).join('');
+    const firstAt = (e: PartEntry): number => said.indexOf((e.quoteParts ?? [e.quote ?? ''])[0]);
+    const items = entries.filter(e => e.part === shown.part && !!e.quote).sort((a, b) => firstAt(a) - firstAt(b));
+    const phrases = expanded ? items : items.slice(0, SHOWN_PHRASES);
     const pick = (p: PartKey) => {
         setOpen(p);
         onFocus(focus === p && shown.part === p ? null : p);
@@ -77,7 +109,8 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
     return (
         <div className="mt-2" data-testid="vr-links">
             <div className="text-[16px] font-extrabold text-emerald-900" data-testid="vr-why-heading">{copy.whyHeading}</div>
-            <p className="m-0 mb-2 text-[13px] font-bold text-stone-600">{copy.whySub}</p>
+            <p className="m-0 text-[13px] font-bold text-stone-600">{copy.whySub}</p>
+            <p className="m-0 mb-2 text-[12px] font-semibold text-stone-500" data-testid="vr-plain-note">{copy.plainWordsNote}</p>
             <div className="grid grid-cols-4 gap-1.5">
                 {groups.map(g => {
                     const m = partMeta(g.part);
@@ -93,8 +126,9 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
                 })}
             </div>
             <div className="mt-2 space-y-3 rounded-3xl border-2 bg-white p-3 shadow-[0_6px_18px_rgba(23,50,31,0.08)]" style={{ borderColor: tint }} data-testid="vr-link-card" data-part={shown.part}>
-                {phrases.map((phrase, i) => {
-                    const noted = entries.find(e => e.part === shown.part && e.quote === phrase);
+                {phrases.map((entry, i) => {
+                    const phrase = entry.quote ?? '';
+                    const wrote = wroteOf(entry, language, copy);
                     return (
                         <div key={i} data-testid={`vr-link-phrase-${shown.part}-${i}`}>
                             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-[17px] font-semibold leading-snug text-stone-800">
@@ -107,19 +141,19 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
                                 <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700"><Lightbulb size={14} aria-hidden="true" /></span>
                                 <span className="min-w-0 text-[14.5px] font-bold leading-snug text-stone-700">{copy.whyReason}</span>
                             </div>
-                            {noted?.value && noted.value !== phrase && (
-                                <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5" style={{ background: tint }}>
+                            {wrote && wrote !== phrase && (
+                                <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5" style={{ background: tint }} data-testid={`vr-why-wrote-${shown.part}-${i}`}>
                                     <span className="text-[12.5px] font-extrabold text-stone-700">{copy.wrote}</span>
-                                    <span className="text-[17px] font-extrabold leading-tight text-stone-900">{noted.value}</span>
+                                    <span className="text-[17px] font-extrabold leading-tight text-stone-900">{wrote}</span>
                                 </div>
                             )}
                         </div>
                     );
                 })}
-                {shown.phrases.length > SHOWN_PHRASES && (
+                {items.length > SHOWN_PHRASES && (
                     <button type="button" onClick={() => setAll(a => ({ ...a, [shown.part]: !expanded }))} data-testid="vr-why-more"
                         className="min-h-[44px] w-full rounded-xl border-2 border-stone-200 text-[14px] font-extrabold text-stone-700 active:scale-[0.99]">
-                        {expanded ? copy.less : copy.more(shown.phrases.length - SHOWN_PHRASES)}
+                        {expanded ? copy.less : copy.more(items.length - SHOWN_PHRASES)}
                     </button>
                 )}
             </div>

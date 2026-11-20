@@ -82,8 +82,10 @@ export interface PartEntry {
     part: PartKey;
     /** What was noted, as recorded. `null` = the part was mentioned with nothing more to show. */
     value: string | null;
-    /** His own verified phrase for it, if any. */
+    /** His own verified phrase for it, if any. A phrase the parser wrote with a gap ("कराटे 250 ml ... फवारलं") reads "कराटे 250 ml … फवारलं". */
     quote?: string;
+    /** Lane RWF: only when the phrase has a gap - his words on either side of it, each exactly as he said it, in order. */
+    quoteParts?: string[];
     /** False when the server could not find the item's phrase in his words: flagged, never a plain fact. */
     verified: boolean;
     /** Lane L6b — an input's products as recorded (design ProductCard): the chip row and the spray / drip box. */
@@ -118,15 +120,49 @@ export function findPhrase(transcript: string, phrase: string): { start: number;
     return hit < 0 ? null : { start: at[hit], end: at[hit + needle.length - 1] + 1 };
 }
 
+/** A gap the parser left inside a phrase ("कराटे 250 ml ... फवारलं"): two or more dots, or the ellipsis character. */
+const GAP = /\.{2,}|…/;
+
 /**
- * The item's phrase, ONLY when it is verified and found in his transcript — returned as HIS words (the transcript's
- * own stretch), so the mark lands exactly on what he said.
+ * Where an item's phrase sits in his words when the parser wrote it WITH a gap: the words on either side of the dots are his, the words
+ * between were left out. Each fragment must be found in his words (letters only, like `findPhrase`) IN ORDER; one that is missing or out
+ * of order means the phrase is not verified and nothing is marked (P4). A phrase with no gap is one span, as before.
  */
-export function verifiedPhrase(item: Sourced, transcript: string | undefined): string | undefined {
+export function phraseSpans(transcript: string, phrase: string): Array<{ start: number; end: number }> | null {
+    const at: number[] = [];
+    let flat = '';
+    for (let i = 0; i < transcript.length; i += 1) {
+        if (SKIP.test(transcript[i])) continue;
+        flat += transcript[i].toLowerCase();
+        at.push(i);
+    }
+    const needles = phrase.split(GAP).map(f => [...f].filter(ch => !SKIP.test(ch)).join('').toLowerCase()).filter(Boolean);
+    if (needles.length === 0) return null;
+    const spans: Array<{ start: number; end: number }> = [];
+    let from = 0;
+    for (const needle of needles) {
+        const hit = flat.indexOf(needle, from);
+        if (hit < 0) return null;
+        spans.push({ start: at[hit], end: at[hit + needle.length - 1] + 1 });
+        from = hit + needle.length;
+    }
+    return spans;
+}
+
+/** The item's phrase as HIS words, one string per fragment (one when it has no gap): ONLY when it is verified and found in his transcript. */
+export function verifiedParts(item: Sourced, transcript: string | undefined): string[] | undefined {
     const phrase = item.sourceText?.trim();
     if (!phrase || item.provenanceVerified === false || !transcript) return undefined;
-    const hit = findPhrase(transcript, phrase);
-    return hit ? transcript.slice(hit.start, hit.end) : undefined;
+    const spans = phraseSpans(transcript, phrase);
+    return spans ? spans.map(s => transcript.slice(s.start, s.end)) : undefined;
+}
+
+/**
+ * The item's phrase, ONLY when it is verified and found in his transcript — returned as HIS words (the transcript's
+ * own stretch), so the mark lands exactly on what he said. A phrase with a gap reads "A … B".
+ */
+export function verifiedPhrase(item: Sourced, transcript: string | undefined): string | undefined {
+    return verifiedParts(item, transcript)?.join(' … ');
 }
 
 const LATIN = /[A-Za-z]/;
@@ -290,9 +326,11 @@ export function partEntriesOf(log: DailyLog, language: string | null | undefined
     const out: PartEntry[] = [];
     const costs: PartEntry[] = [];
     const add = (part: PartKey, index: number, item: Sourced & { id?: string }, value: string, products?: ProductBox) => {
-        const quote = verifiedPhrase(item, transcript);
+        const pieces = verifiedParts(item, transcript);
+        const quote = pieces?.join(' … ');
         out.push({
             id: item.id || `${log.id}:${part}:${index}`, logId: log.id, part, value: value || quote || null, quote,
+            ...(pieces && pieces.length > 1 && { quoteParts: pieces }),
             verified: item.provenanceVerified !== false, ...(products && { products }),
         });
     };
@@ -634,39 +672,62 @@ export function buildDayView(current: readonly DailyLog[], history: readonly Dai
     };
 }
 
-/** A run of his words; `part` set when the run is a verified phrase that made Sathi understand that part. */
-export interface WordRun { text: string; part?: PartKey }
+/**
+ * A run of his words. `part` is set when the run is a verified phrase that made Sathi understand that part; `also` lists the OTHER parts
+ * the same words made it understand (lane RWF: "सहा जण आली होती त्यांनी माती लावून घेतली" is the soil work AND the six people - each part is flagged).
+ */
+export interface WordRun { text: string; part?: PartKey; also?: PartKey[] }
 
-/** His transcript cut into runs, each verified phrase marked with its part. Overlapping phrases keep the first. */
+/**
+ * His transcript cut into runs, each verified phrase marked with its part. Lane RWF (founder 2026-11-20: "each part must be flagged"):
+ * words that made Sathi understand several parts carry all of them (cut where one part's words begin or end), a phrase the parser wrote
+ * with a gap is marked piece by piece, and two entries with the same words are each flagged. Only verified phrases are ever marked (P4).
+ */
 export function markTranscript(transcript: string, entries: readonly PartEntry[]): WordRun[] {
     if (!transcript) return [];
     const ranges: Array<{ start: number; end: number; part: PartKey }> = [];
     for (const e of entries) {
         if (!e.quote) continue;
-        for (let from = 0, at = transcript.indexOf(e.quote); at >= 0; from = at + 1, at = transcript.indexOf(e.quote, from)) {
-            const end = at + e.quote.length;
-            if (!ranges.some(r => at < r.end && end > r.start)) { ranges.push({ start: at, end, part: e.part }); break; }
+        const pieces = e.quoteParts && e.quoteParts.length > 0 ? e.quoteParts : [e.quote];
+        let cursor = 0;
+        for (const piece of pieces) {
+            // The first stretch of his words this part has not already taken, after the piece before it; when this part already holds
+            // every stretch (two inputs that share "फवारलं"), that stretch stands for this one too.
+            let taken = -1;
+            let first = -1;
+            for (let at = transcript.indexOf(piece, cursor); at >= 0; at = transcript.indexOf(piece, at + 1)) {
+                if (first < 0) first = at;
+                if (!ranges.some(r => r.part === e.part && r.start === at && r.end === at + piece.length)) { taken = at; break; }
+            }
+            if (taken >= 0) ranges.push({ start: taken, end: taken + piece.length, part: e.part });
+            const at = taken >= 0 ? taken : first;
+            if (at < 0) break; // not in his words: nothing more of this phrase is marked
+            cursor = at + piece.length;
         }
     }
-    ranges.sort((a, b) => a.start - b.start);
+    const order = new Map(PARTS.map((p, i) => [p.key, i]));
+    const cuts = [...new Set([0, transcript.length, ...ranges.flatMap(r => [r.start, r.end])])].sort((a, b) => a - b);
     const runs: WordRun[] = [];
-    let cursor = 0;
-    for (const r of ranges) {
-        if (r.start > cursor) runs.push({ text: transcript.slice(cursor, r.start) });
-        runs.push({ text: transcript.slice(r.start, r.end), part: r.part });
-        cursor = r.end;
+    for (let i = 0; i + 1 < cuts.length; i += 1) {
+        const start = cuts[i];
+        const end = cuts[i + 1];
+        const parts = [...new Set(ranges.filter(r => r.start <= start && r.end >= end).map(r => r.part))].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+        const text = transcript.slice(start, end);
+        const prev = runs[runs.length - 1];
+        if (prev && (prev.part ?? null) === (parts[0] ?? null) && (prev.also ?? []).join() === parts.slice(1).join()) prev.text += text;
+        else runs.push({ text, ...(parts.length > 0 && { part: parts[0] }), ...(parts.length > 1 && { also: parts.slice(1) }) });
     }
-    if (cursor < transcript.length) runs.push({ text: transcript.slice(cursor) });
     return runs;
 }
 
-/** The parts his words were marked with, in the order he first said them, each with its phrases. */
+/** The parts his words were marked with, in the order he first said them, each with its phrases (a stretch several parts share is listed under each). */
 export function phrasesByPart(runs: readonly WordRun[]): Array<{ part: PartKey; phrases: string[] }> {
     const out: Array<{ part: PartKey; phrases: string[] }> = [];
     for (const r of runs) {
-        if (!r.part) continue;
-        const hit = out.find(o => o.part === r.part);
-        if (hit) hit.phrases.push(r.text.trim()); else out.push({ part: r.part, phrases: [r.text.trim()] });
+        for (const part of r.part ? [r.part, ...(r.also ?? [])] : []) {
+            const hit = out.find(o => o.part === part);
+            if (hit) hit.phrases.push(r.text.trim()); else out.push({ part, phrases: [r.text.trim()] });
+        }
     }
     return out;
 }

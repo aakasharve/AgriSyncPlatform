@@ -90,12 +90,13 @@ describe('his words come first and open', () => {
         expect(screen.getByTestId('vr-words')).toBeTruthy();
     });
 
-    it('TheWordsSitAboveThePartsOfThisRecording_AndBelowTheRing', () => {
+    it('TheWordsSitFirst_AboveThePartsOfThisRecording_AndAboveTheRing_OptionB', () => {
         show();
         const before = (a: HTMLElement, b: HTMLElement) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-        expect(before(screen.getByTestId('vr-hero'), screen.getByTestId('vr-words-first'))).toBe(true);
+        expect(before(screen.getByTestId('vr-words-first'), screen.getByTestId('vr-hero'))).toBe(true); // option B: the recording card, then the ring
         expect(before(screen.getByTestId('vr-words-first'), screen.getByTestId('vr-day-lines'))).toBe(true);
         expect(before(screen.getByTestId('vr-day-lines'), screen.getByTestId('vr-confirm'))).toBe(true);
+        expect(before(screen.getByTestId('vr-latest'), screen.getByTestId('vr-hero'))).toBe(true);
     });
 });
 
@@ -171,3 +172,63 @@ describe('after the ring settles, and the next step', () => {
         expect(screen.getByTestId('vr-add-another').className).toContain('motion-safe:animate-plr-cue');
     });
 });
+
+
+// ---- lane RWF (founder 2026-11-20): every part is flagged on his words, and tapping it shows how Sathi understood it - the REAL log of 6:58 pm ----
+const REAL_SAID = 'आज कराटे 250 ml आणि Confidor 100 ml 200 L पाण्यात फवारलं सहा जण आली होती त्यांनी माती लावून घेतली';
+const realCurrent = mk('log-real', `${DATE}T13:28:36.312Z`, {
+    fullTranscript: REAL_SAID,
+    cropActivities: [{ id: 'c2', title: 'माती लावणे', workTypes: ['Tying'], sourceText: 'सहा जण आली होती त्यांनी माती लावून घेतली', provenanceVerified: true }],
+    labour: [{ id: 'lb2', count: 6, sourceText: 'सहा जण आली होती', provenanceVerified: true }],
+    inputs: [
+        { id: 'n1', mix: [], type: 'pesticide', unit: 'ml', method: 'Spray', quantity: 250, sourceText: 'कराटे 250 ml ... फवारलं', productName: 'Karate', rawProductName: 'कराटे', provenanceVerified: true },
+        { id: 'n2', mix: [], type: 'pesticide', unit: 'ml', method: 'Spray', quantity: 100, sourceText: 'Confidor 100 ml ... फवारलं', productName: 'Confidor', rawProductName: 'Confidor', provenanceVerified: true },
+    ],
+});
+const showReal = () => render(<VoiceResultScreen {...screenProps({ day: buildDayView([realCurrent], [realCurrent], deps), nodes: ringNodesForDay([realCurrent], DATE) }, [realCurrent])} />);
+
+describe('every part is flagged on his words, and a tap shows how Sathi understood it', () => {
+    it('TheSpraysAreColouredToo_NotOnlyTheSoilWork', () => {
+        showReal();
+        const words = screen.getByTestId('vr-words');
+        const inputs = [...words.querySelectorAll('mark[data-part="inputs"]')].map(m => m.textContent);
+        expect(inputs).toEqual(['कराटे 250 ml', 'Confidor 100 ml', 'फवारलं']);
+        const both = words.querySelector('mark[data-parts="crop labour"]');
+        expect(both?.textContent).toBe('सहा जण आली होती');
+        // the water he said was not placed in any part, so it stays without a colour
+        expect(words.textContent).toContain('200 L पाण्यात');
+        expect([...words.querySelectorAll('mark')].some(m => m.textContent?.includes('200 L'))).toBe(false);
+    });
+
+    it('ATileForEveryPartHisWordsMade_AndTheNoteSaysPlainWordsWerePlacedNowhere', () => {
+        showReal();
+        for (const part of ['inputs', 'crop', 'labour']) expect(screen.getByTestId(`vr-link-${part}`), part).toBeTruthy();
+        expect(screen.getByTestId('vr-plain-note').textContent).toBe('रंग नसलेले शब्द कोणत्याही भागात घेतलेले नाहीत.');
+    });
+
+    it('TappingTheSprayTile_ShowsHisWordsInPieces_AndHowSathiUnderstoodEachSpray', () => {
+        showReal();
+        fireEvent.click(screen.getByTestId('vr-link-inputs'));
+        const card = screen.getByTestId('vr-link-card');
+        expect(card.getAttribute('data-part')).toBe('inputs');
+        expect(screen.getByTestId('vr-link-phrase-inputs-0').textContent).toContain('कराटे 250 ml … फवारलं');
+        expect(screen.getByTestId('vr-link-phrase-inputs-1').textContent).toContain('Confidor 100 ml … फवारलं');
+        const wrote0 = screen.getByTestId('vr-why-wrote-inputs-0').textContent ?? '';
+        const wrote1 = screen.getByTestId('vr-why-wrote-inputs-1').textContent ?? '';
+        expect(wrote0).toContain('फवारणी');
+        expect(wrote0).toContain('२५०'); // the amount he said, in Devanagari digits
+        expect(wrote1).toContain('फवारणी');
+        expect(wrote1).toContain('१००');
+    });
+
+    it('TappingTheLabourTile_ShowsThePeopleSathiWrote_AndTheSoilTileItsOwnWords', () => {
+        showReal();
+        fireEvent.click(screen.getByTestId('vr-link-labour'));
+        expect(screen.getByTestId('vr-link-phrase-labour-0').textContent).toContain('सहा जण आली होती');
+        expect(screen.getByTestId('vr-why-wrote-labour-0').textContent).toContain('6');
+        fireEvent.click(screen.getByTestId('vr-link-crop'));
+        expect(screen.getByTestId('vr-link-phrase-crop-0').textContent).toContain('सहा जण आली होती त्यांनी माती लावून घेतली');
+        expect(screen.getByTestId('vr-why-wrote-crop-0').textContent).toContain('माती लावणे');
+    });
+});
+
