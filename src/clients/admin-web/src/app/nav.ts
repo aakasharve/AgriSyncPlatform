@@ -7,11 +7,12 @@ import {
   Frown,
   HeartPulse,
   Home as HomeIcon,
+  KeyRound,
   LayoutDashboard,
   LifeBuoy,
   MapPinned,
   Repeat2,
-  Settings as SettingsIcon,
+  ShieldCheck,
   Smartphone,
   Star,
   TrendingDown,
@@ -104,6 +105,25 @@ export interface NavItem {
   group: NavGroup;
   /** The route's `EntitlementGuard` module key, or `null` when ungated (A4). */
   module: ModuleKey | null;
+  /**
+   * CR-3 (K29): only the founder (`isPlatformAdmin`) sees and opens this entry. It has no module
+   * key and no tick: "People and access is yours only and has no tick" (D-155).
+   */
+  founderOnly?: boolean;
+}
+
+/**
+ * THE MENU RULE (D-155): a part is in the menu only when the signed-in person may open it. An
+ * entry with a module key needs `canRead(module)`; a founder-only entry needs the founder; an
+ * entry with neither (Home, My access) is for everyone who got in. The sidebar and the command
+ * palette both use this, so neither can offer a door that bounces to the no-access page.
+ */
+export function navVisible(
+  item: { module: string | null; founderOnly?: boolean },
+  who: { canRead: (module: string) => boolean; isPlatformAdmin: boolean },
+): boolean {
+  if (item.founderOnly) return who.isPlatformAdmin;
+  return item.module === null || who.canRead(item.module);
 }
 
 export const NAV: NavItem[] = [
@@ -130,9 +150,13 @@ export const NAV: NavItem[] = [
   { to: '/farms/silent-churn', label: 'Silent Churn', Icon: TrendingDown, group: 'Farms', module: ModuleKeys.FarmsSilentChurn },
   { to: '/farms/suffering', label: 'Suffering', Icon: Frown, group: 'Farms', module: ModuleKeys.FarmsSuffering },
   { to: '/farmer-health', label: 'Farmer Health', Icon: HeartPulse, group: 'Farms', module: ModuleKeys.FarmerHealth },
-  { to: '/schedules/templates', label: 'Templates', Icon: Calendar, group: 'Schedules', module: null },
+  // CR-3 K28: Templates is ShramSafal's own review surface, on the key of the schedule check.
+  { to: '/schedules/templates', label: 'Templates', Icon: Calendar, group: 'Schedules', module: ModuleKeys.ScheduleReview },
   { to: '/users', label: 'Users', Icon: UsersIcon, group: 'Admin', module: ModuleKeys.AdminUsers },
-  { to: '/settings/admins', label: 'Settings', Icon: SettingsIcon, group: 'Admin', module: null },
+  // CR-3: the founder's own page. No module key and no tick; the route is wrapped in `FounderOnly`.
+  { to: '/people', label: 'People and access', Icon: ShieldCheck, group: 'Admin', module: null, founderOnly: true },
+  // CR-3: the old Settings page, now "My access" (the parts you hold, in plain words). Everyone has it.
+  { to: '/settings/admins', label: 'My access', Icon: KeyRound, group: 'Admin', module: null },
 ];
 
 /**

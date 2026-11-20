@@ -12,7 +12,6 @@ import {
   answerRefusalText,
   checkCodeRefusalText,
   formatWait,
-  passwordRefusalText,
   readRefusal,
   sendCodeRefusalText,
   signedOutNotice,
@@ -21,25 +20,15 @@ import {
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 import { PersonName } from '@/components/ui/PersonName';
 
-// 200 answer of POST /user/auth/login. On the web the refresh token is a cookie, so the body
-// never carries one. The last two fields come only from an API that holds a sign-in on a
-// browser the account has not confirmed yet; an API without that rule sends neither.
-interface LoginResponse {
-  userId: string;
-  accessToken: string;
-  expiresAtUtc: string;
-  deviceCheckRequired?: boolean;
-  accountName?: string | null;
-}
-
-// 200 answer of POST /user/auth/start-otp
-interface StartOtpResponse {
-  expiresAtUtc: string;
+// The console's own door (CR-3, D-155 (4)): there is no password way. 200 answer of
+// POST /shramsafal/admin/sign-in/send-code. The same answer for every valid number, approved or
+// not, so nothing here can say which it was.
+interface SendCodeResponse {
   resendAfterSeconds: number;
-  provider: string;
+  message?: string;
 }
 
-// 200 answer of POST /user/auth/verify-otp. On the web the refresh token is a cookie, so the
+// 200 answer of POST /shramsafal/admin/sign-in/check-code (the shape of /user/auth/verify-otp). On the web the refresh token is a cookie, so the
 // body never carries one. The last two fields come only from an API that holds a sign-in on a
 // browser the account has not confirmed yet; an API without that rule sends neither.
 interface VerifyOtpResponse {
@@ -60,7 +49,6 @@ interface DeviceCheckResponse {
   deviceCheckRequired?: boolean;
 }
 
-type Way = 'code' | 'password';
 type CodeStep = 'phone' | 'code' | 'account';
 
 // What the page says about a sign-out the server could not be told about: while it is still
@@ -129,22 +117,21 @@ const NOTE_CLASS = 'mb-4 rounded-chip bg-tint-grey px-4 py-3 text-body font-medi
  * The lowest figure on the screen is 4.86:1, on the disabled button.
  *
  * ── CR-2d JOIN: THE SMS SIGN-IN, IN THIS TOKEN LAYER ──────────────────────
- * The page is the SMS sign-in's (PR 95): two ways in (an SMS code, the
- * default, and a password), the account question, the signed-out notices,
- * and always the home page after a sign-in. Every handler, state, sentence
+ * The page is the SMS sign-in's (PR 95): the account question, the signed-out notices,
+ * and the page asked for (or the landing page) after a sign-in. CR-3 (D-155 (4)) REMOVED THE
+ * PASSWORD WAY and moved the code way onto the console's own door
+ * (`/shramsafal/admin/sign-in/send-code` and `check-code`): only a number the founder approved
+ * gets a code, and the page says the same calm sentence whether or not it was. Every handler, state, sentence
  * and role is that branch's, unchanged; only its classes were moved onto
  * this file's tokens, reusing the classes above (the form card, the field,
  * the primary button, the error line) and the console's own selection colours
- * (`brand-wash` + `brand`, as in OrgSwitcher) for the way toggle. The pairs
- * measured above were measured before the join: the added elements (the way
- * toggle, the code step, the account question, the two notices) were not
- * re-measured.
+ * (`brand-wash` + `brand`, as in OrgSwitcher). The pairs measured above were
+ * measured before the join: the added elements (the code step, the account
+ * question, the two notices) were not re-measured.
  */
 export default function LoginPage() {
-  const [way, setWay] = useState<Way>('code');
   const [step, setStep] = useState<CodeStep>('phone');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [accountName, setAccountName] = useState<string | null>(null);
   // The wait the server gave before a new code may be asked for (a fresh object each time, so
@@ -200,7 +187,14 @@ export default function LoginPage() {
     setResendIn(seconds);
   }
 
-  // Both ways in end here: the same stored session and the same first page.
+  function backToPhoneStep() {
+    setStep('phone');
+    setOtp('');
+    setAccountName(null);
+    startResendCountdown(0);
+  }
+
+  // Every way in ends here: the same stored session and the same first page.
   function signIn(session: AdminSession) {
     try {
       // Admin access is decided server-side by GET /admin/me/scope after login
@@ -227,7 +221,6 @@ export default function LoginPage() {
     // person cannot use is left standing, and so that this call cannot land on top of their
     // next try.
     await tellServerSignedOut();
-    setPassword('');
     backToPhoneStep();
     setError(TEXT.storageRefused);
     setSubmitting(false);
@@ -240,62 +233,6 @@ export default function LoginPage() {
     setAccountName(typeof name === 'string' && name.trim() ? name.trim() : null);
     setStep('account');
     setSubmitting(false);
-  }
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    clearNotices();
-    setSubmitting(true);
-    let data: LoginResponse;
-    try {
-      // With credentials, like the code way: the answer sets the refresh cookie, and the browser
-      // keeps it only then. Without it this session could not be renewed.
-      ({ data } = await adminApi.post<LoginResponse>(
-        '/user/auth/login',
-        { phone, password, ...deviceIdentity() },
-        { withCredentials: true },
-      ));
-    } catch (err) {
-      setError(passwordRefusalText(readRefusal(err)));
-      setSubmitting(false);
-      return;
-    }
-
-    // The server accepted this sign-in, so a sign-out owed for the one before is owed no longer.
-    setOwedSignOut(null);
-    if (data?.deviceCheckRequired === true) {
-      // Now that the page names its browser, a server that asks the account question asks it
-      // after a password too, the first time in each browser.
-      setPassword('');
-      askAccountQuestion(data.accountName);
-      return;
-    }
-
-    const session = toSession(data);
-    if (!session) {
-      setPassword('');
-      setError(TEXT.notCompleted);
-      setSubmitting(false);
-      return;
-    }
-    signIn(session);
-  }
-
-  function backToPhoneStep() {
-    setStep('phone');
-    setOtp('');
-    setAccountName(null);
-    startResendCountdown(0);
-  }
-
-  function chooseWay(next: Way) {
-    if (next === way) return;
-    setWay(next);
-    setError(null);
-    clearNotices();
-    setPassword('');
-    backToPhoneStep();
   }
 
   function changeNumber() {
@@ -311,13 +248,13 @@ export default function LoginPage() {
     setSubmitting(true);
     setResending(isResend);
     try {
-      // No credentials: this call sets no cookie and reads none.
-      const { data } = await adminApi.post<StartOtpResponse>('/user/auth/start-otp', { phone });
+      // No credentials: this call sets no cookie and reads none. Every valid number is answered
+      // the same way, so the page goes to the code step and says the same calm sentence for all.
+      const { data } = await adminApi.post<SendCodeResponse>('/shramsafal/admin/sign-in/send-code', { phone });
       const wait = Number(data?.resendAfterSeconds);
       startResendCountdown(Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : 0);
       setOtp('');
       setStep('code');
-      if (isResend) setNotice(TEXT.newCodeSent);
     } catch (err) {
       setError(sendCodeRefusalText(readRefusal(err)));
     }
@@ -335,14 +272,15 @@ export default function LoginPage() {
       // With credentials: this answer sets the refresh cookie, and a browser keeps a cookie from
       // another origin only when the request was sent with credentials.
       ({ data } = await adminApi.post<VerifyOtpResponse>(
-        '/user/auth/verify-otp',
+        '/shramsafal/admin/sign-in/check-code',
         { phone, otp: otp.trim(), ...deviceIdentity() },
         { withCredentials: true },
       ));
     } catch (err) {
       const refusal = readRefusal(err);
-      // This code is dead (expired, used up, or never there), so a new one may be asked for at once.
-      if (refusal.status === 410 || refusal.status === 404 || refusal.code === 'otp.locked_out') {
+      // A code that did not work says one sentence for every reason, and a new one may be asked
+      // for at once. (Too many tries, or a server that did not answer, are not that.)
+      if (refusal.status !== null && refusal.status !== 429 && refusal.status < 500) {
         startResendCountdown(0);
       }
       setError(checkCodeRefusalText(refusal));
@@ -386,7 +324,7 @@ export default function LoginPage() {
       if (refusal.status === 401) {
         // The server has no open question for this browser any more.
         backToPhoneStep();
-        setError(way === 'code' ? TEXT.questionClosed : TEXT.questionClosedPassword);
+        setError(TEXT.questionClosed);
       } else {
         setError(answerRefusalText(refusal));
       }
@@ -423,7 +361,7 @@ export default function LoginPage() {
 
   const signingIn = submitting && !resending;
   const submitLabel =
-    way === 'code' && step === 'phone'
+    step === 'phone'
       ? (submitting ? 'Sending…' : 'Send me a code →')
       : (signingIn ? 'Signing in…' : 'Sign in →');
 
@@ -512,7 +450,7 @@ export default function LoginPage() {
       {/* ── RIGHT PLANE — the form, on a frosted card ── */}
       <div className="flex flex-1 items-center justify-center px-6 py-10">
         <form
-          onSubmit={way === 'password' && step === 'phone' ? onSubmit : onCodeSubmit}
+          onSubmit={onCodeSubmit}
           className="glass-panel w-full max-w-[440px] rounded-panel p-8"
         >
           {/* The mark again for anyone below lg, where the left plane is gone */}
@@ -550,37 +488,10 @@ export default function LoginPage() {
           </div>
 
           <h2 className="mb-1 text-h1 font-bold text-text-1">Sign in</h2>
-          <p className="mb-8 text-body text-text-2">Admin access only · enter your credentials</p>
-
-          {/* The two ways in. Shown on the first step only. */}
-          {step === 'phone' && (
-            <div
-              role="group"
-              aria-label="How to sign in"
-              className="glass-quiet mb-6 grid grid-cols-2 gap-1 rounded-chip border-control-edge p-1"
-            >
-              {([
-                { key: 'code', label: 'SMS code' },
-                { key: 'password', label: 'Password' },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={way === key}
-                  disabled={submitting}
-                  onClick={() => chooseWay(key)}
-                  className={`rounded-chip py-2.5 text-body font-semibold transition-colors ${
-                    way === key ? 'bg-brand-wash text-brand' : 'text-text-2 hover:text-text-1'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
+          <p className="mb-8 text-body text-text-2">{TEXT.doorPageLine}</p>
 
           {step === 'phone' && (
-            <label className={`${way === 'password' ? 'mb-4' : 'mb-6'} block`}>
+            <label className="mb-6 block">
               <span className="mb-2 block text-caption font-semibold text-text-1">Phone number</span>
               <input
                 type="tel"
@@ -594,24 +505,11 @@ export default function LoginPage() {
             </label>
           )}
 
-          {way === 'password' && step === 'phone' && (
-            <label className="mb-6 block">
-              <span className="mb-2 block text-caption font-semibold text-text-1">Password</span>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={FIELD_CLASS}
-              />
-            </label>
-          )}
-
           {step === 'code' && (
             <>
-              <p className="mb-4 text-body text-text-2">
-                We sent a code by SMS to{' '}
-                <span className="font-mono font-semibold text-text-1">{phone}</span>.
+              {/* The same sentence for every number. It never says whether the number is approved. */}
+              <p role="status" className="mb-4 text-body text-text-2">
+                {TEXT.doorCalm}
               </p>
               <label className="mb-6 block">
                 <span className="mb-2 block text-caption font-semibold text-text-1">Code from the SMS</span>
@@ -688,6 +586,10 @@ export default function LoginPage() {
                 No
               </button>
             </div>
+          )}
+
+          {step === 'phone' && (
+            <p className="mt-3 text-center text-caption text-text-2">{TEXT.doorUnderButton}</p>
           )}
 
           {/* After the first step there is always a way back to it, so nobody is stuck. */}

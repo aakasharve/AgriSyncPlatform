@@ -164,4 +164,38 @@ describe('the app-versions page reads the joined server answer (Review Focus 3)'
     expect(figure('People on an older version')).not.toMatch(/\d/);
     expect(screen.queryByRole('table', { name: 'App versions in use' })).not.toBeInTheDocument();
   });
+  // spec: trusted-control-room-2026-11-20 (CR-3 Task A7, AM7; server rule in Task A4).
+  it('Hidden_names_say_why_and_counts_stay', async () => {
+    const answer = joinedAnswer();
+    // A Viewer seat holds Server health but not All farms: the server sends the counts, no names,
+    // and says why.
+    answer.onOlderVersions = [];
+    answer.onOlderVersionsHiddenReason = 'needs_all_farms';
+    serve(answer);
+    renderWithProviders(<AppVersionsPage />, { route: '/ops/app-versions' });
+
+    // The counts are as they are today ...
+    expect(await screen.findByRole('table', { name: 'App versions in use' }, { timeout: WAIT })).toBeInTheDocument();
+    expect(figure('People who used the app')).toBe('41');
+    expect(figure('People on an older version')).toBe('12');
+    // ... and the sentence stands in place of the list.
+    expect(
+      screen.getByText('Names are hidden: seeing who is on an older version needs the All farms tick.'),
+    ).toBeInTheDocument();
+    // Never a list that reads as "nobody is on an older version".
+    expect(screen.queryByRole('table', { name: 'People still on an older version' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No one was seen on an older version/)).not.toBeInTheDocument();
+  });
+
+  it('with no hidden reason, the names show as before', async () => {
+    const answer = joinedAnswer();
+    answer.onOlderVersionsHiddenReason = null;
+    serve(answer);
+    renderWithProviders(<AppVersionsPage />, { route: '/ops/app-versions' });
+
+    expect(
+      await screen.findByRole('table', { name: 'People still on an older version' }, { timeout: WAIT }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Names are hidden/)).not.toBeInTheDocument();
+  });
 });

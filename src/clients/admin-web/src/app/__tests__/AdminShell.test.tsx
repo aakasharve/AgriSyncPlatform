@@ -13,6 +13,7 @@ import navSource from '../nav.ts?raw';
 import { adminApi } from '@/lib/api';
 import { authStore } from '@/lib/auth';
 import type { MeScopeResponse } from '@/hooks/useAdminScope';
+import { ModuleKeys } from '@/lib/moduleKeys';
 import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
 
@@ -153,6 +154,37 @@ function scopeWithModules(keys: string[]): MeScopeResponse {
       modules: keys.map((key) => ({ key, canRead: true, canWrite: false, canExport: false })),
     },
   };
+}
+
+/**
+ * CR-3 (D-155 menu rule): the menu shows only the parts the signed-in person may open, so a test
+ * that counts or clicks menu items says whose menu it is. The founder holds every module key.
+ */
+function founderScope(): MeScopeResponse {
+  const base = scopeWithModules(Object.values(ModuleKeys));
+  return {
+    ...base,
+    scope: { ...base.scope!, orgType: 'Platform', orgRole: 'Owner', isPlatformAdmin: true },
+    controlRoom: { isFounder: true, startingRole: null, ticks: [], doorSessionRequired: false },
+  };
+}
+
+/** A team seat: Platform Employee, `isPlatformAdmin` false, holding exactly these module keys. */
+function teamSeatScope(keys: string[], ticks: string[], startingRole: string): MeScopeResponse {
+  const base = scopeWithModules(keys);
+  return {
+    ...base,
+    scope: { ...base.scope!, orgType: 'Platform', orgRole: 'Employee', isPlatformAdmin: false },
+    controlRoom: { isFounder: false, startingRole, ticks, doorSessionRequired: false },
+  };
+}
+
+function serveScopeOnly(body: MeScopeResponse) {
+  stub = installAdapter(async (req) => {
+    if (req.url.includes('/me/scope')) return { status: 200, data: body };
+    return { status: 404, data: {} };
+  });
+  return stub;
 }
 
 /** The envelope these two endpoints really send (`AdminResponse<T>`). */
@@ -448,8 +480,8 @@ describe('the shortcut badges are gone (D4, founder 2026-08-31)', () => {
 });
 
 describe('the sidebar (A53, A58)', () => {
-  it('renders seven groups and nineteen destinations', async () => {
-    serve();
+  it('renders seven groups and twenty destinations for the founder', async () => {
+    serveScopeOnly(founderScope());
     signIn({ display_name: 'Test Admin' });
     renderShell();
     await screen.findByText(ORG_A_NAME);
@@ -462,11 +494,13 @@ describe('the sidebar (A53, A58)', () => {
     }
     // B24 (founder, 2026-11-17): the whole Voice Pipeline page (V1-V5) is a double of Company MIS Quality, so its menu entry is gone: 19 -> 18.
     // CR-2d join (plan Task 3 Step 1, D14 (3)): 18 -> 19, "App Versions" under Operations. The schedule check has no entry (D3).
-    expect(within(sidebar).getAllByRole('link')).toHaveLength(19);
+    // CR-3 (D-155 menu rule): the menu is built from what the person may open, so the count is the
+    // founder's. 19 -> 20, "People and access" (founder only); "Settings" became "My access".
+    expect(within(sidebar).getAllByRole('link')).toHaveLength(20);
   });
 
   it('marks exactly one item current, and Home is not current on /farms (A58)', async () => {
-    serve();
+    serveScopeOnly(founderScope());
     signIn({ display_name: 'Test Admin' });
     renderShell({ route: '/farms' });
     await screen.findByText(ORG_A_NAME);
@@ -595,6 +629,84 @@ describe('manual refresh and the freshness chip (B14)', () => {
     renderShell();
 
     expect(await screen.findByText(/^Live · \d+s ago$/)).toBeInTheDocument();
+  });
+});
+
+describe('the menu shows only the parts the person may open (CR-3, D-155)', () => {
+  it('The_menu_shows_only_ticked_parts', async () => {
+    // A field operator: My field visits, Farmers' phone numbers and Downloads. None of them opens a
+    // page that exists yet, so the menu is Home and My access, and nothing else.
+    serveScopeOnly(
+      teamSeatScope(
+        [ModuleKeys.VisitsMine, ModuleKeys.FarmsPhones, ModuleKeys.ExportsDaySheet],
+        ['my_visits', 'farmer_phones', 'downloads'],
+        'field_operator',
+      ),
+    );
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+
+    const sidebar = screen.getByRole('complementary', { name: 'Sections' });
+    expect(within(sidebar).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'My access']);
+    // Groups with nothing in them are not drawn as empty headings.
+    expect(within(sidebar).queryByText('Company MIS', { selector: 'div' })).not.toBeInTheDocument();
+    expect(within(sidebar).queryByText('Farms', { selector: 'div' })).not.toBeInTheDocument();
+    expect(within(sidebar).queryByText('Operations', { selector: 'div' })).not.toBeInTheDocument();
+  });
+
+  it('a Viewer sees the company pages and Live Health, not the farm lists', async () => {
+    serveScopeOnly(
+      teamSeatScope([ModuleKeys.MetricsNsm, ModuleKeys.OpsLive], ['company_numbers', 'server_health'], 'viewer'),
+    );
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+
+    const sidebar = screen.getByRole('complementary', { name: 'Sections' });
+    const labels = within(sidebar).getAllByRole('link').map((a) => a.textContent);
+    expect(labels).toContain('Live Health');
+    expect(labels).toContain('App Versions');
+    expect(labels).toContain('WVFD');
+    expect(labels).toContain('Operations');
+    expect(labels).not.toContain('All Farms');
+    expect(labels).not.toContain('Users');
+    expect(labels).not.toContain('Templates');
+    expect(labels).not.toContain('People and access');
+  });
+
+  it('People_and_access_is_founder_only', async () => {
+    // A team seat that holds EVERY module key still does not see it: it has no key and no tick.
+    serveScopeOnly(
+      teamSeatScope(Object.values(ModuleKeys), ['company_numbers', 'users', 'schedules'], 'admin'),
+    );
+    signIn({ display_name: 'Test Admin' });
+    const first = renderShell();
+    await screen.findByText(ORG_A_NAME);
+    const seat = screen.getByRole('complementary', { name: 'Sections' });
+    expect(within(seat).queryByRole('link', { name: 'People and access' })).not.toBeInTheDocument();
+    expect(within(seat).getByRole('link', { name: 'My access' })).toBeInTheDocument();
+    first.unmount();
+    stub?.restore();
+
+    // The founder does, in the Admin group, and the link goes to /people.
+    serveScopeOnly(founderScope());
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+    const link = within(screen.getByRole('complementary', { name: 'Sections' })).getByRole('link', {
+      name: 'People and access',
+    });
+    expect(link).toHaveAttribute('href', '/people');
+  });
+
+  it('Templates follows the Schedules tick (K28)', async () => {
+    serveScopeOnly(teamSeatScope([ModuleKeys.ScheduleReview], ['schedules'], 'admin'));
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+    expect(
+      within(screen.getByRole('complementary', { name: 'Sections' })).getByRole('link', { name: 'Templates' }),
+    ).toBeInTheDocument();
   });
 });
 

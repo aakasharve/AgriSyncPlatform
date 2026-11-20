@@ -16,29 +16,30 @@ export const TEXT = {
   unreachable: 'The server could not be reached. Check your connection and try again.',
   wentWrong: 'Something went wrong. Please try again in a little while.',
   badPhone: 'That phone number does not look right. Enter a 10-digit mobile number.',
-  wrongPassword: 'The phone number or password is not right.',
   storageRefused:
     'This browser is blocking the console from remembering your sign-in. Allow site data for this site and try again.',
-  notSent: 'The code could not be sent just now. Please try again in a little while.',
-  wrongCode: 'That code is not right. Check the SMS and try again.',
-  expiredCode: 'That code has expired. Send a new code.',
-  noCodeWaiting: 'There is no code waiting for this number. Send a new code.',
-  missingCode: 'Enter the code from the SMS.',
   tooMany: 'Too many tries. Please wait a while, then try again.',
   notCompleted: 'The sign-in could not be completed. Please start again.',
   questionClosed: 'This sign-in is no longer waiting for an answer. Send a new code to start again.',
-  questionClosedPassword:
-    'This sign-in is no longer waiting for an answer. Enter your password to start again.',
   answerNotSaved: 'Your answer could not be saved. Please try again.',
   declined:
     'You were not signed in, because you said this account is not yours. Check the phone number and try again.',
-  newCodeSent: 'A new code has been sent.',
+  // CR-3, the console's own door (D-155, D-155b). The same sentence for every number: it never says
+  // whether a number is approved. Written out here once; the server's own `message` is not shown.
+  doorCalm:
+    'If this number is approved, a code is on its way. No code after a minute? Check the number, or ask Akash.',
+  doorRefusedCode: 'That code did not work. Ask for a new code, or ask Akash.',
+  doorPageLine: 'Sign in with your phone number. Only numbers Akash has approved can sign in.',
+  doorUnderButton: 'No code is sent to a number that is not approved.',
+  // H10: a team seat whose session did not begin at the door is ended and sent here.
+  doorSessionRequired: 'Sign in again here, with a code sent to your phone.',
 } as const;
 
 // What the page says when the console itself signed the person out and sent them here.
 const SIGNED_OUT_TEXT: Record<SessionEndReason, string> = {
   'max-age': `You were signed out after ${MAX_SESSION_HOURS} hours. Sign in again.`,
   ended: 'Your session has ended. Sign in again.',
+  'door-required': TEXT.doorSessionRequired,
 };
 
 export function signedOutNotice(search: string = window.location.search): string | null {
@@ -67,52 +68,31 @@ export function readRefusal(err: unknown): Refusal {
   return { status: err.response.status, unreachable: false, code, message };
 }
 
+// The door's send-code (POST /shramsafal/admin/sign-in/send-code). Every valid number gets the
+// same 200, so the only refusals are a number that cannot be read (400), too many tries (429),
+// and a server that did not answer well. Nothing the server wrote is shown but its 429 sentence.
 export function sendCodeRefusalText(r: Refusal): string {
   if (r.unreachable) return TEXT.unreachable;
   if (r.status === 429) return r.message ?? TEXT.tooMany;
-  // 400 is a number the server could not read, unless the SMS provider itself failed.
-  if (r.status === 400) return r.code?.startsWith('msg91.') ? TEXT.notSent : TEXT.badPhone;
+  if (r.status === 400) return TEXT.badPhone;
   return TEXT.wentWrong;
 }
 
+// The door's check-code. Every refusal (401 `code_not_accepted`, or any other 4xx) is the one
+// sentence, so a person learns nothing about why. No answer, too many tries and a server fault
+// are not refusals of the code and say so.
 export function checkCodeRefusalText(r: Refusal): string {
   if (r.unreachable) return TEXT.unreachable;
-  switch (r.status) {
-    case 401:
-      return TEXT.wrongCode;
-    case 410:
-      return TEXT.expiredCode;
-    case 429:
-      return r.message ?? TEXT.tooMany;
-    case 404:
-      return TEXT.noCodeWaiting;
-    case 400:
-      return r.code === 'otp.invalid_code' ? TEXT.missingCode : TEXT.badPhone;
-    default:
-      return TEXT.wentWrong;
-  }
+  if (r.status === 429) return r.message ?? TEXT.tooMany;
+  if (r.status !== null && r.status >= 500) return TEXT.wentWrong;
+  if (r.status === null) return TEXT.wentWrong;
+  return TEXT.doorRefusedCode;
 }
 
 export function answerRefusalText(r: Refusal): string {
   if (r.unreachable) return TEXT.unreachable;
   if (r.status === 429) return r.message ?? TEXT.tooMany;
   return TEXT.answerNotSaved;
-}
-
-// The password way, in the code way's sentences. Nothing the server wrote is ever shown here:
-// its 401 has no body, and its other refusals are not written for a person to read.
-export function passwordRefusalText(r: Refusal): string {
-  if (r.unreachable) return TEXT.unreachable;
-  switch (r.status) {
-    case 401:
-      return TEXT.wrongPassword;
-    case 429:
-      return TEXT.tooMany;
-    case 400:
-      return TEXT.badPhone;
-    default:
-      return TEXT.wentWrong;
-  }
 }
 
 // A session is built only from an answer that really carries one.

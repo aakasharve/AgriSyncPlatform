@@ -363,12 +363,17 @@ describe('every entry is filtered through canRead (A46, B16)', () => {
 
     await openPalette();
 
-    /* What is left is exactly the three routes App.tsx leaves ungated on
-       purpose (A4) — and they are ungated because no ModuleKey exists that
-       would let anyone back in, so none of them can 403. */
-    expect(options()).toHaveLength(3);
-    for (const open of ['Home', 'Templates', 'Settings']) {
+    /* What is left is exactly the routes App.tsx leaves ungated on purpose
+       (A4) — Home and, since CR-3, "My access" (what was Settings) — and they
+       are ungated because no ModuleKey exists that would let anyone back in,
+       so neither can 403. Templates is no longer one of them (CR-3 K28: it is
+       behind the schedules tick), and "People and access" is the founder's. */
+    expect(options()).toHaveLength(2);
+    for (const open of ['Home', 'My access']) {
       expect(within(palette()).getByText(open)).toBeInTheDocument();
+    }
+    for (const closed of ['Templates', 'People and access']) {
+      expect(within(palette()).queryByText(closed)).not.toBeInTheDocument();
     }
     for (const gated of [
       'Live Health',
@@ -811,7 +816,7 @@ describe('it says what it searched, and never reports a broken source as empty',
     await userEvent.type(box(), 'zzzz');
 
     expect(within(palette()).getByText(/Nothing matches/)).toBeInTheDocument();
-    expect(palette().textContent).toContain('Searched 3 screens');
+    expect(palette().textContent).toContain('Searched 2 screens');
   });
 });
 

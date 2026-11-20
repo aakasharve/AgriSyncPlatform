@@ -61,6 +61,9 @@ const PORT_SCHEDULE_CHECK = ['/schedules/check'];
  */
 const PAGES_LANE_DELETIONS = ['/ops/voice'];
 
+/** CR-3 Task A7: the founder's People and access page and its History (inside `FounderOnly`). */
+const CR3_PEOPLE = ['/people', '/people/history'];
+
 const EXPECTED = [
   ...new Set([
     ...PAGES_LANE_0EFEBFBD,
@@ -68,6 +71,7 @@ const EXPECTED = [
     ...SMS_BRANCH_F1A69077,
     ...PORT_APP_VERSIONS,
     ...PORT_SCHEDULE_CHECK,
+    ...CR3_PEOPLE,
   ]),
 ].filter((path) => !PAGES_LANE_DELETIONS.includes(path));
 
@@ -127,7 +131,28 @@ describe('the join keeps every route of every lane (plan CR-2d Review Focus 1, D
     expect(declared.length, 'a path is declared twice').toBe(new Set(declared).size);
     // The pages lane's deletion is not brought back by the SMS branch's older table.
     for (const gone of PAGES_LANE_DELETIONS) expect(declared).not.toContain(gone);
-    expect(declared).toHaveLength(26);
+    expect(declared).toHaveLength(28);
+  });
+
+  it('People_pages_are_routed_inside_the_shell_and_in_the_menu_for_the_founder_only', () => {
+    expect(insideShell()).toEqual(expect.arrayContaining(['/people', '/people/history']));
+    const entry = NAV.find((item) => item.to === '/people');
+    expect(entry?.label).toBe('People and access');
+    expect(entry?.group).toBe('Admin');
+    expect(entry?.founderOnly).toBe(true);
+    expect(entry?.module).toBeNull();
+    // "Settings" is "My access" now, at the same address, for everyone.
+    const mine = NAV.find((item) => item.to === '/settings/admins');
+    expect(mine?.label).toBe('My access');
+    expect(mine?.founderOnly).toBeUndefined();
+  });
+
+  it('Templates_is_guarded_by_the_schedules_tick', () => {
+    // K28: an FPO seat has no schedules tick (`schedules.review` is the founder's and a ticked team
+    // seat's), so it is refused here. Before CR-3 the route was ungated and FPO seats opened it.
+    expect(guardOf('/schedules/templates')).toBe(ModuleKeys.ScheduleReview);
+    const entry = NAV.find((item) => item.to === '/schedules/templates');
+    expect(entry?.module).toBe(ModuleKeys.ScheduleReview);
   });
 
   it('Schedule_check_page_is_routed', () => {

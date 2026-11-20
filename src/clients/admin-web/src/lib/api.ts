@@ -46,17 +46,28 @@ export const adminApi: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/** The server's code for "this session did not begin at the console's own sign-in" (A3, H10). */
+export const DOOR_SESSION_REQUIRED = 'control_room.door_session_required';
+
 /**
  * The sign-in, renewal and sign-out routes. A call to one of them never starts a renewal and is
  * never sent again, so a renewal cannot lead to another renewal.
  */
 function isAuthRoute(url: string | undefined): boolean {
-  return (url ?? '').includes('/user/auth/');
+  const u = url ?? '';
+  // CR-3 (D-155 (4)): the console's own door is a sign-in route as well.
+  return u.includes('/user/auth/') || u.includes('/shramsafal/admin/sign-in/');
 }
 
 /** The two routes whose 2xx answer puts a new refresh cookie in this browser. */
 function isNewSignInRoute(url: string | undefined): boolean {
-  return (url ?? '').includes('/user/auth/login') || (url ?? '').includes('/user/auth/verify-otp');
+  const u = url ?? '';
+  return (
+    u.includes('/user/auth/login') ||
+    u.includes('/user/auth/verify-otp') ||
+    // CR-3: the door's check-code answer puts a new refresh cookie in this browser too.
+    u.includes('/shramsafal/admin/sign-in/check-code')
+  );
 }
 
 function isSignOutRoute(url: string | undefined): boolean {
@@ -68,14 +79,14 @@ function isSignOutRoute(url: string | undefined): boolean {
  * MAX_SESSION_HOURS ('max-age'), or it could not be renewed ('ended'). The person's own
  * sign-out opens the login page with no reason at all.
  */
-export type SessionEndReason = 'max-age' | 'ended';
+export type SessionEndReason = 'max-age' | 'ended' | 'door-required';
 
 const SESSION_END_PARAM = 'signedOut';
 
 /** Reads the reason out of the login page's address, where `endSession` put it. */
 export function readSessionEndReason(search: string): SessionEndReason | null {
   const value = new URLSearchParams(search).get(SESSION_END_PARAM);
-  return value === 'max-age' || value === 'ended' ? value : null;
+  return value === 'max-age' || value === 'ended' || value === 'door-required' ? value : null;
 }
 
 /** How long the console waits for the server to answer a sign-out before going on without it. */
@@ -288,7 +299,9 @@ let ending: Promise<void> | null = null;
  */
 export function endSession(reason: SessionEndReason): Promise<void> {
   ending ??= (async () => {
-    const tellServer = reason === 'max-age';
+    // A session that did not begin at the door (H10) is the one case besides age where the server
+    // is told: it is a real sign-in with a real refresh cookie that must stop working.
+    const tellServer = reason === 'max-age' || reason === 'door-required';
     if (tellServer) markSignOutOwed();
     forgetSession();
     if (tellServer && (await tellServerSignedOut())) unmarkSignOutOwed();
@@ -536,6 +549,20 @@ adminApi.interceptors.response.use(
 
     // Only a 401 is a renewal case. A 403 `auth.device_unconfirmed` (an account question still
     // waiting for its answer) is not: it goes back to the caller like any other refusal.
+    // H10 (CR-3): a team seat whose session did not begin at the console's door. A renewal would
+    // carry the same mark, so none is tried: the session ends and the login page says why.
+    if (
+      status === 401 &&
+      isAxiosError(err) &&
+      body?.code === DOOR_SESSION_REQUIRED &&
+      !isAuthRoute(err.config?.url)
+    ) {
+      return (async () => {
+        await endSession('door-required');
+        throw err;
+      })();
+    }
+
     if (status === 401 && isAxiosError(err)) return retryAfterRenewal(err);
 
     if (status === 428 && body?.code === 'admin_active_org_required') {

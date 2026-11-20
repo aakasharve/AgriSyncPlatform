@@ -20,6 +20,9 @@ import {
  * Expected behaviour from the plan (Task 4, Global Constraints, B2, B6).
  */
 
+/** D-156b: the founder's own button label for this console page; the "no AI wording" rule is for the farmer app. */
+const COPY_FOR_AI_LABEL = 'Copy for AI (text)';
+
 let stub: StubbedAdapter | null = null;
 
 beforeEach(() => {
@@ -240,7 +243,8 @@ describe('words on the pages (CR-2b Task 4)', () => {
     for (const s of MIS_SECTIONS) {
       fireEvent.click(screen.getByRole('button', { name: `open ${s}` }));
       await countedShown();
-      const text = screen.getByTestId('mis-dashboard').textContent ?? '';
+      // D-156b: the console's one "Copy for AI (text)" button is the founder's own wording; nothing else may say AI.
+      const text = (screen.getByTestId('mis-dashboard').textContent ?? '').replace(COPY_FOR_AI_LABEL, '');
       const titles = [...screen.getByTestId('mis-dashboard').querySelectorAll('[title],[aria-label]')]
         .map((e) => `${e.getAttribute('title') ?? ''} ${e.getAttribute('aria-label') ?? ''}`).join(' ');
       for (const t of [text, titles]) {

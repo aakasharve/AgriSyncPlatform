@@ -78,9 +78,13 @@ describe('the route table and the menu after B24', () => {
   });
 
   it('B24_slash_redirects_to_MIS_overview_and_home_is_its_own_route', () => {
+    // CHANGED IN CR-3 (D-155 landing rule), WITH THE BEHAVIOUR: `/` was a fixed redirect to
+    // /MIS/overview. It is now the landing component, which sends a person who may read the company
+    // numbers to /MIS/overview and everyone else to /home. The two answers are walked, rendered, in
+    // landing.byAccess.test.tsx; "B24_slash_lands_on_MIS_overview" below still holds for a scope
+    // that holds every module.
     const root = routes.find((r) => r.path === '/')!;
-    const redirect = flatten(root.element).find((e) => (e.props as P).to !== undefined);
-    expect((redirect!.props as P).to).toBe('/MIS/overview');
+    expect((root.element as ReactElement).type).toHaveProperty('name', 'RootLanding');
     expect(paths).toContain('/home');
   });
 

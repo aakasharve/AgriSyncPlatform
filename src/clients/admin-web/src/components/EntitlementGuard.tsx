@@ -55,3 +55,25 @@ export function EntitlementGuard({ module, require = 'read', children, fallback 
 
   return <>{children}</>;
 }
+
+/**
+ * CR-3 (K29): the founder's pages (People and access, History). They have no module key and no
+ * tick: the children render only when the scope is the founder's (`isPlatformAdmin`), and anyone
+ * else is sent to the no-access page. The server refuses the same people (403
+ * `control_room.founder_only`); this is the door on the console's side, not the lock.
+ *
+ * Like `EntitlementGuard`, it renders nothing while the scope is loading, so a page never flashes.
+ */
+export function FounderOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
+  const { session } = useAdminAuth();
+  const { isLoading, isPlatformAdmin } = useAdminScope();
+  const location = useLocation();
+  const account = signInKey(session) ?? undefined;
+
+  if (isLoading) return null;
+  if (!isPlatformAdmin) {
+    const state: NoAccessState = { from: location.pathname, module: 'people', account };
+    return fallback ? <>{fallback}</> : <Navigate to="/403" state={state} replace />;
+  }
+  return <>{children}</>;
+}

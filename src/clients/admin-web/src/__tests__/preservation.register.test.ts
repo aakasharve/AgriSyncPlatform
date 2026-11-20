@@ -159,21 +159,24 @@ const REGISTER: Record<string, Row> = {
       assert: () => {
         expect(Object.keys(ModuleKeys)).toHaveLength(41); // CR-2d join: 36 -> 37, ScheduleReview; CR-3 A1: 37 -> 41 (the four control-room keys).
         const app = code('/src/App.tsx');
-        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(18); // B24: 17 -> 16 (/ops/voice gone); CR-2d join: 16 -> 18 (the two ports).
+        expect([...app.matchAll(/<EntitlementGuard module=/g)]).toHaveLength(19); // B24: 17 -> 16 (/ops/voice gone); CR-2d join: 16 -> 18 (the two ports); CR-3 K28: 18 -> 19 (Templates behind schedules.review).
       },
     },
   },
 
   A4: {
-    what: 'three routes deliberately ungated, and the comments that say why',
+    what: 'the routes deliberately ungated (three until CR-3 K28 guarded Templates), and the comments that say why',
     verdict: kept(() => {
       const app = code('/src/App.tsx');
       // Ungated means the path is declared with no guard element beside it.
-      for (const path of ['path="/"', 'path="/home"', 'path="/schedules/templates"', 'path="/settings/admins"']) {
+      // CR-3 (K28, D-155): `/schedules/templates` is no longer one of them - ShramSafal's own review
+      // surface sits behind the schedules tick (`schedules.review`) - so it is declared WITH a guard.
+      // `/settings/admins` is "My access" now and stays ungated: every person who got in has it.
+      for (const path of ['path="/"', 'path="/home"', 'path="/settings/admins"']) {
         expect(app).toContain(path);
       }
-      expect(app).not.toMatch(/path="\/schedules\/templates"[^\n]*EntitlementGuard/);
       expect(app).not.toMatch(/path="\/settings\/admins"[^\n]*EntitlementGuard/);
+      expect(app).toMatch(/path="\/schedules\/templates" element=\{\s*<EntitlementGuard module=\{ModuleKeys\.ScheduleReview\}>/);
       // The reasons are comments, and comments are the artefact this row names.
       expect(raw('/src/App.tsx')).toContain('no matching module key');
       // B24 (founder, 2026-11-17): Home has no KPI cards any more (H1-H7 are doubles), so the old "403 independently" reason is retired; the new reason is asserted.

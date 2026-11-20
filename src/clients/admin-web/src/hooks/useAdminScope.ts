@@ -26,10 +26,24 @@ export interface MembershipSummary {
 
 export type ResolveOutcome = 'Resolved' | 'Unauthorized' | 'Ambiguous' | 'NotInOrg';
 
+/**
+ * CR-3 (Task A3): what the server knows about a control-room team seat. `null` for a scope that is
+ * not the platform's own. `ticks` are the server's tick keys (`company_numbers`, `farmer_phones`, ...).
+ * `doorSessionRequired` is true when the session did not begin at the console's own sign-in (H10).
+ */
+export interface ControlRoomScope {
+  isFounder: boolean;
+  startingRole: string | null;
+  ticks: string[];
+  doorSessionRequired: boolean;
+}
+
 export interface MeScopeResponse {
   outcome: ResolveOutcome;
   scope: AdminScopeView | null;
   memberships: MembershipSummary[];
+  /** Additive (A3). An older server sends none: it reads as null. */
+  controlRoom?: ControlRoomScope | null;
 }
 
 export interface UseAdminScopeResult {
@@ -48,6 +62,10 @@ export interface UseAdminScopeResult {
   /** For the org-switcher UI — present when Ambiguous / NotInOrg / Resolved. */
   memberships: MembershipSummary[];
   outcome: ResolveOutcome | null;
+  /** True only for a resolved scope that is the founder's (the Platform Owner seat). */
+  isPlatformAdmin: boolean;
+  /** The control-room part of the answer, or null (not a platform seat, or an older server). */
+  controlRoom: ControlRoomScope | null;
   /**
    * Permission helpers. All return false when the scope isn't resolved.
    * Cheap — mirrors the server-side AdminScope.CanRead / CanWrite / CanExport.
@@ -55,6 +73,11 @@ export interface UseAdminScopeResult {
   canRead: (moduleKey: string) => boolean;
   canWrite: (moduleKey: string) => boolean;
   canExport: (moduleKey: string) => boolean;
+}
+
+/** `controlRoom` is pinned at the top level of the answer (Task A3). An older server sends none: null. */
+export function readControlRoom(data: MeScopeResponse | undefined): ControlRoomScope | null {
+  return data?.controlRoom ?? null;
 }
 
 /**
@@ -102,6 +125,8 @@ export function useAdminScope(): UseAdminScopeResult {
     scope,
     memberships: q.data?.memberships ?? [],
     outcome: q.data?.outcome ?? null,
+    isPlatformAdmin: scope?.isPlatformAdmin === true,
+    controlRoom: readControlRoom(q.data),
     canRead: (k) => has(k, (m) => m.canRead),
     canWrite: (k) => has(k, (m) => m.canWrite),
     canExport: (k) => has(k, (m) => m.canExport),

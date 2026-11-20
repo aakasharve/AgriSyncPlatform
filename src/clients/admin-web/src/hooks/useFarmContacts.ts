@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { adminApi } from '@/lib/api';
+import { AdminModuleForbiddenError } from '@/lib/adminErrors';
 import { useOrgKey } from '@/lib/orgQuery';
 
 export interface FarmContact {
@@ -43,6 +45,18 @@ export interface FarmContactsState {
   contacts: Map<string, FarmContact>;
   /** True when a request for these ids failed and has not since been answered. */
   failed: boolean;
+  /**
+   * CR-3 (K22): true when the server REFUSED the request (403): the person does not hold the All
+   * farms tick. Apart from `failed`: nothing broke, the names are simply not theirs to see, and a
+   * page says so instead of silently keeping the short id.
+   */
+  refused: boolean;
+}
+
+/** A 403 as the console sees it: the module denial the interceptor raises, or a plain 403. */
+function isRefusal(err: unknown): boolean {
+  if (err instanceof AdminModuleForbiddenError) return true;
+  return isAxiosError(err) && err.response?.status === 403;
 }
 
 /** Same as `useFarmContacts`, plus whether a request failed (so "not fetched" is honest). */
@@ -50,6 +64,7 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
   const org = useOrgKey();
   const [contacts, setContacts] = useState<Map<string, FarmContact>>(() => new Map());
   const [failed, setFailed] = useState(false);
+  const [refused, setRefused] = useState(false);
   const asked = useRef<Set<string>>(new Set());
   const orgRef = useRef(org);
   const mounted = useRef(true);
@@ -73,6 +88,7 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
       asked.current = new Set();
       setContacts(new Map());
       setFailed(false);
+      setRefused(false);
     }
     if (!wantedKey) return;
     const fresh = wantedKey.split(',').filter((id) => !asked.current.has(id));
@@ -87,6 +103,7 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
         .then(({ data }) => {
           if (!mounted.current || orgRef.current !== sessionOrg || !Array.isArray(data)) return;
           setFailed(false);
+          setRefused(false);
           setContacts((prev) => {
             const next = new Map(prev);
             for (const c of data) {
@@ -95,7 +112,13 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
             return next;
           });
         })
-        .catch(() => {
+        .catch((err: unknown) => {
+          if (isRefusal(err)) {
+            /* Refused, not broken (K22): the ids stay marked as asked, so the same refusal is not
+               asked for again on every poll; the page says the names need the All farms tick. */
+            if (mounted.current && orgRef.current === sessionOrg) setRefused(true);
+            return;
+          }
           /* Not an empty answer: these ids stay unnamed and are asked about again
              if the id list changes. The page keeps showing the short id. */
           for (const id of batch) asked.current.delete(id);
@@ -104,5 +127,5 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
     }
   }, [wantedKey, org]);
 
-  return { contacts, failed };
+  return { contacts, failed, refused };
 }

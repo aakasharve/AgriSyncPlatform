@@ -19,6 +19,8 @@ export interface CapturedRequest {
   method: string;
   headers: Record<string, unknown>;
   signal: AbortSignal | undefined;
+  /** The JSON body that was sent, parsed (CR-3: so a test can say what a button posted). */
+  body?: unknown;
 }
 
 export interface StubbedAdapter {
@@ -46,6 +48,7 @@ export function installAdapter(
       method: (config.method ?? 'get').toLowerCase(),
       headers: config.headers.toJSON() as Record<string, unknown>,
       signal: config.signal as AbortSignal | undefined,
+      body: parseBody(config.data),
     };
     requests.push(req);
 
@@ -70,6 +73,15 @@ export function installAdapter(
   }) as AxiosAdapter;
 
   return { requests, restore: () => { adminApi.defaults.adapter = previous; } };
+}
+
+function parseBody(data: unknown): unknown {
+  if (typeof data !== 'string' || data === '') return undefined;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
 }
 
 /** A transport that accepts the request and never answers. */

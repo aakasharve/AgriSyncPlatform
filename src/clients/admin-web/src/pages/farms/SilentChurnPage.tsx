@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { TrendingDown } from 'lucide-react';
-import { LoadingState, MeasuredZero, MetricLines, NotMeasuredPanel } from '@/components/state';
+import { LoadingState, MeasuredZero, MetricLines, NotMeasuredPanel, PhoneText } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
@@ -48,7 +48,7 @@ function FarmTable({ farms, caption }: { farms: SilentFarm[]; caption: string })
               <td className="py-1.5 pr-4 text-text-1">
                 <PersonName name={f.name} fallback={`${f.farmId.slice(0, 8)}…`} />
               </td>
-              <td className="py-1.5 pr-4 text-text-2">{f.ownerPhone ?? 'Phone not recorded'}</td>
+              <td className="py-1.5 pr-4 text-text-2"><PhoneText value={f.ownerPhone} /></td>
               <td className="py-1.5 pr-4 text-text-2">{daysSilentWords(f)}</td>
               <td className="py-1.5 pr-4 text-text-2">
                 {fmt.dateTime(f.lastEntryUtc, DATE_FORMATS.usersLastLogin) ?? 'No entry recorded'}

@@ -8,9 +8,9 @@ import { ConsoleBootBoundary } from '@/app/ConsoleBootBoundary';
 import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
-import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { EntitlementGuard, FounderOnly } from '@/components/EntitlementGuard';
 import { ServerUnreachable } from '@/components/ServerUnreachable';
-import { gotNoVerdict } from '@/lib/api';
+import { endSession, gotNoVerdict } from '@/lib/api';
 import { ModuleKeys } from '@/lib/moduleKeys';
 import { signInKey, type NoAccessState } from '@/lib/noAccessView';
 import { currentPathWithQuery } from '@/lib/returnTo';
@@ -32,6 +32,9 @@ const ScheduleTemplatesPage   = lazy(() => import('@/pages/schedules/ScheduleTem
 const ScheduleCheckPage       = lazy(() => import('@/pages/schedules/ScheduleCheckPage'));
 const UsersPage               = lazy(() => import('@/pages/users/UsersPage'));
 const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdminsPage'));
+// CR-3 (Task A7): the founder's People and access page and its History.
+const PeoplePage              = lazy(() => import('@/pages/people/PeoplePage'));
+const HistoryPage             = lazy(() => import('@/pages/people/HistoryPage'));
 
 // DWC v2 §4.3 — Farmer Health (Mode B landing + Mode A drilldown).
 const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/FarmerHealthPage'));
@@ -47,6 +50,16 @@ function Fallback({ text = 'Loading…' }: { text?: string }) {
   return (
     <div className="grid min-h-[400px] place-items-center text-body text-text-2">{text}</div>
   );
+}
+
+/**
+ * THE LANDING RULE (CR-3, D-155). `/` opens Company MIS Overview for a person who may read the
+ * company numbers, and Home for everyone else, so nobody lands on a page that bounces them to the
+ * no-access page. Inside RequireScope, so the scope is resolved when this renders.
+ */
+function RootLanding() {
+  const { canRead } = useAdminScope();
+  return <Navigate to={canRead(ModuleKeys.MetricsNsm) ? '/MIS/overview' : '/home'} replace />;
 }
 
 /**
@@ -113,13 +126,21 @@ export function RequireAuth({ children }: { children: ReactNode }) {
  */
 export function RequireScope({ children }: { children: ReactNode }) {
   const { session } = useAdminAuth();
-  const { isLoading, isFetching, isError, error, refetch, outcome, memberships } = useAdminScope();
+  const { isLoading, isFetching, isError, error, refetch, outcome, memberships, controlRoom } = useAdminScope();
   const { activeOrgId, clear } = useActiveOrg();
   const [rejectedOrg, setRejectedOrg] = useState<string | null>(null);
   const notOnTeam: NoAccessState = {
     reason: 'not-on-team',
     account: signInKey(session) ?? undefined,
   };
+
+  // H10 (CR-3): a team seat whose session did not begin at the console's own sign-in is ended the
+  // way a sign-out is, and the login page says to sign in again with a code. Nothing the person is
+  // not allowed to read has been asked for: the shell below is never rendered for this answer.
+  const doorSessionRequired = controlRoom?.doorSessionRequired === true;
+  useEffect(() => {
+    if (doorSessionRequired) void endSession('door-required');
+  }, [doorSessionRequired]);
 
   useEffect(() => {
     if (outcome !== 'NotInOrg' || !activeOrgId) return;
@@ -128,6 +149,7 @@ export function RequireScope({ children }: { children: ReactNode }) {
   }, [outcome, activeOrgId, clear]);
 
   if (isLoading) return <Fallback />;
+  if (doorSessionRequired) return <Fallback text="Signing you out…" />;
   if (isError) {
     // A server that did not answer has refused nobody: "Access denied" would be untrue.
     if (gotNoVerdict(error)) return <ServerUnreachable onRetry={refetch} retrying={isFetching} />;
@@ -250,7 +272,7 @@ export default function App() {
                         and holds two ideas that make no request, so no single module gate fits and
                         there is no guard here. `/ops/voice` is not a route: the Voice Pipeline page
                         was a double of Company MIS Quality; its file stays for CR-2d. */}
-                    <Route path="/" element={<Navigate to="/MIS/overview" replace />} />
+                    <Route path="/" element={<RootLanding />} />
                     <Route path="/home" element={<HomePage />} />
 
                     <Route path="/ops/live" element={
@@ -313,14 +335,24 @@ export default function App() {
                     {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
                         Relying on RequireScope (any resolved scope) for now; specific module
                         gates land when schedule / admin-management surfaces add their keys. */}
-                    <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                    {/* CR-3 K28: Templates is ShramSafal's own review surface, so it is behind the
+                        schedules tick (`schedules.review`) like the check. Before this it was
+                        ungated and an FPO seat could open it. */}
+                    <Route path="/schedules/templates" element={
+                      <EntitlementGuard module={ModuleKeys.ScheduleReview}><ScheduleTemplatesPage /></EntitlementGuard>
+                    } />
                     {/* spec: plr-d10 lane SCH-A - the schedule check is a ShramSafal platform act: gated on
                         its own module key. As on the go-live line it has NO menu entry; the templates
                         page links to it (CR-2d D3, Task 3 Step 2). */}
                     <Route path="/schedules/check" element={
                       <EntitlementGuard module={ModuleKeys.ScheduleReview}><ScheduleCheckPage /></EntitlementGuard>
                     } />
+                    {/* My access (CR-3): every signed-in person sees the parts they hold. There is no
+                        matching module key, so it is ungated: Relying on RequireScope (any resolved scope). */}
                     <Route path="/settings/admins" element={<SettingsAdminsPage />} />
+                    {/* CR-3 (K29): the founder's pages. No module key, no tick: FounderOnly. */}
+                    <Route path="/people" element={<FounderOnly><PeoplePage /></FounderOnly>} />
+                    <Route path="/people/history" element={<FounderOnly><HistoryPage /></FounderOnly>} />
 
                     {/* TASK 27 STEP 2 — A REAL 404 REPLACES A SILENT BOUNCE (A43).
 

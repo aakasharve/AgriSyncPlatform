@@ -66,3 +66,37 @@ describe('sign out on /403 (A13)', () => {
     expect(localStorage.getItem('admin.session.v1')).toBeNull();
   });
 });
+
+/*
+ * spec: trusted-control-room-2026-11-20 (CR-3, Task A7; D-155). A part that is not ticked says one
+ * sentence, whether the page knows which part (a guard sent a module key) or not.
+ */
+describe('a part that is not ticked (CR-3)', () => {
+  const SENTENCE = 'This part is not open for you. Ask Akash if you need it.';
+  const session = {
+    accessToken: 't',
+    refreshToken: null,
+    userId: 'u1',
+    expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+    signedInAtUtc: '2026-11-20T04:00:00.000Z',
+  };
+
+  it('says the pinned sentence when a guard named the part', async () => {
+    authStore.set(session);
+    renderForbidden({ from: '/users', module: 'admin.users', account: `${session.userId}|${session.signedInAtUtc}` });
+    expect(await screen.findByText(SENTENCE)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to the home page/ })).toBeInTheDocument();
+  });
+
+  it('says the same sentence when the page was opened with no reason it can trust', async () => {
+    renderForbidden(null);
+    expect(await screen.findByText(SENTENCE)).toBeInTheDocument();
+  });
+
+  it('never names the part, the address or a code', async () => {
+    authStore.set(session);
+    renderForbidden({ from: '/users', module: 'admin.users', account: `${session.userId}|${session.signedInAtUtc}` });
+    await screen.findByText(SENTENCE);
+    expect(document.body.textContent).not.toMatch(/admin\.users|\/users|403/);
+  });
+});
