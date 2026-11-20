@@ -125,6 +125,32 @@ describe('one crop with many plots: the number grid, and the "सगळे" butt
     });
 });
 
+describe('natural number order (G2 before G10) on the log\'s plot step', () => {
+    const scrambled = (n: number) => crop('grape', 'द्राक्ष', 'Grape', 'bg-green-500', ['G10', 'G2', 'G1', 'G11', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G12', 'G13', 'G14', 'G15'].slice(0, n).map(g => `द्राक्ष ${g}`));
+
+    it('the number grid lists the plots in number order; the box number stays the plot\'s place in the crop\'s own list', async () => {
+        render(<Harness crops={[scrambled(15)]} first={['grape']} stepper={{ workFacts: null }} />);
+        await flush();
+        const names = [...screen.getByTestId('flow-plot-grid').children].map(c => part(c as HTMLElement, 'name')?.textContent);
+        expect(names.slice(0, 4)).toEqual(['G1', 'G2', 'G3', 'G4']);
+        expect(names.slice(-3)).toEqual(['G13', 'G14', 'G15']);
+        expect(names.indexOf('G10')).toBe(9);
+        expect(part(screen.getByTestId('flow-plot-grape-3'), 'number')).toHaveTextContent('३'); // G1 is stored third
+    });
+
+    it('the chips of a small crop (flat list) are in number order too, with the full names as before', () => {
+        render(<Harness crops={[crop('grape', 'द्राक्ष', 'Grape', 'bg-green-500', ['द्राक्ष G10', 'द्राक्ष G2', 'द्राक्ष G1'])]} first={['grape']} />);
+        const order = [...screen.getByTestId('flow-plot-list').children].map(c => c.textContent);
+        expect(order).toEqual(['द्राक्ष G1', 'द्राक्ष G2', 'द्राक्ष G10']);
+    });
+
+    it('compare\'s classic look keeps the farm\'s own order until its lane', () => {
+        render(<Harness crops={[crop('grape', 'द्राक्ष', 'Grape', 'bg-green-500', ['द्राक्ष G10', 'द्राक्ष G2', 'द्राक्ष G1'])]} first={['grape']} stepper={{ look: 'classic' }} />);
+        const order = [...screen.getByTestId('flow-plot-list').children].map(c => c.textContent);
+        expect(order).toEqual(['द्राक्ष G10', 'द्राक्ष G2', 'द्राक्ष G1']);
+    });
+});
+
 describe('small crops look and behave as before', () => {
     it('6 plots of one crop are chips as before: no grid, no "all" button, no count line, full names', () => {
         render(<Harness crops={[grapes(6)]} first={['grape']} />);

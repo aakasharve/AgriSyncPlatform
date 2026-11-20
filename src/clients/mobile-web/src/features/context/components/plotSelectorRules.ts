@@ -84,6 +84,47 @@ export function plotShortName(plotName: string, cropNames: readonly (string | un
 /** The plot's place in its crop as the farmer reads it (1 for the first plot): the same number the calendar prints. */
 export const plotPosition = (index: number): number => index + 1;
 
+// ── natural number order (CTO ruling 2026-11-20: G2 before G10 everywhere plots are listed) ──────────
+
+const digitRuns = (name: string): string[] => toLatinDigits(name).toLowerCase().match(/\d+|\D+/g) ?? [];
+const hasDigit = (name: string): boolean => /[0-9०-९]/.test(name);
+
+/**
+ * Two plot names in natural number order: "G2" before "G10", a Devanagari digit the same as a Latin one ("ऊस २" before "ऊस १०"). A name with
+ * a digit comes before a name with none; two names with no digit compare equal (the caller keeps their order). Display order only.
+ */
+export function compareNaturally(a: string, b: string): number {
+    const da = hasDigit(a);
+    const db = hasDigit(b);
+    if (da !== db) return da ? -1 : 1;
+    if (!da) return 0;
+    const ta = digitRuns(a);
+    const tb = digitRuns(b);
+    for (let i = 0; i < Math.min(ta.length, tb.length); i++) {
+        const x = ta[i];
+        const y = tb[i];
+        const nx = /^[0-9]/.test(x);
+        const ny = /^[0-9]/.test(y);
+        if (nx && ny) {
+            const d = Number(x) - Number(y);
+            if (d !== 0) return d < 0 ? -1 : 1;
+        } else if (nx !== ny) {
+            return nx ? -1 : 1;
+        } else if (x !== y) {
+            return x < y ? -1 : 1;
+        }
+    }
+    return ta.length === tb.length ? 0 : ta.length < tb.length ? -1 : 1;
+}
+
+/** The positions of `names` in natural number order; ties (and names without a digit) keep their original order. */
+export const naturalOrder = (names: readonly string[]): number[] =>
+    names.map((_, i) => i).sort((i, j) => compareNaturally(names[i], names[j]) || i - j);
+
+/** The items in natural order of their plot names, stable: the one sort every list of plots uses. A new array; the input is not touched. */
+export const sortedNaturally = <T>(items: readonly T[], nameOf: (item: T) => string): T[] =>
+    naturalOrder(items.map(nameOf)).map(i => items[i]);
+
 /**
  * Does this plot answer the search? A search of only digits matches the plot's place number, or a whole run of digits in its name
  * ("G7" for "7", never "G17"); any other search matches the name. Devanagari and Latin digits are the same. An empty search matches all.

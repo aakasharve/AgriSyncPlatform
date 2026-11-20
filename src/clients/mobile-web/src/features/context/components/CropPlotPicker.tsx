@@ -27,7 +27,7 @@ import type { Language } from '../../../i18n/language';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { useCropPicture } from './cropImage';
-import { SELECTOR_WORDS, allCropsColumns, allCropsLine, allCropsPhotoSlots, moreCropsText } from './plotSelectorRules';
+import { SELECTOR_WORDS, allCropsColumns, allCropsLine, allCropsPhotoSlots, moreCropsText, sortedNaturally } from './plotSelectorRules';
 
 const NUM = "'DM Sans', sans-serif";
 
@@ -277,7 +277,7 @@ export const CropPlotPicker: React.FC<CropPlotPickerProps> = ({
     // The all-crops card (UI-9a) sits ABOVE the crop cards, so the cards themselves are the crops only.
     // With no all-crops card to stand for "everything" (one crop, or a page that does not offer it), a page that is on `all` has every crop on.
     const isOn = (c: PickerCrop) => chosen === c.id || (chosen === 'all' && !allTile);
-    const plotsShown = of(chosen).flatMap(c => c.plots.map(p => ({ p, c })));
+    const plotsShown = of(chosen).flatMap(c => sortedNaturally(c.plots, p => p.name).map(p => ({ p, c }))); // natural number order: G2 before G10
     const showTiles = !choiceOnly || crops.length > 1;
     const showPlots = !hidePlots && (choiceOnly ? plotsShown.length > 1 : plotsShown.length > 0);
     const question = (text: string | undefined) => (text ? <p className="m-0 mb-1 px-1 text-[13.5px] font-extrabold text-stone-600">{text}</p> : null);

@@ -126,6 +126,12 @@ describe('CropPlotPicker — tiles then coloured chips', () => {
         expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('२ पैकी २ प्लॉट');
     });
 
+    it('the plot chips are in natural number order: G2 before G10 (the schedule maker draws this row)', () => {
+        const crop: PickerCrop = { id: 'g', name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500', plots: [{ id: 'a', name: 'G10' }, { id: 'b', name: 'G2' }, { id: 'c', name: 'G1' }] };
+        render(<CropPlotPicker crops={[crop]} chosen="g" pickedPlotIds={[]} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} testIds={IDS} language="mr" />);
+        expect([...screen.getByTestId('pk-plots').querySelectorAll('button')].map(b => b.textContent)).toEqual(['G1', 'G2', 'G10']);
+    });
+
     it('hidePlots draws the crop tiles and no chips (the schedule library asks for the crop only)', () => {
         render(<CropPlotPicker crops={[GRAPE, CANE]} chosen="grape" pickedPlotIds={['g1']} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} hidePlots testIds={IDS} language="mr" />);
         expect(screen.getByTestId('pk-crops')).toBeTruthy();

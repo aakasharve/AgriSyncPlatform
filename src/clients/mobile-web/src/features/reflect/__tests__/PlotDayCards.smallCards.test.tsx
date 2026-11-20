@@ -115,6 +115,23 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
     });
 });
 
+describe('natural number order (G2 before G10)', () => {
+    it('small cards and full cards are listed in number order whatever order the plots were stored in; a card keeps its stored place number', () => {
+        const names = ['G10', 'G2', 'G1', 'G11', 'G3', 'G4'];
+        const scrambled = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', names.map((g, i) => plot(`s${i}`, `द्राक्ष ${g}`)));
+        const small = render(<PlotDayCards cards={cardsOf([scrambled], selectAll([scrambled]), [])} isToday onOpen={vi.fn()} />);
+        const listed = [...screen.getByTestId('plot-small-cards-grape').children].map(c => part(c as HTMLElement, 'name')?.textContent);
+        expect(listed).toEqual(['G1', 'G2', 'G3', 'G4', 'G10', 'G11']);
+        expect(part(screen.getByTestId('plot-card-grape:s2'), 'number')?.textContent).toBe('३'); // G1 is stored third
+        small.unmount();
+        // three cards: full cards, the same order
+        const few = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', ['G10', 'G2', 'G1'].map((g, i) => plot(`f${i}`, `द्राक्ष ${g}`)));
+        render(<PlotDayCards cards={cardsOf([few], selectAll([few]), [])} isToday onOpen={vi.fn()} />);
+        const full = screen.getAllByTestId(/^plot-card-grape:/).map(c => c.getAttribute('data-testid'));
+        expect(full).toEqual(['plot-card-grape:f2', 'plot-card-grape:f1', 'plot-card-grape:f0']);
+    });
+});
+
 describe('taps', () => {
     it('a tap on the card opens that plot\'s day; the small mic opens the mic for that plot and does not open the day', () => {
         const onOpen = vi.fn();

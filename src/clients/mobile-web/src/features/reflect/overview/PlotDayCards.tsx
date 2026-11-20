@@ -33,7 +33,7 @@ import { useLogAttachmentCount } from './useLogAttachmentCount';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { PlotCount } from '../../context/components/CropPlotPicker';
 import { PlotGroupHeader, cropWordsOf } from '../../context/components/PlotSelector';
-import { plotShortName, smallPlotCardsFor } from '../../context/components/plotSelectorRules';
+import { plotShortName, smallPlotCardsFor, sortedNaturally } from '../../context/components/plotSelectorRules';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 /** The result screen's खर्च colour, for the ledger's money chip. */
@@ -305,9 +305,11 @@ export const PlotDayCards: React.FC<{
         const last = groups[groups.length - 1];
         if (last && last[0].ref.cropId === c.ref.cropId && c.ref.plotId) last.push(c); else groups.push([c]);
     }
+    // Natural number order inside a crop (G2 before G10); a crop with no plot yet has its one card.
+    const ordered = groups.map(g => (g[0].ref.plotId ? sortedNaturally(g, c => c.ref.plotName ?? '') : g));
     return (
         <div className="space-y-2.5" data-testid="plot-day-cards">
-            {groups.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
+            {ordered.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
                 ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} />
                 : g.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)))}
             {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}

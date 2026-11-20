@@ -35,7 +35,7 @@ import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
 import { CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
 import { PickedCountLine, PlotGroupHeader, PlotSelector, cropWordsOf } from './PlotSelector';
-import { buildQuickButtons, photoOnceFor, pickedCountText, plotPickMode, type PlotWorkFacts } from './plotSelectorRules';
+import { buildQuickButtons, photoOnceFor, pickedCountText, plotPickMode, sortedNaturally, type PlotWorkFacts } from './plotSelectorRules';
 import { usePlotWorkFacts } from './usePlotWorkFacts';
 import {
     EMPTY_SELECTION, allCropsSelected, allPlotsSelected, isGlobal, isReady, pendingCrops,
@@ -214,7 +214,8 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const chosen = crops.filter(c => sel.crops.includes(c.id));
     const others = crops.filter(c => !sel.crops.includes(c.id));
     const pending = pendingCrops(sel);
-    const shown = chosen.flatMap(c => c.plots.map(p => ({ crop: c, plot: p })));
+    // Natural number order (G2 before G10) in the shared look; compare's classic look keeps the farm's own order until its lane.
+    const shown = chosen.flatMap(c => (classic ? c.plots : sortedNaturally(c.plots, p => p.name)).map(p => ({ crop: c, plot: p })));
     const multiCrop = chosen.length > 1;
     const dense = multiCrop || shown.length > 3;
     const cols = multiCrop ? 'grid-cols-3 max-[339px]:grid-cols-2' : shown.length === 1 ? 'grid-cols-1' : shown.length === 3 || shown.length > 4 ? 'grid-cols-3' : 'grid-cols-2';

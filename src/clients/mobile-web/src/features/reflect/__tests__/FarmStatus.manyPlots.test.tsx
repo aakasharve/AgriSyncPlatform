@@ -70,6 +70,15 @@ describe('the overview picker with 15 plots', () => {
     });
 });
 
+describe('natural number order (G2 before G10)', () => {
+    it('the overview grid lists G1, G2 ... G9, G10 ... whatever order the plots were stored in', () => {
+        const scrambled = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', ['G10', 'G2', 'G1', 'G9', 'G8', 'G7', 'G3', 'G4', 'G5', 'G6'].map((g, i) => plot(`s${i}`, `द्राक्ष ${g}`)));
+        render(<Harness crops={[scrambled]} />);
+        const names = [...screen.getByTestId('farm-grid-grape').children].map(c => part(c as HTMLElement, 'name')?.textContent);
+        expect(names).toEqual(['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10']);
+    });
+});
+
 describe('one tap on a number shows only that plot', () => {
     it('with all chosen a tap on ७ shows ONLY G7, says so, and "सगळे दाखवा" brings every plot back', () => {
         render(<Harness crops={FARM} />);

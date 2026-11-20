@@ -30,7 +30,7 @@ import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { PickerCropPhoto, PlotChip, cropColorOf, type PickerCrop } from './CropPlotPicker';
 import {
     QUICK_WORDS, SELECTOR_WORDS, afterAllToggle, allChosen, hasPlotSearch, pickedCountText, plotMatchesQuery, plotPickMode,
-    plotPosition, plotShortName, photoOnceFor, sameSet, toggleId, type PlotPickMode,
+    naturalOrder, plotPosition, plotShortName, photoOnceFor, sameSet, toggleId, type PlotPickMode,
 } from './plotSelectorRules';
 
 const NUM = "'DM Sans', sans-serif";
@@ -204,7 +204,9 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const nameOf = (name: string) => (short ? plotShortName(name, cropNames ?? []) : name);
     const change = onChange ?? (() => undefined);
     const tap = (id: string) => (onTapPlot ? onTapPlot(id) : change(toggleId(chosen, id)));
-    const ids = plots.map(p => p.id);
+    // Natural number order (G2 before G10); a box keeps its place number in the crop's own list, the number the calendar prints.
+    const entries = naturalOrder(plots.map(p => p.name)).map(i => ({ p: plots[i], position: plotPosition(i) }));
+    const ids = entries.map(e => e.p.id);
 
     if (mode === 'chips') {
         return (
@@ -213,7 +215,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
                     <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle="none" buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
                 ) : null}
                 <div className="flex flex-wrap gap-2" data-testid={testIds.grid}>
-                    {plots.map(p => (
+                    {entries.map(({ p }) => (
                         <PlotChip key={p.id} testId={testIds.plot(p.id)} name={nameOf(p.name)} on={chosen.includes(p.id)} disabled={disabled} color={color} size={chipSize} lead={lead}
                             mark={mark?.(p.id, 'chips')} onClick={() => tap(p.id)} />
                     ))}
@@ -223,7 +225,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     }
 
     const sw = SELECTOR_WORDS[language === 'en' ? 'en' : 'mr'];
-    const shown = plots.map((p, i) => ({ p, position: plotPosition(i) })).filter(x => plotMatchesQuery({ name: x.p.name, position: x.position }, query));
+    const shown = entries.filter(x => plotMatchesQuery({ name: x.p.name, position: x.position }, query));
     return (
         <div data-mode="grid" className="space-y-2">
             <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle={allToggle} buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />

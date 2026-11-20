@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 import {
     ALL_CROPS_PHOTOS_MAX, PHOTO_ONCE_FROM, PLOT_GRID_FROM, PLOT_SEARCH_FROM, SMALL_CARDS_FROM,
     afterAllToggle, allChosen, allCropsColumns, allCropsLine, allCropsPhotoSlots, buildQuickButtons, hasPlotSearch, moreCropsText,
-    onlyShownText, photoOnceFor, pickedCountText, plotIdsWithWorkOn, plotMatchesQuery, plotPickMode, plotShortName, sameSet,
-    smallPlotCardsFor, toLatinDigits, toggleId,
+    naturalOrder, onlyShownText, photoOnceFor, pickedCountText, plotIdsWithWorkOn, plotMatchesQuery, plotPickMode, plotShortName, sameSet,
+    smallPlotCardsFor, sortedNaturally, toLatinDigits, toggleId,
 } from '../plotSelectorRules';
 
 describe('the thresholds are named constants and the rules read them', () => {
@@ -96,6 +96,46 @@ describe('the plot inside its crop\'s group', () => {
         expect(plotShortName('द्राक्ष', ['द्राक्ष'])).toBe('द्राक्ष');
         expect(plotShortName('द्राक्षबाग', ['द्राक्ष'])).toBe('द्राक्षबाग'); // no separator: a different word
         expect(plotShortName('G7', [undefined, ''])).toBe('G7');
+    });
+});
+
+describe('natural number order: G2 before G10 (CTO ruling 2026-11-20)', () => {
+    const order = (names: string[]) => sortedNaturally(names, n => n);
+
+    it('G1, G2, G10, G11 come in number order, not text order', () => {
+        expect(order(['G11', 'G2', 'G10', 'G1'])).toEqual(['G1', 'G2', 'G10', 'G11']);
+        expect(order(['द्राक्ष G10', 'द्राक्ष G9', 'द्राक्ष G100', 'द्राक्ष G1'])).toEqual(['द्राक्ष G1', 'द्राक्ष G9', 'द्राक्ष G10', 'द्राक्ष G100']);
+    });
+
+    it('a Devanagari digit is the same as a Latin one', () => {
+        expect(order(['ऊस १०', 'ऊस २'])).toEqual(['ऊस २', 'ऊस १०']);
+        expect(order(['G10', 'G२', 'G1'])).toEqual(['G1', 'G२', 'G10']);
+    });
+
+    it('a name with no digit sorts after the names that have one, and those keep their own order (stable)', () => {
+        expect(order(['सोनाका', 'G10', 'थॉम्पसन', 'G2', 'पूर्व'])).toEqual(['G2', 'G10', 'सोनाका', 'थॉम्पसन', 'पूर्व']);
+        expect(order(['b', 'a', 'c'])).toEqual(['b', 'a', 'c']);
+        expect(order(['', 'G1'])).toEqual(['G1', '']);
+    });
+
+    it('equal names, or names equal in number, keep their original order; case does not matter; leading zeros are the same number', () => {
+        expect(naturalOrder(['G7', 'g7', 'G07', 'G7'])).toEqual([0, 1, 2, 3]);
+        expect(naturalOrder(['G3', 'G1', 'G3', 'G1'])).toEqual([1, 3, 0, 2]);
+    });
+
+    it('a name with two numbers compares them in turn; a shorter name comes first; a number comes before a word', () => {
+        expect(order(['A2-10', 'A2-9', 'A10-1', 'A2'])).toEqual(['A2', 'A2-9', 'A2-10', 'A10-1']);
+        expect(order(['7B', 'G7'])).toEqual(['7B', 'G7']);
+    });
+
+    it('naturalOrder gives positions and does not touch its input; sortedNaturally returns a new array', () => {
+        const names = ['G2', 'G10', 'G1'];
+        expect(naturalOrder(names)).toEqual([2, 0, 1]);
+        const items = [{ n: 'G10' }, { n: 'G2' }];
+        const sorted = sortedNaturally(items, i => i.n);
+        expect(sorted.map(i => i.n)).toEqual(['G2', 'G10']);
+        expect(items.map(i => i.n)).toEqual(['G10', 'G2']);
+        expect(names).toEqual(['G2', 'G10', 'G1']);
     });
 });
 

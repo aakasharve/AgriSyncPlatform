@@ -51,6 +51,42 @@ describe('how many plots decide how they are drawn', () => {
     });
 });
 
+describe('natural number order: G2 before G10, in the grid and in the chips', () => {
+    const shuffled = (n: number) => ['G10', 'G2', 'G1', 'G11', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'].slice(0, n).map((name, i) => ({ id: `s${i}`, name: `द्राक्ष ${name}` }));
+    const idsInOrder = (testId: string) => [...screen.getByTestId(testId).children].map(c => c.getAttribute('data-testid'));
+
+    it('the grid lists G1, G2, G3 ... G10, G11; each box keeps its place number in the crop\'s own list (the number the calendar prints)', () => {
+        const plots = shuffled(11); // stored order: G10, G2, G1, G11, G3 ...
+        render(<PlotSelector plots={plots} chosen={[]} onChange={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        const names = [...screen.getByTestId('pl-grid').children].map(c => part(c as HTMLElement, 'name')?.textContent);
+        expect(names).toEqual(['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11']);
+        // G1 is the third plot of the stored list: its box says ३, the number the calendar shows for it
+        expect(part(screen.getByTestId('pl-s2'), 'number')).toHaveTextContent('३');
+        expect(part(screen.getByTestId('pl-s0'), 'number')).toHaveTextContent('१'); // G10 is stored first
+    });
+
+    it('the chips are in number order too (full names, as before)', () => {
+        const plots = [{ id: 'a', name: 'द्राक्ष G10' }, { id: 'b', name: 'द्राक्ष G2' }, { id: 'c', name: 'द्राक्ष G1' }];
+        render(<PlotSelector plots={plots} chosen={[]} onChange={vi.fn()} testIds={IDS} language="mr" />);
+        expect(idsInOrder('pl-grid')).toEqual(['pl-c', 'pl-b', 'pl-a']);
+        expect(screen.getByTestId('pl-c')).toHaveTextContent('द्राक्ष G1');
+    });
+
+    it('plots with no digit in their name keep the order they were stored in, after the numbered ones', () => {
+        const plots = [{ id: 'a', name: 'सोनाका' }, { id: 'b', name: 'G2' }, { id: 'c', name: 'थॉम्पसन' }, { id: 'd', name: 'G1' }];
+        render(<PlotSelector plots={plots} chosen={[]} onChange={vi.fn()} testIds={IDS} language="mr" />);
+        expect(idsInOrder('pl-grid')).toEqual(['pl-d', 'pl-b', 'pl-a', 'pl-c']);
+    });
+
+    it('a quick button and the toggle choose in the same order the plots are listed', () => {
+        const onChange = vi.fn();
+        render(<PlotSelector plots={shuffled(8)} chosen={[]} onChange={onChange} testIds={IDS} language="mr" />);
+        fireEvent.click(screen.getByTestId('pl-all'));
+        // stored: G10 G2 G1 G11 G3 G4 G5 G6 (s0..s7); listed: G1 G2 G3 G4 G5 G6 G10 G11. The chosen set follows the listed order.
+        expect(onChange).toHaveBeenLastCalledWith(['s2', 's1', 's4', 's5', 's6', 's7', 's0', 's3']);
+    });
+});
+
 describe('the number box', () => {
     it('shows the plot\'s place big in Devanagari digits and its own name small under it, without the crop word', () => {
         render(<Harness n={15} />);
