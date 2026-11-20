@@ -121,6 +121,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     farmerProfile={ctx.farmerProfile}
                     operatorNameById={ctx.operatorNameById}
                     farmId={farmId}
+                    crops={ctx.crops}
                     farmRole={ctx.farmRole}
                     placeLabel={language => placeOf(logs, language)}
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}

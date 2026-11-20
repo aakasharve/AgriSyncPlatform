@@ -63,7 +63,11 @@ public sealed class CreateDailyLogHandler(
     // content, exactly as AddLogTaskHandler stamps a task. Optional so the direct-construction
     // unit tests keep compiling; without it a task is recorded with no verdict (null = the
     // evaluator never ran), never a made-up one.
-    IScheduleComplianceService? complianceService = null)
+    IScheduleComplianceService? complianceService = null,
+    // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - works out what the server can say about each product of the saved record
+    // (library product, ingredients, day of the season, stage). Optional so the direct-construction unit tests keep compiling; when it
+    // is absent, or fails, the record is exactly as it was (P1): see PersistInputUseSideCarAsync.
+    ShramSafal.Application.Services.IInputUseDerivation? inputUseDerivation = null)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
     private static readonly JsonSerializerOptions DraftReadOptions = new(JsonSerializerDefaults.Web);
@@ -1274,6 +1278,77 @@ public sealed class CreateDailyLogHandler(
         // never discards the already-durable DailyLog (Fix F1 contract).
         await dailyRichnessDerivation.RecomputeAsync(log.FarmId.Value, log.LogDate, ct);
         await repository.SaveChangesAsync(ct);
+
+        // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - the typed ledger rows are now saved, so what the server can say about
+        // each product (library product, ingredients, day of the season, stage) can be worked out from them. In its OWN savepoint, last:
+        // a failure there is logged and rolled back alone and can never discard the record, the typed rows or the richness score (P1).
+        await PersistInputUseSideCarAsync(log.FarmId.Value, log.Id, ct);
+    }
+
+    // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - the non-blocking isolation contract of PersistSideCarAsync, scoped to ONLY
+    // the input-use derivation (savepoint on the sync path's ambient transaction / own transaction on the HTTP path / plain try-catch
+    // for non-relational unit tests). A failure is logged with a warning and swallowed: it must never be silent, and it must never
+    // turn the farmer's saved day into a caller-visible failure. The derived rows are rebuildable (P10), so nothing is lost.
+    private async Task PersistInputUseSideCarAsync(Guid farmId, Guid dailyLogId, CancellationToken ct)
+    {
+        if (inputUseDerivation is null)
+        {
+            return;
+        }
+
+        var relational = dbContext?.Database.IsRelational() == true;
+        var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
+
+        if (ambientTx is not null)
+        {
+            const string savepoint = "ssf_daily_log_sidecar_inputuse";
+            await ambientTx.CreateSavepointAsync(savepoint, ct);
+            try
+            {
+                await inputUseDerivation.DeriveForLogAsync(farmId, dailyLogId, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Input-use derivation rolled back to savepoint for daily log {LogId} (non-blocking); the record is durable and the rows can be rebuilt.",
+                    dailyLogId);
+                await ambientTx.RollbackToSavepointAsync(savepoint, ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        if (relational)
+        {
+            await using var sideCarTx = await dbContext!.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await inputUseDerivation.DeriveForLogAsync(farmId, dailyLogId, ct);
+                await sideCarTx.CommitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Input-use derivation rolled back for daily log {LogId} (non-blocking); the record is durable and the rows can be rebuilt.",
+                    dailyLogId);
+                await sideCarTx.RollbackAsync(ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        try
+        {
+            await inputUseDerivation.DeriveForLogAsync(farmId, dailyLogId, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Input-use derivation skipped for daily log {LogId} (non-blocking); the record is durable and the rows can be rebuilt.",
+                dailyLogId);
+        }
     }
 
     // Track B B2.8 — tolerant timestamp parse for the weather stamp. Falls back

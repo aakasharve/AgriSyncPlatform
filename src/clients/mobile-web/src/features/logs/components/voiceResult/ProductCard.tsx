@@ -17,9 +17,10 @@
  *   - The card only reads the record. An answer is queued as an overlay and never edits the record (P7).
  */
 import React, { useState } from 'react';
-import { Camera, CircleHelp, ShieldCheck, X } from 'lucide-react';
+import { Camera, CircleHelp, ShieldCheck, Sprout, TriangleAlert, X } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { inputWords } from '../../../../domain/inputs/inputWords';
+import { factSources, ingredientFactsFor, ingredientKeysOf, stageLinesFor, type FactsLanguage, type UseContext } from '../../../../domain/inputs/ingredientFacts';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { amountText, productName, type ProductItem } from './productModel';
 import {
@@ -54,6 +55,8 @@ export interface ProductAnswerKit {
     onPhoto: (a: { logId: string; item: ProductItem }) => Promise<void>;
     /** A purchase bill matched to this product, when one is (lane IT6; none today). */
     billOf?: (logId: string, item: ProductItem) => { date: string; amount?: number } | undefined;
+    /** Lane FACTS-1 - the day of the season and the stage of this use, from the plot's own schedule (absent or null = not known; the lines are left out). */
+    useContextOf?: (logId: string) => UseContext | null;
 }
 
 const isLatinOnly = (s: string): boolean => LATIN.test(s) && !/[ऀ-ॿ]/.test(s);
@@ -95,6 +98,23 @@ const Fact: React.FC<{ label: string; children: React.ReactNode; testId?: string
     </div>
 );
 
+/** Where a fact line came from: the packet, the library, or a named web source (the existing "इंटरनेटवरून" mark). */
+const SourceMarks: React.FC<{ keys: readonly string[]; lang: FactsLanguage; ticked: boolean }> = ({ keys, lang, ticked }) => {
+    const words = inputWords(lang);
+    const copy = resultCopy(lang);
+    const src = factSources();
+    return (
+        <>
+            {keys.map(k => {
+                const cls = k === 'PKT' ? 'bg-stone-100 text-stone-700 ring-stone-300' : k === 'LIB' ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'bg-sky-50 text-sky-800 ring-sky-200';
+                const label = k === 'PKT' ? copy.fromPacket : k === 'LIB' ? words.fromLibrary : `${words.fromWeb} · ${lang === 'en' ? src[k]?.shortEn ?? k : src[k]?.short ?? k}`;
+                return <span key={k} data-src={k} className={`ml-1 inline-block whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-bold ring-1 ${cls}`}>{label}</span>;
+            })}
+            {!ticked && <span data-testid="vr-fact-untick" className="ml-1 inline-block whitespace-nowrap rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">{copy.pendingTick}</span>}
+        </>
+    );
+};
+
 export interface ProductCardProps {
     item: ProductItem;
     logId: string;
@@ -120,6 +140,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const bill = kit.billOf?.(logId, item);
     const benefit = found ? benefitFor(identity.product, kit.cropNamesOf(logId), answers) : undefined;
     const photoKept = answers.speaker?.verdict === 'photo' || answers.check?.verdict === 'photo';
+    // Lane FACTS-1: what each ingredient does and what to know at this stage - only sourced, ticked lines (P4, D-96); the day and stage from the plot's schedule.
+    const lang: FactsLanguage = language === 'en' ? 'en' : 'mr';
+    const useContext = found ? kit.useContextOf?.(logId) ?? null : null;
+    const ingredientFacts = found ? ingredientFactsFor(identity.product, lang) : [];
+    const stageLines = found ? stageLinesFor(ingredientKeysOf(identity.product), useContext, lang, undefined, n => digitsFor(n, language)) : [];
 
     const run = async (kind: 'answer' | 'photo', go: () => Promise<void>) => {
         if (busy) return;
@@ -172,7 +197,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                             </Fact>
                         )}
                         {companyLine(identity, language) && <Fact label={copy.factCompany} testId="vr-fact-company">{companyLine(identity, language)}</Fact>}
-                        {amount && <Fact label={copy.factDose} testId="vr-fact-dose">{amount}</Fact>}
+                        {useContext && useContext.day !== null && useContext.refType && (
+                            <Fact label={copy.factWhen} testId="vr-fact-when">{copy.dayAfter(useContext.refType, digitsFor(useContext.day, language))}</Fact>
+                        )}
+                        {useContext && useContext.stageName && language !== 'en' && <Fact label={copy.factStage} testId="vr-fact-stage">{useContext.stageName}</Fact>}
+                        {amount
+                            ? <Fact label={copy.factDose} testId="vr-fact-dose">{amount}</Fact>
+                            : <Fact label={copy.factDose} testId="vr-fact-dose-none"><span className="font-semibold text-stone-600">{copy.doseNotSaid}</span></Fact>}
                         {bill && (
                             <Fact label={copy.factBill} testId="vr-fact-bill">
                                 <span className="text-sky-800">
@@ -203,6 +234,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                                 <Camera size={20} aria-hidden="true" />{copy.takePhoto}
                             </button>
                         )}
+                    </div>
+                )}
+
+                {/* Lane FACTS-1 (founder 2026-11-19): what each ingredient does, with its source. Only ticked lines; none = nothing drawn (P4). */}
+                {ingredientFacts.length > 0 && (
+                    <div className="mt-2 rounded-2xl bg-white px-3 py-2 ring-1 ring-stone-300" data-testid="vr-card-does">
+                        {ingredientFacts.map((f, i) => (
+                            <div key={f.key} className={i ? 'mt-2 border-t border-stone-200 pt-2' : ''} data-testid={`vr-does-${f.key}`}>
+                                <div className="text-[15px] font-extrabold text-stone-900">{f.label}</div>
+                                <div className="mt-0.5 text-[14.5px] font-semibold leading-snug text-stone-800">
+                                    {copy.factDoes}: {f.does}<SourceMarks keys={f.sources} lang={lang} ticked={f.ticked} />
+                                </div>
+                                {f.caution && (
+                                    <div className="mt-1 flex items-start gap-1.5 rounded-xl bg-amber-50 px-2.5 py-1.5 text-[14px] font-extrabold text-amber-900 ring-1 ring-amber-200" data-testid="vr-does-caution">
+                                        <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                                        <span>{f.caution.text}<SourceMarks keys={f.caution.sources} lang={lang} ticked={f.caution.ticked} /></span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {stageLines.length > 0 && (
+                    <div className={`mt-2 rounded-2xl px-3 py-2 ring-1 ${stageLines.some(l => l.warn) ? 'bg-amber-50 ring-amber-300' : 'bg-lime-50 ring-lime-300'}`} data-testid="vr-card-stage-lines">
+                        <div className="flex items-center gap-1.5 text-[14.5px] font-extrabold text-stone-900"><Sprout size={17} className="text-lime-800" aria-hidden="true" />{copy.atThisStage}</div>
+                        {stageLines.map(l => (
+                            <div key={l.id} className="mt-1 text-[14.5px] font-bold leading-snug text-stone-900" data-testid={`vr-stage-${l.id}`}>
+                                {l.text}{l.compare ? <> {l.compare}</> : null}<SourceMarks keys={l.sources} lang={lang} ticked={l.ticked} />
+                            </div>
+                        ))}
                     </div>
                 )}
 

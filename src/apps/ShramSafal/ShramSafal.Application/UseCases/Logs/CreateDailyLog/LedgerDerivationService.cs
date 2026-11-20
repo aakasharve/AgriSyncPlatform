@@ -208,6 +208,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 operations++;
 
                 var productType = ReadString(input, "type"); // legacy fertilizer/pesticide/…
+                // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - how it was applied and the carrier water, copied as the
+                // record states them for the season ledger. Absent stays NULL (P4); the phone's own water count is not recomputed here.
+                var usedMethod = ReadString(input, "method");
+                var usedWaterLitres = ReadDecimal(input, "computedWaterVolume");
                 var mixOrdinal = 0;
                 var hasMix = input.TryGetProperty("mix", out var mix) && mix.ValueKind == JsonValueKind.Array;
                 if (hasMix)
@@ -239,7 +243,9 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             ordinal: mixOrdinal,
                             createdAtUtc: now,
                             doseCertainty: ReadCertainty(doseFact),
-                            doseSpokenText: ReadSpokenText(doseFact));
+                            doseSpokenText: ReadSpokenText(doseFact),
+                            method: usedMethod,
+                            carrierWaterLitres: usedWaterLitres);
                         await repository.AddApplicationInputItemAsync(child, ct);
                         children++;
                         mixOrdinal++;
@@ -274,7 +280,9 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             // wave-3.12 — the legacy shape states its dose on the input row,
                             // so its certainty is read from that same row.
                             doseCertainty: ReadCertainty(ReadNumericFact(input, "dose")),
-                            doseSpokenText: ReadSpokenText(ReadNumericFact(input, "dose")));
+                            doseSpokenText: ReadSpokenText(ReadNumericFact(input, "dose")),
+                            method: usedMethod,
+                            carrierWaterLitres: usedWaterLitres);
                         await repository.AddApplicationInputItemAsync(legacyChild, ct);
                         children++;
                     }

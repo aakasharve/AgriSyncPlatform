@@ -68,6 +68,10 @@ internal static class ManualDraftNormalizer
         // transcript.
         "type", "productName", "npkGrade", "quantity", "dose", "unit",
         "basisQty", "basisUnit",
+        // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - how it was applied and the carrier water, which LedgerDerivationService
+        // now copies onto each input item for the season ledger. Without them here the typed row would lose both between the sync
+        // boundary and the ledger with no error anywhere (the warning above).
+        "method", "computedWaterVolume",
         NumbersField,
     ];
 

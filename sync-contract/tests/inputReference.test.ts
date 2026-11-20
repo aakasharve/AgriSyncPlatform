@@ -332,6 +332,9 @@ describe('generated copies', () => {
         ['mix-rules.json', 'src/clients/mobile-web/src/domain/inputs/generated/mixRules.json'],
         ['catalog.json', 'src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/catalog.json'],
         ['mix-rules.json', 'src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/mix-rules.json'],
+        // lane FACTS-1: the ingredient facts for the farmer product card.
+        ['ingredient-facts.json', 'src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/ingredient-facts.json'],
+        ['ingredient-facts.json', 'src/clients/mobile-web/src/domain/inputs/generated/ingredientFacts.json'],
     ];
 
     it.each(pairs)('generated copies equal the reference files byte-for-byte (%s -> %s)', (ref, copy) => {

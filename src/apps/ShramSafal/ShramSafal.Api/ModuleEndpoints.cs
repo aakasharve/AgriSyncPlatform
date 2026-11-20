@@ -61,6 +61,8 @@ public static class ModuleEndpoints
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
         group.MapExportEndpoints();
+        // spec: facts-card-input-truth-2026-11-19 (lane FACTS, slice C) - the season ledger of a farm's inputs (JSON, CSV, rebuild).
+        group.MapInputUseEndpoints();
         group.MapTestEndpoints();
         group.MapComplianceEndpoints();
         group.MapJobCardEndpoints();

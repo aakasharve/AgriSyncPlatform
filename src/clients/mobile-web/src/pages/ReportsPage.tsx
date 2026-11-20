@@ -26,6 +26,7 @@ import { useFarmContext } from '../core/session/FarmContext';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { SERVICE_PROOF_WORDS, toServiceProofLang } from '../i18n/serviceProofTranslations';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
+import SeasonInputLedger from '../features/inputs/seasonLedger/SeasonInputLedger';
 import { CATEGORY_LABEL, FINANCE_TITLE, PERIOD_LABEL, REPORT_WORDS, entriesCount, periodFilters, rupees, type ReportPeriod } from '../features/finance/moneyLabels';
 import { ChoiceChips, GlassCard, RowLink, SectionHead, Tap } from '../shared/components/ui/placeUi';
 
@@ -157,6 +158,9 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate, onB
                     </GlassCard>
                 </>
             )}
+
+            {/* spec: facts-card-input-truth-2026-11-19 (lane FACTS, slice C) - the season ledger of inputs, for the farm's owner (the server refuses any other seat). */}
+            {currentFarm?.role === 'PrimaryOwner' && <SeasonInputLedger farmId={currentFarm.farmId} />}
 
             {/* Service Proof — CEI Phase 3 §23.2, for the same three roles as before. */}
             {canSeeServiceProof && (
