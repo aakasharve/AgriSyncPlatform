@@ -52,6 +52,8 @@ GET /shramsafal/farms/mine
 GET /shramsafal/farms/{farmId:guid}
 GET /shramsafal/farms/{farmId:guid}/compare
 GET /shramsafal/farms/{farmId:guid}/compliance
+GET /shramsafal/farms/{farmId:guid}/input-use
+GET /shramsafal/farms/{farmId:guid}/input-use.csv
 GET /shramsafal/farms/{farmId:guid}/job-cards
 GET /shramsafal/farms/{farmId:guid}/kept-work
 GET /shramsafal/farms/{farmId:guid}/labour
@@ -136,6 +138,7 @@ POST /shramsafal/consent-gate/link
 POST /shramsafal/corrections
 POST /shramsafal/cropcycles
 POST /shramsafal/farms
+POST /shramsafal/farms/{farmId:guid}/input-use/rebuild
 POST /shramsafal/farms/{farmId:guid}/invite-qr
 POST /shramsafal/farms/{farmId:guid}/invite-qr/rotate
 POST /shramsafal/farms/{farmId:guid}/labour/assignments/{id:guid}/corrections

@@ -1414,6 +1414,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    never touches ssf.audit_events, its policies or its grants. Down() raises while a picture row exists (the proof's data has none), else drops its
         //    four policies and the table. Safe mid-proof.
         "20261117041736_AddPictures",
+        // spec: facts-card-input-truth-2026-11-19 (FACTS lane, merged 2026-11-20) - Up() and Down() read in full: Up() adds two nullable columns to
+        // ssf.application_input_items and creates ssf.input_use_facts and ssf.input_use_ingredients only, FORCE-RLS, each with a tenant policy and a
+        // user-select policy; the user-select policies read ssf.farm_memberships with m.status = 3 (Active seats only, the predicate the active-only migration
+        // set) and never read farm_join_requests. No audit_events object is touched, no ssf.farms policy, no seat, no grant on an existing table. Down() is DATA-DESTROYING by design: it drops the four policies, the two derived tables (rebuildable from
+        // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
+        // snapshot, not on Down(). Re-Up recreates all of it.
+        "20261119105639_AddInputUseFacts",
     ];
 
     /// <summary>

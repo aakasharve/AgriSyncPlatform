@@ -603,6 +603,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // picture belongs to no farm, so NO p_user_select_* policy and nothing here reads farm_memberships). No farm_memberships or farm_join_requests
         // object, no ssf.farms policy, no seat touched. Down() raises while a picture row exists, else drops its policies and the table. Re-Up recreates them.
         "20261117041736_AddPictures",
+        // spec: facts-card-input-truth-2026-11-19 (FACTS lane, merged 2026-11-20) - Up() and Down() read in full: Up() adds two nullable columns to
+        // ssf.application_input_items and creates ssf.input_use_facts and ssf.input_use_ingredients only, FORCE-RLS, each with a tenant policy and a
+        // user-select policy; the user-select policies read ssf.farm_memberships with m.status = 3 (Active seats only, the predicate the active-only migration
+        // set) and never read farm_join_requests. No audit_events object is touched, no ssf.farms policy, no seat, no grant on an existing table. Down() is DATA-DESTROYING by design: it drops the four policies, the two derived tables (rebuildable from
+        // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
+        // snapshot, not on Down(). Re-Up recreates all of it.
+        "20261119105639_AddInputUseFacts",
     ];
 
     /// <summary>
@@ -640,6 +647,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_schedule_step_moves",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
+        // spec: facts-card-input-truth-2026-11-19 (FACTS lane) - 20261119105639_AddInputUseFacts creates ssf.input_use_facts and ssf.input_use_ingredients,
+        // each with a p_user_select_* policy written ALREADY narrowed (m.status = 3). Down() drops both tables with their policies.
+        "p_user_select_input_use_facts",
+        "p_user_select_input_use_ingredients",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —
