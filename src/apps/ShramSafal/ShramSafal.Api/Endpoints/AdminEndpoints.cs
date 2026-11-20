@@ -365,11 +365,15 @@ public static class AdminEndpoints
         // and never open the audited cross-farm factory. Platform seats only (the team, by their ticks) (names and phones). Deliberately has
         // no CacheOutput: each call writes one cross-farm audit row. A farm that does not exist is left out. A read
         // failure is not caught: it answers 500, never an empty list.
+        // spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1) — &namesOnly=true is for a page that shows farm
+        // names only: the same list and the same gates, every ownerPhone is the hidden marker, no owner phone is
+        // loaded, and no phones_shown History row is written. Without it, or with false, the route is as before.
         group.MapGet("/admin/farms/contacts", async (
             HttpContext http,
             IEntitlementResolver resolver,
             GetFarmContactsHandler h,
             string? ids,
+            bool? namesOnly,
             CancellationToken ct) =>
         {
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
@@ -384,7 +388,7 @@ public static class AdminEndpoints
             var (auditDeviceId, auditIpHash) = http.AuditClaims();
             var r = await h.HandleAsync(new GetFarmContactsQuery(
                 ids, http.User.GetUserIdOrEmpty(), scope.IsPlatformSeat, ControlRoomPhones.MayRead(scope),
-                auditDeviceId, auditIpHash), ct);
+                auditDeviceId, auditIpHash, NamesOnly: namesOnly == true), ct);
 
             if (r.IsSuccess)
             {

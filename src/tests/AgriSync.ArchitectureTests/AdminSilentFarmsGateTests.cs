@@ -271,6 +271,14 @@ public sealed class AdminSilentFarmsGateTests
             return Task.FromResult<IReadOnlyList<FarmContactDto>>(Array.Empty<FarmContactDto>());
         }
 
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<SubscriptionProjection?> GetByOwnerAccountAsync(OwnerAccountId ownerAccountId, CancellationToken ct = default)
         {
             PlanCalls++;

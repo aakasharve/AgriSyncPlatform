@@ -18,7 +18,8 @@ public sealed record GetHistoryQuery(Guid ReaderUserId, int Days, string? Action
 /// <item>Names are display names (a person's or an account's), never a phone number. A door line names the door as its actor.</item>
 /// <item>Details per action: see <see cref="DetailsFor"/>. A payload that cannot be read gives a line with no details, never a failed page.</item>
 /// <item>A <c>phones_shown</c> line names the farms from the payload's farm ids, looked up once for the whole page: the
-/// first 10, ", "-joined, then " and N more".</item>
+/// first 10, ", "-joined, then " and N more". The lookup is the names-only read: History never loads an owner phone
+/// (G1 fix round 1, I-1).</item>
 /// </list>
 /// </summary>
 public sealed class GetHistoryHandler(
@@ -114,6 +115,12 @@ public sealed class GetHistoryHandler(
                 d["phoneTail"] = ReadString(p, "phoneTail");
                 d["reason"] = ReadString(p, "reason");
                 break;
+            case ControlRoomHistoryAction.SignedIn:
+                // G1 fix round 1 (M2): a sign-in held for the new-phone question says so; the key is absent otherwise.
+                if (p.ValueKind == JsonValueKind.Object && p.TryGetProperty("heldForQuestion", out var held)
+                    && held.ValueKind == JsonValueKind.True)
+                    d["heldForQuestion"] = "true";
+                break;
             case ControlRoomHistoryAction.PhonesShown:
                 if (p.ValueKind == JsonValueKind.Object && p.TryGetProperty("farmIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
                 {
@@ -159,7 +166,7 @@ public sealed class GetHistoryHandler(
 
         if (wanted.Count == 0) return new Dictionary<Guid, string>();
 
-        var farms = await misRepo.GetFarmContactsAsync(readerUserId, wanted, ct);
+        var farms = await misRepo.GetFarmNamesAsync(readerUserId, wanted, ct);
         return farms.ToDictionary(f => f.FarmId, f => f.Name);
     }
 

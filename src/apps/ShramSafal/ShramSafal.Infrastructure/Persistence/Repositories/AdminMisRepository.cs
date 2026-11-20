@@ -11,7 +11,7 @@ using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Reads the admin farms and users lists, the suffering list and the farm contacts. All queries are read-only.
+/// Reads the admin farms and users lists, the suffering list and the farm contacts, names and owners. All queries are read-only.
 ///
 /// <para>
 /// Nothing here swallows a failure (spec company-mis-real-numbers-2026-11-15): a failed read escapes and answers
@@ -23,7 +23,7 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 ///
 /// <para>
 /// <paramref name="adminDbFactory"/> is needed only by the farms list and the
-/// farm contacts, the cross-farm reads here. It is optional so code that builds
+/// farm contacts, names and owners, the cross-farm reads here. It is optional so code that builds
 /// this repository by hand for the analytics queries keeps working; the
 /// container always supplies it (<c>AddShramSafalInfrastructure</c> registers
 /// the factory).
@@ -328,27 +328,9 @@ public sealed class AdminMisRepository(
             return [];
         }
 
-        if (adminDbFactory is null)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(AdminMisRepository)} was built without an admin DbContext factory, so it cannot "
-                + "read farm names across farms. Resolve it from the container.");
-        }
-
         var wanted = farmIds.Distinct().Select(id => new FarmId(id)).ToList();
 
-        await using var ssf = await adminDbFactory.CreateAsync(
-            reason: $"{nameof(AdminMisRepository)}.farm-contacts",
-            actorUserId: adminUserId,
-            ct: ct);
-
-        if (!await ssf.Farms.AsNoTracking().AnyAsync(ct))
-        {
-            throw new InvalidOperationException(
-                "The admin context can see no farm at all. ssf.farms is under forced row-level security, "
-                + "which returns zero rows without an error to a connection that is not privileged; "
-                + "refusing to answer that these farms do not exist.");
-        }
+        await using var ssf = await OpenSeeingFarmsAsync("farm-contacts", adminUserId, ct);
 
         var farms = await ssf.Farms
             .AsNoTracking()
@@ -374,6 +356,96 @@ public sealed class AdminMisRepository(
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(c => c.FarmId)
             .ToList();
+    }
+
+    // spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). Ids and names only, through the same audited
+    // cross-farm open as the contacts read (its own reason, "farm-names"); public.users is never read, so no owner
+    // phone is loaded. Ordered as the contacts read is.
+    public async Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+        Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return [];
+        }
+
+        var wanted = farmIds.Distinct().Select(id => new FarmId(id)).ToList();
+
+        await using var ssf = await OpenSeeingFarmsAsync("farm-names", adminUserId, ct);
+
+        var farms = await ssf.Farms
+            .AsNoTracking()
+            .Where(f => wanted.Contains(f.Id))
+            .Select(f => new { f.Id, f.Name })
+            .ToListAsync(ct);
+
+        return farms
+            .Select(f => new FarmNameDto(f.Id.Value, f.Name))
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.FarmId)
+            .ToList();
+    }
+
+    // spec: trusted-control-room-2026-11-20 (G1 fix round 1, M9). Farm id to owner user id, through the same audited
+    // cross-farm open (its own reason, "farm-owners"), so the trust report can leave out farms owned by a test account.
+    public async Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+        Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return new Dictionary<Guid, Guid>();
+        }
+
+        var wanted = farmIds.Distinct().Select(id => new FarmId(id)).ToList();
+
+        await using var ssf = await OpenSeeingFarmsAsync("farm-owners", adminUserId, ct);
+
+        var farms = await ssf.Farms
+            .AsNoTracking()
+            .Where(f => wanted.Contains(f.Id))
+            .Select(f => new { f.Id, f.OwnerUserId })
+            .ToListAsync(ct);
+
+        return farms.ToDictionary(f => f.Id.Value, f => f.OwnerUserId.Value);
+    }
+
+    /// <summary>
+    /// Opens the audited cross-farm factory once, with the reason <c>AdminMisRepository.{reason}</c> (one
+    /// <c>admin_cross_tenant</c> audit row naming <paramref name="adminUserId"/>). A repository built without the
+    /// factory, or a factory that can see no farm at all, throws: forced row-level security hides rows without an
+    /// error, so an empty answer would lie.
+    /// </summary>
+    private async Task<ShramSafalDbContext> OpenSeeingFarmsAsync(string reason, Guid adminUserId, CancellationToken ct)
+    {
+        if (adminDbFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AdminMisRepository)} was built without an admin DbContext factory, so it cannot "
+                + "read farm names across farms. Resolve it from the container.");
+        }
+
+        var ssf = await adminDbFactory.CreateAsync(
+            reason: $"{nameof(AdminMisRepository)}.{reason}",
+            actorUserId: adminUserId,
+            ct: ct);
+
+        try
+        {
+            if (!await ssf.Farms.AsNoTracking().AnyAsync(ct))
+            {
+                throw new InvalidOperationException(
+                    "The admin context can see no farm at all. ssf.farms is under forced row-level security, "
+                    + "which returns zero rows without an error to a connection that is not privileged; "
+                    + "refusing to answer that these farms do not exist.");
+            }
+        }
+        catch
+        {
+            await ssf.DisposeAsync();
+            throw;
+        }
+
+        return ssf;
     }
 
 

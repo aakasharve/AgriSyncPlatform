@@ -98,3 +98,9 @@ public sealed record SufferingItemDto(
 /// none is on record). OwnerAccountId is for server use (plans); the contacts route does not send it.
 /// </summary>
 public sealed record FarmContactDto(Guid FarmId, string Name, string? OwnerPhone, Guid OwnerAccountId);
+
+/// <summary>
+/// spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). A farm's id and name, nothing else: the read behind a
+/// name-only farm lookup and History's farm names, so a page that shows names never loads an owner's phone.
+/// </summary>
+public sealed record FarmNameDto(Guid FarmId, string Name);

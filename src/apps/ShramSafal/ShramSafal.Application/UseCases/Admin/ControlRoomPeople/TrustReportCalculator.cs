@@ -12,7 +12,9 @@ public sealed record TrustReportPerson(ControlRoomPerson Person, PersonDto Dto);
 /// <summary>
 /// What the report is counted from: the active people, the number of founders, and ONE History read per action (K15).
 /// <see cref="PhonesShown"/> and <see cref="DoorRefused"/> are read for the last 7 days, <see cref="SignedIn"/> and
-/// <see cref="PersonKept"/> for the last 30.
+/// <see cref="PersonKept"/> for the last 30. <see cref="TestAccountUserIds"/> are the test accounts
+/// (<c>CompanyMis:ExcludedUserIds</c>) and <see cref="TestFarmIds"/> the farms they own (M9): both are required, so a
+/// caller cannot count test accounts by forgetting them; pass empty sets to leave nothing out.
 /// </summary>
 public sealed record TrustReportInput(
     DateTime NowUtc,
@@ -21,12 +23,22 @@ public sealed record TrustReportInput(
     HistoryRead PhonesShown,
     HistoryRead DoorRefused,
     HistoryRead SignedIn,
-    HistoryRead PersonKept);
+    HistoryRead PersonKept,
+    IReadOnlySet<Guid> TestAccountUserIds,
+    IReadOnlySet<Guid> TestFarmIds);
 
 /// <summary>
 /// The weekly trust report's numbers. Pure: it counts the rows it is given inside the windows and never reads anything.
 /// A read that hit its limit is "not measured" with <see cref="HistoryReadLimitReason"/>, never a cut number (K15, P4).
 /// In Release 1 downloads are not counted at all: all three carry <see cref="DownloadsReason"/>, never 0 (K20).
+/// <para>
+/// G1 fix round 1 (M9; global rule: test accounts stay out of every count). The three phone-look counts leave out every
+/// <c>phones_shown</c> row whose actor is a test account, and every test farm from the farm sets. A row whose farms are
+/// all test farms is not a look, so it adds to no count. A Users-page row (it carries <c>personCount</c>, no farms) and a
+/// row whose payload cannot be read are left out only when the actor is a test account. The sign-in and kept rows are
+/// NOT filtered by actor: they decide which named people are listed as unused, and the founder (a test account) is the
+/// actor of every <c>person_kept</c> row, so dropping them would list kept or signed-in people as unused, which is untrue.
+/// </para>
 /// </summary>
 public static class TrustReportCalculator
 {
@@ -41,7 +53,7 @@ public static class TrustReportCalculator
         var weekAgo = input.NowUtc.AddDays(-ShortWindowDays);
         var monthAgo = input.NowUtc.AddDays(-LongWindowDays);
 
-        var phones = Rows(input.PhonesShown, ControlRoomHistoryAction.PhonesShown, weekAgo);
+        var phones = Looks(input, weekAgo);
         var refused = Rows(input.DoorRefused, ControlRoomHistoryAction.DoorRefused, weekAgo);
 
         MisValueDto looks, farms, lookers, doorRefused;
@@ -52,8 +64,8 @@ public static class TrustReportCalculator
         else
         {
             looks = Counted(phones.Count);
-            farms = Counted(phones.SelectMany(r => FarmIds(r.PayloadJson)).Distinct().Count());
-            lookers = Counted(phones.Select(r => r.ActorUserId).Distinct().Count());
+            farms = Counted(phones.SelectMany(r => r.Farms).Where(f => !input.TestFarmIds.Contains(f)).Distinct().Count());
+            lookers = Counted(phones.Select(r => r.Row.ActorUserId).Distinct().Count());
         }
 
         doorRefused = input.DoorRefused.HitLimit ? NotMeasured(HistoryReadLimitReason) : Counted(refused.Count);
@@ -95,8 +107,25 @@ public static class TrustReportCalculator
     private static List<ControlRoomHistoryLine> Rows(HistoryRead read, string action, DateTime fromUtc) =>
         read.Lines.Where(l => l.Action == action && l.AtUtc >= fromUtc).ToList();
 
+    /// <summary>
+    /// The <c>phones_shown</c> rows of the window that count as looks, each with its farm ids (M9): not by a test account,
+    /// and not naming test farms only. A row with no farm ids (the Users page, or a payload that cannot be read) counts.
+    /// </summary>
+    private static List<(ControlRoomHistoryLine Row, IReadOnlyList<Guid> Farms)> Looks(TrustReportInput input, DateTime fromUtc) =>
+        Rows(input.PhonesShown, ControlRoomHistoryAction.PhonesShown, fromUtc)
+            .Where(r => !input.TestAccountUserIds.Contains(r.ActorUserId))
+            .Select(r => (Row: r, Farms: FarmIds(r.PayloadJson)))
+            .Where(r => r.Farms.Count == 0 || r.Farms.Any(f => !input.TestFarmIds.Contains(f)))
+            .ToList();
+
+    /// <summary>Every farm id named by the <c>phones_shown</c> rows of <paramref name="read"/>.</summary>
+    internal static IReadOnlyCollection<Guid> FarmIdsIn(HistoryRead read) =>
+        read.Lines.Where(l => l.Action == ControlRoomHistoryAction.PhonesShown)
+            .SelectMany(l => FarmIds(l.PayloadJson))
+            .ToHashSet();
+
     /// <summary>The <c>farmIds</c> of a <c>phones_shown</c> payload; none for the Users page (which carries <c>personCount</c>) or an unreadable payload.</summary>
-    private static IEnumerable<Guid> FarmIds(string payloadJson)
+    private static IReadOnlyList<Guid> FarmIds(string payloadJson)
     {
         try
         {

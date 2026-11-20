@@ -327,6 +327,14 @@ public sealed class AdminWvfdGateTests
             Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 

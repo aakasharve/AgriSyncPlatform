@@ -1,6 +1,7 @@
 // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5)
 using AgriSync.BuildingBlocks.Abstractions;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.ControlRoom;
 
 namespace ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
@@ -9,9 +10,16 @@ namespace ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
 /// The weekly trust report (K15). One History read per action, never one capped read for everything:
 /// <c>phones_shown</c> and <c>door_refused</c> over the last 7 days, <c>signed_in</c> and <c>person_kept</c> over the last
 /// 30. <see cref="TrustReportCalculator"/> turns the reads into numbers (a read that hit its limit is "not measured").
+/// <para>
+/// G1 fix round 1 (M9): test accounts are the Company MIS list (<see cref="CompanyMisExclusions"/>,
+/// <c>CompanyMis:ExcludedUserIds</c>); a test farm is a farm one of them owns. The owners of the farms the phone looks
+/// name are read once, through the audited cross-farm read, and only when there is a test account to find and a
+/// measured look naming a farm; otherwise nothing cross-farm is opened. A failed read is not caught (500).
+/// </para>
 /// </summary>
 public sealed class GetTrustReportHandler(
-    IControlRoomStore store, IControlRoomPhoneDirectory directory, IControlRoomHistory history, IClock clock)
+    IControlRoomStore store, IControlRoomPhoneDirectory directory, IControlRoomHistory history,
+    IAdminMisRepository misRepo, CompanyMisExclusions exclusions, IClock clock)
 {
     private const int ReadLimit = 1000;
 
@@ -46,6 +54,22 @@ public sealed class GetTrustReportHandler(
         }
 
         var founders = (await store.PlatformOwnerUserIdsAsync(ct)).Count;
-        return TrustReportCalculator.Calculate(new TrustReportInput(now, people, founders, phones, refused, signedIn, kept));
+        var testFarms = await TestFarmsAsync(readerUserId, phones, ct);
+        return TrustReportCalculator.Calculate(new TrustReportInput(
+            now, people, founders, phones, refused, signedIn, kept, exclusions.UserIds, testFarms));
+    }
+
+    /// <summary>The farms named by the phone looks whose owner is a test account.</summary>
+    private async Task<IReadOnlySet<Guid>> TestFarmsAsync(Guid readerUserId, HistoryRead phones, CancellationToken ct)
+    {
+        if (exclusions.UserIds.Count == 0 || phones.HitLimit)
+            return new HashSet<Guid>();
+
+        var farmIds = TrustReportCalculator.FarmIdsIn(phones);
+        if (farmIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var owners = await misRepo.GetFarmOwnersAsync(readerUserId, farmIds, ct);
+        return owners.Where(o => exclusions.UserIds.Contains(o.Value)).Select(o => o.Key).ToHashSet();
     }
 }

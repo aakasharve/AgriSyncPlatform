@@ -115,6 +115,10 @@ public sealed class ControlRoomDoor(
                 store.AddSeat(seat);
             }
 
+            // G1 fix round 1 (M2): a sign-in held for the new-phone question (heldForQuestion) binds here too, before the
+            // person answers it, and the binding stays whatever the answer. That is safe because H3 fails closed: if the
+            // number later belongs to another account, DecideAsync refuses it as account_changed. The signed_in row below
+            // carries heldForQuestion, and History says the sign-in was held.
             person.BindTo(userId, seat.Id, now);
             store.Record(new ControlRoomHistoryEntry(
                 ControlRoomHistoryAction.SeatBound, userId, seat.Id, new { personId = person.Id }, deviceId, ipHash));

@@ -222,6 +222,14 @@ public sealed class GetFarmContactsHandlerTests
             Task.FromResult<IReadOnlyList<FarmContactDto>>(
                 farmIds.Select(id => new FarmContactDto(id, "Fake Farm", "  ", Guid.NewGuid())).ToList());
 
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -265,6 +273,14 @@ public sealed class GetFarmContactsHandlerTests
                 .ToList();
             return Task.FromResult<IReadOnlyList<FarmContactDto>>(answer);
         }
+
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException("These tests read contacts; the names-only route is proved in AdminFarmContactsGateTests.");
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
 
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>

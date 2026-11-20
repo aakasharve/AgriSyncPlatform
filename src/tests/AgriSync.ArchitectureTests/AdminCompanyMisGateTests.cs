@@ -416,5 +416,13 @@ public sealed class AdminCompanyMisGateTests
         public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(
             Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 }

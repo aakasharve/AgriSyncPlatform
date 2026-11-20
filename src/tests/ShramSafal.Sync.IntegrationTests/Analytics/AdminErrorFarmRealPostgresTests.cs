@@ -1,5 +1,6 @@
 // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1; amendments C1, C3, C4, C5, C9, C14)
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -377,6 +378,68 @@ public sealed class AdminErrorFarmRealPostgresTests(Xunit.Abstractions.ITestOutp
         contacts.Should().BeEmpty();
         counting.Opens.Should().Be(0, "zero ids opens nothing");
         (await AllCrossFarmAuditRowsAsync()).Should().Be(0);
+    }
+
+    // spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). The names-only read: through the audited cross-farm
+    // factory (one open, its own reason, one audit row naming the admin), ids and names only, no owner phone.
+    [SkippableFact]
+    public async Task Names_only_read_goes_through_the_audited_factory_and_carries_no_phone()
+    {
+        await GuardAsync();
+
+        await using var scope = AdminScope(BuildProvider());
+        var counting = new CountingAdminFactory(
+            scope.ServiceProvider.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
+        var repository = MisRepository(scope.ServiceProvider, counting);
+
+        var names = await repository.GetFarmNamesAsync(Admin, new[] { Farm1, Farm2, UnknownFarm });
+
+        Output.WriteLine($"[EVIDENCE] names={names.Count} opens={counting.Opens} reasons=[{string.Join(", ", counting.Reasons)}]");
+        names.Should().Equal(new FarmNameDto(Farm1, Farm1Name), new FarmNameDto(Farm2, Farm2Name));
+        counting.Opens.Should().Be(1, "one batch, one factory open");
+        counting.Reasons.Should().Equal("AdminMisRepository.farm-names");
+        (await CrossFarmAuditRowsAsync(Admin)).Should().Be(1, "the open is audited, naming the admin");
+        System.Text.Json.JsonSerializer.Serialize(names).Should().NotContain(Owner1Phone).And.NotContain(Owner2Phone);
+
+        // Through the handler, names only, for a reader who may read phones: every phone is the marker, nothing is recorded.
+        var history = new RecordingControlRoomHistory();
+        var result = await new GetFarmContactsHandler(repository, history, new FixedControlRoomStore()).HandleAsync(
+            new GetFarmContactsQuery($"{Farm1:D},{Farm2:D}", Admin, IsPlatformSeat: true, MayReadPhones: true,
+                AuditDeviceId: "dev", AuditIpHash: "ip", NamesOnly: true));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Select(c => (c.FarmId, c.Name, c.OwnerPhone)).Should().Equal(
+            (Farm1, Farm1Name, (string?)ShramSafal.Application.Admin.ControlRoomPhones.Hidden),
+            (Farm2, Farm2Name, (string?)ShramSafal.Application.Admin.ControlRoomPhones.Hidden));
+        history.Entries.Should().BeEmpty("no phone was sent, so no phone look is written");
+        counting.Reasons.Should().Equal("AdminMisRepository.farm-names", "AdminMisRepository.farm-names");
+
+        // No ids, no open.
+        (await repository.GetFarmNamesAsync(Admin, Array.Empty<Guid>())).Should().BeEmpty();
+        counting.Opens.Should().Be(2);
+    }
+
+    // spec: trusted-control-room-2026-11-20 (G1 fix round 1, M9). The farm-owner read the trust report uses to leave out
+    // farms owned by a test account: through the audited cross-farm factory, owner user ids only.
+    [SkippableFact]
+    public async Task Farm_owners_read_goes_through_the_audited_factory()
+    {
+        await GuardAsync();
+
+        await using var scope = AdminScope(BuildProvider());
+        var counting = new CountingAdminFactory(
+            scope.ServiceProvider.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
+        var repository = MisRepository(scope.ServiceProvider, counting);
+
+        var owners = await repository.GetFarmOwnersAsync(Admin, new[] { Farm1, Farm3, UnknownFarm });
+
+        owners.Should().BeEquivalentTo(new Dictionary<Guid, Guid> { [Farm1] = Owner1, [Farm3] = Owner3 },
+            "each known farm's owner; the unknown id is left out");
+        counting.Reasons.Should().Equal("AdminMisRepository.farm-owners");
+        (await CrossFarmAuditRowsAsync(Admin)).Should().Be(1);
+
+        (await repository.GetFarmOwnersAsync(Admin, Array.Empty<Guid>())).Should().BeEmpty();
+        counting.Opens.Should().Be(1, "no ids, no open");
     }
 
     [SkippableFact]

@@ -8,7 +8,8 @@ namespace ShramSafal.Application.UseCases.Admin.GetFarmContacts;
 /// <summary>
 /// Ids is the raw <c>ids</c> query value: farm ids separated by commas. IsPlatformSeat is true when the caller's
 /// seat belongs to the Platform organisation; MayReadPhones is the farmer_phones tick (or the founder). The audit
-/// fields are the request's device and IP hash, written on the History row of a phone look.
+/// fields are the request's device and IP hash, written on the History row of a phone look. NamesOnly is the
+/// <c>namesOnly=true</c> query value: the page shows farm names only, so no owner phone is loaded, sent or recorded.
 /// </summary>
 public sealed record GetFarmContactsQuery(
     string? Ids,
@@ -16,7 +17,8 @@ public sealed record GetFarmContactsQuery(
     bool IsPlatformSeat,
     bool MayReadPhones,
     string AuditDeviceId,
-    string AuditIpHash);
+    string AuditIpHash,
+    bool NamesOnly = false);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1). Farm names and owner phones for a list of farm
@@ -31,6 +33,10 @@ public sealed record GetFarmContactsQuery(
 /// <item>Without <c>MayReadPhones</c> every owner phone is <see cref="ControlRoomPhones.Hidden"/>; with it, a
 /// <c>phones_shown</c> History row naming the farms is written BEFORE the answer is returned (a History failure
 /// sends no phone), and only when at least one real phone is in the answer.</item>
+/// <item>spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). With <c>NamesOnly</c> (the pages that show farm
+/// names only) the names-only read is used: no owner phone is loaded, every <c>OwnerPhone</c> is
+/// <see cref="ControlRoomPhones.Hidden"/> whoever asks, and no <c>phones_shown</c> row is written, because no phone was
+/// sent. <c>OwnerAccountId</c> is then <see cref="Guid.Empty"/>; the route never sends it.</item>
 /// </list>
 /// <para><b>A repository failure is not caught.</b> It escapes to the server's error path (500); an empty answer
 /// would read as "these farms have no name".</para>
@@ -57,6 +63,14 @@ public sealed class GetFarmContactsHandler(
         {
             return Result.Failure<IReadOnlyList<FarmContactDto>>(
                 Error.Validation(IdsInvalidCode, $"Give 1 to {MaxIds} farm ids separated by commas."));
+        }
+
+        if (query.NamesOnly)
+        {
+            var names = await misRepo.GetFarmNamesAsync(query.ActorId, ids, ct);
+            return Result.Success<IReadOnlyList<FarmContactDto>>(names
+                .Select(n => new FarmContactDto(n.FarmId, n.Name, ControlRoomPhones.Hidden, Guid.Empty))
+                .ToList());
         }
 
         var contacts = await misRepo.GetFarmContactsAsync(query.ActorId, ids, ct);

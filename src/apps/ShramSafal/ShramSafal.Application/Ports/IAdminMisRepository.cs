@@ -34,6 +34,25 @@ public interface IAdminMisRepository
     Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(
         Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). The id and name of each of these farms, and nothing
+    /// else: no owner phone is loaded. For a name-only farm lookup and History's farm names. Opened like
+    /// <see cref="GetFarmContactsAsync"/>: one audited cross-farm open (one <c>admin_cross_tenant</c> row naming
+    /// <paramref name="adminUserId"/>), nothing opened for no ids, a farm that does not exist left out, and a factory
+    /// that can see no farm at all throws.
+    /// </summary>
+    Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+        Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (G1 fix round 1, M9). The owner's user id of each of these farms (farm id
+    /// to owner user id), so the weekly trust report can leave out farms owned by a test account. Opened like
+    /// <see cref="GetFarmContactsAsync"/>: one audited cross-farm open, nothing opened for no ids, a farm that does
+    /// not exist left out, and a factory that can see no farm at all throws.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+        Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
+
     // Phase 5 — Users
     // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, K09): with matchPhone false the search matches
     // display names only, so typing a phone number finds nothing for a seat without the farmer_phones tick.

@@ -221,7 +221,8 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         {
             var sp = scope.ServiceProvider;
             var report = await new GetTrustReportHandler(
-                sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(), clock)
+                sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(),
+                MisRepository(sp), sp.GetRequiredService<CompanyMisExclusions>(), clock)
                 .HandleAsync(Founder);
 
             report.PeopleWithAccess.Should().Be(3);
@@ -279,7 +280,9 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         {
             await using var scope = AdminScope(provider);
             var sp = scope.ServiceProvider;
-            return await new GetTrustReportHandler(sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(), clock)
+            return await new GetTrustReportHandler(
+                    sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(),
+                    MisRepository(sp), sp.GetRequiredService<CompanyMisExclusions>(), clock)
                 .HandleAsync(Founder);
         }
 

@@ -867,6 +867,14 @@ public sealed class ControlRoomLockTwoGateTests
                 farmIds.Select(id => new FarmContactDto(id, "Example Farm", PhoneOnRecord, Guid.NewGuid())).ToList());
         }
 
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
         {
             Calls++;

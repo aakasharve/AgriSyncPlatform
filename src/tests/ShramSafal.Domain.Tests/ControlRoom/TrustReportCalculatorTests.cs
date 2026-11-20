@@ -38,12 +38,74 @@ public sealed class TrustReportCalculatorTests
     private static TrustReportInput Input(
         IReadOnlyList<ControlRoomPerson>? people = null,
         HistoryRead? phones = null, HistoryRead? door = null, HistoryRead? signedIn = null, HistoryRead? kept = null,
-        int founders = 1)
+        int founders = 1, IReadOnlySet<Guid>? testAccounts = null, IReadOnlySet<Guid>? testFarms = null)
     {
         var list = people ?? [];
         return new TrustReportInput(
             Now, list.Select(p => new TrustReportPerson(p, Dto(p))).ToList(), founders,
-            phones ?? Empty, door ?? Empty, signedIn ?? Empty, kept ?? Empty);
+            phones ?? Empty, door ?? Empty, signedIn ?? Empty, kept ?? Empty,
+            testAccounts ?? new HashSet<Guid>(), testFarms ?? new HashSet<Guid>());
+    }
+
+    private static ControlRoomHistoryLine Look(Guid actor, int daysAgo, params Guid[] farms) =>
+        Line(ControlRoomHistoryAction.PhonesShown, actor, actor, Now.AddDays(-daysAgo), new { page = "contacts", farmIds = farms, count = farms.Length });
+
+    private static ControlRoomHistoryLine UsersLook(Guid actor, int daysAgo) =>
+        Line(ControlRoomHistoryAction.PhonesShown, actor, actor, Now.AddDays(-daysAgo), new { page = "users", personCount = 25, count = 25 });
+
+    // ── G1 fix round 1 (M9): test accounts and their farms stay out of every count ─────────────────────────
+
+    [Fact]
+    public void Looks_by_test_accounts_are_left_out()
+    {
+        var a = U(901); var b = U(902); var c = U(903);
+        var phones = Read(false,
+            Look(Founder, 1, a, b),        // the founder is a test account (D-147a)
+            UsersLook(Founder, 1),         // a Users-page look by a test account
+            Look(U(1), 2, c),
+            UsersLook(U(1), 2));           // a Users-page look by a team member still counts
+
+        var report = TrustReportCalculator.Calculate(Input(phones: phones, testAccounts: new HashSet<Guid> { Founder }));
+
+        report.PhoneLooks.Should().Be(new MisValueDto(2, null), "only the team member's two looks");
+        report.PhoneFarms.Should().Be(new MisValueDto(1, null), "farm c; a and b were looked at by a test account only");
+        report.PhoneLookers.Should().Be(new MisValueDto(1, null), "the founder is not counted");
+
+        // The control: with no test accounts the same rows count in full.
+        var all = TrustReportCalculator.Calculate(Input(phones: phones));
+        all.PhoneLooks.Value.Should().Be(4);
+        all.PhoneFarms.Value.Should().Be(3);
+        all.PhoneLookers.Value.Should().Be(2);
+    }
+
+    [Fact]
+    public void Test_farms_are_left_out_of_look_counts()
+    {
+        var a = U(901); var b = U(902); var test = U(990);
+        var phones = Read(false,
+            Look(U(1), 1, a, test),
+            Look(U(2), 2, b, test));
+
+        var report = TrustReportCalculator.Calculate(Input(phones: phones, testFarms: new HashSet<Guid> { test }));
+
+        report.PhoneLooks.Should().Be(new MisValueDto(2, null), "each look also named a real farm");
+        report.PhoneFarms.Should().Be(new MisValueDto(2, null), "a and b; the test farm is not a farm looked at");
+        report.PhoneLookers.Should().Be(new MisValueDto(2, null));
+    }
+
+    [Fact]
+    public void A_look_at_only_test_farms_is_not_counted()
+    {
+        var a = U(901); var test1 = U(990); var test2 = U(991);
+        var phones = Read(false,
+            Look(U(1), 1, test1, test2),
+            Look(U(2), 2, a));
+
+        var report = TrustReportCalculator.Calculate(Input(phones: phones, testFarms: new HashSet<Guid> { test1, test2 }));
+
+        report.PhoneLooks.Should().Be(new MisValueDto(1, null), "a look at test farms only is not a look");
+        report.PhoneFarms.Should().Be(new MisValueDto(1, null));
+        report.PhoneLookers.Should().Be(new MisValueDto(1, null), "U(1) only looked at test farms, so is not counted as a looker");
     }
 
     [Fact]

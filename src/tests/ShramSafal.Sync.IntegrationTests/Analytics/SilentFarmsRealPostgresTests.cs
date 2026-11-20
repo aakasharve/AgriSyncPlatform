@@ -559,6 +559,14 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
             return all.Where(c => c.FarmId != missing).ToList();
         }
 
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            inner.GetFarmNamesAsync(adminUserId, farmIds, ct);
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            inner.GetFarmOwnersAsync(adminUserId, farmIds, ct);
+
         public Task<FarmsListDto> GetFarmsListAsync(
             Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) =>
             inner.GetFarmsListAsync(adminUserId, page, pageSize, search, tier, ct);

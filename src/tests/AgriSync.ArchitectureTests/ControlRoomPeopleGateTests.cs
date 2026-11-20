@@ -17,6 +17,7 @@ using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using User.Application.Ports.External;
@@ -227,7 +228,7 @@ public sealed class ControlRoomPeopleGateTests
         services.AddSingleton(new RemovePersonHandler(store, clock));
         services.AddSingleton(new KeepPersonHandler(store, clock));
         services.AddSingleton(new GetHistoryHandler(store, directory, history, misRepo, clock));
-        services.AddSingleton(new GetTrustReportHandler(store, directory, history, clock));
+        services.AddSingleton(new GetTrustReportHandler(store, directory, history, misRepo, CompanyMisExclusions.None, clock));
 
         var ctx = new DefaultHttpContext
         {
@@ -400,6 +401,8 @@ public sealed class ControlRoomPeopleGateTests
     private sealed class EmptyMisRepository : IAdminMisRepository
     {
         public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task<FarmsListDto> GetFarmsListAsync(Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) => throw new NotSupportedException();

@@ -65,17 +65,24 @@ public sealed class GetHistoryHandlerTests
         }
     }
 
-    private sealed class Farms(params FarmContactDto[] farms) : IAdminMisRepository
+    // G1 fix round 1 (I-1, A5 minor): History names farms through the names-only read; it never loads an owner phone.
+    private sealed class Farms(params FarmNameDto[] farms) : IAdminMisRepository
     {
         public int Calls { get; private set; }
         public IReadOnlyCollection<Guid> Asked { get; private set; } = [];
 
-        public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
         {
             Calls++;
             Asked = farmIds.ToArray();
-            return Task.FromResult<IReadOnlyList<FarmContactDto>>(farms.Where(f => farmIds.Contains(f.FarmId)).ToList());
+            return Task.FromResult<IReadOnlyList<FarmNameDto>>(farms.Where(f => farmIds.Contains(f.FarmId)).ToList());
         }
+
+        public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException("History never loads owner phones to name farms.");
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
 
         public Task<FarmsListDto> GetFarmsListAsync(Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) => throw new NotSupportedException();
@@ -87,7 +94,7 @@ public sealed class GetHistoryHandlerTests
 
     private static GetHistoryHandler Make(
         out FixedHistory history, out Farms farms, ControlRoomPerson[] people, ControlRoomAccount[] accounts,
-        FarmContactDto[]? farmRows = null, bool hit = false, params ControlRoomHistoryLine[] lines)
+        FarmNameDto[]? farmRows = null, bool hit = false, params ControlRoomHistoryLine[] lines)
     {
         history = new FixedHistory(new HistoryRead(lines, hit));
         farms = new Farms(farmRows ?? []);
@@ -146,7 +153,7 @@ public sealed class GetHistoryHandlerTests
     public async Task Phones_shown_names_the_first_ten_farms_and_counts_the_rest()
     {
         var ids = Enumerable.Range(1, 12).Select(n => U(800 + n)).ToArray();
-        var rows = ids.Select((id, i) => new FarmContactDto(id, $"Example: Farm {i + 1}", "9000000000", U(700 + i))).ToArray();
+        var rows = ids.Select((id, i) => new FarmNameDto(id, $"Example: Farm {i + 1}")).ToArray();
 
         var handler = Make(out _, out var farms, [], [new ControlRoomAccount(U(50), "9000000050", "Example: Reader")], rows, false,
             Line(ControlRoomHistoryAction.PhonesShown, U(50), U(50), new { page = "farms", farmIds = ids, count = 12 }, 3),
@@ -164,6 +171,26 @@ public sealed class GetHistoryHandlerTests
         lines[2].Details.Should().BeEquivalentTo(new Dictionary<string, string?> { ["personCount"] = "25" });
         lines[2].Details.Should().NotContainKey("farms");
         lines.Should().OnlyContain(l => l.ActorName == "Example: Reader" && l.SubjectName == null);
+    }
+
+    // G1 fix round 1 (M2): a sign-in held for the new-phone question is said to be held; any other sign-in has no key.
+    [Fact]
+    public async Task A_held_sign_in_is_named_in_history()
+    {
+        var accounts = new[] { new ControlRoomAccount(U(60), "9000000060", "Example: Teammate") };
+        var handler = Make(out _, out _, [], accounts, null, false,
+            Line(ControlRoomHistoryAction.SignedIn, U(60), U(60), new { heldForQuestion = true }, 3),
+            Line(ControlRoomHistoryAction.SignedIn, U(60), U(60), new { heldForQuestion = false }, 2),
+            Line(ControlRoomHistoryAction.SignedIn, U(60), U(60), new { }, 1));
+
+        var result = await handler.HandleAsync(new GetHistoryQuery(Founder, 7, ControlRoomHistoryAction.SignedIn));
+
+        var lines = result.Value!.Lines;
+        lines.Should().HaveCount(3);
+        lines.Should().OnlyContain(l => l.ActorName == "Example: Teammate");
+        lines[0].Details.Should().BeEquivalentTo(new Dictionary<string, string?> { ["heldForQuestion"] = "true" });
+        lines[1].Details.Should().BeEmpty("a sign-in that was not held carries no key");
+        lines[2].Details.Should().BeEmpty("a payload without the flag carries no key");
     }
 
     [Fact]

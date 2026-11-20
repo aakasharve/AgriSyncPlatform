@@ -168,6 +168,54 @@ public sealed class AdminFarmContactsGateTests
         HasOutputCache(Endpoint(SufferingRoute)).Should().BeTrue("Suffering keeps CacheOutput(\"AdminLive\") (Task 2)");
     }
 
+    // spec: trusted-control-room-2026-11-20 (G1 fix round 1, I-1). Live Health, API errors, WVFD and Suffering show farm
+    // names only. With &namesOnly=true no owner phone is loaded or sent and no phones_shown row is written, even for a
+    // seat that holds the phone tick and for the founder; the names and the gates are as before.
+    [Fact]
+    public async Task Names_only_lookup_sends_no_phone_and_writes_no_history()
+    {
+        var seats = new (string Label, AdminScope Scope, ControlRoomPerson? Person)[]
+        {
+            ("team seat with the phone tick", TeamSeat(ControlRoomTicks.AllFarms, ControlRoomTicks.FarmerPhones), TeamPerson()),
+            ("founder", Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true), null),
+        };
+
+        foreach (var (label, scope, person) in seats)
+        {
+            ControlRoomPhones.MayRead(scope).Should().BeTrue($"{label}: the control: this seat would be sent phones");
+
+            var answer = await Ask(ContactsRoute, IdsQuery(3) + "&namesOnly=true", scope, person);
+
+            answer.Status.Should().Be(StatusCodes.Status200OK, $"{label}: {answer.Body}");
+            answer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetFarmNamesAsync) },
+                $"{label}: the names-only read; owner phones are never loaded");
+            using var doc = JsonDocument.Parse(answer.Body);
+            var items = doc.RootElement.EnumerateArray().ToList();
+            items.Select(i => i.GetProperty("name").GetString()).Should().BeEquivalentTo(
+                new[] { "Fake Contact Farm 1", "Fake Contact Farm 2", "Fake Contact Farm 3" }, $"{label}: the names are served");
+            items.Should().OnlyContain(i => i.GetProperty("ownerPhone").GetString() == ControlRoomPhones.Hidden,
+                $"{label}: every phone is the marker \"{ControlRoomPhones.Hidden}\"");
+            answer.Body.Should().NotContain("\"ownerPhone\":\"0000000001\"", $"{label}: farm 1's owner phone is not in the answer");
+            answer.History.Entries.Should().BeEmpty($"{label}: no phone was sent, so History says nothing about one");
+        }
+    }
+
+    [Fact]
+    public async Task Default_lookup_still_records_a_phone_look()
+    {
+        foreach (var query in new[] { IdsQuery(3), IdsQuery(3) + "&namesOnly=false" })
+        {
+            var answer = await Ask(ContactsRoute, query, TeamSeat(ControlRoomTicks.AllFarms, ControlRoomTicks.FarmerPhones), TeamPerson());
+
+            answer.Status.Should().Be(StatusCodes.Status200OK, $"{query}: {answer.Body}");
+            answer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetFarmContactsAsync) }, query);
+            answer.Body.Should().Contain("\"ownerPhone\":\"0000000001\"", $"{query}: the phone is sent as before");
+            var look = answer.History.Entries.Should().ContainSingle($"{query}: the phone look is written as before").Subject;
+            look.Action.Should().Be(ControlRoomHistoryAction.PhonesShown);
+            look.SubjectId.Should().Be(TeamPerson().Id);
+        }
+    }
+
     // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces Suffering_refuses_a_non_platform_admin.
     [Fact]
     public async Task Suffering_answers_a_team_seat_with_the_farms_to_call_tick()
@@ -234,18 +282,19 @@ public sealed class AdminFarmContactsGateTests
         return matches[0];
     }
 
-    private static Task<Answer> Ask(string route, string? query, AdminScope scope) =>
-        Ask(route, query, ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>()));
+    private static Task<Answer> Ask(string route, string? query, AdminScope scope, ControlRoomPerson? reader = null) =>
+        Ask(route, query, ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>()), reader);
 
-    private static async Task<Answer> Ask(string route, string? query, ResolveResult seat)
+    private static async Task<Answer> Ask(string route, string? query, ResolveResult seat, ControlRoomPerson? reader = null)
     {
         var endpoint = Endpoint(route);
         var repository = new RecordingMisRepository();
+        var history = new RecordingControlRoomHistory();
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(new FixedSeatResolver(seat));
-        services.AddSingleton(new GetFarmContactsHandler(repository, new RecordingControlRoomHistory(), new FixedControlRoomStore()));
+        services.AddSingleton(new GetFarmContactsHandler(repository, history, new FixedControlRoomStore(reader)));
         services.AddSingleton(new GetSufferingHandler(repository));
 
         var ctx = new DefaultHttpContext
@@ -265,8 +314,14 @@ public sealed class AdminFarmContactsGateTests
         using var streamReader = new StreamReader(ctx.Response.Body);
         var body = await streamReader.ReadToEndAsync();
 
-        return new Answer(ctx.Response.StatusCode, body, repository);
+        return new Answer(ctx.Response.StatusCode, body, repository, history);
     }
+
+    /// <summary>An approved team person holding the phone tick: the subject of a phone look's History row.</summary>
+    private static ControlRoomPerson TeamPerson() =>
+        ControlRoomPerson.Add(
+            Guid.Parse("b0000000-0000-0000-0000-0000000c2e02"), "+919000000613", "Example Teammate", ControlRoomRole.Admin,
+            [ControlRoomTicks.AllFarms, ControlRoomTicks.FarmerPhones], Admin, new DateTime(2026, 11, 20, 6, 0, 0, DateTimeKind.Utc));
 
     private static string Code(string body)
     {
@@ -276,7 +331,7 @@ public sealed class AdminFarmContactsGateTests
             : "(no code in the body)";
     }
 
-    private sealed record Answer(int Status, string Body, RecordingMisRepository Repository);
+    private sealed record Answer(int Status, string Body, RecordingMisRepository Repository, RecordingControlRoomHistory History);
 
     private sealed class TestRouteBuilder(IServiceProvider services) : IEndpointRouteBuilder
     {
@@ -324,6 +379,21 @@ public sealed class AdminFarmContactsGateTests
             }).ToList();
             return Task.FromResult<IReadOnlyList<FarmContactDto>>(answer);
         }
+
+        public Task<IReadOnlyList<FarmNameDto>> GetFarmNamesAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        {
+            Calls.Add(nameof(GetFarmNamesAsync));
+            ContactsAdminUserId = adminUserId;
+            AskedIds = farmIds.ToArray();
+            return Task.FromResult<IReadOnlyList<FarmNameDto>>(farmIds
+                .Select(id => new FarmNameDto(id, $"Fake Contact Farm {int.Parse(id.ToString("D")[^12..])}"))
+                .ToList());
+        }
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            throw new NotSupportedException("The contacts route never reads farm owners.");
 
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
         {
