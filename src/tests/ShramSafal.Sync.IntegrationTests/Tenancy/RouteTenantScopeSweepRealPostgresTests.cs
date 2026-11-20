@@ -107,6 +107,11 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
             .Build();
         global::User.Infrastructure.DependencyInjection.AddUserInfrastructure(services, config);
         global::Accounts.Infrastructure.DependencyInjection.AddAccountsInfrastructure(services, config);
+
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — Program.cs registers the control room's phone directory
+        // (the host adapter over the User accounts); without it the three people routes answered 500 in this sweep.
+        services.AddScoped<ShramSafal.Application.Ports.IControlRoomPhoneDirectory,
+            AgriSync.Bootstrapper.Adapters.ControlRoomPhoneDirectory>();
     }
 
     /// <summary>Fix pass 1 (review F-10): the ShramSafal routes the Bootstrapper maps outside the module (Program.cs).</summary>
