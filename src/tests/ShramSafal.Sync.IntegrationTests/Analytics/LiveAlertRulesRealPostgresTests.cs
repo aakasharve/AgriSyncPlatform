@@ -404,7 +404,7 @@ public sealed class LiveAlertRulesRealPostgresTests(Xunit.Abstractions.ITestOutp
         await using (var scope = AdminScope(provider))
         {
             var refused = await VoiceHandler(scope.ServiceProvider)
-                .HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformAdmin: false));
+                .HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformSeat: false));
 
             refused.IsSuccess.Should().BeFalse();
             refused.Error.Kind.Should().Be(ErrorKind.Forbidden);
@@ -450,7 +450,7 @@ public sealed class LiveAlertRulesRealPostgresTests(Xunit.Abstractions.ITestOutp
         }
 
         await using var scope = AdminScope(provider);
-        var load = () => VoiceHandler(scope.ServiceProvider).HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformAdmin: true));
+        var load = () => VoiceHandler(scope.ServiceProvider).HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformSeat: true));
 
         var thrown = await load.Should().ThrowAsync<Exception>(
             "a failed voice read escapes (the route answers 500), never an answer that reads as clear");
@@ -504,7 +504,7 @@ public sealed class LiveAlertRulesRealPostgresTests(Xunit.Abstractions.ITestOutp
     private static async Task<AlertCheckDto> VoiceCheckAsync(ServiceProvider provider)
     {
         await using var scope = AdminScope(provider);
-        var result = await VoiceHandler(scope.ServiceProvider).HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformAdmin: true));
+        var result = await VoiceHandler(scope.ServiceProvider).HandleAsync(new GetVoiceCheckQuery(Admin, IsPlatformSeat: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         return result.Value!;
     }

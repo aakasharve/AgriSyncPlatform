@@ -97,11 +97,7 @@ try
         throw new InvalidOperationException("Cors:AllowedOrigins must contain at least one configured origin.");
     }
 
-    builder.Services.AddOutputCache(opts =>
-    {
-        opts.AddPolicy("AdminLive", p => p.Expire(TimeSpan.FromSeconds(30)));
-        opts.AddPolicy("AdminMaterialized", p => p.Expire(TimeSpan.FromMinutes(5)));
-    });
+    builder.Services.AddOutputCache(opts => opts.AddAdminOutputCachePolicies());
 
     builder.Services.AddCors(options =>
     {

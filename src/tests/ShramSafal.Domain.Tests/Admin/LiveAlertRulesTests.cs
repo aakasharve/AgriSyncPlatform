@@ -209,7 +209,7 @@ public sealed class LiveAlertRulesTests
     {
         var reader = new FakeReader(Rows(Array.Empty<MisFarmRow>(), Array.Empty<MisVoiceJobRow>()));
 
-        var result = await Handler(reader).HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformAdmin: false));
+        var result = await Handler(reader).HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformSeat: false));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Forbidden, "the route answers 403");
@@ -225,7 +225,7 @@ public sealed class LiveAlertRulesTests
         var excluded = new HashSet<Guid> { TestAccount };
 
         var result = await Handler(reader, new CompanyMisExclusions(excluded))
-            .HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformAdmin: true));
+            .HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformSeat: true));
 
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         reader.Calls.Should().Be(1);
@@ -245,7 +245,7 @@ public sealed class LiveAlertRulesTests
     {
         var reader = new FakeReader(null!) { Throw = new InvalidOperationException("cr2e: the read failed") };
 
-        var run = async () => await Handler(reader).HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformAdmin: true));
+        var run = async () => await Handler(reader).HandleAsync(new GetVoiceCheckQuery(AdminUser, IsPlatformSeat: true));
 
         await run.Should().ThrowAsync<InvalidOperationException>("a failed read is a 500, never an answer that reads as clear");
     }

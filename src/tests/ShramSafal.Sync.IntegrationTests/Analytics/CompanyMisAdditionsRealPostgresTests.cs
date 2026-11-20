@@ -410,7 +410,7 @@ public sealed class CompanyMisAdditionsRealPostgresTests(Xunit.Abstractions.ITes
         }
 
         await using var scope = AdminScope(provider);
-        var load = () => Handler(scope.ServiceProvider).HandleAsync(new GetCompanyMisQuery(From, To, Admin, IsPlatformAdmin: true));
+        var load = () => Handler(scope.ServiceProvider).HandleAsync(new GetCompanyMisQuery(From, To, Admin, IsPlatformSeat: true));
 
         var thrown = await load.Should().ThrowAsync<Exception>(
             "a failed per-farm read escapes (the route answers 500), never an answer with that farm's rows missing");
@@ -523,7 +523,7 @@ public sealed class CompanyMisAdditionsRealPostgresTests(Xunit.Abstractions.ITes
     {
         await using var scope = AdminScope(provider);
         var result = await Handler(scope.ServiceProvider)
-            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformSeat: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         return result.Value!.Data;
     }

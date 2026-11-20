@@ -27,6 +27,10 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// </param>
 /// <param name="Versions">One row per version with at least one person, newest first.</param>
 /// <param name="OnOlderVersions">People on a version lower than the newest, most recently seen first, at most 200.</param>
+/// <param name="OnOlderVersionsHiddenReason">
+/// <c>needs_all_farms</c> when the caller lacks the All farms tick: <see cref="OnOlderVersions"/> is then empty
+/// because it was not read, never because nobody is behind. Null otherwise.
+/// </param>
 public sealed record AppVersionsDto(
     int Days,
     DateTime? MeasuredSinceUtc,
@@ -37,7 +41,8 @@ public sealed record AppVersionsDto(
     string? NewestVersion,
     string LegacyVersionNumber,
     IReadOnlyList<AppVersionRowDto> Versions,
-    IReadOnlyList<OlderVersionPersonDto> OnOlderVersions);
+    IReadOnlyList<OlderVersionPersonDto> OnOlderVersions,
+    string? OnOlderVersionsHiddenReason = null);
 
 public sealed record AppVersionRowDto(string AppVersion, int People, bool IsNewest);
 

@@ -15,6 +15,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
 
@@ -26,7 +27,7 @@ namespace AgriSync.ArchitectureTests;
 ///
 /// <para>
 /// <c>GET /shramsafal/admin/metrics/wvfd</c> reads every farm and opens the audited cross-farm factory, so it is
-/// platform owners only: the module check (<c>metrics.nsm</c>), then <c>RequirePlatformAdminAsync</c>, refused with
+/// Platform seats only: the module check (<c>metrics.nsm</c>), then <c>RequirePlatformSeatAsync</c>, refused with
 /// 403 before anything is read. No <c>.CacheOutput</c>: each call is an honest live count. <c>GET
 /// /shramsafal/admin/farms</c> answers a tier other than A to D with 400 <c>tier_invalid</c> and a refused tier filter
 /// with 409, before or instead of a list. The gates live in the route delegates, so these tests run them as
@@ -45,23 +46,55 @@ public sealed class AdminWvfdGateTests
     /// <summary>06:30 UTC on Wed 18 Nov 2026 = 12:00 India time.</summary>
     private static readonly DateTime Now = new(2026, 11, 18, 6, 30, 0, DateTimeKind.Utc);
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces The_wvfd_route_refuses_a_non_platform_admin
+    // (its analyst half is now a team seat that is served; its FPO and no-module halves live on below).
     [Fact]
-    public async Task The_wvfd_route_refuses_a_non_platform_admin()
+    public async Task Wvfd_answers_a_team_seat_with_company_numbers()
     {
-        // A Platform Analyst and an FPO owner both hold the module; neither is a platform owner.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
+        var team = TeamSeat(ControlRoomTicks.CompanyNumbers);
+        team.CanRead(ModuleKey.MetricsNsm).Should().BeTrue();
+
+        var ok = await Ask(team, WvfdRoute, "?weeks=4");
+        ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
+        ok.Ports.ReadAllCalls.Should().Be(1, "a Platform seat with the tick is let in and the handler really reads");
+        ok.Ports.AdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
+
+        // The control: the founder is served the same way, naming the signed-in admin. The platform lists no farm,
+        // which is not measured, never an empty "nobody" and never a goal.
+        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
+        var founder = await Ask(owner, WvfdRoute, "?weeks=4");
+        founder.Status.Should().Be(StatusCodes.Status200OK, founder.Body);
+        founder.Ports.ReadAllCalls.Should().Be(1);
+        founder.Ports.AdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
+        founder.Ports.CountedAtUtc.Should().Be(Now);
+        founder.Ports.SinceUtc.Should().Be(new DateTime(2026, 10, 18, 18, 30, 0, DateTimeKind.Utc),
+            "entries load from 00:00 India time of the Monday 4 weeks before this week's Monday");
+
+        using var doc = JsonDocument.Parse(founder.Body);
+        var data = doc.RootElement.GetProperty("data");
+        data.GetProperty("notMeasuredReason").GetString().Should().Be("farm_list_unreadable");
+        data.GetProperty("goalWvfd").ValueKind.Should().Be(JsonValueKind.Null, "no goal is sent");
+        data.GetProperty("currentWvfd").ValueKind.Should().Be(JsonValueKind.Null, "not measured is null, never 0");
+        doc.RootElement.GetProperty("meta").GetProperty("source").GetString().Should().Be("live");
+    }
+
+    [Fact]
+    public async Task Wvfd_refuses_a_team_seat_without_company_numbers()
+    {
+        var team = TeamSeat(ControlRoomTicks.ServerHealth);
+        var refused = await Ask(team, WvfdRoute, "?weeks=4");
+        refused.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(refused.Body).Should().Be("admin_module_forbidden");
+        refused.Ports.ReadAllCalls.Should().Be(0, "no farm key is read, no audited factory opened");
+        refused.Body.Should().NotContain("countedAtUtc", "a refusal carries no part of the answer");
+
+        // An FPO owner holds the module, and only the Platform-seat gate refuses.
         var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
-        foreach (var (seat, name) in new[] { (analyst, "platform analyst"), (fpoOwner, "FPO owner") })
-        {
-            seat.CanRead(ModuleKey.MetricsNsm).Should().BeTrue($"the {name} holds the module; only the platform gate refuses");
-
-            var refused = await Ask(seat, WvfdRoute, "?weeks=4");
-
-            refused.Status.Should().Be(StatusCodes.Status403Forbidden, name);
-            Code(refused.Body).Should().Be("admin_platform_only", name);
-            refused.Ports.ReadAllCalls.Should().Be(0, $"{name}: no farm key is read, no audited factory opened");
-            refused.Body.Should().NotContain("countedAtUtc", "a refusal carries no part of the answer");
-        }
+        fpoOwner.CanRead(ModuleKey.MetricsNsm).Should().BeTrue("the FPO owner holds the module");
+        var fpo = await Ask(fpoOwner, WvfdRoute, "?weeks=4");
+        fpo.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(fpo.Body).Should().Be("admin_platform_only");
+        fpo.Ports.ReadAllCalls.Should().Be(0);
 
         // Without the module: refused by the module check, nothing read.
         var fpoEmployee = Seat(OrganizationType.FPO, OrganizationRole.Employee, isPlatformAdmin: false);
@@ -70,24 +103,6 @@ public sealed class AdminWvfdGateTests
         noModule.Status.Should().Be(StatusCodes.Status403Forbidden);
         Code(noModule.Body).Should().Be("admin_module_forbidden");
         noModule.Ports.ReadAllCalls.Should().Be(0);
-
-        // The control: a platform owner is let in and the handler really reads, naming the signed-in admin. The
-        // platform lists no farm, which is not measured, never an empty "nobody" and never a goal.
-        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
-        var ok = await Ask(owner, WvfdRoute, "?weeks=4");
-        ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
-        ok.Ports.ReadAllCalls.Should().Be(1);
-        ok.Ports.AdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
-        ok.Ports.CountedAtUtc.Should().Be(Now);
-        ok.Ports.SinceUtc.Should().Be(new DateTime(2026, 10, 18, 18, 30, 0, DateTimeKind.Utc),
-            "entries load from 00:00 India time of the Monday 4 weeks before this week's Monday");
-
-        using var doc = JsonDocument.Parse(ok.Body);
-        var data = doc.RootElement.GetProperty("data");
-        data.GetProperty("notMeasuredReason").GetString().Should().Be("farm_list_unreadable");
-        data.GetProperty("goalWvfd").ValueKind.Should().Be(JsonValueKind.Null, "no goal is sent");
-        data.GetProperty("currentWvfd").ValueKind.Should().Be(JsonValueKind.Null, "not measured is null, never 0");
-        doc.RootElement.GetProperty("meta").GetProperty("source").GetString().Should().Be("live");
     }
 
     /// <summary>
@@ -114,7 +129,7 @@ public sealed class AdminWvfdGateTests
         var route = source[start..end];
 
         var module = route.IndexOf("RequireReadAsync(http, scope, ModuleKey.MetricsNsm)", StringComparison.Ordinal);
-        var platform = route.IndexOf("RequirePlatformAdminAsync(http, scope)", StringComparison.Ordinal);
+        var platform = route.IndexOf("RequirePlatformSeatAsync(http, scope)", StringComparison.Ordinal);
         var call = route.IndexOf("handler.HandleAsync", StringComparison.Ordinal);
 
         module.Should().BeGreaterThan(-1);
@@ -174,6 +189,9 @@ public sealed class AdminWvfdGateTests
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
 
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
+
     private static bool HasOutputCache(RouteEndpoint endpoint) =>
         endpoint.Metadata.Any(m => m is IOutputCachePolicy || m is OutputCacheAttribute);
 
@@ -208,7 +226,7 @@ public sealed class AdminWvfdGateTests
         services.AddSingleton<IEntitlementResolver>(
             new FixedSeatResolver(ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>())));
         services.AddSingleton(new GetWvfdHistoryHandler(ports, CompanyMisExclusions.None, new FixedClock(Now)));
-        services.AddSingleton(new GetFarmsListHandler(ports));
+        services.AddSingleton(new GetFarmsListHandler(ports, new RecordingControlRoomHistory(), new FixedControlRoomStore()));
 
         var ctx = new DefaultHttpContext
         {
@@ -312,7 +330,7 @@ public sealed class AdminWvfdGateTests
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }

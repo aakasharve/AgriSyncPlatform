@@ -111,7 +111,7 @@ public sealed class GetSilentFarmsHandlerTests
                 entries: new[] { Entry(unnamed, Owner(1), DaysAgo(10)) }),
             contacts: Array.Empty<FarmContactDto>());
 
-        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformAdmin: true));
+        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         var dto = result.Value!.Data;
@@ -129,7 +129,7 @@ public sealed class GetSilentFarmsHandlerTests
         var ports = new FakePorts(Rows(Array.Empty<MisFarmRow>(), Array.Empty<MisEntryRow>(), farmsListed: 0),
             contacts: Array.Empty<FarmContactDto>());
 
-        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformAdmin: true));
+        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         result.Value!.Data.NotMeasuredReason.Should().Be("farm_list_unreadable");
@@ -141,7 +141,7 @@ public sealed class GetSilentFarmsHandlerTests
     {
         var ports = new FakePorts(Rows(Array.Empty<MisFarmRow>(), Array.Empty<MisEntryRow>()), Array.Empty<FarmContactDto>());
 
-        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformAdmin: false));
+        var result = await Handler(ports).HandleAsync(new GetSilentChurnQuery(AdminUser, IsPlatformSeat: false, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Forbidden);
@@ -173,7 +173,7 @@ public sealed class GetSilentFarmsHandlerTests
 
     /// <summary>A context with no database provider: any use of it throws.</summary>
     private static GetSilentChurnHandler Handler(FakePorts ports) =>
-        new(ports, ports, ports, new DbContext(new DbContextOptionsBuilder<DbContext>().Options),
+        new(ports, ports, ports, new RecordingControlRoomHistory(), new FixedControlRoomStore(), new DbContext(new DbContextOptionsBuilder<DbContext>().Options),
             CompanyMisExclusions.None, new FixedClock(CountedAt));
 
     private sealed class FixedClock(DateTime now) : TimeProvider
@@ -226,7 +226,7 @@ public sealed class GetSilentFarmsHandlerTests
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }

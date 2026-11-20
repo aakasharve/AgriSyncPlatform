@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Admin;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
@@ -6,9 +7,22 @@ using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
 
 namespace ShramSafal.Application.UseCases.Admin.GetFarmsList;
 
-public sealed record GetFarmsListQuery(int Page, int PageSize, string? Search, string? Tier, Guid ActorId);
+/// <summary>
+/// MayReadPhones is the farmer_phones tick (or the founder). The audit fields are the request's device and IP hash,
+/// written on the History row of a phone look. The search matches farm names only, never a phone.
+/// </summary>
+public sealed record GetFarmsListQuery(
+    int Page,
+    int PageSize,
+    string? Search,
+    string? Tier,
+    Guid ActorId,
+    bool MayReadPhones,
+    string AuditDeviceId,
+    string AuditIpHash);
 
-public sealed class GetFarmsListHandler(IAdminMisRepository misRepo)
+public sealed class GetFarmsListHandler(
+    IAdminMisRepository misRepo, IControlRoomHistory history, IControlRoomStore controlRoomStore)
 {
     /// <summary>
     /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32). The tier filter counts every farm's checked days
@@ -67,6 +81,25 @@ public sealed class GetFarmsListHandler(IAdminMisRepository misRepo)
                 // An unknown refusal must never be sent as the (empty) list it came with: the route answers 500.
                 return Result.Failure<AdminResponseDto<FarmsListDto>>(Error.Internal(farms.RefusalCode,
                     $"The farm list was refused with an unknown code: {farms.RefusalCode}."));
+        }
+
+        if (!q.MayReadPhones)
+        {
+            farms = farms with
+            {
+                Items = farms.Items.Select(f => f with { OwnerPhone = ControlRoomPhones.Hidden }).ToList()
+            };
+        }
+        else
+        {
+            // The look is written to History BEFORE the page is returned; a History failure sends no phone.
+            var withPhone = farms.Items.Where(f => ControlRoomPhones.IsReal(f.OwnerPhone)).Select(f => f.FarmId).ToList();
+            if (withPhone.Count > 0)
+            {
+                await ControlRoomPhones.RecordLookAsync(
+                    history, controlRoomStore, q.ActorId, q.AuditDeviceId, q.AuditIpHash,
+                    "farms", withPhone, personCount: 0, count: withPhone.Count, ct);
+            }
         }
 
         return Result.Success(new AdminResponseDto<FarmsListDto>(farms,

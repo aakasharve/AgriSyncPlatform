@@ -14,6 +14,7 @@ using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
 
@@ -41,17 +42,37 @@ public sealed class AdminOneFarmPageGateTests
     private static readonly Guid Org = Guid.Parse("a0000000-0000-0000-0000-0000000c2e03");
     private static readonly Guid Farm = Guid.Parse("c2e30000-0000-0000-0000-000000000001");
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces The_one_farm_page_refuses_a_non_platform_admin
+    // (its analyst half is now a team seat that is served; its FPO half lives on in the refusal test below).
     [Fact]
-    public async Task The_one_farm_page_refuses_a_non_platform_admin()
+    public async Task The_one_farm_page_answers_a_team_seat_with_farmer_health()
     {
-        // A Platform Analyst holds every read module, the farmer-health module included, but is not a platform owner.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        analyst.CanRead(ModuleKey.FarmerHealth).Should().BeTrue("this is the seat the case is about (C13)");
+        var team = TeamSeat(ControlRoomTicks.FarmerHealth);
+        team.CanRead(ModuleKey.FarmerHealth).Should().BeTrue();
 
-        var refused = await Ask(analyst, knownFarm: true);
+        var ok = await Ask(team, knownFarm: true);
+
+        ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
+        ok.Repository.Calls.Should().Equal(new[] { (Farm, Admin) },
+            "one read of this farm; the signed-in admin is named on the factory's audit row");
+        ok.Body.Should().Contain("Fake One-Farm Farm");
+
+        // The control: the founder is let in the same way.
+        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
+        var founder = await Ask(owner, knownFarm: true);
+        founder.Status.Should().Be(StatusCodes.Status200OK);
+        founder.Repository.Calls.Should().Equal(new[] { (Farm, Admin) });
+    }
+
+    [Fact]
+    public async Task The_one_farm_page_refuses_a_team_seat_without_farmer_health()
+    {
+        var team = TeamSeat(ControlRoomTicks.AllFarms);
+
+        var refused = await Ask(team, knownFarm: true);
 
         refused.Status.Should().Be(StatusCodes.Status403Forbidden);
-        Code(refused.Body).Should().Be("admin_platform_only");
+        Code(refused.Body).Should().Be("admin_module_forbidden");
         refused.Repository.Calls.Should().BeEmpty("nothing is read and no factory opened for a refused caller");
         refused.Body.Should().NotContain("Fake One-Farm", "a refusal carries no part of the page");
 
@@ -59,14 +80,6 @@ public sealed class AdminOneFarmPageGateTests
         var fpoAnswer = await Ask(fpoOwner, knownFarm: true);
         fpoAnswer.Status.Should().Be(StatusCodes.Status403Forbidden);
         fpoAnswer.Repository.Calls.Should().BeEmpty();
-
-        // The control: a platform owner is let in, the repository is asked once, naming the signed-in admin.
-        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
-        var ok = await Ask(owner, knownFarm: true);
-        ok.Status.Should().Be(StatusCodes.Status200OK);
-        ok.Repository.Calls.Should().Equal(new[] { (Farm, Admin) },
-            "one read of this farm; the signed-in admin is named on the factory's audit row");
-        ok.Body.Should().Contain("Fake One-Farm Farm");
     }
 
     [Fact]
@@ -99,6 +112,9 @@ public sealed class AdminOneFarmPageGateTests
 
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
+
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
 
     private static bool HasOutputCache(RouteEndpoint endpoint) =>
         endpoint.Metadata.Any(m => m is IOutputCachePolicy || m is OutputCacheAttribute);
@@ -133,7 +149,9 @@ public sealed class AdminOneFarmPageGateTests
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(
             new FixedSeatResolver(ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>())));
-        services.AddSingleton(new GetFarmerHealthHandler(repository, new PassThroughRedactor(), new NoAuditEmitter()));
+        services.AddSingleton(new GetFarmerHealthHandler(
+            repository, new PassThroughRedactor(), new NoAuditEmitter(),
+            new RecordingControlRoomHistory(), new FixedControlRoomStore()));
 
         var path = $"/admin/farmer-health/{Farm:D}";
         var ctx = new DefaultHttpContext

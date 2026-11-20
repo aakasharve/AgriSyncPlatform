@@ -352,10 +352,11 @@ public sealed class AdminErrorFarmRealPostgresTests(Xunit.Abstractions.ITestOutp
         await GuardAsync();
 
         await using var scope = AdminScope(BuildProvider());
-        var handler = new GetFarmContactsHandler(MisRepository(scope.ServiceProvider));
+        var handler = new GetFarmContactsHandler(
+            MisRepository(scope.ServiceProvider), new RecordingControlRoomHistory(), new FixedControlRoomStore());
 
         var result = await handler.HandleAsync(new GetFarmContactsQuery(
-            $"{Farm1:D},{UnknownFarm:D}", Admin, IsPlatformAdmin: true));
+            $"{Farm1:D},{UnknownFarm:D}", Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Select(c => (c.FarmId, c.Name, c.OwnerPhone)).Should().Equal(new[] { (Farm1, Farm1Name, (string?)Owner1Phone) });

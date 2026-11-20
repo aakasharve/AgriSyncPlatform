@@ -5,14 +5,14 @@ using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 namespace ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 
-/// <summary>IsPlatformAdmin is the caller's resolved admin scope.</summary>
-public sealed record GetVoiceCheckQuery(Guid ActorId, bool IsPlatformAdmin);
+/// <summary>IsPlatformSeat is true when the caller's resolved seat belongs to the Platform organisation.</summary>
+public sealed record GetVoiceCheckQuery(Guid ActorId, bool IsPlatformSeat);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C11, C29). Alert check R10, voice recordings
 /// failing, counted live on request for <c>GET /shramsafal/admin/ops/voice-check</c>.
 /// <list type="number">
-/// <item>A caller who is not a platform admin is refused before anything is read, so no cross-farm read is opened
+/// <item>A caller who is not a Platform seat is refused before anything is read, so no cross-farm read is opened
 /// for them (defence in depth: the route gates first).</item>
 /// <item>The rows come from <see cref="ICompanyMisReader"/>, the Company MIS read path: farm keys once through the
 /// audited factory, every farm's voice jobs as the app role under row-level security, the live-count ceiling. That
@@ -28,10 +28,10 @@ public sealed class GetVoiceCheckHandler(ICompanyMisReader reader, CompanyMisExc
 {
     public async Task<Result<AlertCheckDto>> HandleAsync(GetVoiceCheckQuery query, CancellationToken ct = default)
     {
-        if (!query.IsPlatformAdmin)
+        if (!query.IsPlatformSeat)
         {
             return Result.Failure<AlertCheckDto>(
-                Error.Forbidden(GetCompanyMisHandler.PlatformOnlyCode, "The voice check is for platform owners only."));
+                Error.Forbidden(GetCompanyMisHandler.PlatformOnlyCode, "This is for ShramSafal's own team only."));
         }
 
         var countedAtUtc = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Utc);

@@ -16,6 +16,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetSilentChurn;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Domain.Subscriptions;
 using Xunit;
@@ -28,7 +29,7 @@ namespace AgriSync.ArchitectureTests;
 ///
 /// <para>
 /// <c>GET /shramsafal/admin/farms/silent-churn</c> names farms and owner phones across every farm, so it is platform
-/// owners only: the module check (<c>farms.silent-churn</c>), then <c>RequirePlatformAdminAsync</c>, refused with
+/// owners only: the module check (<c>farms.silent-churn</c>), then <c>RequirePlatformSeatAsync</c>, refused with
 /// 403 before anything is read (no reader call, no contacts read, no plan read: no audited factory opened). No
 /// <c>.CacheOutput</c>: each load is an honest live count. The gates live in the route delegate, so these tests run
 /// it as <see cref="AdminOneFarmPageGateTests"/> does: the production mapping on a hand-made route builder, a fixed
@@ -46,25 +47,57 @@ public sealed class AdminSilentFarmsGateTests
     /// <summary>06:30 UTC on 14 Nov 2026 = 12:00 India time.</summary>
     private static readonly DateTime Now = new(2026, 11, 14, 6, 30, 0, DateTimeKind.Utc);
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces Silent_list_refuses_a_non_platform_admin
+    // (its analyst half is now a team seat that is served; its FPO and no-module halves live on below).
     [Fact]
-    public async Task Silent_list_refuses_a_non_platform_admin()
+    public async Task Silent_list_answers_a_team_seat_with_the_farms_to_call_tick()
     {
-        // A Platform Analyst and an FPO owner both hold farms.silent-churn; neither is a platform owner.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
+        var team = TeamSeat(ControlRoomTicks.FarmsToCall);
+        team.CanRead(ModuleKey.FarmsSilentChurn).Should().BeTrue();
+
+        var ok = await Ask(team);
+
+        ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
+        ok.Ports.ReaderCalls.Should().Be(1, "a Platform seat with the tick is let in and the handler really reads");
+        ok.Ports.ReaderAdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
+
+        // The control: the founder. The platform has no farms, which is not measured (C27 2), never an empty "nobody".
+        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
+        var founder = await Ask(owner);
+        founder.Status.Should().Be(StatusCodes.Status200OK, founder.Body);
+        founder.Ports.ReaderCalls.Should().Be(1);
+        founder.Ports.ReaderAdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
+        founder.Ports.ReaderCountedAtUtc.Should().Be(Now);
+        founder.Ports.ReaderSinceUtc.Should().Be(new DateTime(2026, 10, 14, 18, 30, 0, DateTimeKind.Utc),
+            "entries are loaded from the start of the India day 30 days before today (C10, C26)");
+
+        using var doc = JsonDocument.Parse(founder.Body);
+        var data = doc.RootElement.GetProperty("data");
+        data.GetProperty("countedAtUtc").GetDateTime().ToUniversalTime().Should().Be(Now);
+        data.GetProperty("farms").GetArrayLength().Should().Be(0);
+        data.GetProperty("notMeasuredReason").GetString().Should().Be("farm_list_unreadable");
+    }
+
+    [Fact]
+    public async Task Silent_list_refuses_a_team_seat_without_the_farms_to_call_tick()
+    {
+        var team = TeamSeat(ControlRoomTicks.CompanyNumbers);
+        var refused = await Ask(team);
+        refused.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(refused.Body).Should().Be("admin_module_forbidden");
+        refused.Ports.ReaderCalls.Should().Be(0, "no farm key is read, no audited factory opened");
+        refused.Ports.ContactCalls.Should().Be(0, "no name or phone is read");
+        refused.Ports.PlanCalls.Should().Be(0, "no plan is read");
+        refused.Body.Should().NotContain("countedAtUtc", "a refusal carries no part of the answer");
+
+        // An FPO owner holds the module, and only the Platform-seat gate refuses.
         var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
-        foreach (var (seat, name) in new[] { (analyst, "platform analyst"), (fpoOwner, "FPO owner") })
-        {
-            seat.CanRead(ModuleKey.FarmsSilentChurn).Should().BeTrue($"the {name} holds the module; only the platform gate refuses");
-
-            var refused = await Ask(seat);
-
-            refused.Status.Should().Be(StatusCodes.Status403Forbidden, name);
-            Code(refused.Body).Should().Be("admin_platform_only", name);
-            refused.Ports.ReaderCalls.Should().Be(0, $"{name}: no farm key is read, no audited factory opened");
-            refused.Ports.ContactCalls.Should().Be(0, $"{name}: no name or phone is read");
-            refused.Ports.PlanCalls.Should().Be(0, $"{name}: no plan is read");
-            refused.Body.Should().NotContain("countedAtUtc", "a refusal carries no part of the answer");
-        }
+        fpoOwner.CanRead(ModuleKey.FarmsSilentChurn).Should().BeTrue("the FPO owner holds the module");
+        var fpo = await Ask(fpoOwner);
+        fpo.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(fpo.Body).Should().Be("admin_platform_only");
+        fpo.Ports.ReaderCalls.Should().Be(0);
+        fpo.Ports.ContactCalls.Should().Be(0);
 
         // Without the module: refused by the module check, nothing read.
         var fpoEmployee = Seat(OrganizationType.FPO, OrganizationRole.Employee, isPlatformAdmin: false);
@@ -74,23 +107,6 @@ public sealed class AdminSilentFarmsGateTests
         Code(noModule.Body).Should().Be("admin_module_forbidden");
         noModule.Ports.ReaderCalls.Should().Be(0);
         noModule.Ports.ContactCalls.Should().Be(0);
-
-        // The control: a platform owner is let in and the handler really reads, naming the signed-in admin. The
-        // platform has no farms, which is not measured (C27 2), never an empty "nobody".
-        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
-        var ok = await Ask(owner);
-        ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
-        ok.Ports.ReaderCalls.Should().Be(1);
-        ok.Ports.ReaderAdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
-        ok.Ports.ReaderCountedAtUtc.Should().Be(Now);
-        ok.Ports.ReaderSinceUtc.Should().Be(new DateTime(2026, 10, 14, 18, 30, 0, DateTimeKind.Utc),
-            "entries are loaded from the start of the India day 30 days before today (C10, C26)");
-
-        using var doc = JsonDocument.Parse(ok.Body);
-        var data = doc.RootElement.GetProperty("data");
-        data.GetProperty("countedAtUtc").GetDateTime().ToUniversalTime().Should().Be(Now);
-        data.GetProperty("farms").GetArrayLength().Should().Be(0);
-        data.GetProperty("notMeasuredReason").GetString().Should().Be("farm_list_unreadable");
     }
 
     [Fact]
@@ -115,6 +131,9 @@ public sealed class AdminSilentFarmsGateTests
 
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
+
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
 
     private static bool HasOutputCache(RouteEndpoint endpoint) =>
         endpoint.Metadata.Any(m => m is IOutputCachePolicy || m is OutputCacheAttribute);
@@ -153,7 +172,8 @@ public sealed class AdminSilentFarmsGateTests
         services.AddSingleton<IEntitlementResolver>(
             new FixedSeatResolver(ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>())));
         services.AddSingleton(new GetSilentChurnHandler(
-            ports, ports, ports, noDatabase, CompanyMisExclusions.None, new FixedClock(Now)));
+            ports, ports, ports, new RecordingControlRoomHistory(), new FixedControlRoomStore(), noDatabase,
+            CompanyMisExclusions.None, new FixedClock(Now)));
 
         var ctx = new DefaultHttpContext
         {
@@ -268,7 +288,7 @@ public sealed class AdminSilentFarmsGateTests
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }

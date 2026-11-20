@@ -14,6 +14,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetFarmContacts;
 using ShramSafal.Application.UseCases.Admin.GetSuffering;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
 
@@ -48,26 +49,43 @@ public sealed class AdminFarmContactsGateTests
     private static string IdsQuery(int count) =>
         "?ids=" + string.Join(",", Enumerable.Range(1, count).Select(n => Farm(n).ToString("D")));
 
-    [Fact]
-    public async Task Contacts_refuse_a_non_platform_admin()
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces Contacts_refuse_a_non_platform_admin
+    // (its analyst half is now a team seat that is served; its FPO half lives on in the refusal test below).
+    [Theory]
+    [InlineData(ControlRoomTicks.AllFarms)]
+    [InlineData(ControlRoomTicks.FarmsToCall)]
+    public async Task Contacts_answer_a_team_seat_with_a_farm_list_tick(string tick)
     {
+        var team = TeamSeat(tick);
+
+        var answer = await Ask(ContactsRoute, IdsQuery(2), team);
+
+        answer.Status.Should().Be(StatusCodes.Status200OK, answer.Body);
+        answer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetFarmContactsAsync) });
+        answer.Body.Should().Contain("Fake Contact Farm 1", "the names are served");
+    }
+
+    [Fact]
+    public async Task Contacts_refuse_a_team_seat_without_a_farm_list_tick()
+    {
+        // company_numbers and give_visits open metrics.nsm and visits.assign: neither is a farm-name module (K21).
+        foreach (var tick in new[] { ControlRoomTicks.CompanyNumbers, ControlRoomTicks.GiveVisits })
+        {
+            var refused = await Ask(ContactsRoute, IdsQuery(2), TeamSeat(tick));
+            refused.Status.Should().Be(StatusCodes.Status403Forbidden, tick);
+            Code(refused.Body).Should().Be("admin_module_forbidden", tick);
+            refused.Repository.Calls.Should().BeEmpty($"{tick}: no farm name or phone is read and no factory opened");
+        }
+
         var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
         fpoOwner.CanRead(ModuleKey.FarmsList).Should().BeTrue("this is the seat the case is about: it holds farms.list");
 
-        var refused = await Ask(ContactsRoute, IdsQuery(2), fpoOwner);
+        var fpo = await Ask(ContactsRoute, IdsQuery(2), fpoOwner);
 
-        refused.Status.Should().Be(StatusCodes.Status403Forbidden);
-        Code(refused.Body).Should().Be("admin_platform_only");
-        refused.Repository.Calls.Should().BeEmpty("no farm name or phone is read and no factory opened for a refused caller");
-        refused.Body.Should().NotContain("Fake Contact Farm");
-
-        // A Platform Analyst holds every read module but is not a platform owner.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        analyst.CanRead(ModuleKey.FarmsList).Should().BeTrue();
-        var analystAnswer = await Ask(ContactsRoute, IdsQuery(2), analyst);
-        analystAnswer.Status.Should().Be(StatusCodes.Status403Forbidden);
-        Code(analystAnswer.Body).Should().Be("admin_platform_only");
-        analystAnswer.Repository.Calls.Should().BeEmpty();
+        fpo.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(fpo.Body).Should().Be("admin_platform_only");
+        fpo.Repository.Calls.Should().BeEmpty("no farm name or phone is read and no factory opened for a refused caller");
+        fpo.Body.Should().NotContain("Fake Contact Farm");
     }
 
     [Fact]
@@ -150,26 +168,37 @@ public sealed class AdminFarmContactsGateTests
         HasOutputCache(Endpoint(SufferingRoute)).Should().BeTrue("Suffering keeps CacheOutput(\"AdminLive\") (Task 2)");
     }
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces Suffering_refuses_a_non_platform_admin.
     [Fact]
-    public async Task Suffering_refuses_a_non_platform_admin()
+    public async Task Suffering_answers_a_team_seat_with_the_farms_to_call_tick()
     {
-        // A Platform Analyst holds every read module, so only the platform gate can refuse.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        var analystAnswer = await Ask(SufferingRoute, null, analyst);
-        analystAnswer.Status.Should().Be(StatusCodes.Status403Forbidden);
-        Code(analystAnswer.Body).Should().Be("admin_platform_only");
-        analystAnswer.Repository.Calls.Should().BeEmpty("nothing is read for a refused caller");
+        var team = TeamSeat(ControlRoomTicks.FarmsToCall);
+
+        var answer = await Ask(SufferingRoute, null, team);
+
+        answer.Status.Should().Be(StatusCodes.Status200OK, answer.Body);
+        answer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetSufferingAsync) });
+
+        // The control: the founder is let in and the handler really reads.
+        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
+        var ownerAnswer = await Ask(SufferingRoute, null, owner);
+        ownerAnswer.Status.Should().Be(StatusCodes.Status200OK);
+        ownerAnswer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetSufferingAsync) });
+    }
+
+    [Fact]
+    public async Task Suffering_refuses_a_team_seat_without_the_farms_to_call_tick()
+    {
+        var team = TeamSeat(ControlRoomTicks.AllFarms);
+        var refused = await Ask(SufferingRoute, null, team);
+        refused.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(refused.Body).Should().Be("admin_module_forbidden");
+        refused.Repository.Calls.Should().BeEmpty("nothing is read for a refused caller");
 
         var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
         var fpoAnswer = await Ask(SufferingRoute, null, fpoOwner);
         fpoAnswer.Status.Should().Be(StatusCodes.Status403Forbidden);
         fpoAnswer.Repository.Calls.Should().BeEmpty();
-
-        // The control: a platform owner is let in and the handler really reads.
-        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
-        var ownerAnswer = await Ask(SufferingRoute, null, owner);
-        ownerAnswer.Status.Should().Be(StatusCodes.Status200OK);
-        ownerAnswer.Repository.Calls.Should().Equal(new[] { nameof(IAdminMisRepository.GetSufferingAsync) });
     }
 
     // ------------------------------------------------------------------
@@ -178,6 +207,9 @@ public sealed class AdminFarmContactsGateTests
 
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
+
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
 
     private static bool HasOutputCache(RouteEndpoint endpoint) =>
         endpoint.Metadata.Any(m => m is IOutputCachePolicy || m is OutputCacheAttribute);
@@ -213,7 +245,7 @@ public sealed class AdminFarmContactsGateTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(new FixedSeatResolver(seat));
-        services.AddSingleton(new GetFarmContactsHandler(repository));
+        services.AddSingleton(new GetFarmContactsHandler(repository, new RecordingControlRoomHistory(), new FixedControlRoomStore()));
         services.AddSingleton(new GetSufferingHandler(repository));
 
         var ctx = new DefaultHttpContext
@@ -307,7 +339,7 @@ public sealed class AdminFarmContactsGateTests
         }
 
         public Task<UsersListDto> GetUsersListAsync(
-            int page, int pageSize, string? search, CancellationToken ct = default)
+            int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default)
         {
             Calls.Add(nameof(GetUsersListAsync));
             return Task.FromResult(new UsersListDto(Array.Empty<UserSummaryDto>(), 0, page, pageSize));

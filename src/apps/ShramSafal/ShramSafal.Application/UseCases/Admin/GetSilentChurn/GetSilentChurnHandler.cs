@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
+using ShramSafal.Application.Admin;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -10,14 +11,18 @@ using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 namespace ShramSafal.Application.UseCases.Admin.GetSilentChurn;
 
-/// <summary>IsPlatformAdmin is the caller's resolved admin scope.</summary>
-public sealed record GetSilentChurnQuery(Guid ActorId, bool IsPlatformAdmin);
+/// <summary>
+/// IsPlatformSeat is true when the caller's resolved seat belongs to the Platform organisation; MayReadPhones is the
+/// farmer_phones tick (or the founder); the audit fields name the request's device and IP hash on a phone look.
+/// </summary>
+public sealed record GetSilentChurnQuery(
+    Guid ActorId, bool IsPlatformSeat, bool MayReadPhones, string AuditDeviceId, string AuditIpHash);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4, C10, C26). The silent farms, named, with their
 /// plan, counted live on request.
 /// <list type="number">
-/// <item>A caller who is not a platform admin is refused before anything is read, so no cross-farm read is opened
+/// <item>A caller who is not a Platform seat is refused before anything is read, so no cross-farm read is opened
 /// for them (defence in depth: the route gates first).</item>
 /// <item>The farm rows come from <see cref="ICompanyMisReader"/>, the Company MIS read path (farm keys once through
 /// the audited factory, every farm row as the app role under row-level security, the live-count ceiling), loading
@@ -31,6 +36,9 @@ public sealed record GetSilentChurnQuery(Guid ActorId, bool IsPlatformAdmin);
 /// <item>Each listed farm's plan is read through <see cref="ISubscriptionReader.GetByOwnerAccountAsync"/> inside
 /// that farm's own scope (<see cref="RlsIdentityScope.RunAsFarmAsync{T}"/>), the context the app itself reads it in.
 /// No subscription: both plan fields null, never a made-up plan.</item>
+/// <item>spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): without <c>MayReadPhones</c> every owner phone is
+/// <see cref="ControlRoomPhones.Hidden"/>; with it, a <c>phones_shown</c> History row naming the farms is written
+/// BEFORE the answer is returned (a History failure sends no phone), only when a real phone is in the answer.</item>
 /// <item>Above the ceiling, or when any farm could not be read (or could not be named), the list is not measured:
 /// empty, with the reason, never a partial list that reads as "nobody else".</item>
 /// </list>
@@ -41,6 +49,8 @@ public sealed class GetSilentChurnHandler(
     ICompanyMisReader reader,
     IAdminMisRepository misRepo,
     ISubscriptionReader subscriptions,
+    IControlRoomHistory history,
+    IControlRoomStore controlRoomStore,
     DbContext db,
     CompanyMisExclusions exclusions,
     TimeProvider clock)
@@ -64,10 +74,10 @@ public sealed class GetSilentChurnHandler(
     public async Task<Result<AdminResponseDto<SilentFarmsDto>>> HandleAsync(
         GetSilentChurnQuery query, CancellationToken ct = default)
     {
-        if (!query.IsPlatformAdmin)
+        if (!query.IsPlatformSeat)
         {
             return Result.Failure<AdminResponseDto<SilentFarmsDto>>(
-                Error.Forbidden(PlatformOnlyCode, "Silent farms are for platform owners only."));
+                Error.Forbidden(PlatformOnlyCode, "This is for ShramSafal's own team only."));
         }
 
         var countedAtUtc = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Utc);
@@ -116,7 +126,7 @@ public sealed class GetSilentChurnHandler(
             farms.Add(new SilentFarmDto(
                 FarmId: farm.FarmId,
                 Name: contact.Name,
-                OwnerPhone: contact.OwnerPhone,
+                OwnerPhone: query.MayReadPhones ? contact.OwnerPhone : ControlRoomPhones.Hidden,
                 Band: farm.Band,
                 DaysSilent: farm.DaysSilent,
                 LastEntryUtc: farm.LastEntryUtc,
@@ -130,6 +140,18 @@ public sealed class GetSilentChurnHandler(
             .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(f => f.FarmId)
             .ToList();
+
+        // Without the tick no phone was sent. With it, the look is written to History BEFORE the answer is returned.
+        if (query.MayReadPhones)
+        {
+            var withPhone = ordered.Where(f => ControlRoomPhones.IsReal(f.OwnerPhone)).Select(f => f.FarmId).ToList();
+            if (withPhone.Count > 0)
+            {
+                await ControlRoomPhones.RecordLookAsync(
+                    history, controlRoomStore, query.ActorId, query.AuditDeviceId, query.AuditIpHash,
+                    "silent_farms", withPhone, personCount: 0, count: withPhone.Count, ct);
+            }
+        }
 
         return Answer(countedAtUtc, today, ordered, notMeasuredReason: null);
     }

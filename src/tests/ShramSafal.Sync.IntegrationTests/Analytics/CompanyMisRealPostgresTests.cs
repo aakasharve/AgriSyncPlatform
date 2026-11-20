@@ -328,7 +328,7 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         await using var scope = AdminScope(provider);
         var handler = Handler(scope.ServiceProvider);
 
-        var result = await handler.HandleAsync(new GetCompanyMisQuery(null, null, Admin, IsPlatformAdmin: false));
+        var result = await handler.HandleAsync(new GetCompanyMisQuery(null, null, Admin, IsPlatformSeat: false));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Forbidden);
@@ -460,7 +460,7 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
     {
         await using var scope = AdminScope(provider);
         var result = await Handler(scope.ServiceProvider)
-            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformSeat: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         return result.Value!.Data;
     }

@@ -382,7 +382,7 @@ public sealed class AdminMisRepository(
     // display_name, created_at_utc); last sign-in = the latest refresh-token issue or use. Email is not stored
     // (null); Apps is empty. Nothing is caught: a failed read answers 500, never an empty list.
     public async Task<UsersListDto> GetUsersListAsync(
-        int page, int pageSize, string? search, CancellationToken ct = default)
+        int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default)
     {
         var fs = !string.IsNullOrWhiteSpace(search);
         var total = 0;
@@ -393,7 +393,7 @@ public sealed class AdminMisRepository(
             using (var countCmd = conn.CreateCommand())
             {
                 countCmd.CommandText = "SELECT COUNT(*) FROM public.users u" +
-                    (fs ? $" WHERE u.phone LIKE @s ESCAPE '{LikeEscape}' OR LOWER(u.display_name) LIKE LOWER(@s) ESCAPE '{LikeEscape}'" : "");
+                    (fs ? $" WHERE {SearchPredicate("@s", matchPhone)}" : "");
                 if (fs) AddParam(countCmd, "@s", $"%{EscapeLike(search!)}%");
                 var rawCount = await countCmd.ExecuteScalarAsync(ct);
                 total = Convert.ToInt32(rawCount, System.Globalization.CultureInfo.InvariantCulture);
@@ -406,7 +406,7 @@ public sealed class AdminMisRepository(
                 FROM public.users u
                 LEFT JOIN public.refresh_tokens t ON t.user_id = u."Id"
                 """ +
-                (fs ? $" WHERE u.phone LIKE @s2 ESCAPE '{LikeEscape}' OR LOWER(u.display_name) LIKE LOWER(@s2) ESCAPE '{LikeEscape}'" : "") +
+                (fs ? $" WHERE {SearchPredicate("@s2", matchPhone)}" : "") +
                 """
 
                 GROUP BY u."Id"
@@ -430,6 +430,14 @@ public sealed class AdminMisRepository(
 
         return new UsersListDto(items, total, page, pageSize);
     }
+
+    /// <summary>
+    /// The Users search predicate. The phone is matched only for a seat holding the farmer_phones tick (K09): a
+    /// search that matches digits would tell a seat which phone belongs to which person even with the column hidden.
+    /// </summary>
+    private static string SearchPredicate(string param, bool matchPhone) =>
+        (matchPhone ? $"u.phone LIKE {param} ESCAPE '{LikeEscape}' OR " : "")
+        + $"LOWER(u.display_name) LIKE LOWER({param}) ESCAPE '{LikeEscape}'";
 
     /// <summary>The LIKE escape character used by both lists' search.</summary>
     private const string LikeEscape = "\\";

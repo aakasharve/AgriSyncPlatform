@@ -399,7 +399,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         rows.Checks.Should().BeEmpty();
 
         var result = await new GetWvfdHistoryHandler(reader, sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt))
-            .HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: true));
 
         result.IsSuccess.Should().BeTrue();
         AssertNotMeasured(result.Value!.Data, "too_many_farms_for_live_count");
@@ -515,7 +515,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         async Task<IReadOnlyList<FarmSummaryDto>> Filter(string? tier)
         {
             await using var scope = AdminScope(provider);
-            var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin));
+            var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
             result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
             return result.Value!.Data.Items;
         }
@@ -564,12 +564,12 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         await using var scope = AdminScope(provider);
         var page = (await FarmsHandler(scope.ServiceProvider)
-            .HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin))).Value!.Data.Items;
+            .HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"))).Value!.Data.Items;
         (await CrossFarmAuditRowsAsync(Admin)).Should().Be(2, "All Farms opens it once: the farm keys come from that same open");
 
         await using var scope2 = AdminScope(provider);
         var filtered = (await FarmsHandler(scope2.ServiceProvider)
-            .HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin))).Value!.Data.Items;
+            .HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"))).Value!.Data.Items;
         (await CrossFarmAuditRowsAsync(Admin)).Should().Be(3, "the tier filter reads every farm from the same single open");
         filtered.Select(f => f.FarmId).Should().BeEquivalentTo(new[] { Fm(1), Fm(3) }, "farm 1 has two checked days and farm 3 one: both C; farm 2 only self-confirmed is D");
 
@@ -593,7 +593,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         var provider = BuildProvider();
         await using var scope = AdminScope(provider);
-        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue("one unreadable farm must not make All Farms answer 500");
         var items = result.Value!.Data.Items;
@@ -623,7 +623,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         var provider = BuildProvider();
         await using var scope = AdminScope(provider);
-        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin));
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse("a filter that silently left the unreadable farm out of every tier would be incomplete");
         result.Error.Kind.Should().Be(ErrorKind.Conflict);
@@ -649,8 +649,8 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
             sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>(),
             maxFarmsForLiveCount: 1);
 
-        var result = await new GetFarmsListHandler(Repository(sp, reader))
-            .HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin));
+        var result = await new GetFarmsListHandler(Repository(sp, reader), new RecordingControlRoomHistory(), new FixedControlRoomStore())
+            .HandleAsync(new GetFarmsListQuery(1, 50, null, "C", Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Conflict);
@@ -671,7 +671,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         foreach (var tier in new[] { "E", "AB", "7", "A;--" })
         {
             await using var scope = AdminScope(provider);
-            var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin));
+            var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
             result.IsSuccess.Should().BeFalse(tier);
             result.Error.Kind.Should().Be(ErrorKind.Validation, tier);
@@ -696,7 +696,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         var provider = BuildProvider(new[] { TestAccount });
         await using var scope = AdminScope(provider);
-        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue();
         var items = result.Value!.Data.Items;
@@ -743,7 +743,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         AssertNotMeasured(dto, "farm_list_unreadable");
 
         await using var scope = AdminScope(provider);
-        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+        var result = await FarmsHandler(scope.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
         result.IsSuccess.Should().BeTrue("one unreadable farm never makes All Farms answer 500");
         var items = result.Value!.Data.Items;
         var hidden = items.Single(f => f.FarmId == Fm(2));
@@ -772,13 +772,13 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         await using var scope = AdminScope(provider);
         var handler = HistoryHandler(scope.ServiceProvider);
 
-        var refused = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: false));
+        var refused = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: false));
 
         refused.IsSuccess.Should().BeFalse();
         refused.Error.Kind.Should().Be(ErrorKind.Forbidden);
         (await AllCrossFarmAuditRowsAsync()).Should().Be(0, "a refused caller opens no audited factory");
 
-        var allowed = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: true));
+        var allowed = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: true));
         allowed.IsSuccess.Should().BeTrue();
         allowed.Value!.Data.CurrentWvfd.Should().Be(1m);
         (await CrossFarmAuditRowsAsync(Admin)).Should().Be(1, "the control: a platform owner is let in and the audit row names them");
@@ -916,7 +916,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         await using var scope = AdminScope(provider);
         var route = () => HistoryHandler(scope.ServiceProvider)
-            .HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: true));
         var thrown = await route.Should().ThrowAsync<Exception>(
             "a failed per-farm read escapes (the route answers 500), never zeros or an empty answer");
         Output.WriteLine($"[EVIDENCE] confirmed farm-days: thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
@@ -924,7 +924,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
 
         // All Farms reads the same way: it escapes there too.
         await using var scope2 = AdminScope(provider);
-        var farms = () => FarmsHandler(scope2.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin));
+        var farms = () => FarmsHandler(scope2.ServiceProvider).HandleAsync(new GetFarmsListQuery(1, 50, null, null, Admin, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
         var thrownFarms = await farms.Should().ThrowAsync<Exception>("All Farms never answers a page of \"No entry last week\" for a failed read");
         thrownFarms.Which.ToString().Should().Contain("permission denied");
     }
@@ -1013,7 +1013,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
     {
         await using var scope = AdminScope(provider);
         var result = await HistoryHandler(scope.ServiceProvider)
-            .HandleAsync(new GetWvfdHistoryQuery(weeks, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetWvfdHistoryQuery(weeks, Admin, IsPlatformSeat: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         result.Value!.Data.CountedAtUtc.Should().Be(CountedAt);
         result.Value.Meta.Source.Should().Be("live");
@@ -1026,7 +1026,8 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
             sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>(),
             new FixedClock(CountedAt));
 
-    private static GetFarmsListHandler FarmsHandler(IServiceProvider sp) => new(Repository(sp));
+    private static GetFarmsListHandler FarmsHandler(IServiceProvider sp) =>
+        new(Repository(sp), new RecordingControlRoomHistory(), new FixedControlRoomStore());
 
     private static WvfdWeekDto Week(WvfdHistoryDto dto, DateOnly weekStart) =>
         dto.Weeks.Should().ContainSingle(w => w.WeekStart == weekStart).Which;

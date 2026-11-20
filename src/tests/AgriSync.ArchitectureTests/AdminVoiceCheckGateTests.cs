@@ -13,6 +13,7 @@ using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
 
@@ -40,39 +41,50 @@ public sealed class AdminVoiceCheckGateTests
     /// <summary>06:30 UTC on 14 Nov 2026.</summary>
     private static readonly DateTime Now = new(2026, 11, 14, 6, 30, 0, DateTimeKind.Utc);
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces Voice_check_refuses_a_non_platform_admin
+    // (its analyst half is now a team seat that is served; its FPO half lives on in the refusal test below).
     [Fact]
-    public async Task Voice_check_refuses_a_non_platform_admin()
+    public async Task Voice_check_answers_a_team_seat_with_server_health()
     {
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
-        foreach (var (seat, name) in new[] { (analyst, "platform analyst"), (fpoOwner, "FPO owner") })
-        {
-            var refused = await Ask(seat);
+        var team = TeamSeat(ControlRoomTicks.ServerHealth);
+        team.CanRead(ModuleKey.OpsLive).Should().BeTrue();
 
-            refused.Status.Should().Be(StatusCodes.Status403Forbidden, name);
-            refused.Ports.ReaderCalls.Should().Be(0, $"{name}: nothing is read, no audited factory opened");
-            refused.Body.Should().NotContain("windowEndUtc", "a refusal carries no part of the answer");
-        }
-
-        // A seat that holds the module but is not a platform owner is refused by the platform gate itself.
-        analyst.CanRead(ModuleKey.OpsLive).Should().BeTrue("the analyst holds ops.live; only the platform gate refuses");
-        var analystRefusal = await Ask(analyst);
-        Code(analystRefusal.Body).Should().Be("admin_platform_only");
-
-        // The control: a platform owner is let in and the reader is asked once, naming the signed-in admin.
-        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
-        var ok = await Ask(owner);
+        var ok = await Ask(team);
         ok.Status.Should().Be(StatusCodes.Status200OK, ok.Body);
-        ok.Ports.ReaderCalls.Should().Be(1);
+        ok.Ports.ReaderCalls.Should().Be(1, "a Platform seat with the tick is let in and the reader is asked once");
         ok.Ports.ReaderAdminUserId.Should().Be(Admin);
-        ok.Ports.ReaderCountedAtUtc.Should().Be(Now);
-        ok.Ports.ReaderSinceUtc.Should().Be(Now.AddHours(-6));
 
-        using var doc = JsonDocument.Parse(ok.Body);
+        // The control: the founder is let in and the reader is asked once, naming the signed-in admin.
+        var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
+        var founder = await Ask(owner);
+        founder.Status.Should().Be(StatusCodes.Status200OK, founder.Body);
+        founder.Ports.ReaderCalls.Should().Be(1);
+        founder.Ports.ReaderAdminUserId.Should().Be(Admin);
+        founder.Ports.ReaderCountedAtUtc.Should().Be(Now);
+        founder.Ports.ReaderSinceUtc.Should().Be(Now.AddHours(-6));
+
+        using var doc = JsonDocument.Parse(founder.Body);
         doc.RootElement.GetProperty("rule").GetString().Should().Be("R10");
         doc.RootElement.GetProperty("state").GetString().Should().Be("not_judged",
             "a platform with no farm listed is not measured, never clear");
         doc.RootElement.GetProperty("windowEndUtc").GetDateTime().ToUniversalTime().Should().Be(Now);
+    }
+
+    [Fact]
+    public async Task Voice_check_refuses_a_team_seat_without_server_health()
+    {
+        var team = TeamSeat(ControlRoomTicks.CompanyNumbers);
+        var refused = await Ask(team);
+        refused.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(refused.Body).Should().Be("admin_module_forbidden");
+        refused.Ports.ReaderCalls.Should().Be(0, "nothing is read, no audited factory opened");
+        refused.Body.Should().NotContain("windowEndUtc", "a refusal carries no part of the answer");
+
+        // An FPO owner lacks ops.live, so the module gate refuses it; nothing is read either way.
+        var fpoOwner = Seat(OrganizationType.FPO, OrganizationRole.Owner, isPlatformAdmin: false);
+        var fpo = await Ask(fpoOwner);
+        fpo.Status.Should().Be(StatusCodes.Status403Forbidden);
+        fpo.Ports.ReaderCalls.Should().Be(0);
     }
 
     [Fact]
@@ -97,6 +109,9 @@ public sealed class AdminVoiceCheckGateTests
 
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
+
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
 
     private static bool HasOutputCache(RouteEndpoint endpoint) =>
         endpoint.Metadata.Any(m => m is IOutputCachePolicy || m is OutputCacheAttribute);

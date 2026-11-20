@@ -35,7 +35,7 @@ public sealed class GetFarmerHealthHandlerTests
     {
         var (handler, repo, _, audit) = BuildHandler(repoResult: null);
 
-        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId);
+        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId, "dev", "ip");
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
@@ -55,7 +55,7 @@ public sealed class GetFarmerHealthHandlerTests
         var dto = SeedDto();
         var (handler, _, _, audit) = BuildHandler(repoResult: dto);
 
-        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId);
+        var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), FarmId, AdminUserId, "dev", "ip");
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -73,7 +73,7 @@ public sealed class GetFarmerHealthHandlerTests
         var (handler, _, redactor, _) = BuildHandler(repoResult: dto);
 
         var lowPrivilege = MakeFpoEmployeeScope();
-        var query = new GetFarmerHealthQuery(lowPrivilege, FarmId, AdminUserId);
+        var query = new GetFarmerHealthQuery(lowPrivilege, FarmId, AdminUserId, "dev", "ip");
         var result = await handler.HandleAsync(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -95,7 +95,7 @@ public sealed class GetFarmerHealthHandlerTests
         var repo = new FakeFarmerHealthRepo(repoResult);
         var redactor = new FakeRedactor();
         var audit = new FakeAuditEmitter();
-        return (new GetFarmerHealthHandler(repo, redactor, audit), repo, redactor, audit);
+        return (new GetFarmerHealthHandler(repo, redactor, audit, new RecordingControlRoomHistory(), new FixedControlRoomStore()), repo, redactor, audit);
     }
 
     private static AdminScope MakePlatformOwnerScope()

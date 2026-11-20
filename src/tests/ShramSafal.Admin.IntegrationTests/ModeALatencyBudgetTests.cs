@@ -235,10 +235,11 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
                 TimeProvider.System,
                 new ShramSafalAdminDbContextFactory(AdminFactoryConfiguration()));
             var redactor = scope.ServiceProvider.GetRequiredService<IResponseRedactor>();
-            var handler = new GetFarmerHealthHandler(repo, redactor, NullAuditEmitter.Instance);
+            var handler = new GetFarmerHealthHandler(
+                repo, redactor, NullAuditEmitter.Instance, new RecordingControlRoomHistory(), new FixedControlRoomStore());
 
             var farmId = farmIds[rng.Next(0, farmIds.Count)];
-            var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), farmId, AdminUserId);
+            var query = new GetFarmerHealthQuery(MakePlatformOwnerScope(), farmId, AdminUserId, "dev", "ip");
 
             var sw = Stopwatch.StartNew();
             var result = await handler.HandleAsync(query, CancellationToken.None);

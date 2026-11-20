@@ -35,6 +35,8 @@ public interface IAdminMisRepository
         Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
 
     // Phase 5 — Users
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, K09): with matchPhone false the search matches
+    // display names only, so typing a phone number finds nothing for a seat without the farmer_phones tick.
     Task<UsersListDto> GetUsersListAsync(
-        int page, int pageSize, string? search, CancellationToken ct = default);
+        int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default);
 }

@@ -101,14 +101,14 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         await using var scope = AdminScope(BuildProvider());
         var handler = Handler(Repository(scope.ServiceProvider));
 
-        var unknown = await handler.HandleAsync(new GetFarmerHealthQuery(PlatformOwner, UnknownFarm, Admin));
+        var unknown = await handler.HandleAsync(new GetFarmerHealthQuery(PlatformOwner, UnknownFarm, Admin, "dev", "ip"));
 
         Output.WriteLine($"[EVIDENCE] unknown farm: success={unknown.IsSuccess} kind={(unknown.IsSuccess ? "-" : unknown.Error.Kind.ToString())}");
         unknown.IsSuccess.Should().BeFalse("a farm id that does not exist answers 404, never a page of dashes");
         unknown.Error.Kind.Should().Be(ErrorKind.NotFound);
 
         // The control: a farm that exists answers its page through the same handler.
-        var known = await handler.HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin));
+        var known = await handler.HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin, "dev", "ip"));
         known.IsSuccess.Should().BeTrue(known.IsSuccess ? string.Empty : known.Error.Description);
         known.Value!.FarmId.Should().Be(Farm1);
     }
@@ -131,7 +131,7 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
             "it is the blind-factory refusal itself, not some other failure (C19 item 4)");
 
         // Through the handler too: the failure escapes, it never becomes a NotFound result (404).
-        var viaHandler = () => Handler(repository).HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin));
+        var viaHandler = () => Handler(repository).HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin, "dev", "ip"));
         await viaHandler.Should().ThrowAsync<InvalidOperationException>();
 
         // The control: the same farm is there for a factory that can see it.
@@ -787,7 +787,7 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         Output.WriteLine($"[EVIDENCE] thrown={thrown.Which.GetType().Name}: {thrown.Which.Message}");
         thrown.Which.ToString().Should().Contain("permission denied", "it is the refused workers query that escaped");
 
-        var viaHandler = () => Handler(repository).HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin));
+        var viaHandler = () => Handler(repository).HandleAsync(new GetFarmerHealthQuery(PlatformOwner, Farm1, Admin, "dev", "ip"));
         await viaHandler.Should().ThrowAsync<Exception>("the handler never turns a failed read into a NotFound result or a page");
     }
 
@@ -802,7 +802,8 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
             factory ?? sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>());
 
     private static GetFarmerHealthHandler Handler(AdminFarmerHealthRepository repository) =>
-        new(repository, new ResponseRedactor(), new NoAuditEmitter());
+        new(repository, new ResponseRedactor(), new NoAuditEmitter(),
+            new RecordingControlRoomHistory(), new FixedControlRoomStore());
 
     private static string Problem(string endpoint, string? routeFarm = null, int status = 500) =>
         Props(("endpoint", endpoint), ("statusCode", status), ("latencyMs", 9), ("route", endpoint), ("routeFarmId", routeFarm));

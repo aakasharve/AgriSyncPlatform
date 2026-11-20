@@ -465,7 +465,7 @@ public sealed class ConfirmedFarmDaysTests
         lastWeek[Id(3)].Should().BeNull("a readable farm with no counted entry last week is \"No entry last week\", not tier D");
     }
 
-    // ── The route's handler: platform owners only ───────────────────────────
+    // ── The route's handler: Platform seats only ───────────────────────────
 
     [Fact]
     public async Task The_wvfd_route_refuses_a_non_platform_admin()
@@ -473,13 +473,13 @@ public sealed class ConfirmedFarmDaysTests
         var reader = new RecordingReader(Rows(Farms(Id(1)), [], []));
         var handler = new GetWvfdHistoryHandler(reader, CompanyMisExclusions.None, new FixedClock(CountedAt));
 
-        var refused = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: false));
+        var refused = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: false));
 
         refused.IsSuccess.Should().BeFalse();
         refused.Error.Kind.Should().Be(ErrorKind.Forbidden);
         reader.Calls.Should().Be(0, "a refused caller opens no audited factory and reads no farm");
 
-        var allowed = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformAdmin: true));
+        var allowed = await handler.HandleAsync(new GetWvfdHistoryQuery(4, Admin, IsPlatformSeat: true));
         allowed.IsSuccess.Should().BeTrue();
         reader.Calls.Should().Be(1);
         reader.AdminUserId.Should().Be(Admin, "the signed-in admin is named on the factory's audit row");
@@ -500,9 +500,9 @@ public sealed class ConfirmedFarmDaysTests
     public async Task An_unknown_tier_is_refused(string tier)
     {
         var repo = new RecordingFarmsRepository();
-        var handler = new GetFarmsListHandler(repo);
+        var handler = new GetFarmsListHandler(repo, new RecordingControlRoomHistory(), new FixedControlRoomStore());
 
-        var result = await handler.HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin));
+        var result = await handler.HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin, MayReadPhones: false, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Validation, "the route answers 400");
@@ -522,7 +522,7 @@ public sealed class ConfirmedFarmDaysTests
     {
         var repo = new RecordingFarmsRepository();
 
-        var result = await new GetFarmsListHandler(repo).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin));
+        var result = await new GetFarmsListHandler(repo, new RecordingControlRoomHistory(), new FixedControlRoomStore()).HandleAsync(new GetFarmsListQuery(1, 50, null, tier, Admin, MayReadPhones: false, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue();
         repo.Calls.Should().Be(1);
@@ -535,7 +535,7 @@ public sealed class ConfirmedFarmDaysTests
     {
         var repo = new RecordingFarmsRepository { RefusalCode = code };
 
-        var result = await new GetFarmsListHandler(repo).HandleAsync(new GetFarmsListQuery(1, 50, null, "A", Admin));
+        var result = await new GetFarmsListHandler(repo, new RecordingControlRoomHistory(), new FixedControlRoomStore()).HandleAsync(new GetFarmsListQuery(1, 50, null, "A", Admin, MayReadPhones: false, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Conflict);
@@ -654,7 +654,7 @@ public sealed class ConfirmedFarmDaysTests
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 }

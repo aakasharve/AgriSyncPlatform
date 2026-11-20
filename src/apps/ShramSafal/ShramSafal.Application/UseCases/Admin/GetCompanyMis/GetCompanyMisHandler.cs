@@ -6,15 +6,15 @@ namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 /// <summary>
 /// From and To are India-time calendar days; both null means "the last 30 days
-/// ending today". IsPlatformAdmin is the caller's resolved admin scope.
+/// ending today". IsPlatformSeat is true when the caller's resolved seat belongs to the Platform organisation.
 /// </summary>
-public sealed record GetCompanyMisQuery(DateOnly? From, DateOnly? To, Guid ActorId, bool IsPlatformAdmin);
+public sealed record GetCompanyMisQuery(DateOnly? From, DateOnly? To, Guid ActorId, bool IsPlatformSeat);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2a). Company-wide numbers
 /// for platform owners only.
 /// <list type="number">
-/// <item>A caller who is not a platform admin is refused before anything is
+/// <item>A caller who is not a Platform seat is refused before anything is
 /// read, so no cross-farm read is opened for them (defence in depth: the route
 /// gates first).</item>
 /// <item>The range is validated: both dates or neither, From &lt;= To, To not
@@ -56,10 +56,10 @@ public sealed class GetCompanyMisHandler(
     public async Task<Result<AdminResponseDto<CompanyMisDto>>> HandleAsync(
         GetCompanyMisQuery query, CancellationToken ct = default)
     {
-        if (!query.IsPlatformAdmin)
+        if (!query.IsPlatformSeat)
         {
             return Result.Failure<AdminResponseDto<CompanyMisDto>>(
-                Error.Forbidden(PlatformOnlyCode, "Company numbers are for platform owners only."));
+                Error.Forbidden(PlatformOnlyCode, "This is for ShramSafal's own team only."));
         }
 
         var countedAtUtc = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Utc);

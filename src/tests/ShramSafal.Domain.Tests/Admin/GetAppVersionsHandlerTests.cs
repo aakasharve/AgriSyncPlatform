@@ -270,6 +270,46 @@ public sealed class GetAppVersionsHandlerTests
             "a person behind is a name, their farms, a version and a time, and nothing else");
     }
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, AM7, K29)
+
+    [Fact]
+    public async Task App_versions_shows_counts_but_hides_names_without_all_farms()
+    {
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        repo.Rows.Add(Seen(Sunita, "1.0.18", Now.AddHours(-1)));
+        repo.Rows.Add(Seen(Ramesh, "1.0.17", Now.AddDays(-2)));
+        repo.Names[Ramesh] = "Ramesh Patil";
+        repo.FarmNames[Ramesh] = new[] { "Patil Wadi" };
+
+        // The Viewer preset (company_numbers, server_health): counts only.
+        var (data, _) = await Ask(repo, mayReadNames: false);
+
+        data.People.Should().Be(2);
+        data.Versions.Should().Equal(
+            new AppVersionRowDto("1.0.18", 1, true),
+            new AppVersionRowDto("1.0.17", 1, false));
+        data.OnOlderVersions.Should().BeEmpty("the names were not read");
+        data.OnOlderVersionsHiddenReason.Should().Be("needs_all_farms",
+            "the page says why the list is empty, never shows it as nobody");
+        repo.NameCalls.Should().BeEmpty("nothing that reads names runs without the All farms tick");
+        repo.FarmNameCalls.Should().BeEmpty("the cross-farm factory is not opened without the All farms tick");
+    }
+
+    [Fact]
+    public async Task App_versions_names_people_with_all_farms()
+    {
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        repo.Rows.Add(Seen(Sunita, "1.0.18", Now.AddHours(-1)));
+        repo.Rows.Add(Seen(Ramesh, "1.0.17", Now.AddDays(-2)));
+        repo.Names[Ramesh] = "Ramesh Patil";
+        repo.FarmNames[Ramesh] = new[] { "Patil Wadi" };
+
+        var (data, _) = await Ask(repo, mayReadNames: true);
+
+        data.OnOlderVersions.Should().ContainSingle().Which.Name.Should().Be("Ramesh Patil");
+        data.OnOlderVersionsHiddenReason.Should().BeNull();
+    }
+
     [Fact]
     public async Task Farm_names_are_asked_only_for_people_on_an_older_version()
     {
@@ -484,7 +524,7 @@ public sealed class GetAppVersionsHandlerTests
         };
 
         var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
-        var result = await handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser));
+        var result = await handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true));
 
         result.IsSuccess.Should().BeTrue("\"nothing recorded yet\" is an answer, not a failure");
         var data = result.Value!.Data;
@@ -638,7 +678,7 @@ public sealed class GetAppVersionsHandlerTests
             var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser)));
+                () => handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true)));
 
             thrown.Should().BeSameAs(repo.Failure,
                 $"when {failing} fails the failure reaches the server's own error path as it is: "
@@ -695,11 +735,11 @@ public sealed class GetAppVersionsHandlerTests
     }
 
     /// <summary>Asks as the admin, at <see cref="Now"/>, and expects an answer.</summary>
-    private static async Task<(AppVersionsDto Data, AdminMetaDto Meta)> Ask(FakeOpsRepository repo, int? days = 7)
+    private static async Task<(AppVersionsDto Data, AdminMetaDto Meta)> Ask(FakeOpsRepository repo, int? days = 7, bool mayReadNames = true)
     {
         var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
 
-        var result = await handler.HandleAsync(new GetAppVersionsQuery(days, AdminUser));
+        var result = await handler.HandleAsync(new GetAppVersionsQuery(days, AdminUser, mayReadNames));
 
         result.IsSuccess.Should().BeTrue("the repository answered, so the handler has an answer");
         result.Value.Should().NotBeNull();

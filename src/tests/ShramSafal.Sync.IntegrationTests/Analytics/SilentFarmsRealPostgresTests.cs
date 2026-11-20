@@ -279,7 +279,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
             sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>(),
             maxFarmsForLiveCount: 1);
 
-        var result = await Handler(sp, reader: reader).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformAdmin: true));
+        var result = await Handler(sp, reader: reader).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         var dto = result.Value!.Data;
@@ -327,7 +327,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         await using var scope = AdminScope(provider);
         var contacts = new ContactsMissingOneFarm(MisRepository(scope.ServiceProvider), Ten.Id);
         var result = await Handler(scope.ServiceProvider, contacts: contacts)
-            .HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         var dto = result.Value!.Data;
@@ -335,6 +335,47 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         contacts.Calls.Should().BeGreaterThan(0, "the contacts read was asked");
         dto.NotMeasuredReason.Should().Be("farm_list_unreadable", "the whole answer, never a blank name");
         dto.Farms.Should().BeEmpty("never a silently shorter list");
+    }
+
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): the phone rule on the silent list, on a real database
+    // (the route-level tests cannot reach the plan read, which needs a relational context).
+    [SkippableFact]
+    public async Task Silent_list_hides_every_phone_without_the_phone_tick_and_records_nothing()
+    {
+        await GuardAsync();
+
+        var history = new RecordingControlRoomHistory();
+        await using var scope = AdminScope(BuildProvider());
+
+        var result = await Handler(scope.ServiceProvider, history: history).HandleAsync(
+            new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: false, AuditDeviceId: "dev", AuditIpHash: "ip"));
+
+        result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
+        var farms = result.Value!.Data.Farms;
+        farms.Should().NotBeEmpty("the names and bands are still served");
+        farms.Should().OnlyContain(f => f.OwnerPhone == "**redacted**");
+        JsonSerializer.Serialize(result.Value).Should().NotContain("90000004", "no seeded phone digits appear in the answer");
+        history.Entries.Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task Silent_list_with_the_phone_tick_records_the_farms_whose_phones_it_sent()
+    {
+        await GuardAsync();
+
+        var history = new RecordingControlRoomHistory();
+        await using var scope = AdminScope(BuildProvider());
+
+        var result = await Handler(scope.ServiceProvider, history: history).HandleAsync(
+            new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
+
+        result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
+        var farms = result.Value!.Data.Farms;
+        farms.Should().OnlyContain(f => f.OwnerPhone != "**redacted**" && !string.IsNullOrEmpty(f.OwnerPhone));
+        var entry = history.Entries.Should().ContainSingle().Subject;
+        entry.Action.Should().Be("phones_shown");
+        entry.SubjectId.Should().Be(Admin, "no person row: the subject is the reader's own user id");
+        ControlRoomPhoneFakesJson.FarmIds(entry.Payload).Should().BeEquivalentTo(farms.Select(f => f.FarmId));
     }
 
     // ── access, audit, failures ──────────────────────────────────────────────
@@ -348,7 +389,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         var before = await AllCrossFarmAuditRowsAsync();
         await using var scope = AdminScope(BuildProvider());
 
-        var result = await Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformAdmin: false));
+        var result = await Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformSeat: false, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Forbidden);
@@ -425,7 +466,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         }
 
         await using var scope = AdminScope(provider);
-        var load = () => Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformAdmin: true));
+        var load = () => Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
 
         var thrown = await load.Should().ThrowAsync<Exception>(
             "a failed plan read escapes (the route answers 500), never \"No plan recorded\" for every farm");
@@ -460,10 +501,13 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
 
     /// <summary>The handler wired as in production: scoped reader, contacts, plan reader and the same scoped context.</summary>
     private static GetSilentChurnHandler Handler(
-        IServiceProvider sp, ICompanyMisReader? reader = null, IAdminMisRepository? contacts = null) =>
+        IServiceProvider sp, ICompanyMisReader? reader = null, IAdminMisRepository? contacts = null,
+        RecordingControlRoomHistory? history = null) =>
         new(reader ?? sp.GetRequiredService<ICompanyMisReader>(),
             contacts ?? MisRepository(sp),
             sp.GetRequiredService<ISubscriptionReader>(),
+            history ?? new RecordingControlRoomHistory(),
+            new FixedControlRoomStore(),
             sp.GetRequiredService<ShramSafalDbContext>(),
             sp.GetRequiredService<CompanyMisExclusions>(),
             new FixedClock(CountedAt));
@@ -471,7 +515,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
     private static async Task<SilentFarmsDto> LoadAsync(ServiceProvider provider)
     {
         await using var scope = AdminScope(provider);
-        var result = await Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformAdmin: true));
+        var result = await Handler(scope.ServiceProvider).HandleAsync(new GetSilentChurnQuery(Admin, IsPlatformSeat: true, MayReadPhones: true, AuditDeviceId: "dev", AuditIpHash: "ip"));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         result.Value!.Data.CountedAtUtc.Should().Be(CountedAt);
         return result.Value.Data;
@@ -484,7 +528,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         var result = await new GetCompanyMisHandler(
                 sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<IAdminOpsRepository>(),
                 sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt))
-            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(from, to, Admin, IsPlatformSeat: true));
         result.IsSuccess.Should().BeTrue(result.IsSuccess ? string.Empty : result.Error.Description);
         return result.Value!.Data;
     }
@@ -522,7 +566,7 @@ public sealed class SilentFarmsRealPostgresTests(Xunit.Abstractions.ITestOutputH
         public Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default) =>
             inner.GetSufferingAsync(ct);
 
-        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
-            inner.GetUsersListAsync(page, pageSize, search, ct);
+        public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) =>
+            inner.GetUsersListAsync(page, pageSize, search, matchPhone, ct);
     }
 }

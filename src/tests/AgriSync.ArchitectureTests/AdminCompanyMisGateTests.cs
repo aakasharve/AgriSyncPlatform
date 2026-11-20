@@ -14,6 +14,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetUsersList;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
 
@@ -60,16 +61,29 @@ public sealed class AdminCompanyMisGateTests
         answer.Body.Should().NotContain("countedAtUtc", "a refusal carries no part of the answer");
     }
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): was Company_mis_is_refused_to_a_platform_analyst.
     [Fact]
-    public async Task Company_mis_is_refused_to_a_platform_analyst()
+    public async Task Company_mis_answers_a_team_seat_with_company_numbers()
     {
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        analyst.CanRead(ModuleKey.MetricsNsm).Should().BeTrue("the analyst holds the module; only the platform gate refuses");
+        var team = TeamSeat(ControlRoomTicks.CompanyNumbers);
+        team.CanRead(ModuleKey.MetricsNsm).Should().BeTrue("the company_numbers tick opens metrics.nsm");
+        team.IsPlatformAdmin.Should().BeFalse("this is a team seat, not the founder");
 
-        var answer = await Ask(CompanyRoute, null, analyst);
+        var answer = await Ask(CompanyRoute, null, team);
+
+        answer.Status.Should().Be(StatusCodes.Status200OK, answer.Body);
+        answer.Reader.Calls.Should().Be(1, "for a Platform seat with the tick the handler really reads");
+    }
+
+    [Fact]
+    public async Task Company_mis_refuses_a_team_seat_without_company_numbers()
+    {
+        var team = TeamSeat(ControlRoomTicks.ServerHealth);
+
+        var answer = await Ask(CompanyRoute, null, team);
 
         answer.Status.Should().Be(StatusCodes.Status403Forbidden);
-        Code(answer.Body).Should().Be("admin_platform_only");
+        Code(answer.Body).Should().Be("admin_module_forbidden");
         answer.Reader.Calls.Should().Be(0);
     }
 
@@ -158,23 +172,11 @@ public sealed class AdminCompanyMisGateTests
         Code(farms.Body).Should().Be("admin_platform_only");
         farms.Repository.Calls.Should().BeEmpty("no farm and no phone number is read for a refused caller");
 
-        // Users: the FPO owner is refused too, and nothing is read.
+        // Users: the FPO owner holds no admin.users module, so the module gate refuses; nothing is read.
         var users = await Ask(UsersRoute, "?page=1&pageSize=20", fpoOwner);
         users.Status.Should().Be(StatusCodes.Status403Forbidden);
+        Code(users.Body).Should().Be("admin_module_forbidden");
         users.Repository.Calls.Should().BeEmpty();
-
-        // The platform gate itself on both lists: a Platform Analyst holds farms.list and admin.users
-        // but is not a platform owner.
-        var analyst = Seat(OrganizationType.Platform, OrganizationRole.Analyst, isPlatformAdmin: false);
-        analyst.CanRead(ModuleKey.FarmsList).Should().BeTrue();
-        analyst.CanRead(ModuleKey.AdminUsers).Should().BeTrue();
-        foreach (var route in new[] { FarmsRoute, UsersRoute })
-        {
-            var refused = await Ask(route, "?page=1&pageSize=20", analyst);
-            refused.Status.Should().Be(StatusCodes.Status403Forbidden, route);
-            Code(refused.Body).Should().Be("admin_platform_only", route);
-            refused.Repository.Calls.Should().BeEmpty(route);
-        }
 
         // The control: a platform owner is let in and the handlers really read.
         var owner = Seat(OrganizationType.Platform, OrganizationRole.Owner, isPlatformAdmin: true);
@@ -187,12 +189,46 @@ public sealed class AdminCompanyMisGateTests
         ownerUsers.Repository.Calls.Should().Contain(nameof(IAdminMisRepository.GetUsersListAsync));
     }
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4): replaces the analyst half of
+    // Farms_and_users_lists_are_refused_to_a_non_platform_admin.
+    [Fact]
+    public async Task Farms_and_users_lists_answer_a_team_seat_with_their_ticks()
+    {
+        var team = TeamSeat(ControlRoomTicks.AllFarms, ControlRoomTicks.Users);
+
+        var farms = await Ask(FarmsRoute, "?page=1&pageSize=20", team);
+        farms.Status.Should().Be(StatusCodes.Status200OK, farms.Body);
+        farms.Repository.Calls.Should().Contain(nameof(IAdminMisRepository.GetFarmsListAsync));
+
+        var users = await Ask(UsersRoute, "?page=1&pageSize=20", team);
+        users.Status.Should().Be(StatusCodes.Status200OK, users.Body);
+        users.Repository.Calls.Should().Contain(nameof(IAdminMisRepository.GetUsersListAsync));
+    }
+
+    [Fact]
+    public async Task Farms_and_users_lists_refuse_a_team_seat_without_their_ticks()
+    {
+        var team = TeamSeat(ControlRoomTicks.CompanyNumbers);
+
+        foreach (var route in new[] { FarmsRoute, UsersRoute })
+        {
+            var refused = await Ask(route, "?page=1&pageSize=20", team);
+            refused.Status.Should().Be(StatusCodes.Status403Forbidden, route);
+            Code(refused.Body).Should().Be("admin_module_forbidden", route);
+            refused.Repository.Calls.Should().BeEmpty(route);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Harness (as AdminOpsAppVersionsGateTests)
     // ------------------------------------------------------------------
 
     private static AdminScope Seat(OrganizationType type, OrganizationRole role, bool isPlatformAdmin) =>
         new(Org, type, role, EntitlementMatrix.For(type, role), IsPlatformAdmin: isPlatformAdmin);
+
+    /// <summary>A control-room team seat: a Platform seat that is not the founder, serving only what its ticks open.</summary>
+    private static AdminScope TeamSeat(params string[] ticks) =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee, ControlRoomTicks.ModulesFor(ticks), IsPlatformAdmin: false);
 
     private static RouteEndpoint Endpoint(string route)
     {
@@ -229,8 +265,8 @@ public sealed class AdminCompanyMisGateTests
         services.AddSingleton<IEntitlementResolver>(resolver);
         services.AddSingleton(new GetCompanyMisHandler(
             reader, new NoAppSeenOpsRepository(), new CompanyMisExclusions(new HashSet<Guid>()), new FixedClock(Now)));
-        services.AddSingleton(new GetFarmsListHandler(repository));
-        services.AddSingleton(new GetUsersListHandler(repository));
+        services.AddSingleton(new GetFarmsListHandler(repository, new RecordingControlRoomHistory(), new FixedControlRoomStore()));
+        services.AddSingleton(new GetUsersListHandler(repository, new RecordingControlRoomHistory(), new FixedControlRoomStore()));
 
         var ctx = new DefaultHttpContext
         {
@@ -368,7 +404,7 @@ public sealed class AdminCompanyMisGateTests
         }
 
         public Task<UsersListDto> GetUsersListAsync(
-            int page, int pageSize, string? search, CancellationToken ct = default)
+            int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default)
         {
             Calls.Add(nameof(GetUsersListAsync));
             return Task.FromResult(new UsersListDto(Array.Empty<UserSummaryDto>(), 0, page, pageSize));

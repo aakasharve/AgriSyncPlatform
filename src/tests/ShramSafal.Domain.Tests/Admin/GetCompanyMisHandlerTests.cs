@@ -34,7 +34,7 @@ public sealed class GetCompanyMisHandlerTests
         var reader = new RecordingReader();
         var handler = Handler(reader, Noon14NovIst);
 
-        var result = await handler.HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformAdmin: false));
+        var result = await handler.HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: false));
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Forbidden);
@@ -43,7 +43,7 @@ public sealed class GetCompanyMisHandlerTests
 
         // Even a malformed range is not looked at first: the gate comes before the range rules.
         var alsoBadRange = await handler.HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), AdminUser, IsPlatformAdmin: false));
+            new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), AdminUser, IsPlatformSeat: false));
         alsoBadRange.Error.Kind.Should().Be(ErrorKind.Forbidden);
         reader.Calls.Should().Be(0);
     }
@@ -53,7 +53,7 @@ public sealed class GetCompanyMisHandlerTests
     {
         var reader = new RecordingReader();
         var result = await Handler(reader, Noon14NovIst)
-            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: true));
 
         result.IsSuccess.Should().BeTrue();
         var data = result.Value!.Data;
@@ -69,7 +69,7 @@ public sealed class GetCompanyMisHandlerTests
     public async Task The_previous_period_has_the_same_length_and_ends_the_day_before()
     {
         var result = await Handler(new RecordingReader(), Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), AdminUser, IsPlatformSeat: true));
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Data.Range.Should().Be(new MisRangeDto(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 7));
@@ -78,7 +78,7 @@ public sealed class GetCompanyMisHandlerTests
 
         // One day: the previous period is the day before.
         var oneDay = await Handler(new RecordingReader(), Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 14), new DateOnly(2026, 11, 14), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 14), new DateOnly(2026, 11, 14), AdminUser, IsPlatformSeat: true));
         oneDay.Value!.Data.PreviousRange.Should().Be(
             new MisRangeDto(new DateOnly(2026, 11, 13), new DateOnly(2026, 11, 13), 1));
     }
@@ -89,14 +89,14 @@ public sealed class GetCompanyMisHandlerTests
         var to = new DateOnly(2026, 11, 14);
 
         var tooLong = await Handler(new RecordingReader(), Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
-            to.AddDays(-180), to, AdminUser, IsPlatformAdmin: true)); // 181 days
+            to.AddDays(-180), to, AdminUser, IsPlatformSeat: true)); // 181 days
         tooLong.IsSuccess.Should().BeFalse();
         tooLong.Error.Kind.Should().Be(ErrorKind.Validation);
         tooLong.Error.Code.Should().Be("admin.mis_range_invalid");
 
         var reader = new RecordingReader();
         var longest = await Handler(reader, Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
-            to.AddDays(-179), to, AdminUser, IsPlatformAdmin: true)); // 180 days
+            to.AddDays(-179), to, AdminUser, IsPlatformSeat: true)); // 180 days
         longest.IsSuccess.Should().BeTrue("180 days is the longest range allowed");
         longest.Value!.Data.Range.Days.Should().Be(180);
         longest.Value.Data.PreviousRange.Days.Should().Be(180);
@@ -118,7 +118,7 @@ public sealed class GetCompanyMisHandlerTests
         {
             var reader = new RecordingReader();
             var result = await Handler(reader, Noon14NovIst)
-                .HandleAsync(new GetCompanyMisQuery(c.From, c.To, AdminUser, IsPlatformAdmin: true));
+                .HandleAsync(new GetCompanyMisQuery(c.From, c.To, AdminUser, IsPlatformSeat: true));
 
             result.IsSuccess.Should().BeFalse(c.Why);
             result.Error.Kind.Should().Be(ErrorKind.Validation, c.Why);
@@ -134,22 +134,22 @@ public sealed class GetCompanyMisHandlerTests
         var clock = new DateTime(2026, 11, 14, 19, 0, 0, DateTimeKind.Utc);
 
         var noDates = await Handler(new RecordingReader(), clock)
-            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: true));
         noDates.Value!.Data.Range.To.Should().Be(new DateOnly(2026, 11, 15));
         noDates.Value.Data.Range.From.Should().Be(new DateOnly(2026, 10, 17));
 
         var endingToday = await Handler(new RecordingReader(), clock).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformSeat: true));
         endingToday.IsSuccess.Should().BeTrue("15 Nov is already today in India although it is still 14 Nov in UTC");
 
         var endingTomorrow = await Handler(new RecordingReader(), clock).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 16), new DateOnly(2026, 11, 16), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 16), new DateOnly(2026, 11, 16), AdminUser, IsPlatformSeat: true));
         endingTomorrow.Error.Kind.Should().Be(ErrorKind.Validation);
 
         // And the other side: 18:00 UTC on 14 Nov is 23:30 on 14 Nov in India; 15 Nov is still tomorrow.
         var lateEvening = new DateTime(2026, 11, 14, 18, 0, 0, DateTimeKind.Utc);
         var notYet = await Handler(new RecordingReader(), lateEvening).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformSeat: true));
         notYet.Error.Kind.Should().Be(ErrorKind.Validation);
     }
 
@@ -158,7 +158,7 @@ public sealed class GetCompanyMisHandlerTests
     {
         var reader = new RecordingReader();
         await Handler(reader, Noon14NovIst, new HashSet<Guid> { FakeTestAccount }).HandleAsync(new GetCompanyMisQuery(
-            new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), AdminUser, IsPlatformAdmin: true));
+            new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), AdminUser, IsPlatformSeat: true));
 
         // Previous period starts 25 Oct; minus 30 days = 25 Sep; 00:00 India time = 24 Sep 18:30 UTC.
         reader.SinceUtc.Should().Be(new DateTime(2026, 9, 24, 18, 30, 0, DateTimeKind.Utc));
@@ -172,7 +172,7 @@ public sealed class GetCompanyMisHandlerTests
     public async Task The_answer_says_when_it_was_counted()
     {
         var result = await Handler(new RecordingReader(), Noon14NovIst)
-            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformAdmin: true));
+            .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: true));
 
         result.Value!.Data.CountedAtUtc.Should().Be(Noon14NovIst);
         result.Value.Meta.LastRefreshedUtc.Should().Be(Noon14NovIst);
@@ -183,7 +183,7 @@ public sealed class GetCompanyMisHandlerTests
     {
         var handler = Handler(new ThrowingReader(), Noon14NovIst);
 
-        var act = () => handler.HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformAdmin: true));
+        var act = () => handler.HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: true));
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*fake read failure*");

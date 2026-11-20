@@ -4,7 +4,11 @@ using ShramSafal.Application.Ports;
 
 namespace ShramSafal.Application.UseCases.Admin.GetAppVersions;
 
-public sealed record GetAppVersionsQuery(int? Days, Guid ActorId);
+/// <summary>
+/// MayReadNames is the All farms tick (or the founder): without it the counts are answered and the people list (names
+/// and farm names) is not read at all (spec: trusted-control-room-2026-11-20, plan CR-3, Task A4, AM7).
+/// </summary>
+public sealed record GetAppVersionsQuery(int? Days, Guid ActorId, bool MayReadNames);
 
 /// <summary>
 /// spec: control-room-app-versions-2026-11-12 (ADR 0028). Who used the farmer
@@ -43,6 +47,12 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
     /// </summary>
     public const string LegacyVersionNumber = "0.9.0";
 
+    /// <summary>
+    /// Why the people list is empty for a seat without the All farms tick (P4: the page says why the names are
+    /// hidden, never shows an empty list as "nobody").
+    /// </summary>
+    public const string NeedsAllFarmsReason = "needs_all_farms";
+
     public async Task<Result<AdminResponseDto<AppVersionsDto>>> HandleAsync(
         GetAppVersionsQuery query, CancellationToken ct = default)
     {
@@ -57,7 +67,10 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
 
         var people = LatestUsePerPerson(rows);
         var versions = CountByVersion(people);
-        var onOlderVersions = await DescribePeopleBehindAsync(people, versions, query.ActorId, ct);
+        // Without the All farms tick nothing that reads names or opens the cross-farm factory runs.
+        IReadOnlyList<OlderVersionPersonDto> onOlderVersions = query.MayReadNames
+            ? await DescribePeopleBehindAsync(people, versions, query.ActorId, ct)
+            : [];
 
         var data = new AppVersionsDto(
             Days: days,
@@ -69,7 +82,8 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
             NewestVersion: versions.Count > 0 ? versions[0].AppVersion : null,
             LegacyVersionNumber: LegacyVersionNumber,
             Versions: versions,
-            OnOlderVersions: onOlderVersions);
+            OnOlderVersions: onOlderVersions,
+            OnOlderVersionsHiddenReason: query.MayReadNames ? null : NeedsAllFarmsReason);
 
         return Result.Success(new AdminResponseDto<AppVersionsDto>(data,
             new AdminMetaDto(

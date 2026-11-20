@@ -42,7 +42,9 @@ namespace ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 public sealed class GetFarmerHealthHandler(
     IAdminFarmerHealthRepository repo,
     IResponseRedactor redactor,
-    IAdminAuditEmitter audit)
+    IAdminAuditEmitter audit,
+    IControlRoomHistory history,
+    IControlRoomStore controlRoomStore)
 {
     public async Task<Result<FarmerHealthDto>> HandleAsync(GetFarmerHealthQuery q, CancellationToken ct = default)
     {
@@ -55,6 +57,21 @@ public sealed class GetFarmerHealthHandler(
 
         await audit.EmitFarmerLookupAsync(q.Scope, q.FarmId, "ModeA_Drilldown", ct);
         var redacted = redactor.Redact(dto, q.Scope, ModuleKey.FarmerHealth);
+
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4). The phone is set AFTER redaction: hidden unless
+        // the seat holds the farmer_phones tick; otherwise the look is written to History before it is returned.
+        if (!ControlRoomPhones.MayRead(q.Scope))
+        {
+            return Result.Success(redacted with { Phone = ControlRoomPhones.Hidden });
+        }
+
+        if (ControlRoomPhones.IsReal(redacted.Phone))
+        {
+            await ControlRoomPhones.RecordLookAsync(
+                history, controlRoomStore, q.ActorUserId, q.AuditDeviceId, q.AuditIpHash,
+                "farm_page", [q.FarmId], personCount: 0, count: 1, ct);
+        }
+
         return Result.Success(redacted);
     }
 }

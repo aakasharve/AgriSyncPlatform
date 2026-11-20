@@ -143,6 +143,27 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         (await CrossFarmAuditRowsAsync(Admin)).Should().Be(2);
     }
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, K09): without the phone tick the search matches names only.
+    [SkippableFact]
+    public async Task Users_search_matches_a_phone_only_when_asked_to()
+    {
+        await GuardAsync();
+
+        await using var scope = AdminScope(BuildProvider());
+        var repository = Repository(scope.ServiceProvider);
+
+        var without = await repository.GetUsersListAsync(1, 50, "0000009301", matchPhone: false);
+        without.TotalCount.Should().Be(0, "the digits of a phone match nobody without the tick");
+        without.Items.Should().BeEmpty();
+
+        var with = await repository.GetUsersListAsync(1, 50, "0000009301", matchPhone: true);
+        with.TotalCount.Should().Be(1);
+        with.Items.Should().ContainSingle().Which.UserId.Should().Be(SignedInPerson);
+
+        var byName = await repository.GetUsersListAsync(1, 50, "signed in", matchPhone: false);
+        byName.Items.Select(i => i.UserId).Should().Contain(SignedInPerson, "a name still matches without the tick");
+    }
+
     [SkippableFact]
     public async Task Users_list_returns_real_people_with_last_sign_in()
     {
@@ -150,7 +171,7 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
 
         var provider = BuildProvider();
         await using var scope = AdminScope(provider);
-        var list = await Repository(scope.ServiceProvider).GetUsersListAsync(1, 200, null);
+        var list = await Repository(scope.ServiceProvider).GetUsersListAsync(1, 200, null, matchPhone: true);
 
         Output.WriteLine($"[EVIDENCE] users list total={list.TotalCount} items={list.Items.Count}");
         var mine = list.Items
@@ -196,8 +217,8 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         {
             await using var scope = AdminScope(provider);
             var repository = Repository(scope.ServiceProvider);
-            var page1 = await repository.GetUsersListAsync(1, 1, null);
-            var page2 = await repository.GetUsersListAsync(2, 1, null);
+            var page1 = await repository.GetUsersListAsync(1, 1, null, matchPhone: true);
+            var page2 = await repository.GetUsersListAsync(2, 1, null, matchPhone: true);
 
             page1.Items.Should().ContainSingle();
             page2.Items.Should().ContainSingle();
@@ -238,7 +259,7 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         var repository = Repository(scope.ServiceProvider);
         foreach (var ch in new[] { "_", "%" })
         {
-            var users = await repository.GetUsersListAsync(1, 200, ch);
+            var users = await repository.GetUsersListAsync(1, 200, ch, matchPhone: true);
             users.Items.Should().OnlyContain(
                 u => (u.DisplayName ?? string.Empty).Contains(ch) || u.Phone.Contains(ch),
                 "a search for '{0}' returns only people who really contain it", ch);
@@ -266,7 +287,7 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         var repository = Repository(scope.ServiceProvider);
 
         var farms = () => repository.GetFarmsListAsync(Admin, 1, 50, null, null);
-        var users = () => repository.GetUsersListAsync(1, 50, null);
+        var users = () => repository.GetUsersListAsync(1, 50, null, matchPhone: true);
 
         await farms.Should().ThrowAsync<Exception>("a failed read escapes to the 500 path, never an empty list");
         await users.Should().ThrowAsync<Exception>("a failed read escapes to the 500 path, never an empty list");

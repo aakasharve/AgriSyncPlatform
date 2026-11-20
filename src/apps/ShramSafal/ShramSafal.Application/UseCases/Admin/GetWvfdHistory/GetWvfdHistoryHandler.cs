@@ -6,14 +6,14 @@ using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 namespace ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
 
-/// <summary>Weeks is the number of complete India weeks; IsPlatformAdmin is the caller's resolved admin scope.</summary>
-public sealed record GetWvfdHistoryQuery(int Weeks, Guid ActorId, bool IsPlatformAdmin);
+/// <summary>Weeks is the number of complete India weeks; IsPlatformSeat is true when the caller's resolved seat belongs to the Platform organisation.</summary>
+public sealed record GetWvfdHistoryQuery(int Weeks, Guid ActorId, bool IsPlatformSeat);
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6 as replaced by C32; C12). Confirmed farm-days,
 /// counted live on request.
 /// <list type="number">
-/// <item>A caller who is not a platform admin is refused before anything is read, so no cross-farm read is opened
+/// <item>A caller who is not a Platform seat is refused before anything is read, so no cross-farm read is opened
 /// for them (defence in depth: the route gates first).</item>
 /// <item>The rows come from <see cref="IConfirmedFarmDaysReader.ReadAllAsync"/>: farm keys ONCE through the audited
 /// factory, every farm's entries and their verification events as the app login under row-level security, the
@@ -35,10 +35,10 @@ public sealed class GetWvfdHistoryHandler(
     public async Task<Result<AdminResponseDto<WvfdHistoryDto>>> HandleAsync(
         GetWvfdHistoryQuery query, CancellationToken ct = default)
     {
-        if (!query.IsPlatformAdmin)
+        if (!query.IsPlatformSeat)
         {
             return Result.Failure<AdminResponseDto<WvfdHistoryDto>>(
-                Error.Forbidden(PlatformOnlyCode, "Confirmed farm-days are for platform owners only."));
+                Error.Forbidden(PlatformOnlyCode, "This is for ShramSafal's own team only."));
         }
 
         var countedAtUtc = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Utc);

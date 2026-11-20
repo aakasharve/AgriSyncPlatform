@@ -135,6 +135,23 @@ public static class AdminScopeHelper
         return false;
     }
 
+    /// <summary>
+    /// Module-gate for a route several modules open (the farm names behind more than one page). Passes when the
+    /// scope can read any of <paramref name="moduleKeys"/>; otherwise writes 403 and returns false.
+    /// </summary>
+    public static async Task<bool> RequireReadAnyAsync(
+        HttpContext ctx, AdminScope scope, params string[] moduleKeys)
+    {
+        if (moduleKeys.Any(scope.CanRead)) return true;
+        await WriteJsonAsync(ctx, StatusCodes.Status403Forbidden, new
+        {
+            code = "admin_module_forbidden",
+            moduleKey = string.Join(" or ", moduleKeys),
+            message = $"Your admin scope does not grant read on any of '{string.Join("', '", moduleKeys)}'."
+        });
+        return false;
+    }
+
     /// <summary>Write-gate counterpart of <see cref="RequireReadAsync"/>.</summary>
     public static async Task<bool> RequireWriteAsync(
         HttpContext ctx, AdminScope scope, string moduleKey)
@@ -160,6 +177,22 @@ public static class AdminScopeHelper
         {
             code = "admin_platform_only",
             message = "This action requires Platform+Owner scope."
+        });
+        return false;
+    }
+
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4). Lock 2 of the company routes: the seat must belong
+    /// to the Platform organisation (an FPO owner holds some of the same modules and is refused). It follows
+    /// <see cref="RequireReadAsync"/>, so a team seat is served only what its ticks open.
+    /// </summary>
+    public static async Task<bool> RequirePlatformSeatAsync(HttpContext ctx, AdminScope scope)
+    {
+        if (scope.IsPlatformSeat) return true;
+        await WriteJsonAsync(ctx, StatusCodes.Status403Forbidden, new
+        {
+            code = "admin_platform_only",
+            message = "This is for ShramSafal's own team only."
         });
         return false;
     }
