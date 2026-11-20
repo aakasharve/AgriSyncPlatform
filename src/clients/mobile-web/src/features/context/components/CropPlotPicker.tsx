@@ -225,7 +225,8 @@ export const AllCropsCard: React.FC<{
     const on = chosen === 'all';
     const { shown, more } = allCropsPhotoSlots(crops.length);
     const cols = allCropsColumns(shown, more > 0);
-    const px = cols >= 4 ? 64 : cols === 3 ? 84 : 96;
+    // Sized so the photos still fit their columns on the narrowest phone (320 px): four across 56, three across 76, two across 96.
+    const px = cols >= 4 ? 56 : cols === 3 ? 76 : 96;
     const id = testIds.crop('all');
     const plots = crops.reduce((n, c) => n + c.plots.length, 0);
     return (
