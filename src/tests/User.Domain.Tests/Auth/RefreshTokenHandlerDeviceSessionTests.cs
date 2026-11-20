@@ -265,10 +265,10 @@ public class RefreshTokenHandlerDeviceSessionTests
 
     private sealed class FakeJwt : IJwtTokenService
     {
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
             => new("access-new", "refresh-new", DateTime.UtcNow.AddMinutes(15));
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
             => new("access-new", "refresh-new", DateTime.UtcNow.AddMinutes(15));
     }
 

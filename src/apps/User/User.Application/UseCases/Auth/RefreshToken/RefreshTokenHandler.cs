@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using User.Application.Contracts.Dtos;
 using User.Application.Ports;
@@ -69,7 +70,10 @@ public sealed class RefreshTokenHandler(
         // spec: plr-d10 lane NP-1 — the new-phone hold rides the session: a held session's refresh stays held (its
         // token still opens nothing) until the phone answers; a known phone's refresh is never held.
         var held = existingToken.IsHeldForDeviceCheck;
-        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: held);
+        // spec: trusted-control-room-2026-11-20 (CR-3, H10) — the door mark rides the session too: the STORED row's platform
+        // decides (the new row below copies it), never the refresh request's.
+        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: held,
+            controlRoomDoor: existingToken.Platform == ControlRoomSessionClaims.SessionPlatform);
 
         // Store new refresh token — preserve device metadata from the old token
         var newRefreshTokenId = idGenerator.New();

@@ -114,13 +114,13 @@ public sealed class SmsSignInOnPasswordAccountTests
     {
         public bool? LastPhoneVerified { get; private set; }
 
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
         {
             LastPhoneVerified = phoneVerified;
             return new("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));
         }
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
         {
             LastPhoneVerified = phoneVerified;
             return new("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));

@@ -431,6 +431,9 @@ public static class AuthEndpoints
             "android",
             StringComparison.OrdinalIgnoreCase);
 
+    /// <remarks>spec: trusted-control-room-2026-11-20 (CR-3, H10) — the platform passes through
+    /// <see cref="DeviceSessionPlatform.FromClient"/>: blank is "unknown" as before, and the control room's reserved name is
+    /// "unknown" too, so no route here can mint a session that is issued with the door mark.</remarks>
     private static DeviceSessionRequest BuildDeviceSession(
         HttpContext context, bool rememberDevice, string? deviceId, string? deviceName, string? platform)
     {
@@ -441,7 +444,7 @@ public static class AuthEndpoints
             DeviceId: resolvedDeviceId,
             RememberDevice: rememberDevice,
             DeviceName: deviceName,
-            Platform: string.IsNullOrWhiteSpace(platform) ? "unknown" : platform!);
+            Platform: DeviceSessionPlatform.FromClient(platform));
     }
 
     private static IResult CreateValidationErrorResponse(HttpContext context, ILoggerFactory loggerFactory, ArgumentException ex)

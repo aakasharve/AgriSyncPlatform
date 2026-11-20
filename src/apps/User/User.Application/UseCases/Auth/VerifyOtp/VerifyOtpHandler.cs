@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.Logging;
@@ -153,7 +154,11 @@ public sealed class VerifyOtpHandler(
                 user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
         }
 
-        var tokens = jwtTokenService.GenerateIdentityTokens(user.Id, phoneVerified: true, deviceCheckPending: hold is not null);
+        // spec: trusted-control-room-2026-11-20 (CR-3, H10) — only the console's door builds a session under the reserved
+        // platform (every /user/auth route turns a client-sent one into "unknown"), so only its tokens carry the mark.
+        var tokens = jwtTokenService.GenerateIdentityTokens(
+            user.Id, phoneVerified: true, deviceCheckPending: hold is not null,
+            controlRoomDoor: command.Session.Platform == ControlRoomSessionClaims.SessionPlatform);
 
         var refreshToken = new Domain.Security.RefreshToken(
             idGenerator.New(),

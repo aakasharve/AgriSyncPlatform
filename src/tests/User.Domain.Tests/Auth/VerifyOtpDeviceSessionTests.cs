@@ -142,10 +142,10 @@ public class VerifyOtpDeviceSessionTests
 
     private sealed class FakeJwt(string rawRefreshToken = "refresh") : IJwtTokenService
     {
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
             => new("access", rawRefreshToken, DateTime.UtcNow.AddMinutes(15));
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
             => new("access", rawRefreshToken, DateTime.UtcNow.AddMinutes(15));
     }
 

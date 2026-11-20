@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Auth.DeviceCheck;
 using AgriSync.BuildingBlocks.Auth.Jwt;
 using Microsoft.Extensions.Options;
@@ -20,7 +21,8 @@ internal sealed class JwtTokenIssuer(
         string displayName,
         IReadOnlyCollection<MembershipClaim> memberships,
         bool phoneVerified,
-        bool deviceCheckPending)
+        bool deviceCheckPending,
+        bool controlRoomDoor = false)
     {
         var utcNow = DateTime.UtcNow;
         var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
@@ -43,6 +45,7 @@ internal sealed class JwtTokenIssuer(
         }
 
         AddDeviceCheckClaim(claims, deviceCheckPending);
+        AddControlRoomDoorClaim(claims, controlRoomDoor);
 
         // Note: prior to W0-B, this issuer also stamped a `membership: shramsafal:admin`
         // claim for userIds listed in appsettings.Admins[]. That path is removed.
@@ -69,7 +72,7 @@ internal sealed class JwtTokenIssuer(
         return new TokenPair(accessToken, refreshToken, expiresAt);
     }
 
-    public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
+    public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
     {
         var utcNow = DateTime.UtcNow;
         var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
@@ -84,6 +87,7 @@ internal sealed class JwtTokenIssuer(
         };
 
         AddDeviceCheckClaim(claims, deviceCheckPending);
+        AddControlRoomDoorClaim(claims, controlRoomDoor);
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -101,6 +105,19 @@ internal sealed class JwtTokenIssuer(
             + Convert.ToBase64String(Guid.NewGuid().ToByteArray());
 
         return new TokenPair(accessToken, refreshToken, expiresAt);
+    }
+
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (plan CR-3, H10) — the mark of a session that began at the control room's own
+    /// sign-in page. Added only when asked; every other token (every phone token, every password token) carries exactly the
+    /// claims it carried before.
+    /// </summary>
+    private static void AddControlRoomDoorClaim(List<Claim> claims, bool controlRoomDoor)
+    {
+        if (controlRoomDoor)
+        {
+            claims.Add(new Claim(ControlRoomSessionClaims.Type, ControlRoomSessionClaims.Value));
+        }
     }
 
     /// <summary>

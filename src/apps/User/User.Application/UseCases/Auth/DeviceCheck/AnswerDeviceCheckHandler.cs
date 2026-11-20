@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using User.Application.Ports;
@@ -62,7 +63,7 @@ public sealed class AnswerDeviceCheckHandler(
             // Already "होय" (a retried tap) or never asked. A "होय" simply hands the phone its token again; a "नाही"
             // from a phone that is not being asked is refused, so a known phone never carries the support mark.
             return command.ItIsMe
-                ? Result.Success(Opened(user))
+                ? Result.Success(Opened(user, session.Platform == ControlRoomSessionClaims.SessionPlatform))
                 : Result.Failure<AnswerDeviceCheckResult>(UserErrors.DeviceCheckNotAsked);
         }
 
@@ -81,7 +82,7 @@ public sealed class AnswerDeviceCheckHandler(
             logger.LogInformation(
                 "New-phone question answered YES for account {UserId} on device ****{DeviceTail} ({Platform}); the phone is known now.",
                 user.Id, Tail(session.DeviceId), session.Platform);
-            return Result.Success(Opened(user));
+            return Result.Success(Opened(user, session.Platform == ControlRoomSessionClaims.SessionPlatform));
         }
 
         // "नाही" — this phone only. The declined row is the support mark; the account's other phones stay signed in.
@@ -100,7 +101,9 @@ public sealed class AnswerDeviceCheckHandler(
     /// An access token that opens the account (the same claims a refresh issues). Only the access half is handed out:
     /// the phone keeps the refresh credential it answered with, and the pair's refresh half is never stored, so it is inert.
     /// </summary>
-    private AnswerDeviceCheckResult Opened(Domain.Identity.User user)
+    /// <param name="controlRoomDoor">spec: trusted-control-room-2026-11-20 (CR-3, H10) — the answered session began at the
+    /// console's door (its stored platform is the reserved one), so the opened token keeps the door mark.</param>
+    private AnswerDeviceCheckResult Opened(Domain.Identity.User user, bool controlRoomDoor)
     {
         var memberships = user.Memberships
             .Where(m => !m.IsRevoked)
@@ -108,7 +111,7 @@ public sealed class AnswerDeviceCheckHandler(
             .ToList();
         var tokens = jwtTokenService.GenerateTokens(
             user.Id, user.Phone.Value, user.DisplayName, memberships,
-            phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: false);
+            phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: false, controlRoomDoor: controlRoomDoor);
         return new AnswerDeviceCheckResult(user.Id, Confirmed: true, tokens.AccessToken, tokens.ExpiresAtUtc);
     }
 

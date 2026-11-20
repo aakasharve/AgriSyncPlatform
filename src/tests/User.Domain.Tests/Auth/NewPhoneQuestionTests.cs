@@ -342,13 +342,13 @@ public sealed class NewPhoneQuestionTests
     {
         public bool? LastPending { get; private set; }
 
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
         {
             LastPending = deviceCheckPending;
             return new TokenPair("access", Guid.NewGuid().ToString("N"), Now.AddMinutes(15));
         }
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending, bool controlRoomDoor = false)
         {
             LastPending = deviceCheckPending;
             return new TokenPair("access", Guid.NewGuid().ToString("N"), Now.AddMinutes(15));
