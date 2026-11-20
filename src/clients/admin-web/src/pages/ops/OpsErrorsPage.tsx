@@ -388,7 +388,7 @@ export default function OpsErrorsPage() {
     () => rows.map((r) => r.farmId).filter((id): id is string => !!id),
     [rows],
   );
-  const { contacts, refused: farmNamesRefused } = useFarmContactsState(farmIds);
+  const { contacts, refused: farmNamesRefused } = useFarmContactsState(farmIds, { namesOnly: true });
   const columns = useMemo(() => buildColumns(contacts), [contacts]);
 
   /* THE ENVELOPE SENDS `lastRefreshedUtc`. Read it through the one accessor

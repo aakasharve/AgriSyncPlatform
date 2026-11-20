@@ -60,12 +60,13 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Block({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
+function Block({ title, sub, note, children }: { title: string; sub?: string; note?: string; children: ReactNode }) {
   return (
     <section className="glass-panel rounded-panel p-5">
       <h3 className="text-h3 font-semibold text-text-1">{title}</h3>
       {sub && <p className="mb-2 text-caption text-text-2">{sub}</p>}
       <dl className="mt-1">{children}</dl>
+      {note && <p className="mt-2 text-caption text-text-2">{note}</p>}
     </section>
   );
 }
@@ -107,7 +108,7 @@ export function TrustReport() {
           ))}
         </Block>
 
-        <Block title="Farmers' phone numbers looked at">
+        <Block title="Farmers' phone numbers looked at" note="Test accounts and their farms are left out.">
           <Row label="Times looked at">
             <Count value={r.phoneLooks} to={`${HISTORY}?action=phones_shown&days=7`} />
           </Row>

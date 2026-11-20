@@ -580,6 +580,7 @@ export default function OpsLivePage() {
       ],
       [sufferingFarms, events],
     ),
+    { namesOnly: true },
   );
   const eventColumns = useMemo(() => buildEventColumns(contacts), [contacts]);
   const sufferingColumns = useMemo(() => buildSufferingColumns(contacts), [contacts]);

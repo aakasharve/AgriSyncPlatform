@@ -113,7 +113,7 @@ export default function PeoplePage() {
                     <td className="px-4 py-3 text-body text-text-2">
                       {p.lastSignedInUtc
                         ? fmt.dateTime(p.lastSignedInUtc, DATE_FORMATS.usersLastLogin)
-                        : 'Not signed in yet'}
+                        : 'No sign-in here yet'}
                     </td>
                     <td className="px-4 py-3">
                       {p.isFounder || !p.personId ? null : confirming === p.personId ? (

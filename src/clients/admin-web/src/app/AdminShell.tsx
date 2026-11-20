@@ -128,6 +128,20 @@ export function AdminShell() {
      inside RequireScope, so the scope is resolved by now; `canRead` fails closed until it is. */
   const { canRead, isPlatformAdmin } = useAdminScope();
 
+  /* CR-3 (G1 fix 1, M3): the scope is read again on EVERY route change, so a tick given or taken
+     away shows in the menu on the person's next click instead of after the 60-second hold. The
+     answer already on screen stays until the new one arrives (invalidate keeps the data), so the
+     menu does not flash empty. The first render is skipped: that scope was just read. */
+  const scopeQueryClient = useQueryClient();
+  const firstPath = useRef(true);
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    void scopeQueryClient.invalidateQueries({ queryKey: ['admin', 'me', 'scope'] });
+  }, [location.key, scopeQueryClient]);
+
   return (
     /* 1280 is the design width and gets the full 236px sidebar; 1024-1279
        narrows it to 212px; below 1024 the sidebar stops being a column and

@@ -699,6 +699,27 @@ describe('the menu shows only the parts the person may open (CR-3, D-155)', () =
     expect(link).toHaveAttribute('href', '/people');
   });
 
+  it('A_tick_change_shows_on_the_next_click', async () => {
+    // G1 fix 1 (M3): the scope is read again on every route change, so a tick given (or taken
+    // away) shows in the menu on the person's next click, not after the 60-second hold.
+    let answer = teamSeatScope([ModuleKeys.MetricsNsm], ['company_numbers'], 'viewer');
+    stub = installAdapter(async (req) => {
+      if (req.url.includes('/me/scope')) return { status: 200, data: answer };
+      return { status: 404, data: {} };
+    });
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+    const sidebar = screen.getByRole('complementary', { name: 'Sections' });
+    expect(within(sidebar).queryByRole('link', { name: 'Live Health' })).not.toBeInTheDocument();
+
+    // The founder ticks Server health for this person; their next click is on a link they have.
+    answer = teamSeatScope([ModuleKeys.MetricsNsm, ModuleKeys.OpsLive], ['company_numbers', 'server_health'], 'viewer');
+    await userEvent.click(within(sidebar).getAllByRole('link', { name: 'Overview' })[0]);
+
+    expect(await within(sidebar).findByRole('link', { name: 'Live Health' })).toBeInTheDocument();
+  });
+
   it('Templates follows the Schedules tick (K28)', async () => {
     serveScopeOnly(teamSeatScope([ModuleKeys.ScheduleReview], ['schedules'], 'admin'));
     signIn({ display_name: 'Test Admin' });

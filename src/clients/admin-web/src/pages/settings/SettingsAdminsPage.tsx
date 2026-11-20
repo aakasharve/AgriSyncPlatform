@@ -6,7 +6,7 @@ import {
   VISIT_TICKS,
   VISITS_LATER_NOTE,
   roleLabel,
-  tickDescription,
+  tickSelfDescription,
   tickLabel,
 } from '@/lib/controlRoomTicks';
 
@@ -72,7 +72,7 @@ export default function SettingsAdminsPage() {
               {ticks.map((key) => (
                 <li key={key} data-tick={key} className="rounded-chip border border-control-edge px-3 py-2">
                   <span className="block text-body font-semibold text-text-1">{tickLabel(key)}</span>
-                  <span className="block text-caption text-text-2">{tickDescription(key)}</span>
+                  <span className="block text-caption text-text-2">{tickSelfDescription(key)}</span>
                   {VISIT_TICKS.has(key) && (
                     <span data-visits-later="true" className="block text-caption font-semibold text-text-1">
                       {VISITS_LATER_NOTE}

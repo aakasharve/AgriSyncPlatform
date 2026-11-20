@@ -37,8 +37,18 @@ const MAX_IDS_PER_CALL = 200;
  *
  * The Map is keyed by the lower-case farm id.
  */
-export function useFarmContacts(ids: string[]): Map<string, FarmContact> {
-  return useFarmContactsState(ids).contacts;
+export function useFarmContacts(ids: string[], options?: FarmContactsOptions): Map<string, FarmContact> {
+  return useFarmContactsState(ids, options).contacts;
+}
+
+export interface FarmContactsOptions {
+  /**
+   * CR-3 (I-1): a page that shows farm NAMES only asks with `namesOnly=true`. The server then
+   * answers every ownerPhone as "**redacted**" and records no phone look. A page that shows a
+   * phone leaves this off. Part of the request identity: the ids already asked about are
+   * tracked per hook instance, so the mode never changes within one instance.
+   */
+  namesOnly?: boolean;
 }
 
 export interface FarmContactsState {
@@ -60,7 +70,8 @@ function isRefusal(err: unknown): boolean {
 }
 
 /** Same as `useFarmContacts`, plus whether a request failed (so "not fetched" is honest). */
-export function useFarmContactsState(ids: string[]): FarmContactsState {
+export function useFarmContactsState(ids: string[], options?: FarmContactsOptions): FarmContactsState {
+  const namesOnly = options?.namesOnly === true;
   const org = useOrgKey();
   const [contacts, setContacts] = useState<Map<string, FarmContact>>(() => new Map());
   const [failed, setFailed] = useState(false);
@@ -99,7 +110,7 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
     for (let i = 0; i < fresh.length; i += MAX_IDS_PER_CALL) {
       const batch = fresh.slice(i, i + MAX_IDS_PER_CALL);
       adminApi
-        .get<FarmContactItem[]>('/shramsafal/admin/farms/contacts', { params: { ids: batch.join(',') } })
+        .get<FarmContactItem[]>('/shramsafal/admin/farms/contacts', { params: namesOnly ? { ids: batch.join(','), namesOnly: 'true' } : { ids: batch.join(',') } })
         .then(({ data }) => {
           if (!mounted.current || orgRef.current !== sessionOrg || !Array.isArray(data)) return;
           setFailed(false);
@@ -125,7 +136,7 @@ export function useFarmContactsState(ids: string[]): FarmContactsState {
           if (mounted.current && orgRef.current === sessionOrg) setFailed(true);
         });
     }
-  }, [wantedKey, org]);
+  }, [wantedKey, org, namesOnly]);
 
   return { contacts, failed, refused };
 }

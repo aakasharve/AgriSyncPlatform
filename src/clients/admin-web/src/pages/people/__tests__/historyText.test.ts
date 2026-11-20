@@ -145,3 +145,22 @@ describe('historyText: one sentence per action', () => {
     expect(HISTORY_ACTIONS.map((a) => a.action)).toContain('door_refused');
   });
 });
+
+describe('historyText: a held sign-in and Users-page phone looks (G1 fix 1: M2, F2)', () => {
+  it('a sign-in held for the new-phone question says so', () => {
+    expect(historyText(line('signed_in', { details: { heldForQuestion: 'true' } }))).toBe(
+      'Akash entered a correct code on a new phone; the sign-in waited for the new-phone question.',
+    );
+    expect(historyText(line('signed_in', { details: { heldForQuestion: 'false' } }))).toBe('Akash signed in.');
+    expect(historyText(line('signed_in'))).toBe('Akash signed in.');
+  });
+
+  it('a Users-page phone look counts people, 1 person and 3 people', () => {
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: '1' } }))).toBe(
+      'Akash looked at the phone numbers of 1 person on the Users page.',
+    );
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: '3' } }))).toBe(
+      'Akash looked at the phone numbers of 3 people on the Users page.',
+    );
+  });
+});
