@@ -11,12 +11,16 @@
  * so the existing scope rules (`isWholeFarmSelection`, `getScopedLogCost`, the log lookups in
  * `../helpers`) keep working exactly as they did.
  *
- * Two rules, both from the approved preview:
+ * Three rules, the first two from the approved preview:
  *   - never an empty page: un-picking the last picked plot picks every plot of the view again;
  *   - a crop whose plots are ALL un-picked leaves the scope. (In the old pair an empty plot list meant
  *     "every plot of that crop", so leaving it in would have shown the very plots he just hid.)
+ *   - lane UI-9a (founder pick 2026-11-20, overview C "number grid in place"): with MANY plots in view (a crop drawn as a number grid, 7 or
+ *     more) and every plot picked, one tap on a number shows ONLY that plot (before: the tap took it off, so seeing one plot of 15 meant 14
+ *     taps). From there taps add and remove as usual. A small farm (chips) keeps the tap it always had.
  */
 import type { CropProfile, DailyLog, Plot } from '../../../types';
+import { plotPickMode } from '../../context/components/plotSelectorRules';
 
 export interface ReflectSelection {
     /** 'all' = "सर्व पिकं"; otherwise one crop id. */
@@ -56,9 +60,27 @@ export const selectAll = (crops: readonly CropProfile[]): ReflectSelection => ({
 export const pickCrop = (crops: readonly CropProfile[], key: 'all' | string): ReflectSelection =>
     ({ crop: key, plotIds: plotIdsOf(cropsOfView(crops, key)) });
 
+/** The view holds a crop with so many plots that its plots are drawn as a number grid (`plotSelectorRules`). */
+export const viewHasManyPlots = (crops: readonly CropProfile[], key: 'all' | string): boolean =>
+    cropsOfView(crops, key).some(c => plotPickMode((c.plots ?? []).length) === 'grid');
+
+/** Every plot of the view is picked (and there is more than one to pick from). */
+const allPicked = (crops: readonly CropProfile[], sel: ReflectSelection): boolean => {
+    const visible = plotIdsOf(cropsOfView(crops, sel.crop));
+    return visible.length > 1 && visible.every(id => sel.plotIds.includes(id));
+};
+
+/** The one plot the page is narrowed to, when the view has many plots and exactly one of them is picked; else undefined. */
+export const soloPlotId = (crops: readonly CropProfile[], sel: ReflectSelection): string | undefined => {
+    if (!viewHasManyPlots(crops, sel.crop)) return undefined;
+    const picked = plotIdsOf(cropsOfView(crops, sel.crop)).filter(id => sel.plotIds.includes(id));
+    return picked.length === 1 ? picked[0] : undefined;
+};
+
 export const togglePlot = (crops: readonly CropProfile[], sel: ReflectSelection, plotId: string): ReflectSelection => {
-    const next = sel.plotIds.includes(plotId) ? sel.plotIds.filter(id => id !== plotId) : [...sel.plotIds, plotId];
     const stillVisible = plotIdsOf(cropsOfView(crops, sel.crop));
+    if (stillVisible.includes(plotId) && viewHasManyPlots(crops, sel.crop) && allPicked(crops, sel)) return { ...sel, plotIds: [plotId] };
+    const next = sel.plotIds.includes(plotId) ? sel.plotIds.filter(id => id !== plotId) : [...sel.plotIds, plotId];
     return next.some(id => stillVisible.includes(id)) ? { ...sel, plotIds: next } : pickCrop(crops, sel.crop);
 };
 

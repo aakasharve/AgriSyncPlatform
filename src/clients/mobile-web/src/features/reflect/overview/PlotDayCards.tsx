@@ -10,9 +10,14 @@
  * (`plotDayModel.dayChipsOf`), the money as one chip from the server ledger (tap → that day's money lens), and keeps
  * the plot's identity, the ONE status wording, "आज N वेळा सांगितलं", the water state and weather. An empty day says
  * "आज अजून काही सांगितलं नाही". Tapping a card opens the plot's day (`day/DaySheets.PlotDayView`).
+ *
+ * Lane UI-9a (founder pick overview C, 2026-11-20: "if same crop is more than 3 times it should only show one image"): a crop with 4 or
+ * more cards on screen shows its photo ONCE in a header and its plots as two small cards across - the crop's colour edge, the plot's name
+ * and number, ONE status in words (all from what the card already holds) and, where the full card would show "अजून सांगा", a small mic. A tap
+ * anywhere else opens the plot's day, as before. A crop with 1 to 3 cards keeps today's full card with its photo.
  */
 import React from 'react';
-import { ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Mic, Paperclip, Thermometer, User } from 'lucide-react';
+import { Check, ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Mic, Paperclip, Thermometer, User } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing';
 import { PartIcon } from '../../logs/components/voiceResult/HisWords';
@@ -26,6 +31,9 @@ import { CropBanner, Num, Tap } from './ui';
 import { inkOnColour } from '../../context/components/cropColourInk';
 import { useLogAttachmentCount } from './useLogAttachmentCount';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
+import { PlotCount } from '../../context/components/CropPlotPicker';
+import { PlotGroupHeader, cropWordsOf } from '../../context/components/PlotSelector';
+import { plotShortName, smallPlotCardsFor, sortedNaturally } from '../../context/components/plotSelectorRules';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 /** The result screen's खर्च colour, for the ledger's money chip. */
@@ -105,14 +113,87 @@ const Foot: React.FC<{ card: DayCardCore; isToday: boolean; testKey: string }> =
     );
 };
 
+/** Words of the small card and its header tags. PROPOSED (Marathi); every one is a plain statement of a fact the card holds. */
+const SMALL_WORDS = {
+    mr: { problem: 'अडचण सांगितली', told: 'सांगितले', problemTag: 'अडचण', left: 'बाकी' },
+    en: { problem: 'A problem was reported', told: 'told', problemTag: 'problem', left: 'left' },
+} as const;
+
+/** One status for a plot's day, said in words: a stoppage told, how many times it was told, or nothing yet. */
+type SmallStatus = 'problem' | 'told' | 'left';
+const smallStatusOf = (card: PlotDayCard): SmallStatus => (card.status === 'blocked' ? 'problem' : card.recordings > 0 ? 'told' : 'left');
+
+/**
+ * The small plot card (crop of 4 or more plots): no photo of its own (the crop's header carries it), the crop's colour edge, the plot's name
+ * without the crop word and its place number, one status, and the small mic only when the full card would offer "अजून सांगा" with a way to
+ * speak. The whole card opens the plot's day; the mic stops that tap.
+ */
+const SmallPlotCard: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onTell }) => {
+    const { ref } = card;
+    const language = useOptionalLanguage()?.language;
+    const copy = useReflectCopy();
+    const w = SMALL_WORDS[language === 'en' ? 'en' : 'mr'];
+    const status = smallStatusOf(card);
+    const mic = Boolean(card.nextHint && onTell);
+    const name = plotShortName(ref.plotName ?? '', cropWordsOf(ref.crop));
+    const tone = status === 'problem' ? 'bg-amber-100 text-amber-900' : status === 'told' ? 'bg-emerald-100 text-emerald-900' : 'bg-stone-100 text-stone-700';
+    return (
+        <CardButton testId={`plot-card-${ref.key}`} status={card.status} onOpen={() => onOpen(ref)} edge={ref.cropColor} small>
+            <span className={`block min-h-[64px] ${mic ? 'pb-11' : ''}`} data-part="small-card">
+                <span className="flex items-baseline gap-1.5">
+                    <span className="min-w-0 truncate text-[18px] font-extrabold leading-tight text-stone-900" data-part="name">{name}</span>
+                    <span className="shrink-0 text-[12.5px] font-bold text-stone-600" data-part="number">{digitsFor(ref.plotIndex + 1, language)}</span>
+                </span>
+                <span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[12.5px] font-extrabold leading-snug ${tone}`} data-testid={`plot-status-${ref.key}`} data-status={status}>
+                    {status === 'told' && <Check size={13} strokeWidth={3} className="shrink-0" aria-hidden="true" />}
+                    <span className="min-w-0">{status === 'problem' ? w.problem : status === 'told' ? copy.timesTold(card.recordings, isToday) : copy.nothingTold(isToday)}</span>
+                </span>
+            </span>
+            {mic && (
+                <Tap onClick={e => { e.stopPropagation(); onTell?.(ref); }} data-testid={`plot-hint-speak-${ref.key}`} aria-label={`${copy.moreToTell} ${card.nextHint}`}
+                    className="absolute bottom-2 right-2 grid h-11 w-11 place-items-center rounded-full bg-emerald-700 text-white">
+                    <Mic size={20} aria-hidden="true" />
+                </Tap>
+            )}
+        </CardButton>
+    );
+};
+
+/** A crop's header on the overview: its photo once, its plot count, and what the day looks like across its plots (true counts only; none drawn at 0). */
+const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ cards, isToday, onOpen, onTell }) => {
+    const language = useOptionalLanguage()?.language;
+    const lang = language === 'en' ? 'en' : 'mr';
+    const w = SMALL_WORDS[lang];
+    const first = cards[0].ref;
+    const counts = { problem: 0, told: 0, left: 0 };
+    for (const c of cards) counts[smallStatusOf(c)] += 1;
+    const tag = (n: number, text: string, tone: string, id: string) => (n > 0
+        ? <span className={`rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ${tone}`} data-testid={`plot-group-${id}-${first.cropId}`}>{digitsFor(n, language)} {text}</span>
+        : null);
+    return (
+        <section className="space-y-2" data-testid={`plot-group-${first.cropId}`} data-small="yes">
+            <PlotGroupHeader crop={first.crop} testId={`plot-group-header-${first.cropId}`} language={lang}
+                sub={<PlotCount total={cards.length} language={lang} />} />
+            <div className="flex flex-wrap gap-1.5 empty:hidden">
+                {tag(counts.told, w.told, 'bg-emerald-100 text-emerald-900', 'told')}
+                {tag(counts.problem, w.problemTag, 'bg-amber-100 text-amber-900', 'problem')}
+                {tag(counts.left, w.left, 'bg-stone-100 text-stone-700', 'left')}
+            </div>
+            <div className="grid grid-cols-2 gap-2" data-testid={`plot-small-cards-${first.cropId}`}>
+                {cards.map(c => <SmallPlotCard key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onTell={onTell} />)}
+            </div>
+        </section>
+    );
+};
+
 /** A whole card is the button into its day (Enter / Space too). */
-const CardButton: React.FC<{ testId: string; status: DayCardCore['status']; onOpen: () => void; children: React.ReactNode; edge?: string }> = ({ testId, status, onOpen, children, edge }) => {
+const CardButton: React.FC<{ testId: string; status: DayCardCore['status']; onOpen: () => void; children: React.ReactNode; edge?: string; small?: boolean }> = ({ testId, status, onOpen, children, edge, small }) => {
     const tint = status === 'blocked' ? 'border-amber-200 bg-amber-50' : status === 'worked' ? 'border-emerald-200 bg-white' : 'border-stone-200 bg-white';
     return (
         <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
             data-testid={testId} data-status={status}
-            className={`relative block w-full cursor-pointer rounded-[18px] border-2 p-3 pl-4 text-left transition-transform active:scale-[0.99] ${tint}`}>
-            {edge && <span className={`absolute inset-y-0 left-0 w-1.5 rounded-l-[18px] ${edge}`} aria-hidden="true" />}
+            className={`relative block w-full cursor-pointer border-2 text-left transition-transform active:scale-[0.99] ${small ? 'min-w-0 rounded-2xl p-2 pl-3.5' : 'rounded-[18px] p-3 pl-4'} ${tint}`}>
+            {edge && <span className={`absolute inset-y-0 left-0 w-1.5 ${small ? 'rounded-l-2xl' : 'rounded-l-[18px]'} ${edge}`} aria-hidden="true" data-part="edge" />}
             {children}
         </div>
     );
@@ -217,9 +298,21 @@ export const PlotDayCards: React.FC<{
     onCost?: (ref: PlotRef) => void;
     /** The "tell more" line's mic: THE ONE mic for that plot. Omit and the line is not drawn (never a mic that leads nowhere). */
     onTell?: (ref: PlotRef) => void;
-}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost, onTell }) => (
-    <div className="space-y-2.5" data-testid="plot-day-cards">
-        {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)}
-        {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
-    </div>
-);
+}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost, onTell }) => {
+    // The cards of one crop sit together (the farm's own order). A crop with 4 or more cards is a header and small cards; fewer keep the full card.
+    const groups: PlotDayCard[][] = [];
+    for (const c of cards) {
+        const last = groups[groups.length - 1];
+        if (last && last[0].ref.cropId === c.ref.cropId && c.ref.plotId) last.push(c); else groups.push([c]);
+    }
+    // Natural number order inside a crop (G2 before G10); a crop with no plot yet has its one card.
+    const ordered = groups.map(g => (g[0].ref.plotId ? sortedNaturally(g, c => c.ref.plotName ?? '') : g));
+    return (
+        <div className="space-y-2.5" data-testid="plot-day-cards">
+            {ordered.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
+                ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} />
+                : g.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)))}
+            {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
+        </div>
+    );
+};

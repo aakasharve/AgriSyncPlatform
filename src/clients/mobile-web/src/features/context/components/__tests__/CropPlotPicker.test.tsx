@@ -29,7 +29,7 @@ describe('CropPlotPicker — tiles then coloured chips', () => {
         expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('द्राक्ष');
         expect(screen.getByTestId('pk-crop-cane')).toHaveTextContent('ऊस');
         // a tile that is not chosen says how many plots the crop has; the colour strip is the crop's own colour
-        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('2 प्लॉट');
+        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('२ प्लॉट'); // Marathi digits (UI-9a)
         expect(part(screen.getByTestId('pk-crop-grape'), 'accent')?.className).toContain('bg-purple-500');
         expect(part(screen.getByTestId('pk-crop-cane'), 'accent')?.className).toContain('bg-pink-500');
         // tiles come before chips
@@ -42,28 +42,94 @@ describe('CropPlotPicker — tiles then coloured chips', () => {
         expect(part(screen.getByTestId('pk-plot-c1'), 'dot')?.className).toContain('bg-pink-500');
     });
 
-    it('"all crops" tile first when asked and there is more than one crop; chosen tile is ticked and counts "N पैकी N"', () => {
+    it('the all-crops card (UI-9a, option C) sits above the crop cards: "सर्व पिकं", "२ पिकं · ३ प्लॉट", a tick and a green border when every crop is on', () => {
         render(<CropPlotPicker crops={[GRAPE, CANE]} chosen="all" pickedPlotIds={['g1', 'c1']} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
         const all = screen.getByTestId('pk-crop-all');
         expect(all).toHaveTextContent('सर्व पिकं');
+        expect(screen.getByTestId('pk-crop-all-line')).toHaveTextContent('२ पिकं · ३ प्लॉट');
         expect(all).toHaveAttribute('aria-pressed', 'true');
         expect(part(all, 'tick')).toBeTruthy();
-        expect(all).toHaveTextContent('2 पैकी 3 प्लॉट');
+        expect(all).not.toHaveTextContent('सगळी बघा');
+        expect(screen.getByTestId('pk-crop-all-card')).toHaveAttribute('data-on', 'yes');
+        expect(screen.getByTestId('pk-crop-all-card').className).toContain('border-emerald-700');
         expect(part(screen.getByTestId('pk-crop-grape'), 'tick')).toBeNull();
-        // the "all" tile is the first tile
-        expect(screen.getByTestId('pk-crops').querySelectorAll('button')[0]).toBe(all);
+        // the card is above the crop cards, and is no longer one of the scrolling crop cards
+        expect(screen.getByTestId('pk-crop-all-card').compareDocumentPosition(screen.getByTestId('pk-crop-grape')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(Array.from(screen.getByTestId('pk-crops').querySelectorAll('.snap-x button')).includes(all)).toBe(false);
     });
 
-    it('no "all crops" tile for a single crop even when asked', () => {
+    it('the card shows a small photo of EVERY crop, each with its own colour strip, name and plot count', () => {
+        render(<CropPlotPicker crops={[GRAPE, CANE]} chosen="all" pickedPlotIds={[]} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
+        const g = screen.getByTestId('pk-crop-all-photo-grape');
+        const c = screen.getByTestId('pk-crop-all-photo-cane');
+        expect(g).toHaveTextContent('द्राक्ष');
+        expect(g).toHaveTextContent('२ प्लॉट');
+        expect(c).toHaveTextContent('ऊस');
+        expect(c).toHaveTextContent('१ प्लॉट');
+        expect(part(g, 'accent')?.className).toContain('bg-purple-500');
+        expect(part(c, 'accent')?.className).toContain('bg-pink-500');
+        expect(g.querySelector('img, svg')).toBeTruthy();
+        expect(screen.getByTestId('pk-crop-all-photos')).toHaveAttribute('data-cols', '2');
+    });
+
+    it('every photo in the card is its own button and picks that crop: the same tap as the crop\'s card', () => {
+        const onPickCrop = vi.fn();
+        render(<CropPlotPicker crops={[GRAPE, CANE]} chosen="all" pickedPlotIds={[]} onPickCrop={onPickCrop} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
+        expect(screen.getByTestId('pk-crop-all-photo-cane').tagName).toBe('BUTTON');
+        fireEvent.click(screen.getByTestId('pk-crop-all-photo-cane'));
+        expect(onPickCrop).toHaveBeenLastCalledWith('cane');
+        fireEvent.click(screen.getByTestId('pk-crop-grape'));
+        expect(onPickCrop).toHaveBeenLastCalledWith('grape');
+    });
+
+    it('with one crop chosen the card loses its tick and border and says "सगळी बघा"; one tap goes back to every crop', () => {
+        const onPickCrop = vi.fn();
+        render(<CropPlotPicker crops={[GRAPE, CANE]} chosen="grape" pickedPlotIds={['g1']} onPickCrop={onPickCrop} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
+        const all = screen.getByTestId('pk-crop-all');
+        expect(all).toHaveAttribute('aria-pressed', 'false');
+        expect(part(all, 'tick')).toBeNull();
+        expect(all).toHaveTextContent('सगळी बघा');
+        expect(screen.getByTestId('pk-crop-all-card')).toHaveAttribute('data-on', 'no');
+        expect(screen.getByTestId('pk-crop-all-card').className).not.toContain('border-emerald-700');
+        // the chosen crop's photo inside the card carries the green border and the tick
+        expect(screen.getByTestId('pk-crop-all-photo-grape')).toHaveAttribute('aria-pressed', 'true');
+        expect(part(screen.getByTestId('pk-crop-all-photo-grape'), 'tick')).toBeTruthy();
+        expect(screen.getByTestId('pk-crop-all-photo-grape').className).toContain('border-emerald-700');
+        expect(part(screen.getByTestId('pk-crop-all-photo-cane'), 'tick')).toBeNull();
+        fireEvent.click(all);
+        expect(onPickCrop).toHaveBeenLastCalledWith('all');
+    });
+
+    it('more than 8 crops: 7 photos and a "+N पिकं" tile that is not a button; up to 8 every crop has its photo', () => {
+        const many = (n: number): PickerCrop[] => Array.from({ length: n }, (_, i) => ({ id: `k${i}`, name: `Crop${i}`, iconName: 'Grape', color: 'bg-teal-500', plots: [{ id: `k${i}p`, name: 'x' }] }));
+        const { unmount } = render(<CropPlotPicker crops={many(8)} chosen="all" pickedPlotIds={[]} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
+        expect(screen.getByTestId('pk-crop-all-photos').querySelectorAll('button').length).toBe(8);
+        expect(screen.queryByTestId('pk-crop-all-more')).toBeNull();
+        expect(screen.getByTestId('pk-crop-all-photos')).toHaveAttribute('data-cols', '4');
+        unmount();
+        render(<CropPlotPicker crops={many(10)} chosen="all" pickedPlotIds={[]} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
+        expect(screen.getByTestId('pk-crop-all-photos').querySelectorAll('button').length).toBe(7);
+        expect(screen.getByTestId('pk-crop-all-more')).toHaveTextContent('+३ पिकं');
+        expect(screen.getByTestId('pk-crop-all-more').tagName).not.toBe('BUTTON');
+        expect(screen.getByTestId('pk-crop-all-line')).toHaveTextContent('१० पिकं · १० प्लॉट');
+    });
+
+    it('no all-crops card for a single crop even when asked', () => {
         render(<CropPlotPicker crops={[GRAPE]} chosen="grape" pickedPlotIds={['g1', 'g2']} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
         expect(screen.queryByTestId('pk-crop-all')).toBeNull();
-        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('2 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('२ पैकी २ प्लॉट');
     });
 
-    it('a page that is on "all" with no "all" tile to show it (one crop) has that crop\'s tile on, with every plot counted', () => {
+    it('a page that is on "all" with no all-crops card to show it (one crop) has that crop\'s tile on, with every plot counted', () => {
         render(<CropPlotPicker crops={[GRAPE]} chosen="all" pickedPlotIds={['g1', 'g2']} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} allCrops testIds={IDS} language="mr" />);
         expect(screen.getByTestId('pk-crop-grape')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('2 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('pk-crop-grape')).toHaveTextContent('२ पैकी २ प्लॉट');
+    });
+
+    it('the plot chips are in natural number order: G2 before G10 (the schedule maker draws this row)', () => {
+        const crop: PickerCrop = { id: 'g', name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500', plots: [{ id: 'a', name: 'G10' }, { id: 'b', name: 'G2' }, { id: 'c', name: 'G1' }] };
+        render(<CropPlotPicker crops={[crop]} chosen="g" pickedPlotIds={[]} onPickCrop={vi.fn()} onTogglePlot={vi.fn()} testIds={IDS} language="mr" />);
+        expect([...screen.getByTestId('pk-plots').querySelectorAll('button')].map(b => b.textContent)).toEqual(['G1', 'G2', 'G10']);
     });
 
     it('hidePlots draws the crop tiles and no chips (the schedule library asks for the crop only)', () => {
@@ -131,11 +197,18 @@ describe('the pieces', () => {
 
     it('PlotCount: with a count it reads "N पैकी N प्लॉट", without one "N प्लॉट", none at all "प्लॉट नाही"', () => {
         const { container, rerender } = render(<PlotCount total={3} picked={1} language="mr" />);
-        expect(container).toHaveTextContent('1 पैकी 3 प्लॉट');
+        expect(container).toHaveTextContent('१ पैकी ३ प्लॉट');
         rerender(<PlotCount total={3} language="mr" />);
-        expect(container).toHaveTextContent('3 प्लॉट');
+        expect(container).toHaveTextContent('३ प्लॉट');
         rerender(<PlotCount total={0} language="mr" />);
         expect(container).toHaveTextContent('प्लॉट नाही');
+        // every digit of a count is Devanagari in Marathi mode, however long the number
+        rerender(<PlotCount total={125} picked={40} language="mr" />);
+        expect(container.textContent).toBe('४० पैकी १२५ प्लॉट');
+        expect(container.textContent).not.toMatch(/[0-9]/);
+        // English keeps its own digits
+        rerender(<PlotCount total={12} picked={4} language="en" />);
+        expect(container).toHaveTextContent('4 of 12 plots');
     });
 
     it('a plot chip is at least 44 px tall in both sizes; the dot is the crop\'s colour and the tick shows only when chosen', () => {
