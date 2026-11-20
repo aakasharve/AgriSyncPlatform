@@ -580,7 +580,9 @@ public sealed class PlotScopeFixPass1RealPostgresTests(ITestOutputHelper output)
         // The accounts side (subscriptions) is not what is proved here; the farm side runs as agrisync_app with RLS on.
         await using var accounts = new AccountsDbContext(new DbContextOptionsBuilder<AccountsDbContext>().UseNpgsql(SuperuserConn).Options);
         var farms = await new FarmMembershipSnapshotReader(ssf, accounts, new UtcClock()).GetForUserAsync(new UserId(who));
-        return farms.Single(f => f.FarmId == new FarmId(FarmA)).Authorities.Select(a => a.Name).ToList();
+        var onFarm = farms.Single(f => f.FarmId == new FarmId(FarmA));
+        Xunit.Assert.NotNull(onFarm.Authorities);
+        return onFarm.Authorities.Select(a => a.Name).ToList();
     }
 
     private static List<string> Names(JsonElement row, string property) =>

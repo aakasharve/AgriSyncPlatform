@@ -149,10 +149,12 @@ public sealed class NewPhoneQuestionTests
     {
         var user = ExistingUser();
         var newPhone = await Login(user, new Sessions(known: [])).HandleAsync(new LoginCommand(Phone, "pw", Device("new-phone")));
+        Assert.NotNull(newPhone.Value);
         newPhone.Value.DeviceCheckRequired.Should().BeTrue();
         newPhone.Value.AccountName.Should().Be("रमेश");
 
         var console = await Login(user, new Sessions(known: [])).HandleAsync(new LoginCommand(Phone, "pw", Device("unknown")));
+        Assert.NotNull(console.Value);
         console.Value.DeviceCheckRequired.Should().BeFalse("the admin console names no phone; the password is the proof there");
     }
 
@@ -170,6 +172,7 @@ public sealed class NewPhoneQuestionTests
         var refreshed = await new RefreshTokenHandler(new OneUser(user), sessions, jwt, new GuidIds(), new FixedClock(Now))
             .HandleAsync(new RefreshTokenCommand("raw-held", Device("p")));
 
+        Assert.NotNull(refreshed.Value);
         refreshed.Value.DeviceCheckRequired.Should().BeTrue();
         jwt.LastPending.Should().BeTrue();
         sessions.Added.Single().DeviceCheck.Should().Be(DeviceCheckState.AskedAfterSmsCode, "the hold rides the rotation");
@@ -177,8 +180,10 @@ public sealed class NewPhoneQuestionTests
         var known = Session("p2", "raw-known");
         var knownSessions = new Sessions(known: [], byHash: known);
         var jwt2 = new CapturingJwt();
-        (await new RefreshTokenHandler(new OneUser(user), knownSessions, jwt2, new GuidIds(), new FixedClock(Now))
-            .HandleAsync(new RefreshTokenCommand("raw-known", Device("p2")))).Value.DeviceCheckRequired.Should().BeFalse();
+        var knownRefreshed = await new RefreshTokenHandler(new OneUser(user), knownSessions, jwt2, new GuidIds(), new FixedClock(Now))
+            .HandleAsync(new RefreshTokenCommand("raw-known", Device("p2")));
+        Assert.NotNull(knownRefreshed.Value);
+        knownRefreshed.Value.DeviceCheckRequired.Should().BeFalse();
         jwt2.LastPending.Should().BeFalse();
     }
 
@@ -195,6 +200,7 @@ public sealed class NewPhoneQuestionTests
 
         var result = await Answer(user, sessions, jwt).HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: true));
 
+        Assert.NotNull(result.Value);
         result.Value.Confirmed.Should().BeTrue();
         result.Value.AccessToken.Should().Be("access");
         jwt.LastPending.Should().BeFalse("the token after होय opens the account");
@@ -214,6 +220,7 @@ public sealed class NewPhoneQuestionTests
         var result = await Answer(user, new Sessions(known: [], byHash: held), new CapturingJwt())
             .HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: true));
 
+        Assert.NotNull(result.Value);
         result.Value.Confirmed.Should().BeTrue();
         user.PhoneVerifiedAtUtc.Should().BeNull("I19: only an SMS code verifies a number");
     }
@@ -228,6 +235,7 @@ public sealed class NewPhoneQuestionTests
 
         var result = await Answer(user, sessions, new CapturingJwt()).HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: false));
 
+        Assert.NotNull(result.Value);
         result.Value.Confirmed.Should().BeFalse();
         result.Value.AccessToken.Should().BeNull();
         held.DeviceCheck.Should().Be(DeviceCheckState.Declined);
@@ -250,8 +258,10 @@ public sealed class NewPhoneQuestionTests
         known.DeviceCheck.Should().BeNull("no mark on a known phone");
 
         // A retried होय on an already-known phone just opens it again.
-        (await Answer(user, new Sessions(known: [], byHash: known), new CapturingJwt())
-            .HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: true))).Value.Confirmed.Should().BeTrue();
+        var retried = await Answer(user, new Sessions(known: [], byHash: known), new CapturingJwt())
+            .HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: true));
+        Assert.NotNull(retried.Value);
+        retried.Value.Confirmed.Should().BeTrue();
 
         var gone = await Answer(user, new Sessions(known: [], byHash: null), new CapturingJwt())
             .HandleAsync(new AnswerDeviceCheckCommand("raw", ItIsMe: true));

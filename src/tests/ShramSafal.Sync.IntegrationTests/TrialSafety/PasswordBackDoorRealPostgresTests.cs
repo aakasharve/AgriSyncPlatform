@@ -83,6 +83,7 @@ public sealed class PasswordBackDoorRealPostgresTests(TrialSafetyDatabase db, IT
             var registered = await Register(scope.ServiceProvider, allow: true, jwt)
                 .HandleAsync(new RegisterUserCommand(phone, OwnersPassword, "Owner", Session: Device("owners-laptop")));
             registered.IsSuccess.Should().BeTrue(registered.IsSuccess ? "" : registered.Error.Code);
+            Xunit.Assert.NotNull(registered.Value);
             userId = registered.Value.UserId;
             jwt.LastPhoneVerified.Should().BeFalse("a password sign-up is not phone-verified");
         }
@@ -125,6 +126,7 @@ public sealed class PasswordBackDoorRealPostgresTests(TrialSafetyDatabase db, IT
                     sp.GetRequiredService<IClock>(), NullLogger<AnswerDeviceCheckHandler>.Instance)
                 .HandleAsync(new AnswerDeviceCheckCommand(verified.Value.RefreshToken, ItIsMe: true));
             answered.IsSuccess.Should().BeTrue(answered.IsSuccess ? "" : answered.Error.Code);
+            Xunit.Assert.NotNull(answered.Value);
             answered.Value.Confirmed.Should().BeTrue();
         }
 

@@ -35,6 +35,7 @@ public sealed class FarmRateTests
     public void An_input_price_is_kept_whole_with_money_as_the_repo_keeps_it()
     {
         var rate = Make().Value;
+        Assert.NotNull(rate);
         Assert.Equal("युरिया", rate.ItemName);
         Assert.Equal(1350.56m, rate.Amount); // two places, away from zero — the CostEntry / PriceConfig convention
         Assert.Equal("INR", rate.CurrencyCode);
@@ -72,21 +73,26 @@ public sealed class FarmRateTests
     public void A_stop_is_the_next_version_of_the_same_rate_who_and_when_its_own()
     {
         var first = Make().Value;
+        Assert.NotNull(first);
         var by = new UserId(Guid.Parse("20000000-0000-0000-0000-0000000000a2"));
         var stopped = first.RetiredVersion(Guid.NewGuid(), by, Now.AddDays(1), "req-2", "1.0.18").Value;
+        Assert.NotNull(stopped);
         Assert.Equal(2, stopped.Version);
         Assert.Equal(first.RateLineId, stopped.RateLineId);
         Assert.True(stopped.Retired);
         Assert.Equal(first.Amount, stopped.Amount);
         Assert.Equal(by, stopped.CreatedByUserId);
         Assert.False(stopped.StatesTheSameAs(first));
-        Assert.True(Make().Value.StatesTheSameAs(first), "the same rate again states nothing new");
+        var again = Make().Value;
+        Assert.NotNull(again);
+        Assert.True(again.StatesTheSameAs(first), "the same rate again states nothing new");
     }
 
     [Fact]
     public void Its_time_is_kept_to_the_microsecond_and_never_exactly_on_a_whole_second()
     {
         var onTheSecond = Make(at: new DateTime(2026, 11, 6, 6, 0, 0, DateTimeKind.Utc)).Value;
+        Assert.NotNull(onTheSecond);
         Assert.NotEqual(0, onTheSecond.CreatedAtUtc.Ticks % TimeSpan.TicksPerSecond);
         Assert.Equal(0, onTheSecond.CreatedAtUtc.Ticks % 10);
     }

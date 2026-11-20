@@ -466,6 +466,7 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
             var refused = await SetPermissionAsync(CoOwner, target, allowed: true);
             output.WriteLine($"[EVIDENCE] co-owner grants {target} -> {refused.Error?.Code}");
             refused.IsSuccess.Should().BeFalse();
+            Xunit.Assert.NotNull(refused.Error);
             refused.Error.Code.Should().Be("ShramSafal.Forbidden");
             // Nothing moved (the co-owner's OWN हजेरी is the primary owner's earlier choice).
             (await GrantFlagAsync(target)).Should().Be(before);

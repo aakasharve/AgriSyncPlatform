@@ -80,7 +80,9 @@ public sealed class ReminderSeatsRealPostgresTests(ITestOutputHelper output) : R
         await using var ssf = new ShramSafalDbContext(new DbContextOptionsBuilder<ShramSafalDbContext>().UseNpgsql(AppConn).Options);
         await using var accounts = new AccountsDbContext(new DbContextOptionsBuilder<AccountsDbContext>().UseNpgsql(SuperuserConn).Options);
         var farms = await new FarmMembershipSnapshotReader(ssf, accounts, new UtcClock()).GetForUserAsync(new UserId(who));
-        return farms.Single(f => f.FarmId == new FarmId(FarmA)).Authorities.Select(a => a.Name).ToList();
+        var onFarm = farms.Single(f => f.FarmId == new FarmId(FarmA));
+        Xunit.Assert.NotNull(onFarm.Authorities);
+        return onFarm.Authorities.Select(a => a.Name).ToList();
     }
 
     private sealed class UtcClock : IClock
