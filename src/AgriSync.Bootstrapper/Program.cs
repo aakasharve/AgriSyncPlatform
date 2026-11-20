@@ -343,6 +343,10 @@ try
     builder.Services.AddScoped<User.Application.Ports.IMeInvitationSnapshotReader,
         AgriSync.Bootstrapper.Adapters.MeInvitationSnapshotReader>();
 
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — the control room reads User accounts only through the host.
+    builder.Services.AddScoped<ShramSafal.Application.Ports.IControlRoomPhoneDirectory,
+        AgriSync.Bootstrapper.Adapters.ControlRoomPhoneDirectory>();
+
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")
         ?? builder.Configuration.GetConnectionString("UserDb")

@@ -31,6 +31,9 @@ GET /shramsafal/admin/ops/health
 GET /shramsafal/admin/ops/recorded
 GET /shramsafal/admin/ops/voice
 GET /shramsafal/admin/ops/voice-check
+GET /shramsafal/admin/people
+GET /shramsafal/admin/people/history
+GET /shramsafal/admin/people/trust-report
 GET /shramsafal/admin/pii-review/queue
 GET /shramsafal/admin/users
 GET /shramsafal/ai/config
@@ -122,6 +125,9 @@ POST /bootstrap/first-farm
 POST /shramsafal/admin/access-extensions
 POST /shramsafal/admin/breach/report
 POST /shramsafal/admin/erasure/request
+POST /shramsafal/admin/people
+POST /shramsafal/admin/people/{id:guid}/keep
+POST /shramsafal/admin/people/{id:guid}/remove
 POST /shramsafal/admin/pii-review/{id:guid}/approve
 POST /shramsafal/admin/pii-review/{id:guid}/reject
 POST /shramsafal/ai/cove-reverify
@@ -231,6 +237,7 @@ POST /user/auth/refresh
 POST /user/auth/register
 POST /user/auth/start-otp
 POST /user/auth/verify-otp
+PUT /shramsafal/admin/people/{id:guid}
 PUT /shramsafal/ai/config
 PUT /shramsafal/consent/improvement
 PUT /shramsafal/consent/me

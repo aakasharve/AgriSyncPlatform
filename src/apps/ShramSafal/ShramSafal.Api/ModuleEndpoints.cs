@@ -52,6 +52,8 @@ public static class ModuleEndpoints
         group.MapPlannedWorkEndpoints();
         group.MapReportEndpoints();
         group.MapAdminEndpoints();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) - People and access, History, the weekly trust report (founder only).
+        group.MapControlRoomEndpoints();
         group.MapAttentionEndpoints();
         // DFES companion (dfes-companion-2026-07-11) — read-only farmer
         // engagement projection (streak / points / rich-day unlock bar).

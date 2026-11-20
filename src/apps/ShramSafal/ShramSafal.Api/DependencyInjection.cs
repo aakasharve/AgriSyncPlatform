@@ -830,6 +830,15 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 1) — farm names and owner phones by id.
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmContacts.GetFarmContactsHandler>();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — People and access (founder only). The directory
+        // (IControlRoomPhoneDirectory) is registered by the host, which alone sees the User module.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.ListPeopleHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.AddPersonHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.ChangePersonHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.RemovePersonHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.KeepPersonHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetHistoryHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetTrustReportHandler>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4) — silent farms counted live. Needs
         // ICompanyMisReader, CompanyMisExclusions, ISubscriptionReader and the scoped DbContext (Infrastructure),
         // IAdminMisRepository (below) and TimeProvider.
