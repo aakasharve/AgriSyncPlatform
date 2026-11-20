@@ -56,9 +56,10 @@ describe('आढावा crop cards: no "Grapes / Sugarcane" in Marathi mode', 
 
     it('Marathi mode', () => {
         render(<FarmStatus crops={crops} sel={{ crop: 'all', plotIds: [] }} onSel={() => undefined} />);
-        // the crop is named twice since lane UI-9a: on its own card, and under its photo in the all-crops card
-        for (const id of ['farm-crop-c1', 'farm-crop-all-photo-c1']) expect(within(screen.getByTestId(id)).getByText('द्राक्ष')).toBeInTheDocument();
-        for (const id of ['farm-crop-c2', 'farm-crop-all-photo-c2']) expect(within(screen.getByTestId(id)).getByText('ऊस')).toBeInTheDocument();
+        // the crop is named under its photo in the all-crops card (the crop cards below it are not drawn any more: fix round item 6)
+        expect(within(screen.getByTestId('farm-crop-all-photo-c1')).getByText('द्राक्ष')).toBeInTheDocument();
+        expect(within(screen.getByTestId('farm-crop-all-photo-c2')).getByText('ऊस')).toBeInTheDocument();
+        expect(screen.queryByTestId('farm-crop-c1')).toBeNull();
         expect(screen.queryByText('Grapes')).toBeNull();
         expect(screen.queryByText('Sugarcane')).toBeNull();
     });
@@ -66,7 +67,7 @@ describe('आढावा crop cards: no "Grapes / Sugarcane" in Marathi mode', 
     it('English mode', () => {
         lang.current = 'en';
         render(<FarmStatus crops={crops} sel={{ crop: 'all', plotIds: [] }} onSel={() => undefined} />);
-        for (const id of ['farm-crop-c1', 'farm-crop-all-photo-c1']) expect(within(screen.getByTestId(id)).getByText('Grapes')).toBeInTheDocument();
+        expect(within(screen.getByTestId('farm-crop-all-photo-c1')).getByText('Grapes')).toBeInTheDocument();
         expect(screen.getByText('All crops')).toBeInTheDocument();
         expect(screen.queryByText('द्राक्ष')).toBeNull();
     });

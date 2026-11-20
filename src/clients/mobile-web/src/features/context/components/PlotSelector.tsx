@@ -13,7 +13,8 @@
  * the farmer did through `onChange` (the whole new chosen set of THESE plots) or - when a page has its own tap rule - `onTapPlot`.
  *
  * One "chosen" look everywhere: dark green fill, white letters, a white tick (a shape, so it reads in sunlight); never the crop's own
- * colour as the chosen signal (grapes are green). Not chosen: white with a grey border. The crop's colour is only a small dot.
+ * colour as the chosen signal (grapes are green). Not chosen: white with a grey border. The crop's colour is a small dot on a chip and a thin
+ * strip under the photo in a group header; a number box carries none (fix round, 2026-11-20).
  *
  * Honesty: the quick buttons come in from the host (`quickButtons`), built from facts the phone holds (`buildQuickButtons`); this view
  * invents none and draws none whose count is zero. `groups` is an extension point that nothing feeds yet (a later lane): each named group
@@ -120,37 +121,43 @@ export const PlotGroupHeader: React.FC<{
 }> = ({ crop, sub, right, testId, language: languageProp }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
+    // Founder 2026-11-20 (fix round, header A): the crop's own colour is a thin strip under the photo it belongs to - not a bar floating at the
+    // right edge. The name is 18 px and the count line 14 px in a darker grey, so both read in sunlight.
     return (
-        <div className="flex items-center gap-2.5" data-testid={testId} data-part="group-header">
-            <PickerCropPhoto crop={crop} px={40} />
-            <span className="min-w-0 flex-1">
-                <span className="block truncate text-[16px] font-extrabold leading-tight text-stone-900">{cropNameIn(crop.name, language, crop.masterId)}</span>
-                {sub !== undefined && sub !== null && <span className="block text-[12.5px] font-bold leading-snug text-stone-600">{sub}</span>}
+        <div className="flex items-start gap-2.5" data-testid={testId} data-part="group-header">
+            <span className="flex w-10 shrink-0 flex-col" data-part="photo-column">
+                <PickerCropPhoto crop={crop} px={40} />
+                <span aria-hidden="true" data-part="strip" className={`mt-1 block h-1 rounded-full ${cropColorOf(crop.color)}`} />
             </span>
-            <span aria-hidden="true" data-part="accent" className={`h-8 w-1.5 shrink-0 rounded-full ${cropColorOf(crop.color)}`} />
+            <span className="flex min-h-[40px] min-w-0 flex-1 flex-col justify-center">
+                <span className="block truncate text-[18px] font-extrabold leading-tight text-stone-900">{cropNameIn(crop.name, language, crop.masterId)}</span>
+                {sub !== undefined && sub !== null && <span className="block text-[14px] font-bold leading-snug text-stone-700">{sub}</span>}
+            </span>
             {right}
         </div>
     );
 };
 
-/** One plot as a number box: its place in the crop big, its own (short) name small under it, the crop's colour as a dot. */
+/**
+ * One plot as a number box (founder 2026-11-20, fix round, tile A): its place in the crop big, its own (short) name small under it. No dot - the
+ * crop's colour told the farmer nothing here (every box of a crop had the same one) and it sat on the number. The tick has its own corner
+ * (top 2, right 2, 14 px) and the number starts 15 px from the top, so the two never touch. 64 px tall, so a thumb always finds it.
+ */
 export const PlotNumberBox: React.FC<{
     testId: string;
     position: number;
     name: string;
     on: boolean;
     onClick: () => void;
-    color?: string;
     mark?: React.ReactNode;
     disabled?: boolean;
     language: Language;
-}> = ({ testId, position, name, on, onClick, color, mark, disabled, language }) => (
+}> = ({ testId, position, name, on, onClick, mark, disabled, language }) => (
     <button type="button" disabled={disabled} data-testid={testId} aria-pressed={on} onClick={onClick}
-        className={`relative flex min-h-[60px] min-w-0 flex-col items-center justify-center rounded-2xl border-2 px-0.5 py-1 text-center transition active:scale-95 disabled:opacity-60 ${on ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-stone-400 bg-white text-stone-800'}`}>
-        <span aria-hidden="true" data-part="dot" className={`absolute left-1.5 top-1.5 h-2.5 w-2.5 rounded-full ${cropColorOf(color)} ${on ? 'ring-2 ring-white' : ''}`} />
-        {on && <span data-part="tick" className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-white text-emerald-800"><Check size={11} strokeWidth={4} aria-hidden="true" /></span>}
-        <span className="text-[22px] font-black leading-none" style={language === 'en' ? { fontFamily: NUM } : undefined} data-part="number">{digitsFor(position, language)}</span>
-        <span className={`mt-0.5 block max-w-full truncate text-[12px] font-extrabold leading-tight ${on ? 'text-emerald-50' : 'text-stone-700'}`} data-part="name">{name}</span>
+        className={`relative flex h-[64px] min-w-0 flex-col items-center rounded-[14px] border-2 px-0.5 pt-[15px] text-center transition active:scale-95 disabled:opacity-60 ${on ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-stone-400 bg-white text-stone-900'}`}>
+        {on && <span data-part="tick" className="absolute right-[2px] top-[2px] grid h-[14px] w-[14px] place-items-center rounded-full bg-white text-emerald-800"><Check size={10} strokeWidth={4} aria-hidden="true" /></span>}
+        <span className="text-[24px] font-black leading-[26px]" style={language === 'en' ? { fontFamily: NUM } : undefined} data-part="number">{digitsFor(position, language)}</span>
+        <span className={`block max-w-full truncate text-[13px] font-extrabold leading-[15px] ${on ? 'text-white' : 'text-stone-900'}`} data-part="name">{name}</span>
         {mark}
     </button>
 );
@@ -162,7 +169,7 @@ export const cropWordsOf = (crop: { name: string; masterId?: string }): string[]
 // ── the selector ─────────────────────────────────────────────────────────────────────────────────────
 
 export interface PlotSelectorProps {
-    /** The crop's plots, in the farm's own order (the number on a box is the plot's place in this list). */
+    /** The crop's plots, in the farm's own order (the list is drawn, and its boxes numbered, in natural number order). */
     plots: readonly { id: string; name: string }[];
     /** The chosen plots (of these plots). */
     chosen: readonly string[];
@@ -173,7 +180,7 @@ export interface PlotSelectorProps {
     onChange?: (next: string[]) => void;
     /** A page with its own tap rule (the आढावा page's "one tap shows only that plot") hears the tap instead of `onChange`. */
     onTapPlot?: (plotId: string) => void;
-    /** The crop's colour class (the dot). */
+    /** The crop's colour class (the dot on a chip; the number boxes of the grid carry none). */
     color?: string;
     /** The crop's names, in any language the stored plot names might start with; used to say "G7" instead of "द्राक्ष G7". */
     cropNames?: readonly (string | undefined)[];
@@ -204,8 +211,8 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const nameOf = (name: string) => (short ? plotShortName(name, cropNames ?? []) : name);
     const change = onChange ?? (() => undefined);
     const tap = (id: string) => (onTapPlot ? onTapPlot(id) : change(toggleId(chosen, id)));
-    // Natural number order (G2 before G10); a box keeps its place number in the crop's own list, the number the calendar prints.
-    const entries = naturalOrder(plots.map(p => p.name)).map(i => ({ p: plots[i], position: plotPosition(i) }));
+    // Natural number order (G2 before G10), and the number on a box is its place in that same order (G3 reads 3), so a name and its number agree.
+    const entries = naturalOrder(plots.map(p => p.name)).map((i, rank) => ({ p: plots[i], position: plotPosition(rank) }));
     const ids = entries.map(e => e.p.id);
 
     if (mode === 'chips') {
@@ -235,7 +242,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
             )}
             <div className="grid grid-cols-5 gap-2 max-[339px]:grid-cols-4" data-testid={testIds.grid}>
                 {shown.map(({ p, position }) => (
-                    <PlotNumberBox key={p.id} testId={testIds.plot(p.id)} position={position} name={nameOf(p.name)} on={chosen.includes(p.id)} color={color} disabled={disabled}
+                    <PlotNumberBox key={p.id} testId={testIds.plot(p.id)} position={position} name={nameOf(p.name)} on={chosen.includes(p.id)} disabled={disabled}
                         mark={mark?.(p.id, 'grid')} language={language} onClick={() => tap(p.id)} />
                 ))}
             </div>

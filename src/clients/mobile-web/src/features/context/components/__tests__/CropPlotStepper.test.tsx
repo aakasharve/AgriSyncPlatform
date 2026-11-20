@@ -138,12 +138,12 @@ describe('CropSelector layout="stepper"', () => {
         // DOCUMENT_POSITION_FOLLOWING (4): the second node comes after the first
         expect(strip.compareDocumentPosition(lead) & 4).toBeTruthy();
         expect(lead.compareDocumentPosition(plot) & 4).toBeTruthy();
-        // the card says what was chosen, in words and in the crop's own name
+        // the strip says what was chosen with the crop's own name (fix round 2026-11-20: no "chosen crop" label any more)
         const card = screen.getByTestId('flow-sel-cane');
-        expect(card.textContent).toContain('CHOSEN-CROP');
         expect(card.textContent).toContain('ऊस');
-        // UI-7: the shared tile, chosen = green border and a tick (was a solid green card)
-        expect(card.className).toContain('border-emerald-600');
+        expect(card.textContent).not.toContain('CHOSEN-CROP');
+        // the one chosen look: dark green fill, white letters, a tick
+        expect(card.className).toContain('bg-emerald-800');
         expect(card.querySelector('[data-part="tick"]')).toBeTruthy();
     });
 

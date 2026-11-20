@@ -33,7 +33,7 @@ import { useLogAttachmentCount } from './useLogAttachmentCount';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { PlotCount } from '../../context/components/CropPlotPicker';
 import { PlotGroupHeader, cropWordsOf } from '../../context/components/PlotSelector';
-import { plotShortName, smallPlotCardsFor, sortedNaturally } from '../../context/components/plotSelectorRules';
+import { plotNumbers, plotShortName, smallPlotCardsFor, sortedNaturally } from '../../context/components/plotSelectorRules';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 /** The result screen's खर्च colour, for the ledger's money chip. */
@@ -128,7 +128,7 @@ const smallStatusOf = (card: PlotDayCard): SmallStatus => (card.status === 'bloc
  * without the crop word and its place number, one status, and the small mic only when the full card would offer "अजून सांगा" with a way to
  * speak. The whole card opens the plot's day; the mic stops that tap.
  */
-const SmallPlotCard: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onTell }) => {
+const SmallPlotCard: React.FC<{ card: PlotDayCard; number?: number; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ card, number, isToday, onOpen, onTell }) => {
     const { ref } = card;
     const language = useOptionalLanguage()?.language;
     const copy = useReflectCopy();
@@ -142,9 +142,9 @@ const SmallPlotCard: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (re
             <span className={`block min-h-[64px] ${mic ? 'pb-11' : ''}`} data-part="small-card">
                 <span className="flex items-baseline gap-1.5">
                     <span className="min-w-0 truncate text-[18px] font-extrabold leading-tight text-stone-900" data-part="name">{name}</span>
-                    <span className="shrink-0 text-[12.5px] font-bold text-stone-600" data-part="number">{digitsFor(ref.plotIndex + 1, language)}</span>
+                    {number !== undefined && <span className="shrink-0 text-[14px] font-bold text-stone-700" data-part="number">{digitsFor(number, language)}</span>}
                 </span>
-                <span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[12.5px] font-extrabold leading-snug ${tone}`} data-testid={`plot-status-${ref.key}`} data-status={status}>
+                <span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-extrabold leading-snug ${tone}`} data-testid={`plot-status-${ref.key}`} data-status={status}>
                     {status === 'told' && <Check size={13} strokeWidth={3} className="shrink-0" aria-hidden="true" />}
                     <span className="min-w-0">{status === 'problem' ? w.problem : status === 'told' ? copy.timesTold(card.recordings, isToday) : copy.nothingTold(isToday)}</span>
                 </span>
@@ -165,6 +165,8 @@ const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onO
     const lang = language === 'en' ? 'en' : 'mr';
     const w = SMALL_WORDS[lang];
     const first = cards[0].ref;
+    // A card's number is its plot's place among ALL the crop's plots in natural order (G3 reads 3), not among the cards in view.
+    const numbers = plotNumbers(first.crop.plots ?? []);
     const counts = { problem: 0, told: 0, left: 0 };
     for (const c of cards) counts[smallStatusOf(c)] += 1;
     const tag = (n: number, text: string, tone: string, id: string) => (n > 0
@@ -180,7 +182,7 @@ const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onO
                 {tag(counts.left, w.left, 'bg-stone-100 text-stone-700', 'left')}
             </div>
             <div className="grid grid-cols-2 gap-2" data-testid={`plot-small-cards-${first.cropId}`}>
-                {cards.map(c => <SmallPlotCard key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onTell={onTell} />)}
+                {cards.map(c => <SmallPlotCard key={c.ref.key} card={c} number={c.ref.plotId ? numbers.get(c.ref.plotId) : undefined} isToday={isToday} onOpen={onOpen} onTell={onTell} />)}
             </div>
         </section>
     );

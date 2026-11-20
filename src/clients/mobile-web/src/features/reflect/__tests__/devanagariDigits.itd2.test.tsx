@@ -192,7 +192,8 @@ describe('UI-9a - the counts on the crop picker are in Devanagari digits in Mara
         lang.value = 'mr';
         renderPage();
         await waitFor(() => expect(screen.getByTestId('plot-hint-grape:g1')).toBeInTheDocument());
-        for (const id of ['farm-crop-all', 'farm-crop-all-line', 'farm-crop-grape']) {
+        // (the crop cards under the all-crops card are not drawn any more, fix round item 6: the card's photos carry each crop's count)
+        for (const id of ['farm-crop-all', 'farm-crop-all-line', 'farm-crop-all-photo-grape']) {
             const el = screen.getByTestId(id);
             expect(el.textContent, id).toMatch(/[०-९]/);
             expect(latinDigitFindings(el), id).toEqual([]);

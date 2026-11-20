@@ -17,6 +17,7 @@ import CropSelector from '../CropSelector';
 import type { StepperExtras } from '../CropPlotStepper';
 import type { CropProfile } from '../../../../types';
 import { getTodayKey, getYesterdayKey } from '../../../../core/domain/services/DateKeyService';
+import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 // The phone's work records: the test decides what the date index returns (or that it cannot be read).
 const store: { byDate: Record<string, unknown[]>; broken: boolean } = { byDate: {}, broken: false };
@@ -128,14 +129,19 @@ describe('one crop with many plots: the number grid, and the "सगळे" butt
 describe('natural number order (G2 before G10) on the log\'s plot step', () => {
     const scrambled = (n: number) => crop('grape', 'द्राक्ष', 'Grape', 'bg-green-500', ['G10', 'G2', 'G1', 'G11', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G12', 'G13', 'G14', 'G15'].slice(0, n).map(g => `द्राक्ष ${g}`));
 
-    it('the number grid lists the plots in number order; the box number stays the plot\'s place in the crop\'s own list', async () => {
+    it('the number grid lists the plots in number order and every box reads G<n> with the number n (the CTO\'s G3 with १४ case), two-digit ones included', async () => {
         render(<Harness crops={[scrambled(15)]} first={['grape']} stepper={{ workFacts: null }} />);
         await flush();
-        const names = [...screen.getByTestId('flow-plot-grid').children].map(c => part(c as HTMLElement, 'name')?.textContent);
+        const boxes = [...screen.getByTestId('flow-plot-grid').children] as HTMLElement[];
+        const names = boxes.map(c => part(c, 'name')?.textContent);
         expect(names.slice(0, 4)).toEqual(['G1', 'G2', 'G3', 'G4']);
         expect(names.slice(-3)).toEqual(['G13', 'G14', 'G15']);
         expect(names.indexOf('G10')).toBe(9);
-        expect(part(screen.getByTestId('flow-plot-grape-3'), 'number')).toHaveTextContent('३'); // G1 is stored third
+        boxes.forEach((box, i) => {
+            expect(part(box, 'name')).toHaveTextContent(`G${i + 1}`);
+            expect(part(box, 'number')?.textContent).toBe(toDevanagariDigits(String(i + 1)));
+        });
+        expect(part(screen.getByTestId('flow-plot-grape-3'), 'number')).toHaveTextContent('१'); // G1 is stored third but reads १
     });
 
     it('the chips of a small crop (flat list) are in number order too, with the full names as before', () => {

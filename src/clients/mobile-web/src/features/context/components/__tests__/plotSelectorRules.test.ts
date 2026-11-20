@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
     ALL_CROPS_PHOTOS_MAX, PHOTO_ONCE_FROM, PLOT_GRID_FROM, PLOT_SEARCH_FROM, SMALL_CARDS_FROM,
     afterAllToggle, allChosen, allCropsColumns, allCropsLine, allCropsPhotoSlots, buildQuickButtons, hasPlotSearch, moreCropsText,
-    naturalOrder, onlyShownText, photoOnceFor, pickedCountText, plotIdsWithWorkOn, plotMatchesQuery, plotPickMode, plotShortName, sameSet,
+    naturalOrder, onlyShownText, photoOnceFor, pickedCountText, plotIdsWithWorkOn, plotMatchesQuery, plotNumbers, plotPickMode, plotShortName, sameSet,
     smallPlotCardsFor, sortedNaturally, toLatinDigits, toggleId,
 } from '../plotSelectorRules';
 
@@ -136,6 +136,45 @@ describe('natural number order: G2 before G10 (CTO ruling 2026-11-20)', () => {
         expect(sorted.map(i => i.n)).toEqual(['G2', 'G10']);
         expect(items.map(i => i.n)).toEqual(['G10', 'G2']);
         expect(names).toEqual(['G2', 'G10', 'G1']);
+    });
+});
+
+describe('plotNumbers: the number printed next to a plot\'s name is its place in natural number order (CTO ruling 2026-11-20)', () => {
+    const scrambled = [3, 4, 7, 14, 1, 9, 12, 2, 15, 5, 11, 6, 13, 10, 8].map(n => ({ id: `p${n}`, name: `द्राक्ष G${n}` }));
+
+    it('G1 gets 1 ... G15 gets 15 whatever order the farm stored the plots in (the "G3 with १४" case)', () => {
+        const numbers = plotNumbers(scrambled);
+        for (let n = 1; n <= 15; n += 1) expect(numbers.get(`p${n}`)).toBe(n);
+        expect(numbers.size).toBe(15);
+    });
+
+    it('two-digit names sort after one-digit names, so G10 is 10 and G2 is 2', () => {
+        const numbers = plotNumbers([{ id: 'a', name: 'G10' }, { id: 'b', name: 'G2' }, { id: 'c', name: 'G1' }]);
+        expect(numbers.get('c')).toBe(1);
+        expect(numbers.get('b')).toBe(2);
+        expect(numbers.get('a')).toBe(3);
+    });
+
+    it('a Devanagari digit counts like a Latin one; plots with no digit are numbered after the numbered ones, in stored order', () => {
+        const numbers = plotNumbers([{ id: 'a', name: 'सोनाका' }, { id: 'b', name: 'ऊस १०' }, { id: 'c', name: 'थॉम्पसन' }, { id: 'd', name: 'ऊस २' }]);
+        expect(numbers.get('d')).toBe(1);
+        expect(numbers.get('b')).toBe(2);
+        expect(numbers.get('a')).toBe(3);
+        expect(numbers.get('c')).toBe(4);
+    });
+
+    it('the numbers come from the whole list: the same plot has the same number whatever else is on screen', () => {
+        const whole = plotNumbers(scrambled);
+        const inView = plotNumbers(scrambled.filter(p => ['p3', 'p14'].includes(p.id)));
+        expect(whole.get('p14')).toBe(14);
+        expect(inView.get('p14')).toBe(2); // proof that the caller must pass the crop's WHOLE list
+    });
+
+    it('does not touch its input; an empty list is an empty map', () => {
+        const copy = scrambled.map(p => p.id);
+        plotNumbers(scrambled);
+        expect(scrambled.map(p => p.id)).toEqual(copy);
+        expect(plotNumbers([]).size).toBe(0);
     });
 });
 

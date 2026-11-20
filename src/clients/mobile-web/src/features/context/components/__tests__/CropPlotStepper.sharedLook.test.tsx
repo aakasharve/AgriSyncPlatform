@@ -115,16 +115,39 @@ describe('the stepper in the shared look', () => {
         for (const id of ['flow-plot-cane-1', 'flow-plot-cane-2']) expect(screen.getByTestId(id).className).toMatch(/min-h-\[(4[4-9]|5\d)px\]/);
     });
 
-    it('the chosen crop\'s tile keeps its words ("CHOSEN-CROP", "N पैकी N प्लॉट") and the amber ring while no plot is chosen', () => {
+    it('the chosen crop\'s strip is the dark chosen look with the photo and the name ONLY (no label, no count) and keeps the amber ring while no plot is chosen', () => {
         render(<Harness />);
         fireEvent.click(screen.getByTestId('flow-crop-cane'));
         const card = screen.getByTestId('flow-sel-cane');
-        expect(card).toHaveTextContent('CHOSEN-CROP');
-        expect(card).toHaveTextContent('० पैकी २ प्लॉट');
+        expect(card).toHaveAttribute('data-look', 'chosen-strip');
+        expect(card.className).toContain('bg-emerald-800');
+        expect(card.textContent).toBe('ऊस'); // the name and nothing else: not "CHOSEN-CROP", not a count
+        expect(card).not.toHaveTextContent('CHOSEN-CROP');
+        expect(card).not.toHaveTextContent('पैकी');
         expect(card.className).toContain('ring-amber-300');
         fireEvent.click(screen.getByTestId('flow-plot-cane-1'));
         expect(screen.getByTestId('flow-sel-cane').className).toContain('ring-emerald-300');
-        expect(screen.getByTestId('flow-sel-cane')).toHaveTextContent('१ पैकी २ प्लॉट');
+        expect(screen.getByTestId('flow-sel-cane').textContent).toBe('ऊस');
+    });
+
+    it('the strip fits its box: 76 px tall (64 on a short screen), the tick sits on the photo corner (no width), the name takes two lines of 16 px at most', () => {
+        render(<Harness />);
+        fireEvent.click(screen.getByTestId('flow-crop-cane'));
+        const card = screen.getByTestId('flow-sel-cane');
+        expect(card.className).toContain('h-[76px]');
+        expect(card.className).toContain('[@media(max-height:720px)]:h-[64px]');
+        expect(card.className).toContain('overflow-hidden');
+        expect(card.className).toContain('min-w-0'); // may shrink to the 120 px box at 320 px
+        const photo = part(card, 'photo');
+        expect(photo?.querySelector('[data-part="tick"]')).toBeTruthy(); // the tick belongs to the photo, so it takes no width of its own
+        const name = part(card, 'name');
+        expect(name?.className).toMatch(/line-clamp-2/);
+        expect(name?.className).toContain('text-[16px]');
+        expect(name?.className).toContain('text-white');
+        // 6 + 40 photo + 6 gap + name + 6: the name always has room (62 px at 320, 96 px at 360) because nothing else is in the strip
+        expect(card.className).toContain('p-1.5');
+        expect(card.className).toContain('gap-1.5');
+        expect(card.children).toHaveLength(2);
     });
 
     it('marked plots still carry their short tag, and nothing is chosen for him', () => {

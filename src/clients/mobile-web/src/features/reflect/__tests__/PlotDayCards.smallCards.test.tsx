@@ -27,6 +27,7 @@ import { buildPlotDayCard, withNextHint } from '../overview/plotDayModel';
 import { PlotDayCards } from '../overview/PlotDayCards';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
 import { TODAY, TODAY_KEY, crop, log, plot } from './reflectFixtures';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 
 const GRAPES = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 15 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
 const CANE = crop('cane', 'ऊस', 'Sugarcane', 'bg-pink-500', [plot('c1', 'ऊस S1'), plot('c2', 'ऊस S2'), plot('c3', 'ऊस S3')]);
@@ -66,6 +67,20 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
         // cane has 3 plots: today's full cards, each with its banner photo, no group header
         expect(screen.queryByTestId('plot-group-cane')).toBeNull();
         for (const id of ['cane:c1', 'cane:c2', 'cane:c3']) expect(part(screen.getByTestId(`plot-card-${id}`), 'banner')).toBeTruthy();
+    });
+
+    it('item 5 (founder 2026-11-20): on a small card the number is 14 px in the darker grey and the status words 13 px (they were 12.5 px, paler)', () => {
+        render(<PlotDayCards cards={cardsOf()} isToday onOpen={vi.fn()} />);
+        const card = screen.getByTestId('plot-card-grape:g7');
+        const number = part(card, 'number') as HTMLElement;
+        expect(number.className).toContain('text-[14px]');
+        expect(number.className).toContain('text-stone-700');
+        expect(number.className).not.toMatch(/text-\[12/);
+        expect(screen.getByTestId('plot-status-grape:g7').className).toContain('text-[13px]');
+        // the group's header: its colour is a strip under the photo, the count line is 14 px
+        const header = screen.getByTestId('plot-group-header-grape');
+        expect(part(header, 'strip')?.className).toContain('bg-green-500');
+        expect(part(header, 'accent')).toBeNull();
     });
 
     it('a small card carries the crop\'s colour edge, the plot\'s name without the crop word, its number in Devanagari digits, and nothing else but one status', () => {
@@ -116,19 +131,42 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
 });
 
 describe('natural number order (G2 before G10)', () => {
-    it('small cards and full cards are listed in number order whatever order the plots were stored in; a card keeps its stored place number', () => {
+    it('small cards and full cards are listed in number order whatever order the plots were stored in; a small card\'s number is its place in that order', () => {
         const names = ['G10', 'G2', 'G1', 'G11', 'G3', 'G4'];
         const scrambled = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', names.map((g, i) => plot(`s${i}`, `द्राक्ष ${g}`)));
         const small = render(<PlotDayCards cards={cardsOf([scrambled], selectAll([scrambled]), [])} isToday onOpen={vi.fn()} />);
         const listed = [...screen.getByTestId('plot-small-cards-grape').children].map(c => part(c as HTMLElement, 'name')?.textContent);
         expect(listed).toEqual(['G1', 'G2', 'G3', 'G4', 'G10', 'G11']);
-        expect(part(screen.getByTestId('plot-card-grape:s2'), 'number')?.textContent).toBe('३'); // G1 is stored third
+        const numbers = [...screen.getByTestId('plot-small-cards-grape').children].map(c => part(c as HTMLElement, 'number')?.textContent);
+        expect(numbers).toEqual(['१', '२', '३', '४', '५', '६']); // listed order, numbered in that order (G1 is stored third but reads १)
+        expect(part(screen.getByTestId('plot-card-grape:s2'), 'number')?.textContent).toBe('१');
         small.unmount();
         // three cards: full cards, the same order
         const few = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', ['G10', 'G2', 'G1'].map((g, i) => plot(`f${i}`, `द्राक्ष ${g}`)));
         render(<PlotDayCards cards={cardsOf([few], selectAll([few]), [])} isToday onOpen={vi.fn()} />);
         const full = screen.getAllByTestId(/^plot-card-grape:/).map(c => c.getAttribute('data-testid'));
         expect(full).toEqual(['plot-card-grape:f2', 'plot-card-grape:f1', 'plot-card-grape:f0']);
+    });
+
+    it('15 plots stored in a scrambled order: every small card reads G<n> with the number n, two-digit ones included (the CTO\'s "G3 १४" case)', () => {
+        const order = [3, 4, 7, 14, 1, 9, 12, 2, 15, 5, 11, 6, 13, 10, 8];
+        const scrambled = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', order.map(n => plot(`h${n}`, `द्राक्ष G${n}`)));
+        render(<PlotDayCards cards={cardsOf([scrambled], selectAll([scrambled]), [])} isToday onOpen={vi.fn()} />);
+        for (let n = 1; n <= 15; n += 1) {
+            const card = screen.getByTestId(`plot-card-grape:h${n}`);
+            expect(part(card, 'name')).toHaveTextContent(`G${n}`);
+            expect(part(card, 'number')?.textContent).toBe(toDevanagariDigits(String(n)));
+        }
+    });
+
+    it('the number is the plot\'s place among ALL the crop\'s plots, not among the cards in view: narrowed to G3 and G14, they still read ३ and १४', () => {
+        const order = [3, 4, 7, 14, 1, 9, 12, 2, 15, 5, 11, 6, 13, 10, 8];
+        const scrambled = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', order.map(n => plot(`h${n}`, `द्राक्ष G${n}`)));
+        // four cards in view (the small look starts at 4): G3, G14, G2, G10
+        const sel = { crop: 'grape', plotIds: ['h3', 'h14', 'h2', 'h10'] };
+        render(<PlotDayCards cards={cardsOf([scrambled], sel, [])} isToday onOpen={vi.fn()} />);
+        const numbers = [...screen.getByTestId('plot-small-cards-grape').children].map(c => part(c as HTMLElement, 'number')?.textContent);
+        expect(numbers).toEqual(['२', '३', '१०', '१४']);
     });
 });
 
