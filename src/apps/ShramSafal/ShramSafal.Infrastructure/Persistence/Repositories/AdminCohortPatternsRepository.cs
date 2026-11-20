@@ -61,13 +61,13 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
     /// <summary>
     /// Renders the optional <c>JOIN mis.effective_org_farm_scope</c>
     /// fragment + the matching <c>WHERE efs.org_id = @org</c> filter for
-    /// non-Platform callers. Platform admins get an empty fragment so
+    /// non-Platform callers. Platform seats (the founder and the control room's team seats, gated by the route) get an empty fragment so
     /// they see every farm without an explicit grant in the projection
     /// table (matches the EntitlementResolver Platform special-case).
     /// </summary>
     private static (string Join, string Where) ScopeJoin(AdminScope scope, string farmCol)
     {
-        if (scope.IsPlatformAdmin) return ("", "");
+        if (scope.IsPlatformSeat) return ("", "");
         return (
             $"JOIN mis.effective_org_farm_scope efs ON efs.farm_id = {farmCol}",
             "AND efs.org_id = @org");
@@ -95,7 +95,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                   {where}
                 GROUP BY bin
                 """;
-            if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+            if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
@@ -156,7 +156,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                 """;
             AddParam(cmd, "@bucket", bucket);
             AddParam(cmd, "@lim", limit);
-            if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+            if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
 
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
@@ -198,7 +198,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                   {where}
                 GROUP BY tier
                 """;
-            if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+            if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
@@ -244,7 +244,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                       {where}
                     """;
                 AddParam(cmd, "@half", halfW);
-                if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+                if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
                 using var r = await cmd.ExecuteReaderAsync(ct);
                 if (await r.ReadAsync(ct))
                 {
@@ -281,7 +281,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                 GROUP BY d.week_start
                 ORDER BY d.week_start ASC
                 """;
-            if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+            if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
@@ -319,7 +319,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
                 ORDER BY s.error_count DESC
                 LIMIT 10
                 """;
-            if (!scope.IsPlatformAdmin) AddParam(cmd, "@org", scope.OrganizationId);
+            if (!scope.IsPlatformSeat) AddParam(cmd, "@org", scope.OrganizationId);
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {

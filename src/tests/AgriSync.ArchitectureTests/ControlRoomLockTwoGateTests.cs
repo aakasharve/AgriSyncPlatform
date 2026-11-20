@@ -26,6 +26,8 @@ using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.Admin.GetAppVersions;
+using ShramSafal.Application.UseCases.Admin.GetCohortPatterns;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetFarmContacts;
 using ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
@@ -93,6 +95,8 @@ public sealed class ControlRoomLockTwoGateTests
             ControlRoomTicks.Users, ModuleKey.AdminUsers, false),
         new("mis-company", "/shramsafal/admin/mis/company", "/shramsafal/admin/mis/company", "",
             ControlRoomTicks.CompanyNumbers, ModuleKey.MetricsNsm, true),
+        new("cohort", "/admin/farmer-health/cohort", "/admin/farmer-health/cohort", "",
+            ControlRoomTicks.FarmerHealth, ModuleKey.FarmerHealth, false),
         new("farmer-health", "/admin/farmer-health/{farmId:guid}", $"/admin/farmer-health/{Farm1:D}", "",
             ControlRoomTicks.FarmerHealth, ModuleKey.FarmerHealth, false),
     ];
@@ -174,6 +178,61 @@ public sealed class ControlRoomLockTwoGateTests
         answer.Status.Should().Be(StatusCodes.Status403Forbidden, answer.Body);
         Code(answer.Body).Should().Be("admin_module_forbidden");
         ports.Calls.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("cohort")]
+    [InlineData("farmer-health")]
+    public async Task A_non_platform_seat_holding_farmer_health_is_refused_the_cross_farm_pages(string name)
+    {
+        var c = Case(name);
+        var ports = new Ports();
+        var fpoWithTick = new AdminScope(
+            Org, OrganizationType.FPO, OrganizationRole.Owner, ControlRoomTicks.ModulesFor([ControlRoomTicks.FarmerHealth]),
+            IsPlatformAdmin: false);
+        fpoWithTick.CanRead(ModuleKey.FarmerHealth).Should().BeTrue("the seat holds the module; only the Platform-seat gate refuses");
+
+        var answer = await Ask(c, fpoWithTick, ports);
+
+        answer.Status.Should().Be(StatusCodes.Status403Forbidden, answer.Body);
+        Code(answer.Body).Should().Be("admin_platform_only");
+        ports.Calls.Should().Be(0);
+    }
+
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, AM7): the route maps the seat to who may read names.
+    [Fact]
+    public async Task App_versions_shows_counts_but_hides_names_without_all_farms()
+    {
+        var ops = new AppVersionsOps();
+
+        // The Viewer preset: company_numbers and server_health.
+        var answer = await AskAppVersions(TeamSeat(ControlRoomTicks.CompanyNumbers, ControlRoomTicks.ServerHealth), ops);
+
+        answer.Status.Should().Be(StatusCodes.Status200OK, answer.Body);
+        using var doc = JsonDocument.Parse(answer.Body);
+        var data = doc.RootElement.GetProperty("data");
+        data.GetProperty("versions").GetArrayLength().Should().Be(2);
+        data.GetProperty("onOlderVersions").GetArrayLength().Should().Be(0);
+        data.GetProperty("onOlderVersionsHiddenReason").GetString().Should().Be("needs_all_farms");
+        ops.NameCalls.Should().Be(0, "no name is read");
+        ops.FarmNameCalls.Should().Be(0, "the cross-farm factory is not opened");
+        answer.Body.Should().NotContain("Example Ramesh");
+    }
+
+    [Fact]
+    public async Task App_versions_names_people_with_all_farms()
+    {
+        var ops = new AppVersionsOps();
+
+        var answer = await AskAppVersions(TeamSeat(ControlRoomTicks.ServerHealth, ControlRoomTicks.AllFarms), ops);
+
+        answer.Status.Should().Be(StatusCodes.Status200OK, answer.Body);
+        using var doc = JsonDocument.Parse(answer.Body);
+        var data = doc.RootElement.GetProperty("data");
+        data.GetProperty("onOlderVersions").EnumerateArray().Select(p => p.GetProperty("name").GetString())
+            .Should().Equal("Example Ramesh");
+        data.GetProperty("onOlderVersionsHiddenReason").ValueKind.Should().Be(JsonValueKind.Null);
+        ops.NameCalls.Should().Be(1);
     }
 
     [Fact]
@@ -457,6 +516,26 @@ public sealed class ControlRoomLockTwoGateTests
         return new Answer(status, body, history);
     }
 
+    private static async Task<Answer> AskAppVersions(AdminScope scope, AppVersionsOps ops)
+    {
+        const string route = "/shramsafal/admin/ops/app-versions";
+        var routes = NewRouteBuilder();
+        routes.MapGroup("/shramsafal").MapAdminEndpoints();
+        var endpoint = routes.DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>()
+            .Single(e => e.RoutePattern.RawText == route);
+
+        var history = new RecordingControlRoomHistory();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IEntitlementResolver>(new FixedSeatResolver(scope));
+        AddHandlers(services, new Ports(), history, new FixedControlRoomStore(), ops);
+
+        var ctx = NewContext(services.BuildServiceProvider(), endpoint, "GET", route, "?days=7");
+        await endpoint.RequestDelegate!(ctx);
+        var (status, body) = await ReadAsync(ctx);
+        return new Answer(status, body, history);
+    }
+
     private static DefaultHttpContext NewContext(
         IServiceProvider services, RouteEndpoint endpoint, string method, string path, string query)
     {
@@ -482,8 +561,10 @@ public sealed class ControlRoomLockTwoGateTests
 
     /// <summary>The real handlers over one recording set of ports.</summary>
     private static void AddHandlers(
-        IServiceCollection services, Ports ports, RecordingControlRoomHistory history, FixedControlRoomStore store)
+        IServiceCollection services, Ports ports, RecordingControlRoomHistory history, FixedControlRoomStore store,
+        AppVersionsOps? appOps = null)
     {
+        var ops = appOps ?? new AppVersionsOps();
         var clock = new FixedClock(Now);
         services.AddSingleton(new GetVoiceCheckHandler(ports, CompanyMisExclusions.None, clock));
         services.AddSingleton(new GetWvfdHistoryHandler(ports, CompanyMisExclusions.None, clock));
@@ -494,8 +575,10 @@ public sealed class ControlRoomLockTwoGateTests
             new DbContext(new DbContextOptionsBuilder<DbContext>().Options), CompanyMisExclusions.None, clock));
         services.AddSingleton(new GetSufferingHandler(ports));
         services.AddSingleton(new GetUsersListHandler(ports, history, store));
-        services.AddSingleton(new GetCompanyMisHandler(ports, new NoAppSeenOpsRepository(), CompanyMisExclusions.None, clock));
+        services.AddSingleton(new GetCompanyMisHandler(ports, ops, CompanyMisExclusions.None, clock));
         services.AddSingleton(new GetFarmerHealthHandler(ports, new PassThroughRedactor(), new NoAuditEmitter(), history, store));
+        services.AddSingleton(new GetCohortPatternsHandler(ports, new PassThroughRedactor(), new NoAuditEmitter()));
+        services.AddSingleton(new GetAppVersionsHandler(ops, clock));
     }
 
     /// <summary>Registers, for every class a route asks for, an instance that was never constructed.</summary>
@@ -669,10 +752,44 @@ public sealed class ControlRoomLockTwoGateTests
             Task.CompletedTask;
     }
 
-    /// <summary>Compile-only: the Company MIS handler asks when app.seen rows began; here none were ever written.</summary>
-    private sealed class NoAppSeenOpsRepository : IAdminOpsRepository
+    /// <summary>
+    /// The ops reads the company handlers use: when app.seen rows began (Company MIS), and the app-versions reads, counting
+    /// how many times the people-reading ones were called. Everything else throws.
+    /// </summary>
+    private sealed class AppVersionsOps : IAdminOpsRepository
     {
-        public Task<DateTime?> GetAppSeenStartAsync(CancellationToken ct = default) => Task.FromResult<DateTime?>(null);
+        private static readonly Guid Sunita = Guid.Parse("a4a00000-0000-0000-0000-000000000001");
+        private static readonly Guid Ramesh = Guid.Parse("a4a00000-0000-0000-0000-000000000002");
+
+        public int NameCalls { get; private set; }
+
+        public int FarmNameCalls { get; private set; }
+
+        public Task<DateTime?> GetAppSeenStartAsync(CancellationToken ct = default) =>
+            Task.FromResult<DateTime?>(Now.AddDays(-6));
+
+        public Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AppSeenRow>>(
+                [new AppSeenRow(Sunita, "1.0.18", Now.AddHours(-1)), new AppSeenRow(Ramesh, "1.0.17", Now.AddDays(-2))]);
+
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+            Task.FromResult(new SignInDevices(2, 0, 0));
+
+        public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(
+            IReadOnlyCollection<Guid> personIds, CancellationToken ct = default)
+        {
+            NameCalls++;
+            return Task.FromResult<IReadOnlyDictionary<Guid, string?>>(
+                new Dictionary<Guid, string?> { [Ramesh] = "Example Ramesh" });
+        }
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetFarmNamesByPersonAsync(
+            Guid adminUserId, IReadOnlyCollection<Guid> personIds, CancellationToken ct = default)
+        {
+            FarmNameCalls++;
+            return Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<string>>>(
+                new Dictionary<Guid, IReadOnlyList<string>> { [Ramesh] = ["Example Farm"] });
+        }
 
         public Task<AdminOpsHealthDto> GetOpsHealthAsync(CancellationToken ct = default) => throw new NotSupportedException();
 
@@ -681,20 +798,6 @@ public sealed class ControlRoomLockTwoGateTests
             throw new NotSupportedException();
 
         public Task<OpsVoiceTrendDto> GetVoiceTrendAsync(int days, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(
-            IReadOnlyCollection<Guid> personIds, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetFarmNamesByPersonAsync(
-            Guid adminUserId, IReadOnlyCollection<Guid> personIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(DateTime sinceUtc, CancellationToken ct = default) =>
@@ -706,7 +809,8 @@ public sealed class ControlRoomLockTwoGateTests
     /// the drilldown carry <see cref="Phone"/>; the company readers list no farm.
     /// </summary>
     private sealed class Ports
-        : ICompanyMisReader, IConfirmedFarmDaysReader, IAdminMisRepository, ISubscriptionReader, IAdminFarmerHealthRepository
+        : ICompanyMisReader, IConfirmedFarmDaysReader, IAdminMisRepository, ISubscriptionReader, IAdminFarmerHealthRepository,
+          IAdminCohortPatternsRepository
     {
         public int Calls { get; private set; }
 
@@ -792,6 +896,12 @@ public sealed class ControlRoomLockTwoGateTests
         public Task<AccessExtensionProjection?> GetActiveAccessExtensionAsync(
             OwnerAccountId ownerAccountId, DateTime asOfUtc, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<CohortPatternsDto> GetAsync(AdminScope scope, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(new CohortPatternsDto([], [], [], [], [], [], []));
+        }
 
         public Task<FarmerHealthDto?> GetAsync(Guid farmId, AdminScope scope, Guid adminUserId, CancellationToken ct = default)
         {

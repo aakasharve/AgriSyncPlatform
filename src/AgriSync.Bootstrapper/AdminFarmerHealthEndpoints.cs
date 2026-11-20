@@ -20,7 +20,8 @@ namespace AgriSync.Bootstrapper;
 ///   Audit-logged, redacted per <see cref="ModuleKey.FarmerHealth"/>.</item>
 /// <item><c>GET /admin/farmer-health/cohort</c> — Mode B cohort
 ///   patterns (intervention queue, watchlist, distributions, heatmap,
-///   trends, top-10 suffering). Same gates.</item>
+///   trends, top-10 suffering). Same gates: the module, then a Platform seat
+///   (spec trusted-control-room-2026-11-20, plan CR-3, Task A4).</item>
 /// </list>
 /// <remarks>
 /// <para>
@@ -63,8 +64,8 @@ public static class AdminFarmerHealthEndpoints
                     .RequireReadAsync(http, scope, ModuleKey.FarmerHealth))
                 return Results.Empty;
             // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C13, C21) — the page names the farm and its
-            // owner's phone; an FPO owner holds this module too, so the module check alone would reach beyond the
-            // team: Platform seats only (spec trusted-control-room-2026-11-20, plan CR-3, Task A4), refused before
+            // owner's phone; the module check alone would not say whose seat it is (an FPO seat must never reach
+            // every farm): Platform seats only (spec trusted-control-room-2026-11-20, plan CR-3, Task A4), refused before
             // anything is read or opened. The phone is hidden unless the seat holds the farmer_phones tick. Deliberately has no
             // CacheOutput: each load opens the audited cross-farm factory once (one audit row).
             if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
@@ -96,6 +97,10 @@ public static class AdminFarmerHealthEndpoints
             if (scope is null) return Results.Empty;
             if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
                     .RequireReadAsync(http, scope, ModuleKey.FarmerHealth))
+                return Results.Empty;
+
+            if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
+                    .RequirePlatformSeatAsync(http, scope))
                 return Results.Empty;
 
             var result = await handler.HandleAsync(

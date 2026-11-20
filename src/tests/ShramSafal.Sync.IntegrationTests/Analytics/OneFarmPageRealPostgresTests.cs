@@ -791,6 +791,102 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         await viaHandler.Should().ThrowAsync<Exception>("the handler never turns a failed read into a NotFound result or a page");
     }
 
+    // ── spec: trusted-control-room-2026-11-20 (plan CR-3, Task A4, fix round 1): team seats ─────────────────
+
+    private static AdminScope TeamSeatWithFarmerHealth =>
+        new(Org, OrganizationType.Platform, OrganizationRole.Employee,
+            ShramSafal.Domain.ControlRoom.ControlRoomTicks.ModulesFor([ShramSafal.Domain.ControlRoom.ControlRoomTicks.FarmerHealth]),
+            IsPlatformAdmin: false);
+
+    private static AdminScope FpoEmployee =>
+        new(Org, OrganizationType.FPO, OrganizationRole.Employee,
+            EntitlementMatrix.For(OrganizationType.FPO, OrganizationRole.Employee), IsPlatformAdmin: false);
+
+    [SkippableFact]
+    public async Task A_team_seat_with_only_the_farmer_health_tick_gets_the_one_farm_page()
+    {
+        await GuardAsync();
+
+        await using var scope = AdminScope(BuildProvider());
+        var handler = Handler(Repository(scope.ServiceProvider));
+
+        var team = await handler.HandleAsync(new GetFarmerHealthQuery(TeamSeatWithFarmerHealth, Farm1, Admin, "dev", "ip"));
+        team.IsSuccess.Should().BeTrue(team.IsSuccess ? string.Empty : team.Error.Description);
+        team.Value!.FarmId.Should().Be(Farm1);
+        team.Value.Phone.Should().Be("**redacted**", "no farmer_phones tick");
+
+        var unknown = await handler.HandleAsync(new GetFarmerHealthQuery(TeamSeatWithFarmerHealth, UnknownFarm, Admin, "dev", "ip"));
+        unknown.Error.Kind.Should().Be(ErrorKind.NotFound, "a farm that does not exist is still 404 for a team seat");
+
+        // Every non-Platform scope behaves as before: outside its farm scope, nothing is read.
+        var fpo = await handler.HandleAsync(new GetFarmerHealthQuery(FpoEmployee, Farm1, Admin, "dev", "ip"));
+        fpo.IsSuccess.Should().BeFalse();
+        fpo.Error.Kind.Should().Be(ErrorKind.NotFound);
+    }
+
+    [SkippableFact]
+    public async Task A_team_seat_with_only_the_farmer_health_tick_gets_a_real_cohort()
+    {
+        await GuardAsync();
+
+        // One scored farm: seven entries over the last week, each confirmed, then the score matviews refreshed.
+        await using (var db = new NpgsqlConnection(SuperuserConn))
+        {
+            await db.OpenAsync();
+            for (var i = 0; i < 7; i++)
+            {
+                var logId = Guid.NewGuid();
+                var created = DateTime.UtcNow.AddDays(-(7 - i)).Date.AddHours(6 + (i * 2));
+                await ExecAsync(db, """
+                    INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc,
+                                                source, model_version, prompt_version)
+                    VALUES (@id, @fid, @plot, @cycle, ARRAY[@plot], 'Plot', @op, @date, @created, 'pre_spine', 'unknown', 'unknown');
+                    """,
+                    ("id", logId), ("fid", Farm1), ("plot", Guid.NewGuid()), ("cycle", Guid.NewGuid()), ("op", Owner1),
+                    ("date", created.Date), ("created", created));
+                await ExecAsync(db, """
+                    INSERT INTO ssf.verification_events ("Id", daily_log_id, status, verified_by_user_id, occurred_at_utc)
+                    VALUES (@id, @log, 'Confirmed', @by, @occ);
+                    """,
+                    ("id", Guid.NewGuid()), ("log", logId), ("by", Guid.NewGuid()), ("occ", created.AddSeconds(30)));
+            }
+
+            // The score matview scores the farms that appear in analytics.events.
+            await ExecAsync(db, """
+                INSERT INTO analytics.events
+                    (event_id, event_type, occurred_at_utc, actor_user_id, farm_id,
+                     owner_account_id, actor_role, trigger, schema_version, props)
+                VALUES (@id, 'closure.submitted', @occ, @actor, @fid, NULL, 'farmer', 'manual', 'v1', '{"durationMs":25000}'::jsonb);
+                """,
+                ("id", Guid.NewGuid()), ("occ", DateTime.UtcNow.AddDays(-1)), ("actor", Owner1), ("fid", Farm1));
+
+            foreach (var view in new[]
+            {
+                "mis.wvfd_weekly", "mis.schedule_compliance_weekly", "mis.action_simplicity_p50_per_farm",
+                "mis.repeat_curve_per_farm", "mis.gaming_signals_per_farm", "mis.dwc_score_per_farm_week",
+            })
+            {
+                await ExecAsync(db, $"REFRESH MATERIALIZED VIEW {view};");
+            }
+        }
+
+        Output.WriteLine("[EVIDENCE] score rows: " + await ScalarAsSuperuserAsync("SELECT count(*) FROM mis.dwc_score_per_farm_week")
+            + " wvfd rows: " + await ScalarAsSuperuserAsync("SELECT count(*) FROM mis.wvfd_weekly"));
+        await using var scope = AdminScope(BuildProvider());
+        var repository = new AdminCohortPatternsRepository(scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>());
+
+        static int Counted(CohortPatternsDto dto) => dto.ScoreDistribution.Sum(b => b.Count);
+
+        var founder = await repository.GetAsync(PlatformOwner);
+        Counted(founder).Should().BeGreaterThan(0, "the control: the founder sees the scored farm");
+
+        var team = await repository.GetAsync(TeamSeatWithFarmerHealth);
+        Counted(team).Should().Be(Counted(founder), "a team seat reads every farm too, never zeros that look real");
+
+        var fpo = await repository.GetAsync(FpoEmployee);
+        Counted(fpo).Should().Be(0, "a non-Platform scope is still limited to its own farm scope, as before");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private AdminFarmerHealthRepository Repository(

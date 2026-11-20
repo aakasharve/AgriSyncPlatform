@@ -71,8 +71,8 @@ public sealed class AdminFarmerHealthRepository(
         var firstDay = today.AddDays(-(WindowDays - 1));
         var window = new Window(firstDay, today, GetCompanyMisHandler.IstDayStartUtc(firstDay), countedAtUtc);
 
-        // 1. Scope: a non-platform caller outside the farm's scope gets nothing, and nothing is opened for them.
-        if (!scope.IsPlatformAdmin && !await WithAnalyticsConnectionAsync(
+        // 1. Scope: a Platform seat (the route gates it) reads every farm; a non-platform caller outside the farm's scope gets nothing, and nothing is opened for them.
+        if (!scope.IsPlatformSeat && !await WithAnalyticsConnectionAsync(
                 conn => IsFarmInScopeAsync(conn, scope.OrganizationId, farmId, ct), ct))
         {
             return null;
