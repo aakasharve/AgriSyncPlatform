@@ -11,8 +11,9 @@
  *   - A speaker WITHOUT the confirm-records authority is asked "माहीत असेल तर सांगा (ऐच्छिक)" and closes with "माहीत नाही, मालक
  *     पाहतील"; a checker is asked "हेच औषध वापरलं का?" and closes with "नंतर पाहीन". His answer is kept as HIS. The phone sends no
  *     "is check" - the server decides (D-95). Nothing here blocks saving or confirming (P9).
- *   - A product the library does not know (or knows by a shared name) offers the photo and the close button only: there is no
- *     pick-from-list yet, so a "हो" cannot be recorded for it. A photo reads "फोटो ठेवला" (D-93, P5).
+ *   - A product the library does not know exactly (or knows by a shared name) offers the photo and the close button. Lane FACTS-2: when
+ *     library names SOUND like his word, they are shown as buttons - "तुम्हाला हे म्हणायचं होतं का?" - and his tap on one is the same
+ *     "हो, हेच" answer, naming that product; nothing is chosen for him, and the card then says he chose it. A photo reads "फोटो ठेवला" (D-93, P5).
  *   - Money: a matched purchase bill shows its amount only to a member who may see money (MU-3).
  *   - The card only reads the record. An answer is queued as an overlay and never edits the record (P7).
  */
@@ -20,6 +21,8 @@ import React, { useState } from 'react';
 import { Camera, CircleHelp, ShieldCheck, Sprout, TriangleAlert, X } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { inputWords } from '../../../../domain/inputs/inputWords';
+import { getProduct, type CatalogProduct } from '../../../../domain/inputs/inputCatalog';
+import { nearProducts, type NearProduct } from '../../../../domain/inputs/nearNames';
 import { factSources, ingredientFactsFor, ingredientKeysOf, stageLinesFor, type FactsLanguage, type UseContext } from '../../../../domain/inputs/ingredientFacts';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { amountText, productName, type ProductItem } from './productModel';
@@ -28,6 +31,7 @@ import {
     benefitFor,
     identityOf,
     isAnswerable,
+    nameForMatching,
     TYPE_STYLE,
     typeKeyOf,
     type ItemAnswers,
@@ -91,6 +95,27 @@ export function companyLine(identity: ItemIdentity, language: string | undefined
     return names[0] ?? '';
 }
 
+/** A library brand in this screen's language: the Marathi spelling in Marathi mode when the library has one, else the other spelling (a brand is a name). */
+const brandIn = (b: { en: string | null; mr: string | null } | null | undefined, language: string | undefined): string =>
+    ((language === 'en' ? b?.en ?? b?.mr : b?.mr ?? b?.en) ?? '').trim();
+
+/** The name of a library product for the screen: its first brand, else its first alias. */
+export function libraryNameOf(product: CatalogProduct, language: string | undefined): string {
+    return brandIn(product.brands[0], language) || product.aliases[0] || product.id;
+}
+
+/** The name a "did you mean" button shows: the brand the sound matched, in this language; the library's own spelling for an alias. */
+export function nearBrandName(n: NearProduct, language: string | undefined): string {
+    return brandIn(n.brand, language) || n.matchedName;
+}
+
+/** The company shown under a "did you mean" name: the matched brand's own company in this language, else the product's first company. */
+export function nearCompanyName(n: NearProduct, product: CatalogProduct, language: string | undefined): string {
+    const en = language === 'en';
+    return inLanguage(en ? n.brand?.company : n.brand?.companyMr, language)
+        || companyLine({ state: 'found', product }, language);
+}
+
 const Fact: React.FC<{ label: string; children: React.ReactNode; testId?: string }> = ({ label, children, testId }) => (
     <div className="flex gap-2 py-1" data-testid={testId}>
         <span className="w-[104px] shrink-0 text-[13.5px] font-bold text-stone-500">{label}</span>
@@ -129,9 +154,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState<null | 'answer' | 'photo'>(null);
 
-    const identity = identityOf(item);
     const log = kit.logById.get(logId);
     const answers: ItemAnswers = answersOf(log, item.ref);
+    const identity = identityOf(item, answers);
     const style = TYPE_STYLE[typeKeyOf(identity)];
     const found = identity.state === 'found';
     const answerable = isAnswerable(item);
@@ -140,6 +165,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const bill = kit.billOf?.(logId, item);
     const benefit = found ? benefitFor(identity.product, kit.cropNamesOf(logId), answers) : undefined;
     const photoKept = answers.speaker?.verdict === 'photo' || answers.check?.verdict === 'photo';
+    // Lane FACTS-2: a word the library does not know exactly gets the library names that SOUND like it, to tap. Never chosen for him.
+    const near = identity.state === 'notFound' && answerable && !photoKept ? nearProducts(nameForMatching(item)) : [];
     // Lane FACTS-1: what each ingredient does and what to know at this stage - only sourced, ticked lines (P4, D-96); the day and stage from the plot's schedule.
     const lang: FactsLanguage = language === 'en' ? 'en' : 'mr';
     const useContext = found ? kit.useContextOf?.(logId) ?? null : null;
@@ -161,6 +188,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
 
     const said = (a: InputIdentityAnswer | undefined): string | null => {
         if (!a) return null;
+        // A product he picked from the sound-alike names: he CHOSE it, he did not say it was a library match.
+        if (identity.state === 'found' && identity.byPick && a.verdict === 'confirmed') return copy.speakerChose(kit.nameOfUser(a.assertedByUserId));
         const what = a.verdict === 'confirmed' ? copy.yesThis : a.verdict === 'rejected' ? copy.notThis : words.photoKept;
         return copy.speakerSaid(kit.nameOfUser(a.assertedByUserId), what);
     };
@@ -188,6 +217,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                         {copy.typeNames[typeKeyOf(identity)]}
                     </span>
                 </div>
+                {identity.state === 'found' && identity.byPick && (
+                    <div className="mt-1.5 rounded-xl bg-sky-50 px-3 py-1.5 text-[14px] font-bold leading-snug text-sky-900 ring-1 ring-sky-200" data-testid="vr-card-picked">
+                        {copy.pickedNote(name, libraryNameOf(identity.product, language))}
+                    </div>
+                )}
 
                 {found ? (
                     <div className={`mt-2 rounded-2xl border-l-[6px] ${style.edge} ${style.soft} px-3 py-1.5`} data-testid="vr-card-facts">
@@ -228,6 +262,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                             </span>
                         </div>
                         {amount && <Fact label={copy.factDose} testId="vr-fact-dose">{amount}</Fact>}
+                        {near.length > 0 && (
+                            <div className="mt-2" data-testid="vr-card-near">
+                                <div className="text-[15px] font-extrabold text-stone-900" data-testid="vr-near-question">{copy.didYouMean}</div>
+                                <div className="mt-1.5 space-y-1.5">
+                                    {near.map(n => {
+                                        const product = getProduct(n.productId);
+                                        if (!product) return null;
+                                        // Before his tap: the brand and its company, nothing else. The ingredient and the facts box come only after he chooses.
+                                        const brand = nearBrandName(n, language);
+                                        const line = nearCompanyName(n, product, language);
+                                        return (
+                                            <button key={n.productId} type="button" disabled={busy} data-testid={`vr-near-${n.productId}`}
+                                                onClick={() => void run('answer', () => kit.onAnswer({ logId, item, verdict: 'confirmed', catalogProductId: n.productId }))}
+                                                className="block min-h-[52px] w-full rounded-2xl border-2 border-sky-300 bg-white px-3 py-1.5 text-left disabled:opacity-60">
+                                                <span className="block text-[17px] font-extrabold text-stone-900">{brand}</span>
+                                                {line && <span className="block text-[13.5px] font-bold text-stone-600">{line}</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-1.5 text-[13px] font-semibold text-stone-600" data-testid="vr-near-hint">{copy.didYouMeanHint}</div>
+                            </div>
+                        )}
                         {answerable && !photoKept && (
                             <button type="button" disabled={busy} onClick={() => void run('photo', () => kit.onPhoto({ logId, item }))} data-testid="vr-card-photo"
                                 className="mt-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-emerald-700 text-[16px] font-extrabold text-white disabled:opacity-60">

@@ -80,7 +80,7 @@ const SPRAY = {
     id: 'ev-spray', method: 'Spray', sourceText: 'कॉन्फिडॉर आणि प्रेम गोल्ड फवारलं',
     mix: [
         { id: 'm-conf', productName: 'कॉन्फिडॉर', dose: 1, unit: 'ml' },
-        { id: 'm-prem', productName: 'प्रेम गोल्ड' },
+        { id: 'm-prem', productName: 'वाघोबा रसायन' },
     ],
 };
 /** Calcium nitrate and 19:19:19 in ONE drip tank (a never-together pair when a reviewed rule exists). */
@@ -259,7 +259,7 @@ describe('Task 2 - the product rows, the card, and हो / नाही / फ�
 
     it('AmbiguousProduct_SaysLibraryFoundSeveral_AndOwnerWillLook_NoWayToPickPromised', () => {
         expect(AMBIGUOUS_NAME).not.toBe('');
-        const ambiguous = log(NOW, { fullTranscript: AMBIGUOUS_NAME, inputs: [{ id: 'ev-amb', method: 'Spray', mix: [{ id: 'm-amb', productName: AMBIGUOUS_NAME }, { id: 'm-amb2', productName: 'प्रेम गोल्ड' }] }] });
+        const ambiguous = log(NOW, { fullTranscript: AMBIGUOUS_NAME, inputs: [{ id: 'ev-amb', method: 'Spray', mix: [{ id: 'm-amb', productName: AMBIGUOUS_NAME }, { id: 'm-amb2', productName: 'वाघोबा रसायन' }] }] });
         mount(props({ history: [ambiguous] }));
         open('inputs:ev-amb');
         const row = screen.getByTestId('vr-prow-m-amb');

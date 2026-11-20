@@ -6,8 +6,10 @@
  * about ONE product of a saved record: which library product it is, what has been answered about it, and who may check it.
  * Pure. It reads the record and never changes it (P7).
  *
- *   - Identity comes from the library by EXACT match only (`matchProduct`): a near spelling is not found, a shared name is
- *     ambiguous. There is no pick-from-list yet, so an unknown or ambiguous product can only get a photo or "माहीत नाही".
+ *   - Identity comes from the library by EXACT match (`matchProduct`): a near spelling is not found, a shared name is
+ *     ambiguous. A name that is not found may be offered the library names that SOUND like it (`nearProducts`, lane FACTS-2); it is
+ *     only a suggestion - the product counts as found only when HE taps one (his "हो, हेच" answer names it), and then it says so.
+ *     Without a tap an unknown or ambiguous product can only get a photo or "माहीत नाही".
  *   - An answer (हो / नाही / फोटो) is an overlay on the record (`DailyLog.inputIdentities`). The speaker's own answer is kept as
  *     HIS ("सुनीलने सांगितलं"); only a holder of the confirm-records authority gives the CHECK, and that is the SERVER's word
  *     (`isCheck`), never the phone's (D-95). Nothing here blocks saving or confirming (P9).
@@ -24,22 +26,38 @@ import {
 import type { ProductItem } from './productModel';
 
 export type ItemIdentity =
-    | { state: 'found'; product: CatalogProduct }
+    /** `byPick`: the library did not know his word exactly; he tapped this product from the names that sound like it (lane FACTS-2). */
+    | { state: 'found'; product: CatalogProduct; byPick?: true }
     | { state: 'ambiguous' }
     | { state: 'notFound' };
 
 /** The name the library is asked about: the record's `mix[]` name, else his word, else the parser's label. */
-const nameForMatching = (item: ProductItem): string => (item.matchName ?? item.said ?? item.label ?? '').trim();
+export const nameForMatching = (item: ProductItem): string => (item.matchName ?? item.said ?? item.label ?? '').trim();
 
-/** Which library product this item is, by exact match. */
-export function identityOf(item: ProductItem): ItemIdentity {
+/**
+ * The library product he PICKED for this item when his word did not match exactly (lane FACTS-2, "did you mean"): the newest answer that
+ * counts - the check when there is one, else his own - when it is a "हो, हेच" naming a product the library holds. A "नाही" or a photo
+ * is no pick. Null when there is none. It reads the answers and never changes the record (P7).
+ */
+export function pickedProductOf(answers: ItemAnswers | undefined): CatalogProduct | null {
+    const counting = answers?.check ?? answers?.speaker;
+    if (!counting || counting.verdict !== 'confirmed' || !counting.catalogProductId) return null;
+    return getProduct(counting.catalogProductId) ?? null;
+}
+
+/**
+ * Which library product this item is: by exact match first. Only when his word is not known exactly (or is shared by several products)
+ * does his own tap on a "did you mean" name stand in - and then it says so (`byPick`), so the screen never claims the library matched.
+ */
+export function identityOf(item: ProductItem, answers?: ItemAnswers): ItemIdentity {
     const name = nameForMatching(item);
-    if (!name) return { state: 'notFound' };
-    const m = matchProduct(name, item.npkGrade ?? null);
+    const m = name ? matchProduct(name, item.npkGrade ?? null) : { state: 'notFound' as const, productId: null };
     if (m.state === 'found' && m.productId) {
         const product = getProduct(m.productId);
         if (product) return { state: 'found', product };
     }
+    const picked = pickedProductOf(answers);
+    if (picked) return { state: 'found', product: picked, byPick: true };
     return m.state === 'ambiguous' ? { state: 'ambiguous' } : { state: 'notFound' };
 }
 
