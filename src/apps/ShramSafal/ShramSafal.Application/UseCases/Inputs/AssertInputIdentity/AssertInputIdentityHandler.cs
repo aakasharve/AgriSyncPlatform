@@ -287,9 +287,16 @@ public sealed class AssertInputIdentityHandler(
                     continue;
                 }
 
-                if (!ev.TryGetProperty("mix", out var mix) || mix.ValueKind != JsonValueKind.Array)
+                if (!ev.TryGetProperty("mix", out var mix) || mix.ValueKind != JsonValueKind.Array || mix.GetArrayLength() == 0)
                 {
-                    return Result.Failure<string>(NoSuchProduct);
+                    // A product said on its own is stored on the event itself (an empty mix): it is slot 0, as in
+                    // ProductIdentity.ItemsOf. Any other slot of such an event is not there.
+                    return mixIndex == 0
+                        && ev.TryGetProperty("productName", out var own)
+                        && own.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(own.GetString())
+                            ? Result.Success(own.GetString()!)
+                            : Result.Failure<string>(NoSuchProduct);
                 }
 
                 var slot = 0;

@@ -151,8 +151,11 @@ const itemsOf = (e: InputEvent, index: number, logId: string): ProductItem[] => 
     const perLitre = typeof row.dosePerLitre === 'number' && SAYS_PER_LITRE.test(clean(e.sourceText)) ? { unit: 'L' } : undefined;
     const amount = amountOf(e.quantity, e.unit, e.numbers, 'quantity', perLitre);
     const spoken = said ? {} : spokenNameOf(e, label);
+    // A product said on its own is stored on the event itself (an empty mix): it is slot 0 of its event, the same address the server reads
+    // (`ProductIdentity.ItemsOf`), so it can be answered about (हो / नाही / फोटो) like a product in a mix.
+    const address = e.id && label ? { ref: { eventId: e.id, mixIndex: 0 }, matchName: label } : {};
     return said || label || amount
-        ? [{ id: `${base}:0`, said: said || undefined, label: label || undefined, amount, ...spoken }]
+        ? [{ id: `${base}:0`, ...address, said: said || undefined, label: label || undefined, amount, ...spoken }]
         : [];
 };
 
