@@ -155,6 +155,10 @@ export const PlotNumberBox: React.FC<{
     </button>
 );
 
+/** Every way a crop's word may start a stored plot name: as stored, and in Marathi and in English (for `cropNames`). */
+export const cropWordsOf = (crop: { name: string; masterId?: string }): string[] =>
+    [crop.name, cropNameIn(crop.name, 'mr', crop.masterId), cropNameIn(crop.name, 'en', crop.masterId)];
+
 // ── the selector ─────────────────────────────────────────────────────────────────────────────────────
 
 export interface PlotSelectorProps {
@@ -162,8 +166,11 @@ export interface PlotSelectorProps {
     plots: readonly { id: string; name: string }[];
     /** The chosen plots (of these plots). */
     chosen: readonly string[];
-    /** The whole new chosen set of these plots (a quick button, the toggle, or a plain tap when `onTapPlot` is not given). */
-    onChange: (next: string[]) => void;
+    /**
+     * The whole new chosen set of these plots (a quick button, the toggle, or a plain tap when `onTapPlot` is not given). May be left out only by
+     * a page that hears every tap through `onTapPlot` and draws its own quick row (the आढावा page).
+     */
+    onChange?: (next: string[]) => void;
     /** A page with its own tap rule (the आढावा page's "one tap shows only that plot") hears the tap instead of `onChange`. */
     onTapPlot?: (plotId: string) => void;
     /** The crop's colour class (the dot). */
@@ -195,14 +202,15 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const mode = plotPickMode(plots.length);
     const short = underHeader ?? photoOnceFor(plots.length);
     const nameOf = (name: string) => (short ? plotShortName(name, cropNames ?? []) : name);
-    const tap = (id: string) => (onTapPlot ? onTapPlot(id) : onChange(toggleId(chosen, id)));
+    const change = onChange ?? (() => undefined);
+    const tap = (id: string) => (onTapPlot ? onTapPlot(id) : change(toggleId(chosen, id)));
     const ids = plots.map(p => p.id);
 
     if (mode === 'chips') {
         return (
             <div data-mode="chips" className="space-y-2">
                 {(quickButtons?.length || groups?.length) ? (
-                    <PlotQuickRow plotIds={ids} chosen={chosen} onChange={onChange} allToggle="none" buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
+                    <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle="none" buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
                 ) : null}
                 <div className="flex flex-wrap gap-2" data-testid={testIds.grid}>
                     {plots.map(p => (
@@ -218,7 +226,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const shown = plots.map((p, i) => ({ p, position: plotPosition(i) })).filter(x => plotMatchesQuery({ name: x.p.name, position: x.position }, query));
     return (
         <div data-mode="grid" className="space-y-2">
-            <PlotQuickRow plotIds={ids} chosen={chosen} onChange={onChange} allToggle={allToggle} buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
+            <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle={allToggle} buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
             {hasPlotSearch(plots.length) && (
                 <input type="search" value={query} onChange={e => setQuery(e.target.value)} data-testid={testIds.search} aria-label={sw.search} placeholder={sw.search}
                     className="min-h-[46px] w-full rounded-xl border-2 border-stone-300 bg-white px-3 text-[15px] font-bold text-stone-900 placeholder:text-stone-500" />

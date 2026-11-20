@@ -34,7 +34,7 @@ import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
 import { CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
-import { PickedCountLine, PlotGroupHeader, PlotSelector } from './PlotSelector';
+import { PickedCountLine, PlotGroupHeader, PlotSelector, cropWordsOf } from './PlotSelector';
 import { buildQuickButtons, photoOnceFor, pickedCountText, plotPickMode, type PlotWorkFacts } from './plotSelectorRules';
 import { usePlotWorkFacts } from './usePlotWorkFacts';
 import {
@@ -228,10 +228,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     // of 1 to 6 plots on its own screen is drawn exactly as before.
     const sectioned = !classic && chosen.some(c => plotPickMode(c.plots.length) === 'grid' || (multiCrop && photoOnceFor(c.plots.length)));
     const gridPlots = chosen.filter(c => plotPickMode(c.plots.length) === 'grid').reduce((n, c) => n + c.plots.length, 0);
-    const wordsOfCrop = (c: StepperCrop) => {
-        const stored = storedCrops.find(s => s.id === c.id)?.name;
-        return [c.name, stored, stored ? cropNameIn(stored, 'mr', c.masterId) : undefined, stored ? cropNameIn(stored, 'en', c.masterId) : undefined];
-    };
+    const wordsOfCrop = (c: StepperCrop) => [c.name, ...cropWordsOf({ name: storedCrops.find(s => s.id === c.id)?.name ?? c.name, masterId: c.masterId })];
     const sectionOf = (c: StepperCrop) => {
         const many = plotPickMode(c.plots.length) === 'grid';
         const header = multiCrop && photoOnceFor(c.plots.length);

@@ -71,7 +71,8 @@ describe('आढावा page — starts on every crop and every plot', () => {
     it('two crops: "सर्व पिकं" is chosen, every plot chip is chosen, every plot has its card', () => {
         renderPage(CROPS);
         expect(screen.getByTestId('farm-crop-all')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('farm-crop-all')).toHaveTextContent('3 पैकी 3 प्लॉट');
+        // UI-9a: the all-crops card says how many crops and plots the farm has (Marathi digits), above the crop cards
+        expect(screen.getByTestId('farm-crop-all-line')).toHaveTextContent('२ पिकं · ३ प्लॉट');
         for (const id of ['g1', 'g2', 'c1']) expect(screen.getByTestId(`farm-plot-${id}`)).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('farm-crop-grape')).toHaveAttribute('aria-pressed', 'false');
         expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(3);
@@ -81,7 +82,7 @@ describe('आढावा page — starts on every crop and every plot', () => {
         renderPage([GRAPE]);
         expect(screen.queryByTestId('farm-crop-all')).toBeNull();
         expect(screen.getByTestId('farm-crop-grape')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('2 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('२ पैकी २ प्लॉट');
         for (const id of ['g1', 'g2']) expect(screen.getByTestId(`farm-plot-${id}`)).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(2);
     });
@@ -116,7 +117,7 @@ describe('आढावा page — starts on every crop and every plot', () => {
         lang.value = 'en';
         renderPage(CROPS);
         expect(screen.getByTestId('farm-crop-all')).toHaveTextContent('All crops');
-        expect(screen.getByTestId('farm-crop-all')).toHaveTextContent('3 of 3 plots');
+        expect(screen.getByTestId('farm-crop-all-line')).toHaveTextContent('2 crops · 3 plots');
     });
 });
 
