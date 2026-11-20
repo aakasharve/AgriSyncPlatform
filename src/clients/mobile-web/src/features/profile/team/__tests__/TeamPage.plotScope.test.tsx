@@ -74,6 +74,7 @@ beforeEach(async () => {
     fetchLabourPermissions.mockResolvedValue([OWNER, RAMESH, REQUEST]);
     const db = getDatabase();
     await db.plots.clear();
+    await db.crops.clear();
     for (const [id, name] of [[P1, 'प्लॉट एक'], [P2, 'प्लॉट दोन'], [P4, 'प्लॉट चार']]) {
         await db.plots.put({ id, farmId: FARM, payload: { id, farmId: FARM, name }, updatedAt: '2026-11-02T00:00:00Z' });
     }
@@ -109,6 +110,29 @@ describe('the plot row on a let-in person\'s card', () => {
         expect([...body.plotIds].sort()).toEqual([P2, P4].sort());
         // The SERVER's row is shown: his plots by name.
         await waitFor(() => expect(screen.getByTestId('plot-scope-summary-ramesh').textContent).toBe('प्लॉट चार, प्लॉट दोन'));
+    });
+
+    // spec: UI-9a item 6 - the plots are drawn once per crop, the crop read from the phone's crop list (the stored plot row holds none).
+    it('draws the plots under their crop (read from the crop list), counts them in one line and sends exactly the chosen plots', async () => {
+        const db = getDatabase();
+        const cropBlob = { id: 'c1', name: 'Grapes', iconName: 'Grape', color: 'bg-green-500', plots: [{ id: P1, name: 'प्लॉट एक' }, { id: P2, name: 'प्लॉट दोन' }, { id: P4, name: 'प्लॉट चार' }], supportedTasks: [], workflow: [] };
+        await db.crops.put({ id: 'c1', data: cropBlob, updatedAtMs: 1 });
+        setMemberPlotScope.mockResolvedValue({ ...RAMESH, plotScope: 'ChosenPlots', plotIds: [P2] });
+        render(<Harness />);
+        const card = await screen.findByTestId('team-person-ramesh');
+        fireEvent.click(within(card).getByTestId('plot-scope-row-ramesh'));
+        fireEvent.click(within(card).getByTestId('plot-scope-choice-ChosenPlots-ramesh'));
+        const header = await within(card).findByTestId('plot-scope-header-c1-ramesh');
+        expect(header.textContent).toContain('द्राक्ष');
+        expect(header.textContent).toContain('३ प्लॉट');
+        expect(within(card).getByTestId('plot-scope-count-ramesh').textContent).toBe('३ पैकी ० निवडले');
+        expect((within(card).getByTestId('plot-scope-save-ramesh') as HTMLButtonElement).disabled).toBe(true);
+
+        fireEvent.click(within(card).getByTestId(`plot-scope-plot-${P2}-ramesh`));
+        expect(within(card).getByTestId('plot-scope-count-ramesh').textContent).toBe('३ पैकी १ निवडले');
+        fireEvent.click(within(card).getByTestId('plot-scope-save-ramesh'));
+        await waitFor(() => expect(setMemberPlotScope).toHaveBeenCalledTimes(1));
+        expect(setMemberPlotScope.mock.calls[0][2]).toEqual({ plotScope: 'ChosenPlots', plotIds: [P2] });
     });
 
     it('स्वतःचं काम is one tap and sends no plots', async () => {

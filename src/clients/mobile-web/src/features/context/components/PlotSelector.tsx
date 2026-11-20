@@ -28,10 +28,10 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
-import { PickerCropPhoto, PlotChip, cropColorOf, type PickerCrop } from './CropPlotPicker';
+import { PickerCropPhoto, PlotChip, PlotCount, cropColorOf, type PickerCrop } from './CropPlotPicker';
 import {
     QUICK_WORDS, SELECTOR_WORDS, afterAllToggle, allChosen, hasPlotSearch, pickedCountText, plotMatchesQuery, plotPickMode,
-    naturalOrder, plotPosition, plotShortName, photoOnceFor, sameSet, toggleId, type PlotPickMode,
+    naturalOrder, plotNumbers, plotPosition, plotShortName, photoOnceFor, sameSet, toggleId, type PlotPickMode,
 } from './plotSelectorRules';
 
 const NUM = "'DM Sans', sans-serif";
@@ -180,6 +180,12 @@ export interface PlotSelectorProps {
     onChange?: (next: string[]) => void;
     /** A page with its own tap rule (the आढावा page's "one tap shows only that plot") hears the tap instead of `onChange`. */
     onTapPlot?: (plotId: string) => void;
+    /**
+     * Each plot's number, by plot id - built from ALL the crop's plots (`plotNumbers(wholeCropPlots)`). When given, a box shows `numbers.get(id)`
+     * instead of the plot's rank in the list it is handed, so a narrowed list never renumbers: G3 stays 3 among three plots of fifteen. A plot
+     * the map does not hold falls back to its rank in this list. Default (no map): the rank, as before.
+     */
+    numbers?: ReadonlyMap<string, number>;
     /** The crop's colour class (the dot on a chip; the number boxes of the grid carry none). */
     color?: string;
     /** The crop's names, in any language the stored plot names might start with; used to say "G7" instead of "द्राक्ष G7". */
@@ -201,7 +207,7 @@ export interface PlotSelectorProps {
 }
 
 export const PlotSelector: React.FC<PlotSelectorProps> = ({
-    plots, chosen, onChange, onTapPlot, color, cropNames, underHeader, quickButtons, groups, allToggle = 'toggle', mark, lead, chipSize, testIds, language: languageProp, disabled,
+    plots, chosen, onChange, onTapPlot, numbers, color, cropNames, underHeader, quickButtons, groups, allToggle = 'toggle', mark, lead, chipSize, testIds, language: languageProp, disabled,
 }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
@@ -212,7 +218,8 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     const change = onChange ?? (() => undefined);
     const tap = (id: string) => (onTapPlot ? onTapPlot(id) : change(toggleId(chosen, id)));
     // Natural number order (G2 before G10), and the number on a box is its place in that same order (G3 reads 3), so a name and its number agree.
-    const entries = naturalOrder(plots.map(p => p.name)).map((i, rank) => ({ p: plots[i], position: plotPosition(rank) }));
+    // With `numbers` (the crop's WHOLE list) the number is that place among all the crop's plots, not among the plots in view.
+    const entries = naturalOrder(plots.map(p => p.name)).map((i, rank) => ({ p: plots[i], position: numbers?.get(plots[i].id) ?? plotPosition(rank) }));
     const ids = entries.map(e => e.p.id);
 
     if (mode === 'chips') {
@@ -248,6 +255,39 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
             </div>
             {shown.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-600" data-testid={testIds.search ? `${testIds.search}-empty` : undefined}>{sw.noMatch}</p>}
         </div>
+    );
+};
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane UI-9a, redesign item 4; founder 2026-11-21) - the plots of ONE crop as the shared
+ * selector, for a page that chooses a SINGLE plot: the schedule library's step 1 and the schedule editor. Chips for 1 to 6 plots, a number grid
+ * from 7 (the rules in `plotSelectorRules`); the one chosen plot is dark green with a white tick; no "select all" (one plot, not many).
+ *
+ * `crop.plots` is the crop's WHOLE list, so each number is the plot's place among all the crop's plots (`plotNumbers`) - handed on as `numbers`,
+ * so the number stays right even if a caller later narrows the list it draws. `header` says the crop once (its photo, name and "N प्लॉट") above
+ * the plots, for a screen with no crop row of its own; the plots then drop the crop word from their names (display only). With a crop row
+ * above (several crops), pass no header: the row already says the crop. A pure view: it holds no selection and reports the tapped plot.
+ */
+export const SinglePlotSection: React.FC<{
+    crop: PickerCrop;
+    /** The one chosen plot, or `null` when none is chosen yet. */
+    plotId: string | null;
+    onPickPlot: (plotId: string) => void;
+    header?: boolean;
+    testIds: PlotSelectorTestIds;
+    /** The test ids of the section and of its crop header (both optional). */
+    sectionTestId?: string;
+    headerTestId?: string;
+    language?: Language;
+}> = ({ crop, plotId, onPickPlot, header = false, testIds, sectionTestId, headerTestId, language: languageProp }) => {
+    const ctxLanguage = useOptionalLanguage()?.language;
+    const language: Language = languageProp ?? ctxLanguage ?? 'mr';
+    return (
+        <section className="space-y-2" data-testid={sectionTestId} data-header={header ? 'yes' : 'no'}>
+            {header && <PlotGroupHeader crop={crop} testId={headerTestId} language={language} sub={<PlotCount total={crop.plots.length} language={language} />} />}
+            <PlotSelector plots={crop.plots} numbers={plotNumbers(crop.plots)} chosen={plotId ? [plotId] : []} onTapPlot={onPickPlot} allToggle="none"
+                color={crop.color} cropNames={cropWordsOf(crop)} underHeader={header || photoOnceFor(crop.plots.length)} testIds={testIds} language={language} />
+        </section>
     );
 };
 

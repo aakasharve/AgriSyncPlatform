@@ -10,6 +10,7 @@
  */
 import { AUTHORITY, SWITCHABLE_AUTHORITIES, authorityNeeds } from '../../core/session/farmAuthorities';
 import type { AuthorityGrant } from '../profile/data/labourPermissionsClient';
+import { plotListText } from '../../shared/names/placeWords';
 import type { PlotScopeName } from '../profile/data/membershipAdminClient';
 import type { InvitationCopy } from './invitationCopy';
 import type { CreateInvitationBody, InvitationLabel } from './personalInvitationClient';
@@ -164,7 +165,7 @@ export function cardLines(
         ? copy.allPlots
         : grant.plotScope === 'OwnWork'
             ? copy.ownWork
-            : grant.plotNames.join(', ');
+            : plotListText(grant.plotNames, language); // 1 to 3 plots by name, from 4 a count (founder 2026-11-21)
     // Fix round 1 (M-2, P5): an authority that does nothing on this grant is never said, even if an older invitation held it.
     const ruledOut = notInForce(grant);
     const lines = SWITCHABLE_AUTHORITIES

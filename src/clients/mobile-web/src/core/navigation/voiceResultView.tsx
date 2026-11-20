@@ -54,14 +54,28 @@ export const currentVoiceResult = (ctx: AppRouterContext): VoiceResultState | nu
  * server sent it (English only) and is SHOWN through the one crop-name helper ("Grapes" → "द्राक्ष" in Marathi mode);
  * the plot names are his own words, as written.
  */
-export const placeOf = (logs: readonly DailyLog[], language?: string): string => {
+export const placeOf = (logs: readonly DailyLog[], language?: string, farmCrops?: readonly { id: string; plots?: readonly unknown[] }[]): string => {
     const sel = logs.flatMap(l => l.context?.selection ?? []);
     if (sel.length === 0 || sel.every(s => s.cropId === 'FARM_GLOBAL')) return resultStr(language).wholeFarm;
     const crops = [...new Set(sel.map(s => cropNameIn(s.cropName, language)).filter(Boolean))];
     const plots = [...new Set(sel.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
-    // Lane OF fix 1 (10): one crop — the shared rule (a plot named after its crop is said alone).
-    if (crops.length === 1) return placeWords(sel.find(s => s.cropName)?.cropName, plots, language) || crops[0];
-    return [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
+    // The crop's whole plot count (when the caller knows the farm): lets the shared rule say "सर्व १५ प्लॉट" for every plot of a crop.
+    const totalOf = (cropId: string | undefined): number | undefined => {
+        const total = farmCrops?.find(c => c.id === cropId)?.plots?.length;
+        return total && total > 0 ? total : undefined;
+    };
+    // Lane OF fix 1 (10): one crop — the shared rule (a plot named after its crop is said alone; from 4 plots a count, founder 2026-11-21).
+    if (crops.length === 1) {
+        const first = sel.find(s => s.cropName);
+        return placeWords(first?.cropName, plots, language, totalOf(first?.cropId)) || crops[0];
+    }
+    // Several crops: each crop with its own plots (the same rule per crop), joined by the app's " + ".
+    const byCrop = [...new Set(sel.filter(s => s.cropId !== 'FARM_GLOBAL' && s.cropName).map(s => s.cropName))].map(name => {
+        const mine = sel.filter(s => s.cropName === name);
+        const names = [...new Set(mine.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
+        return placeWords(name, names, language, totalOf(mine[0]?.cropId));
+    }).filter(Boolean);
+    return byCrop.join(' + ') || [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
 };
 
 /**
@@ -123,7 +137,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     farmId={farmId}
                     crops={ctx.crops}
                     farmRole={ctx.farmRole}
-                    placeLabel={language => placeOf(logs, language)}
+                    placeLabel={language => placeOf(logs, language, ctx.crops)}
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
                     onEdit={ctx.handleEditLog}
                     onMoveDay={ctx.moveSavedDay}

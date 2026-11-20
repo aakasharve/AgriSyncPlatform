@@ -55,10 +55,12 @@ function mount(props: { mayMakeOwnSchedule?: boolean; onMakeOwnSchedule?: (cropI
     autoOpenFolds();
 }
 const text = (id: string) => screen.getByTestId(id).textContent ?? '';
+// Redesign item 4: step 1 is the crop row + the chosen crop's plots, so a plot of the OTHER crop is reached by tapping its crop (which picks that crop's first plot).
 const openLibraryFor = async (plotId: string) => {
     await screen.findByTestId(`map-schedule-${T.university}`);
     fireEvent.click(screen.getByTestId('open-library'));
-    if (plotId !== P.g1) fireEvent.click(screen.getByTestId(`library-plot-${plotId}`));
+    if (plotId === P.u1) fireEvent.click(screen.getByTestId('library-crop-crop-2'));
+    else if (plotId !== P.g1) fireEvent.click(screen.getByTestId(`library-plot-${plotId}`));
 };
 const rowIds = () => [...document.querySelectorAll('[data-testid^="library-name-"]')].map(e => (e.getAttribute('data-testid') as string).replace('library-name-', ''));
 
@@ -76,17 +78,31 @@ describe('three numbered steps on one screen', () => {
         expect(document.querySelector('[data-testid^="library-adopt-"]')).toBeNull();
     });
 
-    it('step 1: a chip for every plot of the farm, the plot the page was on chosen; choosing another plot changes the list in step 2', async () => {
+    it('step 1 (item 4): the crop row (each crop once) and the plots of the chosen crop in the shared selector; choosing another crop or plot changes the list in step 2', async () => {
         await seedFarmSubscriptions();
         mount();
         await openLibraryFor(P.g1);
-        for (const id of [P.g1, P.g2, P.g3, P.u1]) expect(screen.getByTestId(`library-plot-${id}`)).toBeInTheDocument();
+        // the crop row: one tile per crop, the plot's crop on - no more "द्राक्ष · G1" chip per plot of the whole farm
+        expect(screen.getByTestId('library-crop-crop-1')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('library-crop-crop-2')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('library-crop-crop-1')).toHaveTextContent('द्राक्ष');
+        expect(screen.getByTestId('library-crop-crop-2')).toHaveTextContent('ऊस');
+        // only the chosen crop's plots are drawn, as chips (3 plots), the plot the page was on chosen
+        for (const id of [P.g1, P.g2, P.g3]) expect(screen.getByTestId(`library-plot-${id}`)).toBeInTheDocument();
+        expect(screen.queryByTestId(`library-plot-${P.u1}`)).toBeNull();
         expect(screen.getByTestId(`library-plot-${P.g1}`)).toHaveAttribute('aria-pressed', 'true');
-        expect(text(`library-plot-${P.g1}`)).toContain('द्राक्ष · G1');
+        expect(screen.getByTestId(`library-plot-${P.g2}`)).toHaveAttribute('aria-pressed', 'false');
+        expect(text(`library-plot-${P.g1}`)).toBe('G1');
         expect(rowIds().sort()).toEqual([T.expert, T.university].sort()); // grapes' schedules only
-        fireEvent.click(screen.getByTestId(`library-plot-${P.u1}`));
-        expect(screen.getByTestId(`library-plot-${P.u1}`)).toHaveAttribute('aria-pressed', 'true');
+        // another plot of the same crop: the chosen mark moves, the list stays the crop's
+        fireEvent.click(screen.getByTestId(`library-plot-${P.g2}`));
+        expect(screen.getByTestId(`library-plot-${P.g2}`)).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId(`library-plot-${P.g1}`)).toHaveAttribute('aria-pressed', 'false');
+        // another crop: its first plot is chosen, its plots are drawn, and step 2 lists ITS schedules
+        fireEvent.click(screen.getByTestId('library-crop-crop-2'));
+        expect(screen.getByTestId('library-crop-crop-2')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId(`library-plot-${P.u1}`)).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByTestId(`library-plot-${P.g1}`)).toBeNull();
         expect(rowIds()).not.toContain(T.university);
         expect(rowIds()).toContain(T.cane);
     });
@@ -127,6 +143,30 @@ describe('three numbered steps on one screen', () => {
         fireEvent.click(screen.getByTestId(`library-pick-${T.expert}`));
         expect(screen.getByTestId('library-confirm')).toHaveTextContent('द्राक्ष · G3 साठी हे शेड्यूल लावा');
         expect(screen.getAllByTestId('library-confirm')).toHaveLength(1);
+    });
+
+    it('item 4: the picked row is THE one chosen look - dark green, white letters, a white tick; the row the plot already uses stays white and locked; no blue ring', async () => {
+        await seedFarmSubscriptions();
+        mount();
+        await openLibraryFor(P.g1);
+        const part = (el: HTMLElement, name: string) => el.querySelector(`[data-part="${name}"]`);
+        const expert = screen.getByTestId(`library-${T.expert}`);
+        expect(expert.className).toContain('bg-white');
+        expect(part(expert, 'tick')).toBeNull();
+        fireEvent.click(screen.getByTestId(`library-pick-${T.expert}`));
+        expect(expert).toHaveAttribute('data-picked', 'yes');
+        expect(expert.className).toContain('border-emerald-800');
+        expect(expert.className).toContain('bg-emerald-800');
+        expect(expert.className).toContain('text-white');
+        expect(expert.className).not.toMatch(/1448E6|blue-50/);
+        expect(part(expert, 'tick')?.querySelector('svg')?.getAttribute('class')).toContain('text-white'); // a white tick, not a blue dot
+        expect(screen.getByTestId(`library-name-${T.expert}`).className).toContain('text-white');
+        // the schedule G1 already follows is locked, white, and carries no tick
+        const used = screen.getByTestId(`library-${T.university}`);
+        expect(used).toHaveAttribute('data-picked', 'no');
+        expect(used.className).toContain('bg-white');
+        expect(part(used, 'tick')).toBeNull();
+        expect(screen.getByTestId(`library-pick-${T.university}`)).toBeDisabled();
     });
 
     it('choosing saves through the existing path (saveScheduleChoice) for the named plot; the page comes back and the plot has joined the schedule on the map', async () => {

@@ -49,7 +49,8 @@ export function placeLabelOf(scope: LogScope, crops: AppRouterContext['crops'], 
     const crop = crops.find(c => scope.selectedCropIds.includes(c.id));
     if (!crop) return undefined;
     const plots = (crop.plots ?? []).filter(p => scope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
-    return placeWords(crop.name, plots, language) || undefined; // lane OF fix 1 (10): never "द्राक्ष · द्राक्ष G1"
+    // lane OF fix 1 (10): never "द्राक्ष · द्राक्ष G1"; founder 2026-11-21: from 4 plots a count ("द्राक्ष · सर्व १५ प्लॉट"), never fifteen names cut off
+    return placeWords(crop.name, plots, language, (crop.plots ?? []).length) || undefined;
 }
 
 interface Session { id: string; prevScope: LogScope | null; spoke: boolean; savedAtStart: string | undefined; statusAtStart: AppStatus; typedSent?: boolean }

@@ -12,8 +12,8 @@ import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { PickedCountLine, PlotGroupHeader, PlotQuickRow, PlotSelector, type PlotSelectorProps } from '../PlotSelector';
-import { buildQuickButtons } from '../plotSelectorRules';
+import { PickedCountLine, PlotGroupHeader, PlotQuickRow, PlotSelector, SinglePlotSection, type PlotSelectorProps } from '../PlotSelector';
+import { buildQuickButtons, plotNumbers } from '../plotSelectorRules';
 import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 afterEach(cleanup);
@@ -354,5 +354,130 @@ describe('the count line and the header', () => {
     it('a quick row with nothing to draw draws nothing', () => {
         const { container } = render(<PlotQuickRow plotIds={['a']} chosen={[]} onChange={vi.fn()} allToggle="toggle" language="mr" />);
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe('the numbers prop (redesign item 4): a narrowed list keeps its numbers', () => {
+    const whole = plotsOf(15); // G1 ... G15, the crop's WHOLE list
+    const numbersOf = () => [...screen.getByTestId('pl-grid').children].map(c => part(c as HTMLElement, 'number')?.textContent);
+
+    it('8 of the 15 plots (G8 to G15) are drawn with the numbers they have among all 15 - eight to fifteen, not one to eight', () => {
+        const narrowed = whole.slice(7);
+        render(<PlotSelector plots={narrowed} numbers={plotNumbers(whole)} chosen={[]} onTapPlot={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        expect(numbersOf()).toEqual(['८', '९', '१०', '११', '१२', '१३', '१४', '१५']);
+        expect(part(screen.getByTestId('pl-p12'), 'name')).toHaveTextContent('G12'); // the name and the number agree
+    });
+
+    it('without the map the same narrowed list renumbers from one (the old behaviour, unchanged for every other caller)', () => {
+        render(<PlotSelector plots={whole.slice(7)} chosen={[]} onTapPlot={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        expect(numbersOf()).toEqual(['१', '२', '३', '४', '५', '६', '७', '८']);
+    });
+
+    it('the map also holds for plots stored scrambled: they are listed by name and numbered by the whole list', () => {
+        const scrambled = ['G13', 'G9', 'G15', 'G8', 'G11', 'G10', 'G14', 'G12'].map(n => ({ id: `x${n}`, name: `द्राक्ष ${n}` }));
+        const all = [...scrambled, ...['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7'].map(n => ({ id: `x${n}`, name: `द्राक्ष ${n}` }))];
+        render(<PlotSelector plots={scrambled} numbers={plotNumbers(all)} chosen={[]} onTapPlot={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        expect(numbersOf()).toEqual(['८', '९', '१०', '११', '१२', '१३', '१४', '१५']);
+    });
+
+    it('English mode keeps the Latin digits of the same numbers', () => {
+        render(<PlotSelector plots={whole.slice(7)} numbers={plotNumbers(whole)} chosen={[]} onTapPlot={vi.fn()} testIds={IDS} language="en" />);
+        expect(numbersOf()).toEqual(['8', '9', '10', '11', '12', '13', '14', '15']);
+    });
+
+    it('a plot the map does not hold falls back to its rank in the list it was handed', () => {
+        const partial = new Map([['p1', 11]]); // only G1 is in the map
+        render(<PlotSelector plots={whole.slice(0, 8)} numbers={partial} chosen={[]} onTapPlot={vi.fn()} cropNames={['द्राक्ष']} testIds={IDS} language="mr" />);
+        expect(part(screen.getByTestId('pl-p1'), 'number')).toHaveTextContent('११');
+        expect(part(screen.getByTestId('pl-p5'), 'number')).toHaveTextContent('५');
+    });
+
+    it('the search over a narrowed list finds a plot by the number it shows, not by its rank in the narrowed list', () => {
+        // 28 plots whose names carry no digit, so the number on a box is all there is to search by; the last 25 are drawn (a search box shows from 25)
+        const all = Array.from({ length: 28 }, (_, i) => ({ id: `l${i}`, name: String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26)) }));
+        render(<PlotSelector plots={all.slice(3)} numbers={plotNumbers(all)} chosen={[]} onTapPlot={vi.fn()} testIds={IDS} language="mr" />);
+        expect(part(screen.getByTestId('pl-l3'), 'number')).toHaveTextContent('४'); // the first drawn plot is the crop's 4th
+        fireEvent.change(screen.getByTestId('pl-search'), { target: { value: '४' } });
+        expect(screen.getByTestId('pl-l3')).toBeTruthy();
+        expect(screen.queryByTestId('pl-l6')).toBeNull(); // the 4th box drawn (rank 4 in the narrowed list) is NOT the plot numbered 4
+    });
+});
+
+describe('SinglePlotSection (redesign item 4): one chosen plot of one crop, in the shared selector', () => {
+    const crop = (n: number) => ({ id: 'grape', name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500', plots: plotsOf(n).map(p => ({ id: p.id, name: p.name.replace('द्राक्ष ', '') })) });
+    const Section: React.FC<{ n: number; start?: string | null; header?: boolean; language?: 'mr' | 'en'; onPick?: (id: string) => void }> = ({ n, start = null, header, language = 'mr', onPick }) => {
+        const [plotId, setPlotId] = useState<string | null>(start);
+        return <SinglePlotSection crop={crop(n)} plotId={plotId} header={header} language={language} onPickPlot={id => { setPlotId(id); onPick?.(id); }}
+            sectionTestId="sec" headerTestId="sec-header" testIds={IDS} />;
+    };
+
+    it('1 to 6 plots are chips, 7 or more a number grid - and every plot keeps the test id the caller gave', () => {
+        const { unmount } = render(<Section n={6} />);
+        expect(screen.getByTestId('pl-grid').parentElement).toHaveAttribute('data-mode', 'chips');
+        for (let i = 1; i <= 6; i++) expect(screen.getByTestId(`pl-p${i}`)).toBeTruthy();
+        unmount();
+        render(<Section n={7} />);
+        expect(screen.getByTestId('pl-grid').parentElement).toHaveAttribute('data-mode', 'grid');
+        for (let i = 1; i <= 7; i++) expect(screen.getByTestId(`pl-p${i}`)).toBeTruthy();
+    });
+
+    it('15 plots: Marathi digits, two-digit numbers whole, no "select all" (it is ONE plot), no search box', () => {
+        render(<Section n={15} start="p12" />);
+        const numbers = [...screen.getByTestId('pl-grid').children].map(c => part(c as HTMLElement, 'number')?.textContent);
+        expect(numbers).toEqual(['१', '२', '३', '४', '५', '६', '७', '८', '९', '१०', '११', '१२', '१३', '१४', '१५']);
+        expect(screen.queryByTestId('pl-all')).toBeNull();
+        expect(screen.queryByTestId('pl-search')).toBeNull();
+    });
+
+    it('exactly one plot is chosen at a time: dark green, white letters, a white tick; a tap moves the choice, a second tap on the same plot keeps it', () => {
+        const onPick = vi.fn();
+        render(<Section n={15} start="p3" onPick={onPick} />);
+        const on = screen.getByTestId('pl-p3');
+        expect(on).toHaveAttribute('aria-pressed', 'true');
+        expect(on.className).toContain('bg-emerald-800');
+        expect(on.className).toContain('text-white');
+        expect(part(on, 'tick')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('pl-p9'));
+        expect(onPick).toHaveBeenLastCalledWith('p9');
+        expect(screen.getByTestId('pl-p9')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('pl-p3')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('pl-p3').className).toContain('bg-white');
+        expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
+        fireEvent.click(screen.getByTestId('pl-p9'));
+        expect(screen.getByTestId('pl-p9')).toHaveAttribute('aria-pressed', 'true'); // never un-chosen: a schedule is always for a plot
+        expect(onPick).toHaveBeenLastCalledWith('p9');
+    });
+
+    it('no plot chosen yet: none is pressed', () => {
+        render(<Section n={8} start={null} />);
+        expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(0);
+    });
+
+    it('a chip row (3 plots) reports the same taps and shows the same chosen look', () => {
+        const onPick = vi.fn();
+        render(<Section n={3} start="p1" onPick={onPick} />);
+        expect(screen.getByTestId('pl-p1').className).toContain('bg-emerald-800');
+        fireEvent.click(screen.getByTestId('pl-p2'));
+        expect(onPick).toHaveBeenLastCalledWith('p2');
+    });
+
+    it('with a header the crop photo stands once with its name and "१५ प्लॉट", and the plots drop the crop word; without one there is none', () => {
+        const named = { ...crop(15), plots: plotsOf(15) }; // stored names carry the crop word: "द्राक्ष G7"
+        const { unmount } = render(<SinglePlotSection crop={named} plotId="p7" header language="mr" onPickPlot={vi.fn()} sectionTestId="sec" headerTestId="sec-header" testIds={IDS} />);
+        const header = screen.getByTestId('sec-header');
+        expect(header).toHaveTextContent('द्राक्ष');
+        expect(header).toHaveTextContent('१५ प्लॉट');
+        expect(screen.getByTestId('sec')).toHaveAttribute('data-header', 'yes');
+        expect(part(screen.getByTestId('pl-p7'), 'name')).toHaveTextContent('G7'); // not "द्राक्ष G7"
+        unmount();
+        render(<Section n={15} />);
+        expect(screen.queryByTestId('sec-header')).toBeNull();
+        expect(screen.getByTestId('sec')).toHaveAttribute('data-header', 'no');
+    });
+
+    it('English: the count and the numbers read in English', () => {
+        render(<Section n={15} start="p7" header language="en" />);
+        expect(screen.getByTestId('sec-header')).toHaveTextContent('15 plots');
+        expect(part(screen.getByTestId('pl-p12'), 'number')).toHaveTextContent('12');
     });
 });

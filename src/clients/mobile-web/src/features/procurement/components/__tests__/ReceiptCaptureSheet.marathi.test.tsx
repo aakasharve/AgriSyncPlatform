@@ -93,10 +93,10 @@ describe('ReceiptCaptureSheet — Marathi, same save', () => {
     });
 });
 
-// I8 review B006 — the "where does it go" option names what THIS sheet's dropdown holds (what the save uses),
-// never the page's pick once the dropdown has moved away from it.
+// I8 review B006 — the "where does it go" option names what THIS sheet's plot choice holds (what the save uses),
+// never the page's pick once the choice has moved away from it. (UI-9a item 5: the choice is the shared plot picker, no longer a drop-down.)
 describe('ReceiptCaptureSheet — the place it names is the place it saves', () => {
-    it('changing the plot dropdown changes the named plot, and the save goes there', async () => {
+    it('choosing another plot in the picker changes the named plot, and the save goes there', async () => {
         extractReceiptWithSession.mockResolvedValue(READ_BILL);
         render(<ReceiptCaptureSheet onClose={vi.fn()} onSave={vi.fn()} crops={CROPS} activePlotId="p1" />);
         fireEvent.change(screen.getByTestId('attachment-input'), { target: { files: [new File(['x'], 'bill.png', { type: 'image/png' })] } });
@@ -106,7 +106,8 @@ describe('ReceiptCaptureSheet — the place it names is the place it saves', () 
         fireEvent.click(plotOption());
         expect(plotOption()).toHaveTextContent('थॉम्पसन');
 
-        fireEvent.change(screen.getByDisplayValue('थॉम्पसन'), { target: { value: 'p2' } });
+        expect(screen.getByTestId('bill-plot-p1')).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByTestId('bill-plot-p2'));
         expect(plotOption()).toHaveTextContent('सोनाका');
         expect(plotOption()).not.toHaveTextContent('थॉम्पसन');
 
