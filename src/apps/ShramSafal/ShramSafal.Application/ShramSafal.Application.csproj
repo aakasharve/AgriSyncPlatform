@@ -19,6 +19,8 @@
        Infrastructure assembly already uses. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ShramSafal.Domain.Tests" />
+    <!-- plan CR-3 Task A3: the picture rule (PictureSubject) is proved against a real database. -->
+    <InternalsVisibleTo Include="ShramSafal.Sync.IntegrationTests" />
   </ItemGroup>
 
   <!-- T-IGH-02-CS-PAYLOADS — single source of truth for sync mutation

@@ -593,6 +593,8 @@ public static class DependencyInjection
         // entry for "admin.farmer_lookup").
         services.AddHttpContextAccessor();
         services.TryAddScoped<ICurrentUser, HttpContextCurrentUser>();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3, H10): whether this session began at the control room's door.
+        services.TryAddScoped<IControlRoomSession, HttpContextControlRoomSession>();
         services.AddScoped<ShramSafal.Application.Admin.IAdminAuditEmitter,
             ShramSafal.Infrastructure.Admin.AdminAuditEmitter>();
 

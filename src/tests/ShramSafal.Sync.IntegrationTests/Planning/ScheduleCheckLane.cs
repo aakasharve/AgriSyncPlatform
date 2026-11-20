@@ -14,6 +14,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
+using AgriSync.BuildingBlocks.Auth;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Domain.Planning;
 using Xunit.Abstractions;
@@ -35,6 +37,22 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
     private bool _reviewSeatsSeeded;
 
     /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3; K07): a non-owner Platform seat is a team seat; the schedule doors
+    /// give it only its ticks, and only from a door session. These suites ask as the console's door does, so the host's session
+    /// is door-true; the Platform Employee then holds the Schedules tick (a person row), the Analyst and Auditor hold none.
+    /// </summary>
+    protected override void AddHostServices(IServiceCollection services)
+    {
+        base.AddHostServices(services);
+        services.AddScoped<IControlRoomSession, DoorSession>();
+    }
+
+    private sealed class DoorSession : IControlRoomSession
+    {
+        public bool BeganAtTheDoor => true;
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane L8b-1F (D-82 note) - a schedule row still WAITING for its check is never listed to a farm caller; the library
     /// as the platform reviewer lists it (every row with its state). The reviewer seats are seeded on first use.
     /// </summary>
@@ -54,6 +72,7 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
         _reviewSeatsSeeded = true;
         await SeedPlatformOwnerAsync(PlatformOwner, Guid.NewGuid(), orgType: 0, role: 0, phone: "6000000001");
         await SeedPlatformOwnerAsync(PlatformEmployee, Guid.NewGuid(), orgType: 0, role: 2, phone: "6000000002");
+        await SeedSchedulesTickAsync(PlatformEmployee);
         await SeedPlatformOwnerAsync(PlatformAnalyst, Guid.NewGuid(), orgType: 0, role: 1, phone: "6000000003");
         await SeedPlatformOwnerAsync(FpoOwner, Guid.NewGuid(), orgType: 1, role: 0, phone: "6000000004");
         await SeedPlatformOwnerAsync(PlatformAuditor, Guid.NewGuid(), orgType: 0, role: 3, phone: "6000000006");
@@ -66,6 +85,13 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
             VALUES (gen_random_uuid(), @farm, @user, 'Agronomist', NOW() - INTERVAL '30 days', NOW(), @account, 3, NULL, FALSE);
             """, ("user", AgronomistSeat), ("farm", FarmA), ("account", AccountA));
     }
+
+    /// <summary>An active person row holding the Schedules tick for a seat's account (what the founder ticks on the People page).</summary>
+    protected Task SeedSchedulesTickAsync(Guid user) => ExecOnSuperuserAsync("""
+        INSERT INTO ssf.control_room_people
+            (id, phone_e164, display_name, starting_role, ticks, user_id, is_active, added_by_user_id, added_at_utc, changed_at_utc)
+        VALUES (gen_random_uuid(), '+919000000071', 'Example: Schedules Checker', 'viewer', ARRAY['schedules']::text[], @user, TRUE, @user, NOW(), NOW());
+        """, ("user", user));
 
     protected static readonly StageDefinition[] UnequalStages =
     [

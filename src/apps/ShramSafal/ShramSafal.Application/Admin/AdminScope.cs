@@ -12,8 +12,12 @@ public sealed record AdminScope(
     OrganizationType OrganizationType,
     OrganizationRole OrganizationRole,
     IReadOnlyList<ModuleEntitlement> Modules,
-    bool IsPlatformAdmin)
+    bool IsPlatformAdmin,
+    bool DoorSessionRequired = false)
 {
+    /// <summary>A seat of the Platform organisation (the control room's team seats are these; ticks decide what they read).</summary>
+    public bool IsPlatformSeat => OrganizationType == OrganizationType.Platform;
+
     public bool CanRead(string moduleKey)
         => Modules.Any(m => m.ModuleKey == moduleKey && m.CanRead);
 

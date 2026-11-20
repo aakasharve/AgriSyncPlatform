@@ -197,6 +197,10 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
         (await CheckAsync(PlatformOwner, stored.Id, "Approved", ActivityIdsOf(stored))).Status.Should().Be(HttpStatusCode.OK);
         (await ChecksAsync(stored.Id)).Should().HaveCount(1);
 
+        // Plan CR-3 Task A3 (K07): the lane's Platform Employee now holds a person row, and the control-room people table's own Down
+        // (a later migration) refuses while it has rows. Take that row away first, so the refusal proved here is this lane's.
+        await ExecOnSuperuserAsync("DELETE FROM ssf.control_room_people");
+
         var refused = async () => await MigrateAsync(MigrationBefore);
 
         var failure = await refused.Should().ThrowAsync<Exception>();

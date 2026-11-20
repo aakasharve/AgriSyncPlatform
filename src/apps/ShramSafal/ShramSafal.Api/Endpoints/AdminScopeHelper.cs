@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Http;
 using ShramSafal.Application.Admin;
@@ -54,6 +55,18 @@ public static class AdminScopeHelper
         switch (result.Outcome)
         {
             case ResolveOutcome.Resolved:
+                // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3): a team seat whose session did not begin at the
+                // console's door reads nothing through the admin routes; it signs in again on the console's page.
+                if (result.Scope!.DoorSessionRequired)
+                {
+                    await WriteJsonAsync(ctx, StatusCodes.Status401Unauthorized, new
+                    {
+                        code = ControlRoomSessionClaims.RequiredErrorCode,
+                        message = "Sign in again on the control room's sign-in page."
+                    });
+                    return null;
+                }
+
                 return result.Scope!;
 
             case ResolveOutcome.Unauthorized:

@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Application.Admin;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Infrastructure.Persistence;
 
@@ -23,10 +25,16 @@ namespace ShramSafal.Infrastructure.Admin;
 ///
 /// Every resolve emits exactly one analytics event for observability —
 /// powers mis.admin_scope_health.
+///
+/// spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3; Lock 2): a Platform seat that is not the Owner (the
+/// control room's team seats) holds only what its person's ticks give, and only when the session began at the
+/// console's door (<see cref="IControlRoomSession"/>). The matrix rows of Platform Employee, Analyst and the rest no
+/// longer decide anything for those seats (K07). The Platform Owner and every other organisation type keep the matrix.
 /// </summary>
 internal sealed class EntitlementResolver(
     ShramSafalDbContext db,
-    IAnalyticsWriter analytics) : IEntitlementResolver
+    IAnalyticsWriter analytics,
+    IControlRoomSession session) : IEntitlementResolver
 {
     public async Task<ResolveResult> ResolveAsync(
         UserId userId,
@@ -83,17 +91,36 @@ internal sealed class EntitlementResolver(
             selected = match;
         }
 
-        var modules = EntitlementMatrix.For(selected.OrganizationType, selected.OrganizationRole);
         var isPlatformAdmin =
             selected.OrganizationType == OrganizationType.Platform &&
             selected.OrganizationRole == OrganizationRole.Owner;
+        var isTeamSeat =
+            selected.OrganizationType == OrganizationType.Platform &&
+            selected.OrganizationRole != OrganizationRole.Owner;
+
+        IReadOnlyList<ModuleEntitlement> modules;
+        var doorSessionRequired = false;
+        if (!isTeamSeat)
+        {
+            modules = EntitlementMatrix.For(selected.OrganizationType, selected.OrganizationRole);
+        }
+        else if (!session.BeganAtTheDoor)
+        {
+            modules = ControlRoomTicks.ModulesFor([]);
+            doorSessionRequired = true;
+        }
+        else
+        {
+            modules = ControlRoomTicks.ModulesFor(await TicksOfAsync(userId, ct));
+        }
 
         var scope = new AdminScope(
             selected.OrganizationId,
             selected.OrganizationType,
             selected.OrganizationRole,
             modules,
-            isPlatformAdmin);
+            isPlatformAdmin,
+            doorSessionRequired);
 
         sw.Stop();
         await EmitAsync(AnalyticsEventType.AdminScopeResolved, userId, new
@@ -125,21 +152,48 @@ internal sealed class EntitlementResolver(
     /// <inheritdoc />
     /// <remarks>
     /// spec: plr-d10 lane SCH-A (Task 3): the same seats <see cref="ResolveAsync"/> reads (active seat, active organisation),
-    /// asked directly and without an analytics event; the answer is the matrix's, never a second list of roles.
+    /// asked directly and without an analytics event. The Platform Owner's answer is the matrix's; any other Platform seat's is its
+    /// <c>schedules</c> tick plus a door session (plan CR-3 Task A3, K07).
     /// </remarks>
-    public async Task<bool> MayCheckSchedulesAsync(UserId userId, CancellationToken ct)
-    {
-        var roles = await PlatformRolesOfAsync(userId, ct);
-        return roles.Any(role => EntitlementMatrix.For(OrganizationType.Platform, role)
-            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanWrite));
-    }
+    public Task<bool> MayCheckSchedulesAsync(UserId userId, CancellationToken ct)
+        => MayAsync(userId, write: true, ct);
 
     /// <inheritdoc />
-    public async Task<bool> MayReadScheduleChecksAsync(UserId userId, CancellationToken ct)
+    public Task<bool> MayReadScheduleChecksAsync(UserId userId, CancellationToken ct)
+        => MayAsync(userId, write: false, ct);
+
+    /// <summary>
+    /// The schedule doors under Lock 2: the Platform Owner by the matrix (as before); any other Platform seat only when its
+    /// person holds the <c>schedules</c> tick AND the session began at the door. Write and read both.
+    /// </summary>
+    private async Task<bool> MayAsync(UserId userId, bool write, CancellationToken ct)
     {
         var roles = await PlatformRolesOfAsync(userId, ct);
-        return roles.Any(role => EntitlementMatrix.For(OrganizationType.Platform, role)
-            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanRead));
+        if (roles.Contains(OrganizationRole.Owner)
+            && EntitlementMatrix.For(OrganizationType.Platform, OrganizationRole.Owner)
+                .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && (write ? e.CanWrite : e.CanRead)))
+        {
+            return true;
+        }
+
+        if (!roles.Any(role => role != OrganizationRole.Owner) || !session.BeganAtTheDoor)
+        {
+            return false;
+        }
+
+        return ControlRoomTicks.ModulesFor(await TicksOfAsync(userId, ct))
+            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && (write ? e.CanWrite : e.CanRead));
+    }
+
+    /// <summary>The ticks of the caller's active person row; none when there is no such row.</summary>
+    private async Task<IReadOnlyList<string>> TicksOfAsync(UserId userId, CancellationToken ct)
+    {
+        var uid = userId.Value;
+        var person = await db.ControlRoomPeople
+            .Where(p => p.UserId == uid && p.IsActive)
+            .OrderBy(p => p.AddedAtUtc)
+            .FirstOrDefaultAsync(ct);
+        return person?.Ticks ?? [];
     }
 
     private Task<List<OrganizationRole>> PlatformRolesOfAsync(UserId userId, CancellationToken ct)

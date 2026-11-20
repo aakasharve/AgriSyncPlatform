@@ -1,7 +1,8 @@
 // spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-A Task 3 ("who may check").
 //
 // A schedule check is a ShramSafal PLATFORM act (founder D-74, L8-R): an append-only server record of who, when and which
-// version. Platform Owner and Platform Employee may check; the Platform Analyst only reads; an FPO owner, a farm's primary
+// version. The Platform Owner may check; any other Platform seat only with the Schedules tick, from a door session (plan CR-3
+// Task A3, K07: the matrix's Employee and Analyst rows no longer decide); an FPO owner, a farm's primary
 // owner and a farm seat with AppRole.Agronomist hold nothing. The database grants the app role no UPDATE / DELETE on the table
 // (E4), and the audit row holds no note and no activity names. Real Postgres as agrisync_app (E3 first), through the real host.
 using System;
@@ -37,7 +38,7 @@ public sealed class ScheduleCheckRealPostgresTests(ITestOutputHelper output) : S
         owner.Status.Should().Be(HttpStatusCode.OK, owner.Body);
         Json(owner.Body).GetProperty("state").GetString().Should().Be("Checked");
 
-        // Platform Employee 200.
+        // Platform Employee 200 (a team seat holding the Schedules tick, from a door session).
         var employee = await CheckAsync(PlatformEmployee, row.Id, "Returned", note: "day 41 irrigation looks too early");
         employee.Status.Should().Be(HttpStatusCode.OK, employee.Body);
 
@@ -46,7 +47,7 @@ public sealed class ScheduleCheckRealPostgresTests(ITestOutputHelper output) : S
         kept.Should().Be(2);
         foreach (var (who, name) in new[]
                  {
-                     (PlatformAnalyst, "Platform Analyst (reads only)"),
+                     (PlatformAnalyst, "a non-owner Platform seat without the Schedules tick"),
                      (PlatformAuditor, "Platform Auditor"),
                      (FpoOwner, "FPO Owner"),
                      (Owner, "a farm's primary owner"),
@@ -310,13 +311,13 @@ public sealed class ScheduleCheckRealPostgresTests(ITestOutputHelper output) : S
         var private_ = await SeedStoredRowAsync("Grapes - private", TenantScope.Private, maker: Owner);
         (await CheckAsync(PlatformOwner, done.Id, "Approved", ActivityIdsOf(done))).Status.Should().Be(HttpStatusCode.OK);
 
-        var seen = await SendJsonAsync(HttpMethod.Get, "/shramsafal/schedule-templates/checks/waiting", PlatformAnalyst, null);
-        seen.Status.Should().Be(HttpStatusCode.OK, "the Analyst reads the queue");
+        var seen = await SendJsonAsync(HttpMethod.Get, "/shramsafal/schedule-templates/checks/waiting", PlatformEmployee, null);
+        seen.Status.Should().Be(HttpStatusCode.OK, "a seat holding the Schedules tick reads the queue");
         var ids = Json(seen.Body).EnumerateArray().Select(e => e.GetProperty("id").GetGuid()).ToList();
         ids.Should().Equal(waiting.Id);
         ids.Should().NotContain(done.Id).And.NotContain(thin).And.NotContain(private_.Id);
 
-        foreach (var who in new[] { Owner, FpoOwner, AgronomistSeat, Worker })
+        foreach (var who in new[] { PlatformAnalyst, Owner, FpoOwner, AgronomistSeat, Worker })
         {
             (await SendJsonAsync(HttpMethod.Get, "/shramsafal/schedule-templates/checks/waiting", who, null)).Status
                 .Should().Be(HttpStatusCode.Forbidden);

@@ -120,7 +120,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         }
 
         (await CountAsync("SELECT count(*) FROM ssf.schedule_templates")).Should().Be(0);
-        // The Employee seat, which holds the module's write, may.
+        // The Employee seat, ticked for Schedules and signed in at the door (plan CR-3 Task A3, K07), may.
         (await ImportAsync(PlatformEmployee, Body())).Status.Should().Be(HttpStatusCode.Created);
     }
 

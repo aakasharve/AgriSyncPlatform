@@ -1,7 +1,9 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
@@ -16,6 +18,7 @@ using ShramSafal.Application.UseCases.Admin.GetSilentChurn;
 using ShramSafal.Application.UseCases.Admin.GetSuffering;
 using ShramSafal.Application.UseCases.Admin.GetUsersList;
 using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
+using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 
 namespace ShramSafal.Api.Endpoints;
@@ -67,9 +70,26 @@ public static class AdminEndpoints
             var result = await resolver.ResolveAsync(
                 new AgriSync.SharedKernel.Contracts.Ids.UserId(userIdGuid), activeOrgId, ct);
 
+            // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3): additive. The caller's control-room standing,
+            // so the console can show what the person was given; null when the resolved scope is not a Platform seat.
+            object? controlRoom = null;
+            if (result.Scope is { IsPlatformSeat: true } platformScope)
+            {
+                var person = await http.RequestServices.GetRequiredService<IControlRoomStore>()
+                    .FindActiveByUserAsync(userIdGuid, ct);
+                controlRoom = new
+                {
+                    isFounder = platformScope.IsPlatformAdmin,
+                    startingRole = person is null ? null : ControlRoomRoles.Key(person.StartingRole),
+                    ticks = person?.Ticks ?? (IReadOnlyList<string>)[],
+                    doorSessionRequired = platformScope.DoorSessionRequired
+                };
+            }
+
             return Results.Ok(new
             {
                 outcome = result.Outcome.ToString(),
+                controlRoom,
                 scope = result.Scope is null ? null : new
                 {
                     userId = userIdGuid,

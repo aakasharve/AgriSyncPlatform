@@ -93,6 +93,10 @@ public sealed class AdminTestFixture : IAsyncLifetime
 
         // Production Infrastructure bindings for the three admin ports.
         services.AddScoped<IEntitlementResolver, EntitlementResolver>();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A3; AM6): the resolver asks whether the session began at the
+        // control room's door. The production class with no request answers false, as a background job would.
+        services.AddHttpContextAccessor();
+        services.AddScoped<AgriSync.BuildingBlocks.Auth.IControlRoomSession, AgriSync.BuildingBlocks.Auth.HttpContextControlRoomSession>();
         services.AddScoped<IOrgFarmScopeProjector, OrgFarmScopeProjector>();
         services.AddSingleton<IResponseRedactor, ResponseRedactor>();
 
