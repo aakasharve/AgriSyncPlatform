@@ -132,6 +132,18 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [crops]);
 
+    // UI-9a (redesign item 7): Setup's "शेड्यूल बघा" opens the tab on a crop - its HOME view (the plot's schedule), not the library. The same one-shot
+    // hand-off as above under its own key; the crop's first plot is chosen and the farmer picks another on the map.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        let target: string | null = null;
+        try { target = window.sessionStorage.getItem('schedule_view_crop_id'); } catch { target = null; }
+        if (!target) return;
+        if (crops.some(c => c.id === target)) pick(target);
+        try { window.sessionStorage.removeItem('schedule_view_crop_id'); } catch { /* storage blocked */ }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [crops]);
+
     useBackDismiss(view !== 'HOME', () => setView('HOME'));
 
     const crop = crops.find(c => c.id === cropId);

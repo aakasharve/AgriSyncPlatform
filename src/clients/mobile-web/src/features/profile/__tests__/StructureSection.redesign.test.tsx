@@ -86,10 +86,12 @@ describe('StructureSection (redesigned)', () => {
         expect(p.setIsAddingCrop).toHaveBeenCalledWith(false);
     });
 
-    it('no schedule yet → "आता निवडा" opens the schedule library for that crop', () => {
+    it('no plot follows a schedule → the orange "शेड्यूल नाही" and "निवडा" open the schedule library for that crop (redesign item 7)', () => {
         const p = props();
         render(<StructureSection {...p} />);
-        expect(screen.getByTestId('schedule-missing-c1')).toHaveTextContent('अजून वेळापत्रक निवडलेलं नाही');
+        expect(screen.getByTestId('schedule-missing-c1')).toHaveTextContent('शेड्यूल नाही');
+        expect(screen.getByTestId('schedule-missing-c1')).not.toHaveTextContent('वेळापत्रक');
+        expect(screen.getByTestId('schedule-open-c1')).toHaveTextContent('निवडा');
         fireEvent.click(screen.getByTestId('schedule-open-c1'));
         expect(p.onOpenScheduleLibrary).toHaveBeenCalledWith('c1');
     });

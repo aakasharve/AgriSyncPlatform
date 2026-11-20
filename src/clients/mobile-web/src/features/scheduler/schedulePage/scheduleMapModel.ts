@@ -97,6 +97,12 @@ function followedOf(resolved: ResolvedSchedule | null): Followed[] {
     return [{ key: resolved.template.id, template: resolved.template, own: resolved.template.ownerType === 'USER', main: true }];
 }
 
+/**
+ * Does this plot follow a schedule somebody chose? The ONE rule behind the tab's dashed "शेड्यूल नाही" group (a plot is in that group when this
+ * is false), shared with Setup's "N पैकी M प्लॉटवर शेड्यूल" so the two screens count the same way (UI-9a, redesign item 7).
+ */
+export const plotFollowsSchedule = (resolved: ResolvedSchedule | null): boolean => followedOf(resolved).length > 0;
+
 export function buildScheduleMap(input: {
     crops: readonly CropProfile[];
     choices: PlotScheduleChoices;
