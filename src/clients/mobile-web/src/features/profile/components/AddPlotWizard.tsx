@@ -6,7 +6,7 @@
  * 3-step wizard for adding a plot to a crop. Used only by StructureSection.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
     X, ArrowRight, Save,
     CheckCircle2, Wrench, AlertTriangle, Tractor
@@ -18,17 +18,22 @@ import {
 import Button from '../../../shared/components/ui/Button';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { createInitialScheduleInstance } from '../../scheduler/planning/ClientPlanEngine';
-import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { VarietySelector } from '../../context/components/VarietySelector';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import PlotStartQuestion, { type PlotStartMode } from '../plotStart/PlotStartQuestion';
+import {
+    checkedScheduleForCrop, dayCountOn, earliestPlantingDate, plantingDateProblem, plantingWordKey,
+    type NewPlotStart,
+} from '../plotStart/plotStartChoice';
 
 interface PlotWizardProps {
     crop: CropProfile;
     profile: FarmerProfile;
-    onSave: (plot: Plot) => void;
+    /** The new plot, and (spec: plr-d10 lane WIZARD-F2) the day it counts from and the checked schedule that follows by itself. */
+    onSave: (plot: Plot, start: NewPlotStart) => void;
     onCancel: () => void;
 }
 
@@ -52,20 +57,22 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
 
 
     const [selectedMachineIds, setSelectedMachineIds] = useState<string[]>([]);
-    const availableSchedules = useMemo(
-        () => getSchedulesForCrop(crop.name).slice(0, 3),
-        [crop.name]
-    );
-    const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(crop.activeScheduleId || null);
+
+    // spec: plr-d10 lane WIZARD-F2 (founder pick F2, 2026-11-19) - step 3 asks ONE required question, when the crop was planted / pruned /
+    // sown. NOTHING is pre-selected (a date is never guessed for him); the finish button stays off until one of the two choices is made.
+    // The schedule is not chosen here: the crop's ShramSafal-checked one follows by itself, or none when the crop has none.
+    const [startMode, setStartMode] = useState<PlotStartMode>(null);
+    const [earlierKey, setEarlierKey] = useState('');
+    const todayKey = getDateKey();
+    const checkedSchedule = checkedScheduleForCrop(crop.name);
+    const earlierProblem = startMode === 'earlier' && earlierKey !== '' ? plantingDateProblem(earlierKey, todayKey) : null;
+    /** The day he named (YYYY-MM-DD), or null while nothing usable is chosen. */
+    const chosenKey: string | null = startMode === 'today'
+        ? todayKey
+        : startMode === 'earlier' && earlierKey !== '' && earlierProblem === null ? earlierKey : null;
 
     // --- VALIDATION STATE ---
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
-
-    useEffect(() => {
-        if (!selectedTemplateId && availableSchedules.length > 0) {
-            setSelectedTemplateId(crop.activeScheduleId || availableSchedules[0].id);
-        }
-    }, [selectedTemplateId, availableSchedules, crop.activeScheduleId]);
 
     // --- VALIDATION FUNCTIONS ---
     const validateStep1 = (): boolean => {
@@ -109,12 +116,8 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
             setErrors({ plotName: 'Plot name is required' });
             return;
         }
-        if (!selectedTemplateId) {
-            setErrors(prev => ({ ...prev, schedule: 'Select one schedule from library options' }));
-            return;
-        }
-
-        const selectedTemplate = getScheduleById(selectedTemplateId);
+        // The finish button is off until the date question is answered; this keeps a stray call from making a plot with a guessed day.
+        if (!chosenKey) return;
 
         const plantingMaterial: PlantingMaterial = materialType === 'Seed' ? {
             type: 'Seed',
@@ -136,7 +139,20 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
         // server will keep: a `p_` prefix failed the sync contract's GUID check, so the plot
         // and every log on it never left the phone.
         const plotId = idGenerator.generate();
-        const startDate = systemClock.nowISO();
+
+        // spec: plr-d10 lane WIZARD-F2 - the plot's start date (and so its crop cycle's), the schedule's day 0 and the choice sent with the
+        // plot are ONE day: the one he named. A plain YYYY-MM-DD, the app's own day, never a timestamp ("now" was the old, silent answer).
+        const startDate = chosenKey;
+        const instance = createInitialScheduleInstance(plotId, crop.name, chosenKey);
+        if (checkedSchedule) {
+            instance.templateId = checkedSchedule.templateId;
+            instance.referenceType = checkedSchedule.referenceType;
+        } else {
+            // A crop with no checked schedule makes a plot with none: no template named, so neither the app's stand-in nor an unchecked
+            // sample is ever stored as its schedule (and none is adopted, `onSave` below says so).
+            instance.templateId = '';
+            instance.referenceType = 'PLANTING';
+        }
 
         const newPlot: Plot = {
             id: plotId,
@@ -150,17 +166,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
             },
             plantingMaterial,
             infrastructure,
-            schedule: (() => {
-                const instance = createInitialScheduleInstance(plotId, crop.name, getDateKey());
-                if (selectedTemplate) {
-                    instance.templateId = selectedTemplate.id;
-                    instance.referenceType = selectedTemplate.referenceType;
-                }
-                return instance;
-            })()
+            schedule: instance
         };
 
-        onSave(newPlot);
+        onSave(newPlot, { scheduleTemplateId: checkedSchedule?.templateId ?? null, referenceDate: chosenKey });
     };
 
     const nextStep = () => {
@@ -374,49 +383,20 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                     {/* STEP 3: SCHEDULE & MACHINERY */}
                     {step === 3 && (
                         <div className="space-y-4 animate-in slide-in-from-right-4">
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
-                                <div className="flex items-center justify-between gap-3 mb-3">
-                                    <div>
-                                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Choose Schedule (3 options)</p>
-                                        <p className="text-xs text-emerald-700/80 mt-1">This schedule becomes baseline for compare and timeline.</p>
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase tracking-wide bg-white border border-emerald-200 px-2 py-1 rounded-full text-emerald-700">
-                                        Required
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {availableSchedules.map(template => {
-                                        const isSelected = selectedTemplateId === template.id;
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={template.id}
-                                                onClick={() => {
-                                                    setSelectedTemplateId(template.id);
-                                                    if (errors.schedule) setErrors({ ...errors, schedule: '' });
-                                                }}
-                                                className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${isSelected ? 'bg-emerald-50 border-emerald-500 shadow-sm ring-1 ring-emerald-500' : 'bg-white/70 border-slate-200 hover:bg-white border-dashed'}`}
-                                            >
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-slate-800 truncate">{template.name}</p>
-                                                        <p className="text-[11px] text-slate-500 mt-0.5 truncate">Created by: {template.createdBy}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-3 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                                                    <span>{template.totalDurationDays || '-'} days</span>
-                                                    {isSelected && <span className="text-emerald-700 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-emerald-200"><CheckCircle2 size={12}/> Selected</span>}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {errors.schedule && (
-                                    <p className="text-red-500 text-xs mt-2 flex items-center gap-1">
-                                        <AlertTriangle size={12} /> {errors.schedule}
-                                    </p>
-                                )}
-                            </div>
+                            {/* spec: plr-d10 lane WIZARD-F2 (founder pick F2) - ONE required question replaces the schedule list. */}
+                            <PlotStartQuestion
+                                language={language}
+                                wordKey={plantingWordKey(checkedSchedule?.referenceType)}
+                                mode={startMode}
+                                onMode={setStartMode}
+                                earlierKey={earlierKey}
+                                onEarlierKey={setEarlierKey}
+                                minKey={earliestPlantingDate(todayKey)}
+                                maxKey={todayKey}
+                                problem={earlierProblem}
+                                dayCount={chosenKey ? dayCountOn(chosenKey, todayKey) : null}
+                                checked={checkedSchedule}
+                            />
 
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{t('profile.selectTools')}</label>
@@ -474,7 +454,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             {t('profile.nextStep')} <ArrowRight size={16} className="ml-2" />
                         </Button>
                     ) : (
-                        <Button onClick={handleSave} className="flex-1 py-3 text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg">
+                        <Button onClick={handleSave} disabled={!chosenKey} className="flex-1 py-3 text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg">
                             <Save size={16} className="mr-2" /> {t('profile.finishSetup')}
                         </Button>
                     )}

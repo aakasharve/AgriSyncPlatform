@@ -86,10 +86,10 @@ export const SectionBlock: React.FC<{
     return (
         <section data-testid={`reflect-section-${id}`}
             className="overflow-hidden rounded-[26px] border border-white/60 bg-white/80 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] backdrop-blur-md">
-            <div className={`flex items-center ${strip ? 'bg-stone-900' : ''}`}>
+            <div className="flex items-center">
                 <Tap onClick={toggle} aria-expanded={open} data-testid={`reflect-section-${id}-toggle`}
                     rippleColor={strip ? 'rgba(252,211,77,0.25)' : undefined}
-                    className={`flex min-h-[64px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left ${strip ? 'bg-stone-900 text-white' : ''}`}>
+                    className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left">
                     {strip ?? (
                         <>
                             <IconDot tone={tone}>{icon}</IconDot>
@@ -100,7 +100,7 @@ export const SectionBlock: React.FC<{
                             {count}
                         </>
                     )}
-                    <ChevronDown size={22} className={`shrink-0 transition-transform ${strip ? 'text-white/70' : 'text-stone-400'} ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </Tap>
                 {reorder && (
                     <span className="flex shrink-0 gap-1.5 pr-3" data-testid={`reflect-section-${id}-reorder`}>

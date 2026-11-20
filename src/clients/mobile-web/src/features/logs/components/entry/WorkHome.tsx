@@ -29,7 +29,7 @@
  * bottom: the update card; the question "काय करायचं आहे?" as one small line (the big Sathi banner is gone - the picture has none);
  * the solid green record door (the biggest block); the solid blue "नियोजन करा" door under it (`PlanDoor`); the हजेरी card, only
  * when a head count was said - and until then a small note that says when हजेरी works (work first, then the head count),
- * never nothing (founder follow-up 2026-11-19); the money as a full-width dark card.
+ * never nothing (founder follow-up 2026-11-19); the money as a full-width light card (not dark: founder 2026-11-19).
  */
 import React from 'react';
 import { ChevronRight, Mic, Users } from 'lucide-react';
@@ -121,7 +121,7 @@ export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attend
             <h2 className="m-0 px-1 text-[15px] font-bold leading-snug text-stone-600" data-testid="home-title">{HOME_WORDS.title}</h2>
 
             <Tap onClick={onTell} data-testid="home-tell" rippleColor="rgba(255,255,255,0.35)"
-                className="flex min-h-[132px] w-full items-center gap-3 rounded-[20px] bg-emerald-700 px-4 py-5 text-left text-white shadow-[0_8px_20px_rgba(4,120,87,0.28)]">
+                className="flex min-h-[144px] w-full items-center gap-3 rounded-[20px] bg-emerald-700 px-4 py-5 text-left text-white shadow-[0_8px_20px_rgba(4,120,87,0.28)]">
                 <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full bg-white/20 text-white"><Mic size={28} strokeWidth={2.4} aria-hidden="true" /></span>
                 <span className="min-w-0 flex-1">
                     <span className="block text-[26px] font-extrabold leading-[1.15]" data-testid="home-tell-title">{HOME_WORDS.tell}</span>

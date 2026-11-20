@@ -83,6 +83,69 @@ describe('the figures are the period\'s real entries', () => {
         expect(screen.queryByTestId('report-margin')).toBeNull();
     });
 
+    // lane HONESTY-2 (H2) — harvest income is not entered anywhere yet, so a month of spending alone is not a loss.
+    describe('H2 — a period with no income recorded is not a loss', () => {
+        it('prints the खर्च and "उत्पन्न अजून नोंदवलेलं नाही", and neither नफा nor तोटा', () => {
+            h.events = [ev('x', 'Expense', 'Fuel', 500), ev('y', 'Expense', 'Labour', 1500)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            const card = screen.getByTestId('report-profit');
+            expect(card).toHaveTextContent('खर्च · हा महिना');
+            expect(screen.getByTestId('report-spend')).toHaveTextContent('₹ 2,000');
+            expect(screen.getByTestId('report-no-income')).toHaveTextContent('उत्पन्न अजून नोंदवलेलं नाही');
+            expect(card.textContent).not.toContain('तोटा');
+            expect(card.textContent).not.toContain('नफा');
+            expect(card.textContent).not.toContain('−');
+            expect(card.textContent).not.toContain('%');
+        });
+
+        it('draws no ₹ 0 जमा tile, no share of जमा, no loss warning and no partial note', () => {
+            h.events = [ev('x', 'Expense', 'Machinery', 5000)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.queryByTestId('report-income')).toBeNull();
+            expect(screen.queryByTestId('report-margin')).toBeNull();
+            expect(screen.queryByTestId('report-loss-tip')).toBeNull();
+            expect(screen.queryByTestId('report-partial-note')).toBeNull();
+            expect(document.body.textContent).not.toContain('तोटा');
+            expect(document.body.textContent).not.toContain('नफा');
+        });
+
+        it('the खर्च split below it is unchanged', () => {
+            h.events = [ev('x', 'Expense', 'Fuel', 500)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.getByTestId('report-cat-Fuel')).toHaveTextContent('इंधन₹ 500 (100%)');
+        });
+
+        it('an income entry corrected to ₹ 0 counts as no income', () => {
+            h.events = [ev('i', 'Income', 'Other', 0), ev('x', 'Expense', 'Fuel', 500)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.getByTestId('report-no-income')).toBeInTheDocument();
+            expect(screen.getByTestId('report-profit').textContent).not.toContain('तोटा');
+        });
+
+        it('only undirected entries: no ₹ figure is made up for the headline', () => {
+            h.events = [ev('u', 'Unknown', 'Other', 700)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.getByTestId('report-spend')).toHaveTextContent('—');
+            expect(screen.getByTestId('report-spend').textContent).not.toContain('₹');
+            expect(screen.getByTestId('report-no-income')).toBeInTheDocument();
+            expect(screen.getByTestId('report-no-direction')).toHaveTextContent('1 नोंद');
+        });
+
+        it('with income recorded, the figure says it is partial and based on what was recorded', () => {
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.getByTestId('report-partial-note')).toHaveTextContent('अपूर्ण — फक्त नोंदवलेल्या रकमांवर आधारित');
+            expect(screen.queryByTestId('report-no-income')).toBeNull();
+        });
+
+        it('with income recorded and a loss, तोटा and its warning stay, with the partial note', () => {
+            h.events = [ev('i', 'Income', 'Other', 1000), ev('x', 'Expense', 'Machinery', 5000)];
+            render(<ReportsPage currentRoute="finance-reports" onNavigate={vi.fn()} />);
+            expect(screen.getByTestId('report-profit')).toHaveTextContent('तोटा · हा महिना');
+            expect(screen.getByTestId('report-partial-note')).toBeInTheDocument();
+            expect(screen.getByTestId('report-loss-tip')).toBeInTheDocument();
+        });
+    });
+
     // I8 review B004 — the only fuel bill was marked duplicate (corrected to ₹ 0): no "इंधन ₹ 0 (NaN%)".
     it('a category that spent nothing gets no row, and nothing reads NaN', () => {
         h.events = [ev('x', 'Expense', 'Fuel', 0), ev('y', 'Expense', 'Labour', 2000)];

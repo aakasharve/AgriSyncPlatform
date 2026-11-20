@@ -94,7 +94,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                 // No place given: the ONE mic asks the crop, then the plot, then listens (CTX-1) — never the mic directly.
                 <TodayAttendanceCard state={attendance} onTell={() => speakHere({ purpose: 'fillPart', context: { part: 'labour' } })} />
             )}
-            {FEATURE_FLAGS.dailyLoop && <DailyLoopClarity done={ctx.todayDayState.completedCount} left={ctx.todayDayState.pendingCount} />}
+            {/* H1 (HONESTY-1, P4): the count is drawn only when it stands on a real plan - never on a stand-in or an unchecked default. */}
+            {FEATURE_FLAGS.dailyLoop && ctx.todayDayState.planIsReal === true && <DailyLoopClarity done={ctx.todayDayState.completedCount} left={ctx.todayDayState.pendingCount} />}
             {topTaskClose && (
                 <TaskCloseConfirmSlot key={topTaskClose.task.id} candidate={topTaskClose} onConfirm={(candidate) => {
                     ctx.handleUpdateTask(candidate.task.id, { status: 'done', completedAt: new Date().toISOString() });

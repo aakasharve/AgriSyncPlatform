@@ -390,6 +390,15 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleStepMoveTooFar = Error.Validation(
         "ShramSafal.ScheduleStepMoveTooFar.InvalidCommand",
         "The new day is too far ahead: a step can be moved at most 90 days past today or past its own day.");
+
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 - lane POSTPONE-B (founder pick B, round 5, question 4). A step may be postponed twice;
+    /// the third time the farmer must record the work or look at the schedule. The count is the step's own move rows. Ends in ".InvalidCommand"
+    /// like its neighbours, so a shipped phone parks rather than retries it. PROPOSED words.
+    /// </summary>
+    public static readonly Error ScheduleStepPostponeLimit = Error.Validation(
+        "ShramSafal.ScheduleStepPostponeLimit.InvalidCommand",
+        "This step has already been postponed twice. Record the work, or look at it in the schedule.");
     // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opened in SCH-OWN (D-82 = 3): NOTHING PRODUCES THIS CODE ANY MORE. Kept because
     // shipped phones still classify it (RejectionPolicy) and a parked row of theirs may still carry it.
     public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");

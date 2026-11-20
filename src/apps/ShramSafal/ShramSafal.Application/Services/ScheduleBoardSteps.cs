@@ -25,10 +25,28 @@ public sealed record BoardStep(
     DateOnly OriginalDate,
     int ScheduleDay,
     string? StageName,
-    string? RepeatCode);
+    string? RepeatCode,
+    // spec: plr-d10 lane POSTPONE-B - how many times the step was postponed = its move rows (history included). Appended with a default so every
+    // existing construction compiles.
+    int PostponeCount = 0)
+{
+    /// <summary>
+    /// The same step on the day the SCHEDULE asks it (before any postpone). The plot's late count, health and rank are read on this day, so a
+    /// postpone hides the step from the list for a while but never makes the plot look healthier.
+    /// </summary>
+    public BoardStep OnOriginalDay() => Step.PlannedDate == OriginalDate ? this : this with { Step = Step with { PlannedDate = OriginalDate } };
+}
 
 /// <summary>The steps of ONE followed schedule on one plot's current season.</summary>
-public sealed record BoardScheduleSteps(Guid SubscriptionId, string ScheduleName, IReadOnlyList<BoardStep> Steps);
+public sealed record BoardScheduleSteps(Guid SubscriptionId, string ScheduleName, IReadOnlyList<BoardStep> Steps)
+{
+    /// <summary>Has any step of this schedule been moved off its own day?</summary>
+    public bool AnyMoved => Steps.Any(s => s.Step.PlannedDate != s.OriginalDate);
+
+    /// <summary>This schedule with every step on the day the schedule asks it (POSTPONE-B: lateness is judged on the original day).</summary>
+    public BoardScheduleSteps OnOriginalDays() =>
+        AnyMoved ? this with { Steps = Steps.Select(s => s.OnOriginalDay()).ToList() } : this;
+}
 
 /// <summary>
 /// spec: plr-d10 lane ATT-W (R29) - what the board reads for the plots that have an Active subscription. Everything is read ONCE for the
@@ -66,7 +84,14 @@ public sealed class BoardScheduleSource
         }
 
         latestMoves = latest;
+
+        // spec: plr-d10 lane POSTPONE-B - one move row = one postpone of that step; the history stays in the table, so the count is the rows.
+        moveCounts = moveRows
+            .GroupBy(m => (m.ScheduleSubscriptionId, m.TemplateActivityId, m.OriginalDate))
+            .ToDictionary(g => g.Key, g => g.Count());
     }
+
+    private readonly IReadOnlyDictionary<(Guid Subscription, Guid Activity, DateOnly Original), int> moveCounts;
 
     /// <summary>
     /// The steps the plot's followed schedules ask in <paramref name="cycle"/>, or <c>null</c> when the plot has NO Active subscription on that
@@ -133,7 +158,8 @@ public sealed class BoardScheduleSource
                     expected.Date,
                     expected.Date.DayNumber - dayZero.DayNumber,
                     window?.Name,
-                    RepeatCodeOf(definition, expected.ActivityId)));
+                    RepeatCodeOf(definition, expected.ActivityId),
+                    moveCounts.TryGetValue((sub.Id, expected.ActivityId, expected.Date), out var postponed) ? postponed : 0));
             }
 
             result.Add(new BoardScheduleSteps(sub.Id, template.Name, steps));

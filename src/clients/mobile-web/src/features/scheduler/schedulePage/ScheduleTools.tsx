@@ -5,15 +5,16 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I15; inventory S2 "keep every real feature")
  *
  * Everything the old शेड्यूल page did that is not the schedule itself, kept and said in Marathi:
- *   - the risk card ("Risk rising / Stable") — now its facts in words. "आज N कामं बाकी" is the page's OWN
+ *   - the open-work lines (the old "Risk rising / Stable" card, V2-01). "आज N कामं बाकी" is the page's OWN
  *     count of today's open schedule tasks (`dueTodayCount`, the आज card's lines), never `computeDayState`'s
  *     `pendingCount`: that one still reads the app's built-in stand-in schedule, repeats the last stage after
  *     the end and counts a weekly task every day, so it said "आज 1 कामं बाकी" under "no schedule" (V2-01).
- *     The farmer's own to-do tasks that count also went into the old line; they keep a line of their own
- *     (same rule as `pendingCount`'s task half, `getTaskCompletion`). The spray / water gaps use the SAME
- *     `computeDayState` numbers and thresholds (`SPRAY_RISK_DAYS`, `IRRIGATION_RISK_DAYS`); the stage-overdue
- *     signal is the आधी राहिलेलं काम list above, so it is not repeated here. The old green "Stable — execution
- *     is aligned" line is not drawn: it could say "all fine" beside a non-empty आधी राहिलेलं काम (two true
+ *     The farmer's own to-do tasks that count keep a line of their own (same rule as `pendingCount`'s task
+ *     half, `getTaskCompletion`). spec: plr-d10 lane HONESTY-1 (H10; P4): the amber "काम मागे पडतंय" (work is
+ *     falling behind) title and colour, and the "फवारणी / पाणी देऊन N दिवस झाले" lines are GONE - they asserted
+ *     lateness from two thresholds (10 days for a spray, 3 for water) that are the same for every crop. The
+ *     last-spray / last-water tiles below already show those facts, without a verdict. What is left is two plain
+ *     counts, in a plain box. The old green "Stable — execution is aligned" line is not drawn either: it could say "all fine" beside a non-empty आधी राहिलेलं काम (two true
  *     surfaces, one false impression — the founder's one-all-clear ruling, `oneAllClearSurface.test.tsx`);
  *   - last spray / last irrigation ("Last Action Memory");
  *   - today's spend, tapping it opens MoneyLens (as the old MoneyChip did) — "—" when nothing was spent (P4);
@@ -24,11 +25,11 @@
 import React from 'react';
 import { CalendarRange, Layers, Settings, TableProperties } from 'lucide-react';
 import { GlassCard, RowLink, Tap } from '../../../shared/components/ui/placeUi';
-import { IRRIGATION_RISK_DAYS, SPRAY_RISK_DAYS, type DayState } from '../../../shared/utils/dayState';
+import type { DayState } from '../../../shared/utils/dayState';
 import { rupees } from '../../finance/moneyLabels';
 import { SC } from './scheduleCopy';
 
-/** What the risk card and the last-action tiles read. */
+/** What the open-work lines and the last-action tiles read. */
 export interface ToolsFacts {
     /** Today's open schedule tasks (`dueTodayCount`); 0 with no schedule, before day 0 and after the end. */
     dueToday: number;
@@ -37,15 +38,11 @@ export interface ToolsFacts {
     lastActions: DayState['lastActions'];
 }
 
-/** The risk lines in Marathi. Empty = nothing to warn about. */
-export function riskLines(state: ToolsFacts): string[] {
+/** The open-work lines in Marathi: two plain counts, no verdict. Empty = nothing open to say. */
+export function openWorkLines(state: ToolsFacts): string[] {
     const out: string[] = [];
     if (state.dueToday > 0) out.push(SC.pendingToday(state.dueToday));
     if (state.tasksOpen > 0) out.push(SC.tasksOpen(state.tasksOpen));
-    const spray = state.lastActions.sprayDaysAgo;
-    if (spray !== null && spray > SPRAY_RISK_DAYS) out.push(SC.sprayGap(spray));
-    const water = state.lastActions.irrigationDaysAgo;
-    if (water !== null && water > IRRIGATION_RISK_DAYS) out.push(SC.waterGap(water));
     return out;
 }
 
@@ -61,14 +58,14 @@ export const ScheduleTools: React.FC<{
     onEditor?: () => void;
     onGrid?: () => void;
 }> = ({ facts, todaySpend, onOpenMoney, onCloseDay, libraryCount, onLibrary, onEditor, onGrid }) => {
-    const risks = riskLines(facts);
+    const open = openWorkLines(facts);
     return (
         <section className="space-y-2.5" data-testid="sched-tools">
-            {risks.length > 0 && (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900" data-testid="risk-card">
-                    <p className="m-0 text-[16px] font-black">{SC.riskTitle}</p>
-                    <ul className="m-0 mt-1 list-disc space-y-0.5 pl-5">{risks.map(r => <li key={r} className="text-[15px] font-bold">{r}</li>)}</ul>
-                </div>
+            {open.length > 0 && (
+                // H10 (HONESTY-1): the same plain box as the tiles below - no amber, no "work is falling behind" title.
+                <ul className="m-0 list-disc space-y-0.5 rounded-2xl bg-stone-50 py-3 pl-8 pr-4 ring-1 ring-stone-200" data-testid="open-work">
+                    {open.map(r => <li key={r} className="text-[15px] font-bold text-stone-800">{r}</li>)}
+                </ul>
             )}
             <GlassCard testId="last-actions">
                 <div className="grid grid-cols-2 gap-2.5">

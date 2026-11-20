@@ -64,13 +64,13 @@ export const MoneyStripFace: React.FC<{ figure: MoneyFigure; hint?: string }> = 
         <span className="flex min-w-0 flex-1 items-center gap-3" data-testid="cost-strip">
             <span data-part="rupee" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-500 text-stone-900"><IndianRupee size={19} strokeWidth={2.5} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-bold leading-tight text-white/85">{copy.moneyStripTitle}</span>
+                <span className="block text-[13px] font-bold leading-tight text-stone-600">{copy.moneyStripTitle}</span>
                 <span className="flex flex-wrap items-baseline gap-x-2">
-                    <Num className="text-[20px] font-extrabold leading-tight text-amber-300" testId="cost-strip-amount">{money(figure.amount)}</Num>
-                    <span className="text-[12px] font-bold text-white/75">{copy.moneyStripSpent}</span>
+                    <Num className="text-[20px] font-extrabold leading-tight text-stone-900" testId="cost-strip-amount">{money(figure.amount)}</Num>
+                    <span className="text-[12px] font-bold text-stone-500">{copy.moneyStripSpent}</span>
                     <PartialTag figure={figure} testId="cost-strip-partial" />
                 </span>
-                {hint && <span className="block text-[11.5px] font-semibold leading-snug text-white/65">{hint}</span>}
+                {hint && <span className="block text-[11.5px] font-semibold leading-snug text-stone-500">{hint}</span>}
             </span>
         </span>
     );

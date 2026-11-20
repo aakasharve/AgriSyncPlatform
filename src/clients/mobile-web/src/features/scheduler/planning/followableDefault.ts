@@ -15,7 +15,7 @@
  * Rows of the farm itself (Team / Private) are not outside schedules; an unchecked row that stores its days is no sample, a
  * withdrawn or sent-back check is neither.
  */
-import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode } from '../../../infrastructure/reference/TemplateCatalog';
+import { UNKNOWN_CROP, getAllTemplates, isFallbackTemplate, scheduleCropCode } from '../../../infrastructure/reference/TemplateCatalog';
 import type { CropScheduleTemplate } from '../scheduler.types';
 
 /** checked = ShramSafal has checked it; sample = the unchecked sample, offered while the crop has no checked schedule. */
@@ -44,6 +44,16 @@ export const offeredForCrop = (bucket: readonly CropScheduleTemplate[]): CropSch
     const checked = outside.filter(isCheckedSchedule);
     return checked.length > 0 ? checked : outside.filter(isSampleSchedule);
 };
+
+/**
+ * spec: plr-d10 lane HONESTY-1 (H1; doctrine P4) - may a COUNT be built on this schedule? Only a plan somebody really made and
+ * stands behind: not the app's invented stand-in (`isFallbackTemplate`), not an empty one, and not an unchecked SAMPLE (the
+ * schedule a plot falls to when nobody chose and ShramSafal has checked none). A checked schedule, one that stores its days, and the
+ * farm's or a person's own schedule are real. Reads the schedule's own marks only - the phone cannot tell an unchecked sample the
+ * farmer picked from the one he was given, so both count as not real (the line hides; nothing is claimed).
+ */
+export const isRealPlan = (t: CropScheduleTemplate | null | undefined): boolean =>
+    !!t && !isFallbackTemplate(t) && t.stages.length > 0 && (!isOutsideSchedule(t) || !!t.ownerUserId || !isSampleSchedule(t));
 
 const outsideOfCrop = (cropName: string): CropScheduleTemplate[] => {
     const code = scheduleCropCode(cropName);

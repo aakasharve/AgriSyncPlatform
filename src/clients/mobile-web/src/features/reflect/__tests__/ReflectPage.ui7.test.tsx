@@ -120,8 +120,8 @@ describe('आढावा page — starts on every crop and every plot', () => {
     });
 });
 
-describe('आढावा page — the dark money strip', () => {
-    it('the closed money section shows a dark strip with the spent-so-far amount from the ledger', () => {
+describe('आढावा page — the money strip', () => {
+    it('the closed money section shows a white strip with the spent-so-far amount from the ledger (founder pick M2)', () => {
         renderPage(CROPS);
         const toggle = screen.getByTestId('reflect-section-cost-toggle');
         expect(toggle).toHaveAttribute('aria-expanded', 'false'); // first use: folded (D-4)
@@ -129,9 +129,9 @@ describe('आढावा page — the dark money strip', () => {
         expect(toggle).toContainElement(strip);
         expect(within(strip).getByTestId('cost-strip-amount')).toHaveTextContent('₹ 1,500');
         expect(strip).toHaveTextContent('उत्पन्न आणि खर्च');
-        // dark strip, amber amount, amber rupee circle
-        expect(toggle.className).toContain('bg-stone-900');
-        expect(within(strip).getByTestId('cost-strip-amount').className).toContain('text-amber-300');
+        // white strip (no black), dark amount, amber rupee circle
+        expect(toggle.className).not.toContain('bg-stone-900');
+        expect(within(strip).getByTestId('cost-strip-amount').className).toContain('text-stone-900');
         expect(part(strip, 'rupee')?.className).toContain('bg-amber-500');
     });
 

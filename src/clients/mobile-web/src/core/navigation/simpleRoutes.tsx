@@ -435,6 +435,9 @@ export const renderAttentionRoute = (ctx: AppRouterContext): React.ReactNode => 
                 // the server answers it — the primary owner always; a मुकादम or सहमालक only when the owner gave it. The
                 // server's ScheduleChangeGate asks the same authority on the move itself.
                 canReschedule={ctx.mayPlanWork ?? ctx.farmRole === 'PrimaryOwner'}
+                // lane POSTPONE-B (founder pick B) — "शेड्यूलमध्ये बघा" on a step postponed twice: the schedule tab, the door a card's
+                // "थकलेली कामे पहा" already uses (`attentionActions.ts`).
+                onOpenSchedule={() => ctx.setCurrentRoute('schedule')}
             />
         </div>
     );

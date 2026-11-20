@@ -113,8 +113,8 @@ describe('ReflectPage (redesigned, real data)', () => {
     it('six sections in their first-use order; no move buttons until "क्रम बदला" is on', () => {
         renderPage();
         expect(sectionOrder()).toEqual([
-            'reflect-section-status', 'reflect-section-todo', 'reflect-section-day',
-            'reflect-section-notes', 'reflect-section-calendar', 'reflect-section-cost',
+            'reflect-section-status', 'reflect-section-calendar', 'reflect-section-day',
+            'reflect-section-notes', 'reflect-section-todo', 'reflect-section-cost',
         ]);
         expect(document.querySelector('[data-testid$="-reorder"]')).toBeNull();
         expect(screen.queryByRole('button', { name: /move (up|down)/i })).toBeNull();
@@ -127,7 +127,7 @@ describe('ReflectPage (redesigned, real data)', () => {
     it('D-4 first use: शेताची स्थिती, करायची कामे, प्लॉटनिहाय काम open; notes, calendar, money folded — their headers keep the count', () => {
         renderPage();
         const expanded = (id: string) => screen.getByTestId(`reflect-section-${id}-toggle`).getAttribute('aria-expanded');
-        expect(['status', 'todo', 'day', 'notes', 'calendar', 'cost'].map(expanded)).toEqual(['true', 'true', 'true', 'false', 'false', 'false']);
+        expect(['status', 'todo', 'day', 'notes', 'calendar', 'cost'].map(expanded)).toEqual(['true', 'true', 'true', 'false', 'true', 'false']); // founder 2026-11-19: the calendar is the day chooser, open from the start
         expect(screen.queryByTestId('notes-list')).toBeNull();
         expect(screen.getByTestId('notes-count')).toHaveTextContent('1'); // the folded section still says how many
         expect(screen.getByTestId('todo-count')).toBeInTheDocument();
@@ -139,17 +139,17 @@ describe('ReflectPage (redesigned, real data)', () => {
         fireEvent.click(screen.getByTestId('reflect-section-todo-toggle')); // fold to-dos
         fireEvent.click(screen.getByTestId('reflect-reorder-toggle'));
         expect(screen.queryByTestId('reflect-section-status-reorder')).toBeNull(); // शेताची स्थिती never moves
-        expect(screen.getByTestId('reflect-section-todo-up')).toBeDisabled(); // already first of the movable ones
+        expect(screen.getByTestId('reflect-section-calendar-up')).toBeDisabled(); // already first of the movable ones
         fireEvent.click(screen.getByTestId('reflect-section-cost-up'));
-        expect(sectionOrder().slice(-2)).toEqual(['reflect-section-cost', 'reflect-section-calendar']);
+        expect(sectionOrder().slice(-2)).toEqual(['reflect-section-cost', 'reflect-section-todo']);
         cleanup();
 
         renderPage(); // the page opened again
         expect(screen.getByTestId('notes-list')).toBeInTheDocument();
         expect(screen.getByTestId('reflect-section-todo-toggle')).toHaveAttribute('aria-expanded', 'false');
         expect(sectionOrder()).toEqual([
-            'reflect-section-status', 'reflect-section-todo', 'reflect-section-day',
-            'reflect-section-notes', 'reflect-section-cost', 'reflect-section-calendar',
+            'reflect-section-status', 'reflect-section-calendar', 'reflect-section-day',
+            'reflect-section-notes', 'reflect-section-cost', 'reflect-section-todo',
         ]);
     });
 
@@ -160,24 +160,17 @@ describe('ReflectPage (redesigned, real data)', () => {
         renderPage();
         expect(screen.getByTestId('reflect-section-day-toggle')).toHaveAttribute('aria-expanded', 'false');
         expect(screen.getByTestId('reflect-section-notes-toggle')).toHaveAttribute('aria-expanded', 'true');
-        expect(sectionOrder().slice(0, 4)).toEqual(['reflect-section-status', 'reflect-section-todo', 'reflect-section-notes', 'reflect-section-day']);
+        expect(sectionOrder().slice(0, 4)).toEqual(['reflect-section-status', 'reflect-section-calendar', 'reflect-section-notes', 'reflect-section-day']);
     });
 
-    it('D-4 TEST build: the owner-layout label and the three versions; V1 opens all, V3 opens calendar and money one at a time', () => {
+    it('founder 2026-11-19: the test-only layout switch with its "नमुना" owner block is gone, and so are the duplicate approval and लक्ष द्या blocks (the header chips and the लक्ष द्या page hold them)', () => {
         renderPage();
-        expect(screen.getByTestId('reflect-owner-preview-label')).toHaveTextContent('मालकाचा आढावा — नमुना');
-        fireEvent.click(screen.getByTestId('reflect-layout-v1'));
-        expect(screen.getByTestId('notes-list')).toBeInTheDocument();
-        expect(screen.queryByTestId('reflect-reorder-toggle')).toBeNull(); // V1 keeps no order
-        fireEvent.click(screen.getByTestId('reflect-layout-v3'));
-        const expanded = (id: string) => screen.getByTestId(`reflect-section-${id}-toggle`).getAttribute('aria-expanded');
-        expect([expanded('notes'), expanded('calendar'), expanded('cost')]).toEqual(['true', 'false', 'false']);
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
-        fireEvent.click(screen.getByTestId('reflect-section-cost-toggle'));
-        expect([expanded('calendar'), expanded('cost')]).toEqual(['false', 'true']);
-        // "पहिली भेट": this version forgets its folds
-        fireEvent.click(screen.getByTestId('reflect-layout-first-visit'));
-        expect([expanded('calendar'), expanded('cost')]).toEqual(['false', 'false']);
+        expect(screen.queryByTestId('reflect-owner-preview-label')).toBeNull();
+        expect(screen.queryByTestId('reflect-layout-v1')).toBeNull();
+        expect(screen.queryByTestId('reflect-layout-v3')).toBeNull();
+        expect(screen.queryByTestId('reflect-approval-chip')).toBeNull();
+        expect(screen.queryByTestId('attention-strip')).toBeNull();
+        expect(document.body.textContent).not.toContain('मालकाचा आढावा');
     });
 
     it('feeds every section from the real props — the money from the server ledger, never the log\'s own total', () => {
@@ -275,10 +268,17 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
 
     it('a past day offers no "आणखी सांगा" (a recording is always today): no dead button', () => {
         renderPage();
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
         pickOct21();
         fireEvent.click(screen.getByTestId('plot-card-cane:c1'));
         expect(screen.queryByTestId('rf-day-tell')).toBeNull();
+    });
+
+    it('founder 2026-11-19: a plot day opens with one summary line that says how many times it was told (Devanagari digits)', () => {
+        renderPage();
+        fireEvent.click(screen.getByTestId('plot-card-grape:g1'));
+        const line = screen.getByTestId('rf-day-synopsis');
+        expect(line.textContent).toMatch(/[०-९]/);
+        expect(line.textContent).not.toMatch(/[0-9]/);
     });
 
     it('the money pill opens the money lens for that plot\'s day, by the plot (the ledger has no phone crop label)', () => {
@@ -292,7 +292,6 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         renderPage();
         expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('आजचा आढावा');
         expect(screen.getByTestId('activity-feed-count')).toHaveTextContent('1');
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
         pickOct21();
         expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('दिवसाचा आढावा');
         expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('बुधवार, 21 ऑक्टो');
@@ -384,7 +383,6 @@ describe('ReflectPage — lane OF (founder D-60 = 4A): any past day can be fille
 
     it('a past day reached through "कामाचं कॅलेंडर": "त्या दिवसाचं काम सांगा · <date>" asks THE ONE mic for THAT day, with no place (crop → plot first)', () => {
         const props = renderPage();
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
         pickOct21();
         const tell = screen.getByTestId('past-day-tell-cal');
         expect(tell).toHaveTextContent('त्या दिवसाचं काम सांगा');
@@ -393,19 +391,22 @@ describe('ReflectPage — lane OF (founder D-60 = 4A): any past day can be fille
         expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-21' } }));
     });
 
-    it('a past day reached through the day bar shows it there too', () => {
+    it('a past day chosen in the calendar shows its label with one way back to today, and offers its "त्या दिवसाचं काम सांगा" in the day section too', () => {
         const props = renderPage();
         openAll();
-        fireEvent.click(screen.getByTestId('day-prev'));
+        pickOct21();
+        expect(screen.getByTestId('day-label')).toHaveTextContent('21 ऑक्टो');
         fireEvent.click(screen.getByTestId('past-day-tell'));
-        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-24' } }));
+        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-21' } }));
+        fireEvent.click(screen.getByTestId('day-today'));
+        expect(screen.queryByTestId('day-today')).toBeNull();
+        expect(screen.getByTestId('day-label')).toHaveTextContent('आज');
     });
 });
 
 describe('ReflectPage — lane OF fix 1 (H1): no work can be told for a day after today', () => {
     it('a FUTURE day in "कामाचं कॅलेंडर" can be looked at, but offers no "त्या दिवसाचं काम सांगा"', () => {
         const props = renderPage();
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
         fireEvent.click(screen.getByTestId('cal-day-2026-10-27')); // two days after today (25 Oct)
         expect(screen.getByTestId('cal-day-2026-10-27')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByTestId('past-day-tell-cal')).toBeNull();

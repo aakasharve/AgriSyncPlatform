@@ -10,17 +10,22 @@
  *   शेड्यूलचे काम (a server step)          → "काम नोंदवा" (the recorder, on that plot) or "पुढे ठरवा"
  *                                            (उद्या / परवा / पुढच्या आठवड्यात — the server keeps the move).
  *
+ * Lane POSTPONE-B (founder pick B, round 5 question 4): a step shows how many times it was postponed ("१ वेळा पुढे ढकललं"); after the
+ * SECOND postpone "पुढे ठरवा" is replaced by "आता ठरवा", which opens a small sheet with "काम नोंदवा" and "शेड्यूलमध्ये बघा". The server
+ * counts and refuses a third postpone itself; this page only draws what it says. The count is shown to everyone who sees the step.
+ *
  * A button is drawn only when the page gives it somewhere to go (P5): no "पुढे ठरवा" for a person the farm has
  * not given planning to, no "झाले" on a reminder this phone's store does not hold. Opening the recorder clears
  * nothing — a step leaves only when the server matches recorded work to it, or after a confirmed move.
  * Every Marathi string is PROPOSED.
  */
 import React, { useState } from 'react';
-import { Bell, CalendarClock, Check, ClipboardCheck, Mic } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, Check, ClipboardCheck, Mic } from 'lucide-react';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import type { TodoItem, TodoWhen } from '../../reflect/overview/todoModel';
-import type { ScheduledWorkItem } from '../scheduledWork';
+import { POSTPONE_LIMIT, type ScheduledWorkItem } from '../scheduledWork';
+import { PostponeLimitError } from '../data/rescheduleStep';
 import { ReminderCardLines } from '../../plannedWork/reminders/ReminderCardLines';
 import { reminderTitleIn } from '../../plannedWork/reminders/reminderModel';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
@@ -114,6 +119,30 @@ export const STEP_MOVE_DAYS: readonly { key: string; days: number; label: string
     { key: 'next_week', days: 7, label: 'पुढच्या आठवड्यात' },
 ];
 
+/** spec: plr-d10 lane POSTPONE-B - the words of the postpone count, the "आता ठरवा" sheet and the refusal. Marathi first; the English twin is PROPOSED. */
+const POSTPONE_WORDS = {
+    mr: {
+        count: (n: number) => `${toDevanagariDigits(n)} वेळा पुढे ढकललं`,
+        decide: 'आता ठरवा',
+        sheetTitle: 'आता काय करायचं?',
+        sheetLine: 'हे काम दोनदा पुढे ढकलून झालं. आता काम नोंदवा, किंवा शेड्यूलमध्ये बघा.',
+        record: 'काम नोंदवा',
+        schedule: 'शेड्यूलमध्ये बघा',
+        close: 'बंद करा',
+        limit: 'हे काम आधीच दोनदा पुढे ढकललं आहे. आता काम नोंदवा किंवा शेड्यूलमध्ये बघा.',
+    },
+    en: {
+        count: (n: number) => (n === 1 ? 'Postponed once' : `Postponed ${n} times`),
+        decide: 'Decide now',
+        sheetTitle: 'What now?',
+        sheetLine: 'This work has been postponed twice. Record it now, or look at it in the schedule.',
+        record: 'Record the work',
+        schedule: 'See in the schedule',
+        close: 'Close',
+        limit: 'This work has already been postponed twice. Record it, or look at it in the schedule.',
+    },
+} as const;
+
 export const StepRow: React.FC<{
     step: ScheduledWorkItem;
     label: string;
@@ -122,33 +151,56 @@ export const StepRow: React.FC<{
     /** "का दिसतंय" (lane ATT-W): why this step is on the list, from the schedule's own words and the plot's own records. Omit -> no line. */
     why?: string;
     onRecord?: (step: ScheduledWorkItem) => void;
-    /** Resolves when the server confirmed the move; rejects when it did not. */
+    /** Resolves when the server confirmed the move; rejects when it did not (`PostponeLimitError` when it refused a third postpone). */
     onMove?: (step: ScheduledWorkItem, days: number) => Promise<void>;
-}> = ({ step, label, dueText, tone, why, onRecord, onMove }) => {
+    /** "शेड्यूलमध्ये बघा" (lane POSTPONE-B): the schedule tab. Omit -> the sheet draws no such button (P5). */
+    onOpenSchedule?: (step: ScheduledWorkItem) => void;
+}> = ({ step, label, dueText, tone, why, onRecord, onMove, onOpenSchedule }) => {
     const [choosing, setChoosing] = useState(false);
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState(false);
+    // The server said no to a third postpone (this phone's count was stale): the row turns to "आता ठरवा" without waiting for the next pull.
+    const [limitHit, setLimitHit] = useState(false);
+    const [deciding, setDeciding] = useState(false);
+    const words = POSTPONE_WORDS[useOptionalLanguage()?.language === 'en' ? 'en' : 'mr'];
     const id = step.plannedActivityId;
+    const postponed = step.postponeCount ?? 0;
+    const atLimit = limitHit || postponed >= POSTPONE_LIMIT;
     const move = (days: number) => {
         if (!onMove) return;
         setBusy(true);
         setFailed(false);
+        setLimitHit(false);
         onMove(step, days)
             .then(() => setChoosing(false))
-            .catch(() => setFailed(true))
+            .catch((error: unknown) => {
+                if (error instanceof PostponeLimitError) { setChoosing(false); setLimitHit(true); } else setFailed(true);
+            })
             .finally(() => setBusy(false));
     };
+    // Past the limit a postpone is never offered, whoever asks; "आता ठरवा" needs at least one place to go (P5).
+    const maySnooze = Boolean(onMove) && !atLimit;
+    const mayDecide = Boolean(onMove) && atLimit && Boolean(onRecord || onOpenSchedule);
     return (
         <Shell tone={tone} testId={`attention-step-${id}`} title={label} place={step.plotName || undefined}
             icon={<ClipboardCheck size={13} aria-hidden="true" />} kind="शेड्यूलचे काम" due={dueText}>
+            {postponed > 0 && (
+                <p className="m-0 mt-1.5">
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[14px] font-extrabold text-amber-900 ring-1 ring-amber-300"
+                        data-testid={`attention-postponed-${id}`}>
+                        {words.count(postponed)}
+                    </span>
+                </p>
+            )}
             {why && <p className="m-0 mt-1.5 text-[13.5px] font-semibold leading-snug text-stone-700" data-testid={`attention-why-${id}`}>{why}</p>}
-            {(onRecord || onMove) && (
+            {(onRecord || maySnooze || mayDecide) && (
                 <div className="mt-2 flex gap-2">
                     {onRecord && <ActionButton primary onClick={() => onRecord(step)} testId={`attention-record-${id}`}><Mic size={18} aria-hidden="true" />काम नोंदवा</ActionButton>}
-                    {onMove && <ActionButton onClick={() => setChoosing(c => !c)} disabled={busy} testId={`attention-later-${id}`}><CalendarClock size={18} aria-hidden="true" />पुढे ठरवा</ActionButton>}
+                    {maySnooze && <ActionButton onClick={() => setChoosing(c => !c)} disabled={busy} testId={`attention-later-${id}`}><CalendarClock size={18} aria-hidden="true" />पुढे ठरवा</ActionButton>}
+                    {mayDecide && <ActionButton onClick={() => setDeciding(true)} testId={`attention-decide-${id}`}><CalendarClock size={18} aria-hidden="true" />{words.decide}</ActionButton>}
                 </div>
             )}
-            {choosing && onMove && (
+            {choosing && maySnooze && (
                 <Choices options={STEP_MOVE_DAYS} disabled={busy} testId={`attention-later-choices-${id}`}
                     onPick={key => move(STEP_MOVE_DAYS.find(o => o.key === key)!.days)} />
             )}
@@ -157,6 +209,32 @@ export const StepRow: React.FC<{
                 <p className="m-0 mt-2 text-[13px] font-bold text-rose-700" role="alert" data-testid={`attention-later-failed-${id}`}>
                     आत्ता दिवस बदलता आला नाही. नेट सुरू आहे ना ते पाहून पुन्हा करा — काम इथेच राहील.
                 </p>
+            )}
+            {limitHit && (
+                <p className="m-0 mt-2 text-[14px] font-bold text-rose-700" role="alert" data-testid={`attention-later-limit-${id}`}>{words.limit}</p>
+            )}
+            {deciding && (
+                <div role="dialog" aria-modal="true" aria-label={words.sheetTitle} data-testid={`attention-decide-sheet-${id}`}
+                    className="fixed inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t-2 border-emerald-700 bg-white p-4 shadow-2xl">
+                    <p className="m-0 text-[17px] font-extrabold text-stone-900">{words.sheetTitle}</p>
+                    <p className="m-0 mt-1 text-[14px] font-semibold leading-snug text-stone-700">{words.sheetLine}</p>
+                    <div className="mt-3 flex flex-col gap-2">
+                        {onRecord && (
+                            <ActionButton primary onClick={() => { setDeciding(false); onRecord(step); }} testId={`attention-decide-record-${id}`}>
+                                <Mic size={18} aria-hidden="true" />{words.record}
+                            </ActionButton>
+                        )}
+                        {onOpenSchedule && (
+                            <ActionButton onClick={() => { setDeciding(false); onOpenSchedule(step); }} testId={`attention-decide-schedule-${id}`}>
+                                <CalendarDays size={18} aria-hidden="true" />{words.schedule}
+                            </ActionButton>
+                        )}
+                        <Tap onClick={() => setDeciding(false)} data-testid={`attention-decide-close-${id}`}
+                            className="min-h-[44px] rounded-full px-3 text-[14.5px] font-extrabold text-stone-600">
+                            {words.close}
+                        </Tap>
+                    </div>
+                </div>
             )}
         </Shell>
     );

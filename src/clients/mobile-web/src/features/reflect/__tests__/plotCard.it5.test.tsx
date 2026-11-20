@@ -212,7 +212,6 @@ describe('पूर्ण शेतीचा आढावा - the plot card (IT
     it('HintHasSpeakMic: a day other than today shows no line (a past day is told through "त्या दिवसाचं काम सांगा")', async () => {
         renderPage();
         await screen.findByTestId('plot-hint-grape:g1');
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle')); // the calendar is folded on first use
         fireEvent.click(screen.getByTestId('cal-prev'));
         fireEvent.click(screen.getByTestId('cal-day-2026-10-21'));
         expect(screen.getByTestId('plot-card-grape:g1')).toBeInTheDocument(); // the cards follow the chosen day

@@ -53,7 +53,16 @@ export interface ScheduledWorkItem {
     originalDate?: string;
     /** The schedule's own day number ("दिवस 34"). */
     scheduleDay?: number;
+    /**
+     * spec: plr-d10 lane POSTPONE-B (founder pick B) - how many times the SERVER counted this step as postponed ("पुढे ठरवा"), from its own move
+     * rows. Absent = never (an older server sends none, and a step never postponed carries none): never read as an error. A planned-activity
+     * step's override keeps no count, so it never has one.
+     */
+    postponeCount?: number;
 }
+
+/** spec: plr-d10 lane POSTPONE-B - a step is postponed at most this many times; the server refuses the next (`MoveScheduleStepHandler.MaxPostpones`). */
+export const POSTPONE_LIMIT = 2;
 
 export interface StoredScheduledWork {
     items: ScheduledWorkItem[];
@@ -132,6 +141,8 @@ export function scheduledWorkItemOf(value: unknown): ScheduledWorkItem | null {
         isMissed: v.isMissed === true,
         ...(routingOf(v) ?? {}),
         ...(whyOf(v) ?? {}),
+        // lane POSTPONE-B: a whole count above zero, or nothing (a malformed one is dropped, never guessed).
+        ...(typeof v.postponeCount === 'number' && Number.isInteger(v.postponeCount) && v.postponeCount > 0 ? { postponeCount: v.postponeCount } : {}),
     };
 }
 

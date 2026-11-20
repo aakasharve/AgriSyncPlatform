@@ -19,6 +19,12 @@ export interface PendingPlotRegistration {
     areaInAcres: number;
     cropName: string;
     startDate: string;
+    /**
+     * spec: plr-d10 lane WIZARD-F2 - the schedule the new plot follows by itself (the crop's checked one) and the day it counts from,
+     * kept with the plot so the start-up retry can still queue its adopt if the app stopped before it was queued. Absent on a plot
+     * made with no checked schedule, and on every record written before this lane.
+     */
+    schedule?: { templateId: string; referenceDate: string };
 }
 
 export const PENDING_PLOT_REGISTRATIONS_KEY = 'agrisync_pending_plot_registrations_v1';
