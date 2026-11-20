@@ -15,53 +15,27 @@ export interface TickWords {
 }
 
 export const TICK_WORDS: Readonly<Record<string, TickWords>> = {
-  company_numbers: {
-    label: 'Company numbers',
-    description: 'The company pages: sign-ups, activity, retention, quality and operations.',
-  },
-  server_health: {
-    label: 'Server health',
-    description: 'Live Health and the counts on App Versions.',
-  },
-  api_errors: {
-    label: 'API errors',
-    description: 'The list of requests that failed or ran slow.',
-  },
-  all_farms: {
-    label: 'All farms',
-    description: 'Every farm with its owner, and the farm names shown on other pages.',
-  },
-  farms_to_call: {
-    label: 'Farms that need a call',
-    description: 'Silent Churn and Suffering: the farms to phone today.',
-  },
-  farmer_health: {
-    label: 'Farmer health',
-    description: 'How each farmer is doing, farm by farm.',
-  },
-  schedules: {
-    label: 'Schedules',
-    description: 'ShramSafal’s schedule templates and the schedule check.',
-  },
-  users: {
-    label: 'Users',
-    description: 'The list of people who use the app.',
-  },
+  company_numbers: { label: 'Company numbers', description: 'The seven Company MIS pages and WVFD' },
+  server_health: { label: 'Server health', description: 'Live health and app versions' },
+  api_errors: { label: 'API errors', description: 'The list of server errors' },
+  all_farms: { label: 'All farms', description: 'The farm list' },
+  farms_to_call: { label: 'Farms that need a call', description: 'Silent churn and suffering' },
+  farmer_health: { label: 'Farmer health', description: "And each farm's own page" },
+  schedules: { label: 'Schedules', description: 'Templates and the schedule check' },
+  users: { label: 'Users', description: 'The list of app users' },
   farmer_phones: {
-    label: 'Farmers’ phone numbers',
-    description: 'See farmers’ phone numbers. Without this tick a number reads "Hidden for you".',
+    label: "Farmers' phone numbers",
+    description: "Lets them see and call farmers' numbers. Off until you tick it. Each look is recorded.",
   },
   downloads: {
     label: 'Downloads',
-    description: 'Download or print the day sheet of farms to visit.',
+    description:
+      "Download the day sheet. Every sheet carries the downloader's name and the time, and every download is written in History.",
   },
-  give_visits: {
-    label: 'Give field visits',
-    description: 'Give a farm visit to a field operator.',
-  },
+  give_visits: { label: 'Give visits to operators', description: 'Give farms to a field operator as visits.' },
   my_visits: {
-    label: 'My field visits',
-    description: 'See the visits given to you and mark each one done.',
+    label: 'My visits',
+    description: 'Only their own visits: the place, a call button, the day sheet, and Done.',
   },
 };
 
@@ -85,9 +59,17 @@ export function tickDescription(key: string): string {
 
 export const ROLE_WORDS: Readonly<Record<string, { label: string; blurb: string }>> = {
   founder: { label: 'Founder', blurb: 'Everything. Set up on the server, never in this screen.' },
-  admin: { label: 'Admin', blurb: 'The company pages, the farms and users, and the farm-visit tools.' },
-  field_operator: { label: 'Field operator', blurb: 'Their own farm visits, with the phone numbers and downloads they need.' },
-  viewer: { label: 'Viewer', blurb: 'The company numbers and server health, to read.' },
+  admin: {
+    label: 'Admin',
+    blurb:
+      "Every page, giving visits to operators, farmers' phone numbers, download lists. Runs the room. Not People and access.",
+  },
+  field_operator: {
+    label: 'Field operator',
+    blurb:
+      'Their own visits only, calling those farmers, downloading their own day sheet, marking visits done. No company numbers.',
+  },
+  viewer: { label: 'Viewer', blurb: 'Company numbers and server health. No phone numbers, no downloads.' },
 };
 
 /** The three roles a person can be given. The founder is never selectable. */

@@ -101,11 +101,11 @@ describe('My access: a team seat', () => {
     render();
     const NOTE = 'Works when field visits arrive (about 5-8 Dec)';
 
-    await screen.findByText('My field visits', undefined, { timeout: SETTLE_WAIT });
+    await screen.findByText('My visits', undefined, { timeout: SETTLE_WAIT });
     const item = (label: string) => screen.getByText(label).closest('li') as HTMLElement;
-    expect(within(item('My field visits')).getByText(NOTE)).toBeInTheDocument();
+    expect(within(item('My visits')).getByText(NOTE)).toBeInTheDocument();
     expect(within(item('Downloads')).getByText(NOTE)).toBeInTheDocument();
-    expect(within(item('Farmers’ phone numbers')).queryByText(NOTE)).not.toBeInTheDocument();
+    expect(within(item("Farmers' phone numbers")).queryByText(NOTE)).not.toBeInTheDocument();
   });
 
   it('says so, and does not invent a part, when no tick is held', async () => {

@@ -91,7 +91,7 @@ export default function HistoryPage() {
         <>
           {q.data.hitLimit && (
             <p role="status" className="rounded-chip bg-tint-amber px-4 py-2 text-body text-text-1">
-              Showing the newest {fmt.num(q.data.lines.length) ?? q.data.lines.length}. Older lines in this period are not shown.
+              Showing the newest {fmt.num(q.data.limit) ?? q.data.limit}. Older lines in this period are not shown.
             </p>
           )}
           {q.data.lines.length === 0 ? (

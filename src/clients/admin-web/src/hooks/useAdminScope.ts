@@ -75,14 +75,9 @@ export interface UseAdminScopeResult {
   canExport: (moduleKey: string) => boolean;
 }
 
-/**
- * The server pins `controlRoom` on the answer (A3). It is read there first and, defensively, on
- * the scope object: the same fact must not be lost to where a server put it.
- */
+/** `controlRoom` is pinned at the top level of the answer (Task A3). An older server sends none: null. */
 export function readControlRoom(data: MeScopeResponse | undefined): ControlRoomScope | null {
-  if (!data) return null;
-  const own = data.controlRoom ?? (data.scope as { controlRoom?: ControlRoomScope | null } | null)?.controlRoom;
-  return own ?? null;
+  return data?.controlRoom ?? null;
 }
 
 /**

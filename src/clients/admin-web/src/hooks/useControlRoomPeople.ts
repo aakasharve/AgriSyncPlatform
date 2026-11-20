@@ -76,8 +76,9 @@ export interface ChangePersonBody {
 
 export interface HistoryAnswer {
   lines: HistoryLine[];
-  /** True when the server's read hit its limit: the page says "Showing the newest N". */
+  /** True when the server's read hit its limit: the page says "Showing the newest {limit}". */
   hitLimit: boolean;
+  limit: number;
 }
 
 const ROOT = '/shramsafal/admin/people';
@@ -159,17 +160,15 @@ export function useHistory(days: number, action: string | null) {
   });
 }
 
-/**
- * The History answer is read from either shape: a bare list of lines, or an object holding the
- * lines (as `lines` or `items`) and whether the server's read hit its limit. A5 pins the line, not
- * the wrapper, so both are accepted; anything else is a failed load, never an empty list.
- */
+/** The History answer (Task A5): `{ lines, hitLimit, limit }`. Anything else is a failed load, never an empty list. */
 export function readHistory(data: unknown): HistoryAnswer {
-  if (Array.isArray(data)) return { lines: data as HistoryLine[], hitLimit: false };
-  const obj = data as { lines?: unknown; items?: unknown; hitLimit?: unknown } | null | undefined;
-  const lines = Array.isArray(obj?.lines) ? obj.lines : Array.isArray(obj?.items) ? obj.items : null;
-  if (!lines) throw new Error('history: the answer is not in the expected shape');
-  return { lines: lines as HistoryLine[], hitLimit: obj?.hitLimit === true };
+  const obj = data as { lines?: unknown; hitLimit?: unknown; limit?: unknown } | null | undefined;
+  if (!obj || !Array.isArray(obj.lines)) throw new Error('history: the answer is not in the expected shape');
+  return {
+    lines: obj.lines as HistoryLine[],
+    hitLimit: obj.hitLimit === true,
+    limit: typeof obj.limit === 'number' ? obj.limit : obj.lines.length,
+  };
 }
 
 /** Add, change, remove and keep. Each refreshes the list and the report that counts them. */

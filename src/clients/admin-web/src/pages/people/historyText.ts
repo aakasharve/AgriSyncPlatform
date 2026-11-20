@@ -59,7 +59,7 @@ export function historyText(line: HistoryLine): string {
 
   switch (line.action) {
     case 'person_added': {
-      const parts = ticksIn(d.ticks ?? d.added);
+      const parts = ticksIn(d.ticks);
       const given = parts.length > 0 ? ` access to ${listOf(parts)}` : ' access';
       return `${actor} gave ${subject}${given}`;
     }
@@ -81,10 +81,9 @@ export function historyText(line: HistoryLine): string {
     case 'seat_bound':
       return `${subject}'s approved number was linked to their account.`;
     case 'door_refused': {
-      const asked = (d.step ?? '').toLowerCase().includes('check')
-        ? `tried a code`
-        : `asked for a code`;
-      const sms = (d.step ?? '').toLowerCase().includes('check') ? '' : ' No SMS sent.';
+      const checking = d.step === 'check';
+      const asked = checking ? 'tried a code' : 'asked for a code';
+      const sms = checking ? '' : ' No SMS sent.';
       return `A number ending ${d.phoneTail ?? '----'} ${asked}. Not approved.${sms}${refusedReason(d.reason)}`;
     }
     case 'code_not_sent':
@@ -92,7 +91,9 @@ export function historyText(line: HistoryLine): string {
     case 'signed_in':
       return `${actor} signed in.`;
     case 'phones_shown':
-      return `${actor} looked at farmers' phone numbers.`;
+      return d.farms
+        ? `${actor} looked at farmers' phone numbers for: ${d.farms}`
+        : `${actor} looked at farmers' phone numbers.`;
     case 'visits_given':
       return `${actor} gave field visits${line.subjectName ? ` to ${line.subjectName}` : ''}.`;
     case 'visit_done':

@@ -107,7 +107,7 @@ interface Served {
   onWrite?: (req: CapturedRequest) => { status: number; data: unknown } | undefined;
 }
 
-function serve({ people = peopleAnswer(), trust = report(), history = [], onWrite }: Served = {}) {
+function serve({ people = peopleAnswer(), trust = report(), history = { lines: [], hitLimit: false, limit: 500 }, onWrite }: Served = {}) {
   stub = installAdapter(async (req) => {
     const url = req.url;
     if (req.method !== 'get') {
@@ -347,15 +347,19 @@ function Where() {
 describe('People and access: the weekly trust report', () => {
   it('The_trust_report_numbers_open_their_history_lines', async () => {
     const s = serve({
-      history: [
-        {
-          atUtc: '2026-11-19T05:00:00Z',
-          action: 'phones_shown',
-          actorName: 'Example: Field Person',
-          subjectName: null,
-          details: {},
-        },
-      ],
+      history: {
+        lines: [
+          {
+            atUtc: '2026-11-19T05:00:00Z',
+            action: 'phones_shown',
+            actorName: 'Example: Field Person',
+            subjectName: null,
+            details: { farmCount: '2', farms: 'Example Farm A, Example Farm B' },
+          },
+        ],
+        hitLimit: false,
+        limit: 500,
+      },
     });
     renderWithProviders(
       <>
@@ -377,7 +381,13 @@ describe('People and access: the weekly trust report', () => {
       () => expect(s.requests.some((r) => r.url.includes('/people/history?days=7&action=phones_shown'))).toBe(true),
       WAIT,
     );
-    expect(await screen.findByText("Example: Field Person looked at farmers' phone numbers.", undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText("Example: Field Person looked at farmers' phone numbers for: Example Farm A, Example Farm B", undefined, WAIT)).toBeInTheDocument();
+  });
+
+  it('says "Showing the newest {limit}" only when the read hit its limit', async () => {
+    serve({ history: { lines: [], hitLimit: true, limit: 500 } });
+    renderWithProviders(<HistoryPage />, { route: '/people/history' });
+    expect(await screen.findByText(/Showing the newest 500\./, undefined, WAIT)).toBeInTheDocument();
   });
 
   it('turned-away tries open the door_refused lines', async () => {

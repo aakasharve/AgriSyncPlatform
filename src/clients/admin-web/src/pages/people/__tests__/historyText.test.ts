@@ -31,6 +31,12 @@ describe('historyText: one sentence per action', () => {
     ).toBe('Akash gave Example: field team access to Farms that need a call and Farmer health');
   });
 
+  it('person_added reads only `ticks`, never `added`', () => {
+    expect(historyText(line('person_added', { subjectName: 'Example: A', details: { added: 'users' } }))).toBe(
+      'Akash gave Example: A access',
+    );
+  });
+
   it('person_added with three parts reads as a list, and with none still reads', () => {
     expect(
       historyText(line('person_added', { subjectName: 'Example: A', details: { ticks: 'company_numbers, server_health, users' } })),
@@ -70,19 +76,19 @@ describe('historyText: one sentence per action', () => {
 
   it('door_refused at the send step: a number turned away, no SMS sent', () => {
     expect(
-      historyText(line('door_refused', { actorName: 'The door', details: { step: 'send-code', phoneTail: '4321', reason: 'not_listed' } })),
+      historyText(line('door_refused', { actorName: 'The door', details: { step: 'send', phoneTail: '4321', reason: 'not_listed' } })),
     ).toBe('A number ending 4321 asked for a code. Not approved. No SMS sent.');
   });
 
   it('door_refused at the check step', () => {
     expect(
-      historyText(line('door_refused', { details: { step: 'check-code', phoneTail: '4321', reason: 'not_listed' } })),
+      historyText(line('door_refused', { details: { step: 'check', phoneTail: '4321', reason: 'not_listed' } })),
     ).toBe('A number ending 4321 tried a code. Not approved.');
   });
 
   it('door_refused after the number moved to another account says so, with no more of the number', () => {
     const text = historyText(
-      line('door_refused', { details: { step: 'check-code', phoneTail: '4321', reason: 'account_changed' } }),
+      line('door_refused', { details: { step: 'check', phoneTail: '4321', reason: 'account_changed' } }),
     );
     expect(text).toBe('A number ending 4321 tried a code. Not approved. The number now belongs to a different account.');
     expect(text).not.toMatch(/\d{5,}/);
@@ -109,9 +115,14 @@ describe('historyText: one sentence per action', () => {
 
   it('signed_in, phones_shown, visits and day sheets', () => {
     expect(historyText(line('signed_in', { actorName: 'Example: A' }))).toBe('Example: A signed in.');
-    expect(historyText(line('phones_shown', { actorName: 'Example: A' }))).toBe(
-      "Example: A looked at farmers' phone numbers.",
-    );
+    expect(
+      historyText(
+        line('phones_shown', {
+          actorName: 'Example: A',
+          details: { farmCount: '12', farms: 'Farm 1, Farm 2 and 10 more' },
+        }),
+      ),
+    ).toBe("Example: A looked at farmers' phone numbers for: Farm 1, Farm 2 and 10 more");
     expect(historyText(line('visits_given', { actorName: 'Example: A', subjectName: 'Example: B' }))).toBe(
       'Example: A gave field visits to Example: B.',
     );
