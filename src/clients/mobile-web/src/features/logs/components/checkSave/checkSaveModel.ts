@@ -66,7 +66,7 @@ export function placeLabel(scope: LogScope | null | undefined, crops: readonly C
     if (scope.selectedCropIds.includes(FARM_GLOBAL)) return wholeFarm;
     const parts = crops.filter(c => scope.selectedCropIds.includes(c.id)).map(c => {
         const plots = (c.plots ?? []).filter(p => scope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
-        return placeWords(c.name, plots, language); // a plot named after its crop is said alone (fix 1, item 10)
+        return placeWords(c.name, plots, language, (c.plots ?? []).length); // a plot named after its crop is said alone (fix 1, item 10); from 4 plots a count (founder 2026-11-21)
     });
     return parts.join(' + ');
 }

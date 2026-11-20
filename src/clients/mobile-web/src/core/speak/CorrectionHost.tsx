@@ -69,7 +69,7 @@ const entryPlaceLabel = (log: DailyLog, crops: AppRouterContext['crops'], langua
     if (!sel || sel.cropId === FARM_GLOBAL) return wholeFarm;
     const crop = crops.find(c => c.id === sel.cropId);
     // Lane OF fix 1 (10): the shared rule — a plot named after its crop is said alone.
-    return placeWords(crop?.name ?? sel.cropName, sel.selectedPlotNames ?? [], language);
+    return placeWords(crop?.name ?? sel.cropName, sel.selectedPlotNames ?? [], language, crop ? (crop.plots ?? []).length : undefined);
 };
 
 const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;

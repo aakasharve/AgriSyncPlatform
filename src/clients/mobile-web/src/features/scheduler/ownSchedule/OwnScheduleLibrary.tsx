@@ -17,6 +17,7 @@ import { Pencil } from 'lucide-react';
 import type { CropProfile, FarmerProfile } from '../../../types';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { PLOT_COUNT_FROM, plotListText } from '../../../shared/names/placeWords';
 import { scheduleCropCode } from '../../../infrastructure/reference/TemplateCatalog';
 import { usePlotScheduleChoices } from '../schedulePage/usePlotScheduleChoices';
 import { shortDateLabel } from './changeList';
@@ -78,6 +79,17 @@ export const OwnScheduleLibrary: React.FC<OwnScheduleLibraryProps> = ({ farmId, 
     const otherCodes = [...chainsByCrop.keys()].filter(code => !farmCodes.has(code));
     const chainById = useMemo(() => new Map(chains.map(c => [c.id, c] as const)), [chains]);
 
+    /** One line per own schedule a crop's plots follow, then one for the plots that follow none, each counted by the shared rule. */
+    const scheduleLines = (crop: CropProfile): { key: string | null; chain: OwnChain | undefined; text: string }[] => {
+        const groups = new Map<string | null, string[]>();
+        for (const plot of crop.plots) {
+            const own = ownOfPlot.get(plot.id);
+            const key = own && chainById.has(own.chainId) ? own.chainId : null;
+            groups.set(key, [...(groups.get(key) ?? []), plot.name]);
+        }
+        return [...groups].map(([key, names]) => ({ key, chain: key ? chainById.get(key) : undefined, text: plotListText(names, language, crop.plots.length) }));
+    };
+
     const card = (chain: OwnChain) => {
         const latest = chain.latest;
         const owner = latest.ownerUserId !== latest.madeByUserId ? nameOf(latest.ownerUserId) : null;
@@ -96,7 +108,7 @@ export const OwnScheduleLibrary: React.FC<OwnScheduleLibraryProps> = ({ farmId, 
                     ? <span className="mt-1.5 block text-[14px] font-bold text-stone-700" data-testid="own-other-owner-line">{words.cannotFollowHere}</span>
                     : (
                         <span className="mt-1.5 block text-[14px] font-bold text-stone-700" data-testid="own-followers">
-                            {plots.length > 0 ? <>{words.followedBy} {plots.join(', ')}</> : words.noFollowers}
+                            {plots.length > 0 ? <>{words.followedBy} {plotListText(plots, language)}</> : words.noFollowers}
                         </span>
                     )}
             </Tap>
@@ -141,15 +153,24 @@ export const OwnScheduleLibrary: React.FC<OwnScheduleLibraryProps> = ({ farmId, 
                 return (
                     <div key={crop.id} data-testid={`own-group-${crop.id}`} className="pt-1">
                         <div className="text-[16px] font-extrabold text-stone-900">{cropNameIn(crop.name, language, crop.masterId)}</div>
-                        {crop.plots.map(plot => {
-                            const own = ownOfPlot.get(plot.id);
-                            const chain = own ? chainById.get(own.chainId) : undefined;
-                            return (
-                                <div key={plot.id} data-testid={`own-plot-line-${plot.id}`} className="flex gap-2 text-[14.5px] font-bold text-stone-700">
-                                    {chain ? words.plotFollows(plot.name, chain.latest.name) : <><b className="font-extrabold">{plot.name}</b><span className="text-stone-500">{words.noOwnPlot}</span></>}
+                        {crop.plots.length >= PLOT_COUNT_FROM
+                            ? scheduleLines(crop).map(line => (
+                                // Founder 2026-11-21 (one count rule): a crop with 4 or more plots gets ONE line per schedule - "हंगामी शेड्यूल · १० प्लॉट" -
+                                // not one line per plot. A crop with up to 3 plots keeps its line per plot.
+                                <div key={line.key ?? 'none'} data-testid={`own-schedule-line-${line.key ?? 'none'}-${crop.id}`} className="flex flex-wrap gap-x-2 text-[14.5px] font-bold text-stone-700">
+                                    {line.chain ? <b className="font-extrabold">{line.chain.latest.name}</b> : <span className="text-stone-500">{words.noOwnPlot}</span>}
+                                    <span>· {line.text}</span>
                                 </div>
-                            );
-                        })}
+                            ))
+                            : crop.plots.map(plot => {
+                                const own = ownOfPlot.get(plot.id);
+                                const chain = own ? chainById.get(own.chainId) : undefined;
+                                return (
+                                    <div key={plot.id} data-testid={`own-plot-line-${plot.id}`} className="flex gap-2 text-[14.5px] font-bold text-stone-700">
+                                        {chain ? words.plotFollows(plot.name, chain.latest.name) : <><b className="font-extrabold">{plot.name}</b><span className="text-stone-500">{words.noOwnPlot}</span></>}
+                                    </div>
+                                );
+                            })}
                         {list.length === 0
                             ? <p className="m-0 mt-1 text-[14px] font-bold text-stone-600">{words.noneInCrop}</p>
                             : list.map(card)}

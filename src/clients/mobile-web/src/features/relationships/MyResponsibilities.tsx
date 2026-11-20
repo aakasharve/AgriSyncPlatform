@@ -20,6 +20,7 @@ import { InvitationCard } from '../invitations/InvitationCard';
 import { invitationCopy } from '../invitations/invitationCopy';
 import { cardLines, dayOf } from '../invitations/invitationModel';
 import type { InvitationCard as InvitationCardData, InvitationLabel } from '../invitations/personalInvitationClient';
+import { plotListText } from '../../shared/names/placeWords';
 import { relationshipCopy } from './relationshipCopy';
 import { labelKeyOf, relationshipCards, type RelationshipCardModel } from './relationshipModel';
 
@@ -134,7 +135,7 @@ const ActiveLines: React.FC<{
     return (
         <>
             <p className="m-0 text-[13.5px] font-semibold text-stone-700" data-testid="relationship-plots">
-                {plotScope === 'ChosenPlots' ? `${copy.cards.plotsLabel}: ${card.plotNames.join(', ')}` : plotScope === 'AllPlots' ? `${copy.cards.plotsLabel}: ${copy.allPlots}` : copy.ownWork}
+                {plotScope === 'ChosenPlots' ? `${copy.cards.plotsLabel}: ${plotListText(card.plotNames, language)}` : plotScope === 'AllPlots' ? `${copy.cards.plotsLabel}: ${copy.allPlots}` : copy.ownWork}
             </p>
             <p className="m-0 text-[13.5px] font-semibold text-stone-700" data-testid="relationship-authorities">
                 {lines.authorities.length > 0 ? lines.authorities.join(' · ') : copy.cards.noAuthorities}
