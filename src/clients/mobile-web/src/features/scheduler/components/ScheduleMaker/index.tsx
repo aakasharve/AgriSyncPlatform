@@ -20,11 +20,13 @@
  * lived only in this session's memory (`useAppData` userResources, never saved).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Check } from 'lucide-react';
 import type { CropProfile } from '../../../../types';
 import type { CropScheduleTemplate } from '../../scheduler.types';
-import { BigButton, Chip, GlassCard, SANS, SectionHead, Tap } from '../../../../shared/components/ui/placeUi';
+import { BigButton, GlassCard, SANS, SectionHead, Tap } from '../../../../shared/components/ui/placeUi';
 import CropPlotPicker from '../../../context/components/CropPlotPicker';
+import { SinglePlotSection } from '../../../context/components/PlotSelector';
+import { photoOnceFor, sortedNaturally } from '../../../context/components/plotSelectorRules';
 import { getScheduleById } from '../../planning/ClientPlanEngine';
 import { libraryTemplates } from '../ScheduleLibraryView';
 import { DAY_ZERO_LABEL, OWNER_LABEL, SC } from '../../schedulePage/scheduleCopy';
@@ -84,9 +86,13 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cropId, plotId]);
 
+    // A tap on a crop picks that crop's first plot in number order (G1 before G10, as the plot row lists them); a tap on the crop that is already
+    // chosen keeps its plot (redesign item 4).
     const pickCrop = (id: string) => {
+        if (id === cropId) return;
         setCropId(id);
-        setPlotId(crops.find(c => c.id === id)?.plots[0]?.id ?? '');
+        const first = sortedNaturally(crops.find(c => c.id === id)?.plots ?? [], p => p.name)[0];
+        setPlotId(first?.id ?? '');
     };
 
     const chosen = options.find(t => t.id === templateId);
@@ -101,12 +107,22 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
         <div className="space-y-4" style={{ fontFamily: SANS }} data-testid="schedule-editor">
             <GlassCard testId="editor-plot-card">
                 <SectionHead title={SC.edPlot} />
-                {/* Lane UI-7 (founder D-150) — the shared crop -> plot picker (tiles, then plot chips in the crop's colour); same model as before:
-                    one crop, one plot (the crop's first on a crop change), a row drawn only when there is something to choose. */}
+                {/* Lane UI-7 (founder D-150) + redesign item 4 — the shared crop row (each crop's photo once), then the chosen crop's plots in the
+                    shared plot selector (chips for 1 to 6, a number grid from 7, each number the plot's place among ALL the crop's plots). Same model as
+                    before: one crop, one plot (the crop's first on a crop change), a row drawn only when there is something to choose. With one crop
+                    there is no crop row; from 4 plots its photo stands once in a header. */}
                 {(crops.length > 1 || (crop?.plots.length ?? 0) > 1) && (
-                    <div className="mt-2">
-                        <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} onPickCrop={pickCrop} onTogglePlot={(_cropId, id) => setPlotId(id)}
-                            choiceOnly testIds={{ crop: key => `editor-crop-${key}`, plot: id => `editor-plot-${id}` }} />
+                    <div className="mt-2 space-y-2.5">
+                        {crops.length > 1 && (
+                            <CropPlotPicker crops={crops} chosen={cropId} pickedPlotIds={plotId ? [plotId] : []} hidePlots language={language}
+                                onPickCrop={pickCrop} onTogglePlot={() => undefined}
+                                testIds={{ crop: key => `editor-crop-${key}`, plot: id => `editor-plot-${id}` }} />
+                        )}
+                        {crop && crop.plots.length > 1 && (
+                            <SinglePlotSection crop={crop} plotId={plotId || null} header={crops.length === 1 && photoOnceFor(crop.plots.length)} language={language}
+                                onPickPlot={setPlotId} sectionTestId="editor-plot-section" headerTestId="editor-crop-header"
+                                testIds={{ plot: id => `editor-plot-${id}`, grid: 'editor-plot-grid' }} />
+                        )}
                     </div>
                 )}
                 <p className="m-0 mt-2 px-1 text-[17px] font-black text-stone-900" data-testid="editor-plot-name">{crop ? cropNameIn(crop.name, language, crop.masterId) : '—'} · {plot?.name ?? SC.noPlots}</p>
@@ -119,15 +135,22 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
                     <div className="mt-2 space-y-2">
                         {options.map(t => {
                             const on = t.id === templateId;
+                            // Redesign item 4: the chosen schedule is THE one chosen look - dark green, white letters (the small lines too), a white tick - in
+                            // place of the green ring and the green "निवडलं" chip. Not chosen: white with the grey ring.
                             return (
                                 <Tap key={t.id} onClick={() => setTemplateId(t.id)} aria-pressed={on} data-testid={`editor-schedule-${t.id}`}
-                                    className={`flex w-full items-start gap-3 rounded-2xl bg-white px-3 py-3 text-left ${on ? 'ring-2 ring-emerald-600' : 'ring-1 ring-stone-300'}`}>
+                                    className={`flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left ${on ? 'bg-emerald-800 text-white ring-2 ring-emerald-800' : 'bg-white ring-1 ring-stone-300'}`}>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block text-[17px] font-extrabold leading-snug text-stone-900">{scheduleNameMr(t.name)}</span>
-                                        <span className="mt-0.5 block text-[14px] font-bold text-stone-600">{SC.edMeta(t.totalDurationDays ?? null, t.stages.length)}</span>
-                                        <span className="block text-[14px] font-bold text-stone-600">{SC.madeBy}: {OWNER_LABEL[t.ownerType] ?? OWNER_LABEL.SYSTEM_DEFAULT}</span>
+                                        <span className={`block text-[17px] font-extrabold leading-snug ${on ? 'text-white' : 'text-stone-900'}`}>{scheduleNameMr(t.name)}</span>
+                                        <span className={`mt-0.5 block text-[14px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{SC.edMeta(t.totalDurationDays ?? null, t.stages.length)}</span>
+                                        <span className={`block text-[14px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{SC.madeBy}: {OWNER_LABEL[t.ownerType] ?? OWNER_LABEL.SYSTEM_DEFAULT}</span>
                                     </span>
-                                    {on && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{SC.edPicked}</Chip>}
+                                    {on && (
+                                        <span data-part="tick" className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-white text-white">
+                                            <Check size={16} strokeWidth={4} className="text-white" aria-hidden="true" />
+                                            <span className="sr-only">{SC.edPicked}</span>
+                                        </span>
+                                    )}
                                 </Tap>
                             );
                         })}
