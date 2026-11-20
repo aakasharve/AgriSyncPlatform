@@ -1,0 +1,186 @@
+// @vitest-environment jsdom
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: facts2-did-you-mean-2026-11-20 (founder 2026-11-20: "yes, add it") - a product word the library does not know EXACTLY gets the
+ * library names that sound like it, as buttons. His tap is the same "हो, हेच" answer naming that product; nothing is chosen for him
+ * (P1), what he said is kept as he said it (P7), a "नाही" is no pick, and a word with no sound-alike or an exact word shows none.
+ */
+import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+
+vi.mock('../../../../../i18n/LanguageContext', async () => {
+    const { t } = await import('../../../../../i18n/translations');
+    const lang = { current: 'mr' as 'mr' | 'en' };
+    (globalThis as unknown as { __lang: typeof lang }).__lang = lang;
+    const ctx = () => ({ language: lang.current, setLanguage: () => undefined, t: (k: string) => t(k, lang.current) });
+    return { useLanguage: ctx, useOptionalLanguage: ctx };
+});
+
+import type { DailyLog, InputIdentityAnswer } from '../../../../../domain/types/log.types';
+import { identityOf, pickedProductOf } from '../inputIdentityModel';
+import { productBoxesOf } from '../productModel';
+import ProductCard, { type ProductAnswerKit } from '../ProductCard';
+import { ProductRow } from '../ProductRows';
+
+const LOG = 'e5e5e5e5-0000-4000-8000-000000000005';
+const KARATE = 'p-lambda-cyhalothrin-5-ec';
+const setLang = (l: 'mr' | 'en') => { (globalThis as unknown as { __lang: { current: string } }).__lang.current = l; };
+
+const answer = (verdict: InputIdentityAnswer['verdict'], over: Partial<InputIdentityAnswer> = {}): InputIdentityAnswer => ({
+    assertionId: 'as-1', inputEventId: 'ev-1', mixIndex: 0, verdict, ...(verdict === 'confirmed' ? { catalogProductId: KARATE } : {}),
+    catalogVersion: 'inputs-2', assertedByUserId: 'user-1', assertedAtUtc: '2026-11-20T05:00:00.000Z', isCheck: false, ...over,
+});
+
+const logWith = (productName: string, answers: InputIdentityAnswer[] = []): DailyLog => ({
+    id: LOG, date: '2026-11-20', cropActivities: [], irrigation: [], labour: [], machinery: [],
+    context: { selection: [{ cropId: 'c1', cropName: 'Grapes', selectedPlotIds: ['p1'], selectedPlotNames: ['प्लॉट १'] }] },
+    inputs: [{ id: 'ev-1', method: 'Spray', mix: [{ id: 'm1', productName }] }],
+    inputIdentities: answers,
+}) as unknown as DailyLog;
+
+const kitFor = (log: DailyLog): ProductAnswerKit => ({
+    logById: new Map([[log.id, log]]), canCheck: false, canSeeMoney: false, nameOfUser: id => (id === 'user-1' ? 'सुनील' : 'अज्ञात'),
+    cropNamesOf: () => ['Grapes'], onAnswer: vi.fn(async () => undefined), onPhoto: vi.fn(async () => undefined),
+});
+
+const show = (log: DailyLog, kit: ProductAnswerKit) => render(<ProductCard item={productBoxesOf(log)[0].items[0]} logId={log.id} kit={kit} onClose={vi.fn()} />);
+
+afterEach(() => { cleanup(); setLang('mr'); });
+
+describe('product card: did you mean (lane FACTS-2)', () => {
+    it('ASpellingTheLibraryDoesNotHold_ShowsTheNamesThatSoundLikeIt_AsButtons_AndTheQuestion', () => {
+        const log = logWith('Karatay');
+        show(log, kitFor(log));
+        expect(screen.getByTestId('vr-near-question').textContent).toBe('तुम्हाला हे म्हणायचं होतं का?');
+        const button = screen.getByTestId(`vr-near-${KARATE}`);
+        expect(button.textContent).toContain('कराटे');
+        expect(button.textContent).toContain('लॅम्बडा');
+        expect(screen.getByTestId('vr-near-hint').textContent).toContain('फोटो');
+        // He is still shown to have said what he said, the photo is still offered, and NOTHING was chosen for him.
+        expect(screen.getByTestId('vr-card-name').textContent).toBe('Karatay');
+        expect(screen.getByTestId('vr-card-photo')).toBeTruthy();
+        expect(screen.queryByTestId('vr-card-facts')).toBeNull();
+        expect(screen.queryByTestId('vr-card-picked')).toBeNull();
+    });
+
+    it('TappingOne_IsTheSameYesThisAnswer_NamingThatProduct_NothingElse', async () => {
+        const log = logWith('Karatay');
+        const kit = kitFor(log);
+        show(log, kit);
+        fireEvent.click(screen.getByTestId(`vr-near-${KARATE}`));
+        await vi.waitFor(() => expect(kit.onAnswer).toHaveBeenCalledTimes(1));
+        expect(kit.onAnswer).toHaveBeenCalledWith(expect.objectContaining({ logId: LOG, verdict: 'confirmed', catalogProductId: KARATE }));
+        expect(kit.onPhoto).not.toHaveBeenCalled();
+    });
+
+    it('AfterHisTap_TheCardIsTheProductsCard_AndSaysHeChoseIt_HisWordKept', () => {
+        const log = logWith('Karatay', [answer('confirmed')]);
+        show(log, kitFor(log));
+        expect(screen.getByTestId('vr-card-name').textContent).toBe('Karatay');
+        expect(screen.getByTestId('vr-card-picked').textContent).toBe('तुम्ही “Karatay” म्हणालात; लायब्ररीतलं “कराटे” तुम्ही निवडलं.');
+        expect(screen.getByTestId('vr-fact-ingredient').textContent).toContain('लॅम्बडा');
+        expect(screen.queryByTestId('vr-card-near')).toBeNull();
+        expect(screen.getByTestId('vr-card-speaker-said').textContent).toContain('सुनील');
+    });
+
+    it('ARejectedAnswer_IsNoPick_TheNamesAreOfferedAgain', () => {
+        const log = logWith('Karatay', [answer('rejected')]);
+        show(log, kitFor(log));
+        expect(screen.queryByTestId('vr-card-picked')).toBeNull();
+        expect(screen.getByTestId(`vr-near-${KARATE}`)).toBeTruthy();
+    });
+
+    it('APhotoAlreadyKept_NoNamesAreOffered', () => {
+        const log = logWith('Karatay', [answer('photo', { attachmentId: 'ph-1' })]);
+        show(log, kitFor(log));
+        expect(screen.queryByTestId('vr-card-near')).toBeNull();
+        expect(screen.getByTestId('vr-card-unknown')).toBeTruthy();
+    });
+
+    it('AnExactName_IsTheLibrarysOwnMatch_NoNamesNoPickNote', () => {
+        const log = logWith('Karate');
+        show(log, kitFor(log));
+        expect(screen.queryByTestId('vr-card-near')).toBeNull();
+        expect(screen.queryByTestId('vr-card-picked')).toBeNull();
+        expect(screen.getByTestId('vr-card-facts')).toBeTruthy();
+    });
+
+    it('AWordNothingSoundsLike_OffersOnlyThePhoto_NoGuess', () => {
+        const log = logWith('कोणतंतरी औषध');
+        show(log, kitFor(log));
+        expect(screen.queryByTestId('vr-card-near')).toBeNull();
+        expect(screen.getByTestId('vr-card-photo')).toBeTruthy();
+    });
+
+    it('AShortOrCommonWord_IsNeverTurnedIntoAProduct', () => {
+        for (const word of ['खत', 'पाणी', 'water']) {
+            const log = logWith(word);
+            const { unmount } = show(log, kitFor(log));
+            expect(screen.queryByTestId('vr-card-near'), word).toBeNull();
+            unmount();
+        }
+    });
+
+    it('English_ShowsEnglishWordsAndTheEnglishBrand', () => {
+        setLang('en');
+        const log = logWith('Karatay');
+        show(log, kitFor(log));
+        expect(screen.getByTestId('vr-near-question').textContent).toBe('Did you mean one of these?');
+        expect(screen.getByTestId(`vr-near-${KARATE}`).textContent).toContain('Karate');
+        expect(screen.getByTestId('vr-near-hint').textContent).toContain('photo');
+    });
+});
+
+describe('the answer model (lane FACTS-2)', () => {
+    const item = (log: DailyLog) => productBoxesOf(log)[0].items[0];
+
+    it('NotFound_BecomesFoundByPick_OnlyWithAConfirmedAnswerNamingAProduct', () => {
+        const log = logWith('Karatay');
+        expect(identityOf(item(log)).state).toBe('notFound');
+        expect(identityOf(item(log), {}).state).toBe('notFound');
+        expect(identityOf(item(log), { speaker: answer('rejected') }).state).toBe('notFound');
+        expect(identityOf(item(log), { speaker: answer('photo', { attachmentId: 'a' }) }).state).toBe('notFound');
+        const found = identityOf(item(log), { speaker: answer('confirmed') });
+        expect(found.state).toBe('found');
+        expect(found.state === 'found' && found.byPick).toBe(true);
+    });
+
+    it('AnExactMatch_WinsOverAnyPick', () => {
+        const log = logWith('Karate');
+        const found = identityOf(item(log), { speaker: answer('confirmed', { catalogProductId: 'p-imidacloprid-17-8-sl' }) });
+        expect(found.state === 'found' && found.product.id).toBe(KARATE);
+        expect(found.state === 'found' && found.byPick).toBeUndefined();
+    });
+
+    it('TheCheckIsHeardBeforeHisOwnWord_AChecksNoUnpicks', () => {
+        expect(pickedProductOf({ speaker: answer('confirmed'), check: answer('rejected', { isCheck: true }) })).toBeNull();
+        expect(pickedProductOf({ speaker: answer('rejected'), check: answer('confirmed', { isCheck: true }) })?.id).toBe(KARATE);
+    });
+
+    it('AProductIdTheLibraryDoesNotHold_IsNoPick', () => {
+        expect(pickedProductOf({ speaker: answer('confirmed', { catalogProductId: 'p-not-in-the-library' }) })).toBeNull();
+    });
+});
+
+describe('the product row (lane FACTS-2)', () => {
+    const row = (log: DailyLog) => render(<ProductRow item={productBoxesOf(log)[0].items[0]} logId={log.id} kit={kitFor(log)} onOpen={vi.fn()} />);
+
+    it('NamesExist_TheRowSaysSo_InsteadOfCouldNotIdentify', () => {
+        row(logWith('Karatay'));
+        expect(screen.getByTestId('vr-prow-status').textContent).toBe('जवळची नावं सापडली — दाबून निवडा');
+    });
+
+    it('NothingSoundsLike_TheRowKeepsItsOldWords', () => {
+        row(logWith('कोणतंतरी औषध'));
+        expect(screen.getByTestId('vr-prow-status').textContent).toBe('हे औषध ओळखता आलं नाही');
+    });
+
+    it('AfterHisTap_TheRowShowsTheIngredientAndHisAnswer', () => {
+        row(logWith('Karatay', [answer('confirmed')]));
+        expect(screen.getByTestId('vr-prow-ingredient').textContent).toContain('लॅम्बडा');
+        expect(screen.getByTestId('vr-prow-status').getAttribute('data-status')).toBe('said');
+    });
+});

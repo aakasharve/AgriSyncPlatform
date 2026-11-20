@@ -18,7 +18,8 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { amountText, nameIsPhrase, productName, type ProductBox, type ProductItem, type ProductWater } from './productModel';
 import { inputWords } from '../../../../domain/inputs/inputWords';
 import { ingredientLine, type ProductAnswerKit } from './ProductCard';
-import { answersOf, identityOf, statusOf, TYPE_STYLE, typeKeyOf, type ItemStatus } from './inputIdentityModel';
+import { answersOf, identityOf, isAnswerable, nameForMatching, statusOf, TYPE_STYLE, typeKeyOf, type ItemStatus } from './inputIdentityModel';
+import { nearProducts } from '../../../../domain/inputs/nearNames';
 import { resultCopy, type ResultCopy } from './resultCopy';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 
@@ -149,12 +150,14 @@ export interface ProductRowProps {
 export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen }) => {
     const language = useOptionalLanguage()?.language;
     const copy = resultCopy(language);
-    const identity = identityOf(item);
+    const answers = answersOf(kit.logById.get(logId), item.ref);
+    const identity = identityOf(item, answers);
     const key = typeKeyOf(identity);
     const style = TYPE_STYLE[key];
-    const answers = answersOf(kit.logById.get(logId), item.ref);
     const rawStatus = statusOf(identity, item, answers, kit.canCheck);
-    const status = statusWords(rawStatus, kit, language);
+    // Lane FACTS-2: library names that sound like his word exist - the row says so (the card shows them), instead of "could not identify".
+    const hasNear = rawStatus.kind === 'notFound' && !rawStatus.photo && isAnswerable(item) && nearProducts(nameForMatching(item)).length > 0;
+    const status = hasNear ? { text: copy.didYouMeanRow, tone: 'text-sky-800', icon: 'ask' as const } : statusWords(rawStatus, kit, language);
     const Icon = status ? STATUS_ICON[status.icon] : null;
     const name = productName(item, language) || (item.matchName ?? '');
     const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);
