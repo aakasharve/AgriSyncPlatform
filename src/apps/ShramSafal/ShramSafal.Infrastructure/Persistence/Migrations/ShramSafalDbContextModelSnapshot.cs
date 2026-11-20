@@ -3063,6 +3063,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("farm_id");
 
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("group_name");
+
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");

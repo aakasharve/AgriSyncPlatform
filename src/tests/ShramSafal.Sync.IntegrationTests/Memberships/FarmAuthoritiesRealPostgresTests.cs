@@ -603,6 +603,226 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
         output.WriteLine("[EVIDENCE] kept copies: >32 KB body kept as size+sha256+head; 206 refusals -> 200 kept + 1 cap row");
     }
 
+    // ── lane GRP-1a (owner-named groups of plots): PUT /shramsafal/farms/{farm}/plots/{plot}/group ───────────────────────
+    // Filter that selects exactly these: FullyQualifiedName~FarmAuthoritiesRealPostgresTests.Plot_group_
+
+    private static string GroupRoute(Guid farm, Guid plot) => $"/shramsafal/farms/{farm}/plots/{plot}/group";
+
+    [Fact]
+    public async Task Plot_group_the_owner_names_changes_and_clears_it_and_each_real_change_is_audited_and_pulled()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // A plot that was there before the column existed reads as "no group" in the database, in the answer and on the pull.
+        (await GroupNameInDbAsync(PlotA)).Should().BeNull();
+        (await PulledGroupAsync(OwnerA, PlotA)).Should().BeNull();
+        var before = await ModifiedAtInDbAsync(PlotA);
+
+        // Name it (the server trims): the answer is the updated plot.
+        using (var named = await SendAsync(HttpMethod.Put, GroupRoute(FarmA, PlotA), OwnerA, new { groupName = "  विहिरीजवळचे " }))
+        {
+            var text = await named.Content.ReadAsStringAsync();
+            named.StatusCode.Should().Be(HttpStatusCode.OK, text);
+            using var doc = JsonDocument.Parse(text);
+            doc.RootElement.GetProperty("id").GetGuid().Should().Be(PlotA);
+            doc.RootElement.GetProperty("farmId").GetGuid().Should().Be(FarmA);
+            doc.RootElement.GetProperty("name").GetString().Should().Be("Probe 2b Plot");
+            doc.RootElement.GetProperty("groupName").GetString().Should().Be("विहिरीजवळचे");
+        }
+
+        (await GroupNameInDbAsync(PlotA)).Should().Be("विहिरीजवळचे");
+        var afterFirst = await ModifiedAtInDbAsync(PlotA);
+        afterFirst.Should().BeAfter(before, "the change moves the plot's modified time, which is what the pull keys on");
+        (await PulledGroupAsync(OwnerA, PlotA)).Should().Be("विहिरीजवळचे", "the existing pull carries the new name to every phone");
+
+        // The same name twice is a success that changes and records nothing.
+        (await PutGroupAsync(OwnerA, "विहिरीजवळचे")).Should().Be(HttpStatusCode.OK);
+        (await ModifiedAtInDbAsync(PlotA)).Should().Be(afterFirst);
+        (await AuditCountAsync(FarmA, "GroupChanged")).Should().Be(1);
+
+        // Change it, then clear it (null).
+        (await PutGroupAsync(OwnerA, "खालचा भाग")).Should().Be(HttpStatusCode.OK);
+        using (var cleared = await SendAsync(HttpMethod.Put, GroupRoute(FarmA, PlotA), OwnerA, new { groupName = (string?)null }))
+        {
+            cleared.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var doc = JsonDocument.Parse(await cleared.Content.ReadAsStringAsync());
+            (doc.RootElement.TryGetProperty("groupName", out var g) ? g.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
+        }
+
+        (await GroupNameInDbAsync(PlotA)).Should().BeNull();
+        (await PulledGroupAsync(OwnerA, PlotA)).Should().BeNull();
+
+        // P3: each real change is one audit row - who, which plot, the old name, the new name.
+        var rows = await AuditPayloadsAsync(FarmA, "GroupChanged");
+        rows.Should().HaveCount(3);
+        string? Name(JsonElement row, string property) =>
+            row.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        rows.Select(r => (Name(r, "oldGroupName"), Name(r, "newGroupName"))).Should().Equal(
+            (null, "विहिरीजवळचे"), ("विहिरीजवळचे", "खालचा भाग"), ("खालचा भाग", null));
+        rows.Should().OnlyContain(r => r.GetProperty("plotId").GetGuid() == PlotA && r.GetProperty("farmId").GetGuid() == FarmA);
+
+        var (entityType, entityId, actor, role) = await FirstAuditRowAsync(FarmA, "GroupChanged");
+        entityType.Should().Be("Plot");
+        entityId.Should().Be(PlotA);
+        actor.Should().Be(OwnerA);
+        role.Should().Be("PrimaryOwner");
+        output.WriteLine("[EVIDENCE] plot group: named / unchanged / changed / cleared; 3 audit rows; pulled each time; modified time moved only on a change");
+    }
+
+    [Fact]
+    public async Task Plot_group_follows_edit_farm_setup_from_this_farms_seat_not_owner_only_and_never_another_farms()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // A कामगार seat and a सहमालक label with no authority hold no "edit farm setup": refused, nothing written.
+        (await PutGroupAsync(Holder, "वरचा भाग")).Should().Be(HttpStatusCode.Forbidden);
+        (await PutGroupAsync(CoOwnerBare, "वरचा भाग")).Should().Be(HttpStatusCode.Forbidden);
+        (await GroupNameInDbAsync(PlotA)).Should().BeNull();
+        (await AuditCountAsync(FarmA, "GroupChanged")).Should().Be(0);
+
+        // The owner can give the seat the authority: then the seat may name a group (so the rule is not "owner only") ...
+        await StoreOnlyAsync(Holder, FarmAuthority.EditFarmSetup, end: null);
+        (await PutGroupAsync(Holder, "वरचा भाग")).Should().Be(HttpStatusCode.OK);
+        (await GroupNameInDbAsync(PlotA)).Should().Be("वरचा भाग");
+        var row = await FirstAuditRowAsync(FarmA, "GroupChanged");
+        row.Actor.Should().Be(Holder);
+        row.Role.Should().Be("Worker");
+
+        // ... and not after it ends.
+        await StoreOnlyAsync(Holder, FarmAuthority.EditFarmSetup, end: DateTime.UtcNow.AddSeconds(-1));
+        (await PutGroupAsync(Holder, "दुसरा")).Should().Be(HttpStatusCode.Forbidden, "ended");
+        (await GroupNameInDbAsync(PlotA)).Should().Be("वरचा भाग");
+
+        // Someone on ANOTHER farm, and someone on no farm, do not see this plot at all (not found, never "forbidden": no hint that it exists).
+        (await PutGroupAsync(OwnerB, "x")).Should().Be(HttpStatusCode.NotFound);
+        (await PutGroupAsync(HolderOnB, "x")).Should().Be(HttpStatusCode.NotFound);
+        (await PutGroupAsync(GlobalOnly, "x")).Should().Be(HttpStatusCode.NotFound);
+        (await GroupNameInDbAsync(PlotA)).Should().Be("वरचा भाग");
+        (await AuditCountAsync(FarmA, "GroupChanged")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Plot_group_a_missing_plot_or_farm_is_404_a_name_over_30_characters_or_a_body_without_the_field_is_400()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // A plot that is not there, and a made-up farm id for a real plot, both answer 404.
+        using (var noPlot = await SendAsync(HttpMethod.Put, GroupRoute(FarmA, Guid.NewGuid()), OwnerA, new { groupName = "x" }))
+        {
+            noPlot.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await noPlot.Content.ReadAsStringAsync()).Should().Contain("PlotNotFound");
+        }
+
+        using (var noFarm = await SendAsync(HttpMethod.Put, GroupRoute(Guid.NewGuid(), PlotA), OwnerA, new { groupName = "x" }))
+        {
+            noFarm.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await noFarm.Content.ReadAsStringAsync()).Should().Contain("NotFound");
+        }
+
+        // The plot belongs to farm A: through farm B's route it is not found, even for farm A's own owner.
+        (await PutGroupAsync(OwnerA, "x", FarmB)).Should().Be(HttpStatusCode.NotFound);
+
+        // 30 characters is allowed, 31 is a 400 and writes nothing.
+        (await PutGroupAsync(OwnerA, new string('क', 30))).Should().Be(HttpStatusCode.OK);
+        (await GroupNameInDbAsync(PlotA)).Should().Be(new string('क', 30));
+        (await PutGroupAsync(OwnerA, new string('क', 31))).Should().Be(HttpStatusCode.BadRequest);
+        (await GroupNameInDbAsync(PlotA)).Should().Be(new string('क', 30));
+
+        // A body that forgot the field is refused - it must never be read as "clear the group".
+        using (var empty = await SendAsync(HttpMethod.Put, GroupRoute(FarmA, PlotA), OwnerA, new { }))
+        {
+            empty.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        using (var wrongField = await SendAsync(HttpMethod.Put, GroupRoute(FarmA, PlotA), OwnerA, new { name = "Renamed" }))
+        {
+            wrongField.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        (await GroupNameInDbAsync(PlotA)).Should().Be(new string('क', 30));
+        (await NameInDbAsync(PlotA)).Should().Be("Probe 2b Plot", "there is no rename: a plot's name is never touched by a group");
+    }
+
+    [Fact]
+    public async Task Plot_group_a_plot_added_the_usual_way_has_no_group_and_the_add_plot_path_is_unchanged()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var plotId = Guid.NewGuid();
+        var outcome = await PushAsync(OwnerA, "grp-plot", "create_plot",
+            new { plotId, farmId = FarmA, name = "G1", areaInAcres = 0.5m });
+        outcome.Status.Should().Be("applied", outcome.ErrorCode);
+
+        (await GroupNameInDbAsync(plotId)).Should().BeNull();
+        (await PutGroupAsync(OwnerA, "वरचा भाग", FarmA, plotId)).Should().Be(HttpStatusCode.OK);
+        (await GroupNameInDbAsync(plotId)).Should().Be("वरचा भाग");
+        (await PulledGroupAsync(OwnerA, plotId)).Should().Be("वरचा भाग");
+    }
+
+    private async Task<HttpStatusCode> PutGroupAsync(Guid who, string? name, Guid? farm = null, Guid? plot = null)
+    {
+        using var response = await SendAsync(HttpMethod.Put, GroupRoute(farm ?? FarmA, plot ?? PlotA), who, new { groupName = name });
+        return response.StatusCode;
+    }
+
+    private async Task<string?> GroupNameInDbAsync(Guid plot)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT group_name FROM ssf.plots WHERE \"Id\" = @p";
+        cmd.Parameters.AddWithValue("p", plot);
+        var value = await cmd.ExecuteScalarAsync();
+        return value is null or DBNull ? null : (string)value;
+    }
+
+    private async Task<string?> NameInDbAsync(Guid plot)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT name FROM ssf.plots WHERE \"Id\" = @p";
+        cmd.Parameters.AddWithValue("p", plot);
+        return (string?)await cmd.ExecuteScalarAsync();
+    }
+
+    private async Task<DateTime> ModifiedAtInDbAsync(Guid plot)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT modified_at_utc FROM ssf.plots WHERE \"Id\" = @p";
+        cmd.Parameters.AddWithValue("p", plot);
+        return (DateTime)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private async Task<(string EntityType, Guid EntityId, Guid Actor, string Role)> FirstAuditRowAsync(Guid farm, string action)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT entity_type, entity_id, actor_user_id, actor_role FROM ssf.audit_events WHERE farm_id = @f AND action = @a ORDER BY occurred_at_utc LIMIT 1";
+        cmd.Parameters.AddWithValue("f", farm);
+        cmd.Parameters.AddWithValue("a", action);
+        await using var r = await cmd.ExecuteReaderAsync();
+        (await r.ReadAsync()).Should().BeTrue($"an audit row for {action} exists");
+        return (r.GetString(0), r.GetGuid(1), r.GetGuid(2), r.GetString(3));
+    }
+
+    /// <summary>The group name the sync PULL hands this person for the plot (null = the plot is there with no group).</summary>
+    private async Task<string?> PulledGroupAsync(Guid who, Guid plot)
+    {
+        using var response = await SendAsync(HttpMethod.Get, "/sync/pull?since=0", who);
+        var text = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, text);
+        using var doc = JsonDocument.Parse(text);
+        var row = doc.RootElement.GetProperty("plots").EnumerateArray()
+            .Where(p => p.GetProperty("id").GetGuid() == plot)
+            .ToList();
+        row.Should().ContainSingle("the pull carries the plot");
+        return row[0].TryGetProperty("groupName", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null;
+    }
+
     // ── Harness ────────────────────────────────────────────────────────────────────────────
 
     private sealed record PushOutcome(string Status, string? ErrorCode);

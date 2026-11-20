@@ -1,9 +1,11 @@
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
+using ShramSafal.Application.UseCases.Farms.SetPlotGroup;
 using ShramSafal.Application.UseCases.Farms.GetFarmDetails;
 using ShramSafal.Application.UseCases.Farms.GetFarmWeather;
 using ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
@@ -276,6 +278,65 @@ public static class FarmEndpoints
         })
         .WithName("CreatePlot");
 
+        // spec: plr-d10 lane GRP-1a - the owner's optional group label on ONE plot ({ "groupName": "..." | null }; null or
+        // blank clears it). PUT, not PATCH: the host's CORS policy lists GET/POST/PUT/DELETE/OPTIONS only, so a browser or
+        // WebView PATCH would die in preflight; a PUT of the label is also naturally idempotent (the same name twice is a
+        // success). Same gate as add-plot (edit farm setup, from THIS farm's seat - not "owner only", the owner can
+        // delegate it). The route names a plot of a farm: the plot's farm is found under the caller's own scope first, so a
+        // missing plot, a plot of a farm he is not on, and a made-up farm id all answer 404 alike; only a member without
+        // the authority is refused with 403.
+        group.MapPut("/farms/{farmId:guid}/plots/{plotId:guid}/group", async (
+            Guid farmId,
+            Guid plotId,
+            SetPlotGroupRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            AgriSync.BuildingBlocks.Application.IHandler<SetPlotGroupCommand, ShramSafal.Application.Contracts.Dtos.PlotDto> handler,
+            ShramSafal.Application.Ports.IShramSafalRepository repository,
+            ShramSafal.Application.Ports.ICallerUserTenantScope userScope,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The plot's farm is found under the caller's OWN user scope (a plot of a farm he is not on is not found, exactly
+            // like a made-up id), then that farm's scope is opened - written out here (not through RouteFarmScope) because
+            // FarmScopedRouteTenantScopeTests requires every /farms/{farmId} route to call EstablishForCallerAsync itself.
+            var plotFarmId = await userScope.RunForCallerAsync(
+                actorUserId,
+                async token => (await repository.GetPlotByIdAsync(plotId, token)) is { } plot ? (Guid?)(Guid)plot.FarmId : null,
+                ct);
+            if (plotFarmId is not { } farmOfPlot)
+            {
+                return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.PlotNotFound);
+            }
+
+            var established = await farmScope.EstablishForCallerAsync(farmOfPlot, actorUserId, ct);
+            if (!established.IsSuccess)
+            {
+                return ToErrorResult(established.Error);
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var command = new SetPlotGroupCommand(
+                farmId,
+                plotId,
+                request.GroupName,
+                actorUserId,
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("SetPlotGroup");
+
         group.MapPost("/cropcycles", async (
             CreateCropCycleRequest request,
             HttpContext httpContext,
@@ -369,6 +430,12 @@ public sealed record UpdateFarmBoundaryRequest(
     decimal CalculatedAreaAcres);
 
 public sealed record CreatePlotRequest(Guid FarmId, string Name, decimal AreaInAcres);
+
+/// <summary>
+/// spec: plr-d10 lane GRP-1a - the group label to set; <c>null</c> (or blank) clears it. The property is REQUIRED in the JSON
+/// (a body without it is a 400): a body that merely forgot the field must never be read as "clear the group".
+/// </summary>
+public sealed record SetPlotGroupRequest([property: JsonRequired] string? GroupName);
 
 public sealed record CreateCropCycleRequest(
     Guid FarmId,

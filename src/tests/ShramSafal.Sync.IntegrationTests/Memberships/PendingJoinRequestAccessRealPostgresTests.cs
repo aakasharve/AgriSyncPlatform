@@ -610,6 +610,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
         // snapshot, not on Down(). Re-Up recreates all of it.
         "20261119105639_AddInputUseFacts",
+        // spec: plr-d10 lane GRP-1a (owner-named groups of plots, 2026-11-20) - Up() and Down() read in full: Up() adds ONE nullable column (group_name, varchar(30)) to
+        // ssf.plots and nothing else. No farm_memberships or farm_join_requests object, no ssf.farms policy, no policy of any table, no grant, no seat touched (the
+        // plots policies are per row on farm_id and a new column needs nothing). Down() is DATA-DESTROYING by design: it drops that one column, so a rollback loses every
+        // group name typed since (the plots stay); the deploy rollback plan relies on the snapshot, not on Down(). Re-Up recreates the column empty.
+        "20261120111737_AddPlotGroupName",
     ];
 
     /// <summary>

@@ -304,6 +304,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    rebuildable rows, not a ledger). It grants or revokes nothing on any append-only ledger. Down() drops the four policies, both tables and the two
         //    columns - only what Up() added. Safe to revert and re-apply mid-proof.
         "20261119105639_AddInputUseFacts",
+        // ── Reviewed 2026-11-20 (spec: plr-d10 lane GRP-1a, owner-named groups of plots); Up() and Down() read in full: Up() adds ONE NULLABLE column (group_name,
+        //    varchar(30)) to ssf.plots - current state, not a ledger - and nothing else: it grants or revokes nothing, on any table or ledger, and creates no table.
+        //    Down() is DATA-DESTROYING by design: it drops that one column (a rollback loses every group name typed since; the plots stay), and the deploy rollback
+        //    plan relies on the snapshot, not on Down(). Safe to revert and re-apply mid-proof (re-Up recreates the column empty).
+        "20261120111737_AddPlotGroupName",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

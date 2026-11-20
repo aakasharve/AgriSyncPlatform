@@ -25,6 +25,11 @@ internal sealed class PlotConfiguration : IEntityTypeConfiguration<Plot>
             .HasMaxLength(120)
             .IsRequired();
 
+        // spec: plr-d10 lane GRP-1a - the owner's optional group label; nullable, no index (a farm has a few dozen plots).
+        builder.Property(x => x.GroupName)
+            .HasColumnName("group_name")
+            .HasMaxLength(Plot.GroupNameMaxLength);
+
         builder.Property(x => x.AreaInAcres)
             .HasColumnName("area_in_acres")
             .HasPrecision(18, 2)
