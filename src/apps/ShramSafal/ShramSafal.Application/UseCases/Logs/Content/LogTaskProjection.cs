@@ -49,6 +49,13 @@ public static class LogTaskProjection
 
         foreach (var item in Items(content, "cropActivities"))
         {
+            // PLR lane AI-PARSE-FIX: an item tagged plannedOnly is a future task, not work done - no done-work line for it.
+            // The phone's buildTaskPayloads skips it the same way (parity fixture case "planned-only-crop-activity").
+            if (PlannedOnlyMarker.IsSet(item))
+            {
+                continue;
+            }
+
             // activityType: activity.workTypes?.[0] || activity.title — a VALUE, not a template.
             JsonElement? first = null;
             if (item.TryGetProperty("workTypes", out var workTypes) && workTypes.ValueKind == JsonValueKind.Array

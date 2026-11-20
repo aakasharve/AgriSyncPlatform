@@ -108,10 +108,18 @@ function uniqueItems(items: WorkDoneProjectionItem[]): WorkDoneProjectionItem[] 
     });
 }
 
+/**
+ * PLR lane AI-PARSE-FIX: an activity the server tagged `plannedOnly` is work still to be done ("खुरपणी पण करायची आहे"), not work
+ * done. It stays in the log with his words; it is just not a "work done" row. The server mirror is `PlannedOnlyMarker` (the done-work
+ * task line and the DFES lens skip it the same way).
+ */
+export const isPlannedOnly = (activity: CropActivityEvent): boolean => activity.plannedOnly === true;
+
 export function buildWorkDoneProjection(log: WorkDoneProjectionInput, L: WorkDoneLabels = ENGLISH_WORK_DONE_LABELS): WorkDoneProjectionItem[] {
     const items: WorkDoneProjectionItem[] = [];
 
     (log.cropActivities || []).forEach((activity, index) => {
+        if (isPlannedOnly(activity)) return;
         const workTypes = (activity.workTypes || []).filter(type => type && !GENERIC_WORK_TITLES.has(type));
         const title = workTypes[0] || (!GENERIC_WORK_TITLES.has(activity.title) ? activity.title : undefined);
 

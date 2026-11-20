@@ -333,6 +333,36 @@
           "notes": ""
         }
       ]
+    },
+    {
+      "name": "planned-only crop activity (lane AI-PARSE-FIX) — a future task is not a done-work line",
+      "logId": "0f1f0000-0000-4000-8000-000000000002",
+      "content": {
+        "schema": 1,
+        "capturedAtUtc": "2026-11-20T17:38:00.000Z",
+        "cropActivities": [
+          {
+            "id": "p-1",
+            "title": "घड बांधणी आणि शेंडा मारणे",
+            "workTypes": ["Trellising", "Topping"],
+            "sourceText": "आज घड बांधायचं काम झालं आणि शेंडा मारला"
+          },
+          {
+            "id": "p-2",
+            "title": "खुरपणी",
+            "workTypes": ["Weeding"],
+            "status": "pending",
+            "plannedOnly": true,
+            "sourceText": "खुरपणी पण करायची आहे"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "activityType": "Trellising",
+          "notes": null
+        }
+      ]
     }
   ]
 }
