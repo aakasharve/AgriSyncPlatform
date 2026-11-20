@@ -433,6 +433,62 @@ public sealed class ControlRoomPeopleRealPostgresTests(Xunit.Abstractions.ITestO
             ControlRoomHistoryAction.PersonChanged, Founder, subject, new { added = new[] { "farmer_phones" } }, "device-a", "iphash-a");
     }
 
+    // ── the migration's own guards ───────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task When_the_app_role_inherits_delete_through_membership_the_grant_guard_refuses()
+    {
+        await GuardAsync();
+
+        // Roles are cluster-wide: a unique name, owning only this scratch database's table, dropped in the finally.
+        var ownerRole = $"ssf_test_people_owner_{Guid.NewGuid():N}";
+        try
+        {
+            await ExecAsSuperuserAsync($"""
+                CREATE ROLE {ownerRole} NOLOGIN;
+                GRANT {ownerRole} TO {IntegrationPostgres.AppRoleUser};
+                ALTER TABLE ssf.control_room_people OWNER TO {ownerRole};
+                """);
+
+            var refusal = await FluentActions
+                .Awaiting(() => ExecAsSuperuserAsync(ShramSafal.Infrastructure.Persistence.Migrations.AddControlRoomPeople.GrantsSql))
+                .Should().ThrowAsync<PostgresException>(
+                    "a REVOKE on agrisync_app cannot remove what it inherits from the owner role, so the migration must stop");
+            refusal.Which.SqlState.Should().Be("P0001", "the refusal is the guard's own RAISE EXCEPTION");
+            refusal.Which.MessageText.Should().Contain($"ssf.control_room_people DELETE via {ownerRole}");
+            refusal.Which.MessageText.Should().Contain($"ssf.control_room_people TRUNCATE via {ownerRole}");
+        }
+        finally
+        {
+            await ExecAsSuperuserAsync($"""
+                ALTER TABLE ssf.control_room_people OWNER TO postgres;
+                DROP ROLE IF EXISTS {ownerRole};
+                """);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Down_refuses_while_a_person_row_exists_and_passes_when_the_table_is_empty()
+    {
+        await GuardAsync();
+
+        var id = G("e081");
+        await ExecAsSuperuserAsync("""
+            INSERT INTO ssf.control_room_people
+                (id, phone_e164, display_name, starting_role, is_active, added_by_user_id, added_at_utc, changed_at_utc)
+            VALUES (@id, '+919000000016', 'Example: Person', 'viewer', true, @by, NOW(), NOW());
+            """, ("id", id), ("by", Founder));
+
+        var refusal = await FluentActions
+            .Awaiting(() => ExecAsSuperuserAsync(ShramSafal.Infrastructure.Persistence.Migrations.AddControlRoomPeople.DownGuardSql))
+            .Should().ThrowAsync<PostgresException>("Down() must not destroy the founder's list");
+        refusal.Which.SqlState.Should().Be("P0001");
+        refusal.Which.MessageText.Should().Contain("control_room_people");
+
+        await ExecAsSuperuserAsync("DELETE FROM ssf.control_room_people WHERE id = @id", ("id", id));
+        await ExecAsSuperuserAsync(ShramSafal.Infrastructure.Persistence.Migrations.AddControlRoomPeople.DownGuardSql);
+    }
+
     // ── the subject of every action (K10) ────────────────────────────────────
 
     [SkippableFact]
