@@ -29,7 +29,7 @@
  * question is the design's amber card (the container's panel, `look="sathi"`).
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, MapPin, Mic, Pencil } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, MapPin, Mic, Pencil } from 'lucide-react';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { dayRel, dayShort } from '../dayPick/dayWords';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
@@ -130,10 +130,14 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const primary: RecordingView | undefined = day.current.find(r => !!r.transcript) ?? day.current[0];
     const [focus, setFocus] = useState<PartKey | null>(null);
     const [openLines, setOpenLines] = useState<ReadonlySet<string>>(() => new Set());
-    const [wordsOpen, setWordsOpen] = useState(false);
+    // Lane RWF (founder 2026-11-20): his words are OPEN when the screen comes - no tap, no scroll. A tap on the title still hides them.
+    const [wordsOpen, setWordsOpen] = useState(true);
+    // The whole day's list is folded under the recording's own parts; opened by a tap (or by the red banner).
+    const [dayOpen, setDayOpen] = useState(false);
     const [card, setCard] = useState<{ item: ProductItem; logId: string } | null>(null);
     const [scrollTo, setScrollTo] = useState<string | null>(null);
     const latest = useRef<HTMLElement>(null);
+    const root = useRef<HTMLDivElement>(null);
     const rules = p.mixRules ?? SHIPPABLE_RULES;
     const kit = p.answerKit;
     // Lane IT4 Task 3 - the day's tank verdicts, derived on read from the records on this screen; nothing is stored.
@@ -146,8 +150,9 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     // After the banner opens a line, bring it into view below the sticky header.
     useEffect(() => {
         if (!scrollTo) return;
-        const el = latest.current?.querySelector<HTMLElement>(`[data-testid="vr-line-${scrollTo}"]`);
-        scrollBelowHeader(el);
+        // `day:key` is a line of the whole-day list, anything else a line of this recording's own list.
+        const id = scrollTo.startsWith('day:') ? `vr-day-line-${scrollTo.slice(4)}` : `vr-line-${scrollTo}`;
+        scrollBelowHeader(root.current?.querySelector<HTMLElement>(`[data-testid="${id}"]`));
         setScrollTo(null);
     }, [scrollTo]);
     const language = useOptionalLanguage()?.language;
@@ -164,13 +169,23 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const copy = resultCopy(language);
     const plotId = plotIdOf(primary);
     const lines = dayLinesOf(day, language);
+    // Lane RWF: what THIS recording added, under his words; the whole day (lines) is the folded list further down.
+    const nowLines = dayLinesOf(day, language, 'now');
     const toggleLine = (key: string) => setOpenLines(prev => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
     // Banner: one tap opens the line that holds the wrong mix and brings it into view.
     const openRed = (v: (typeof reds)[number]) => {
+        // This recording's own list when the wrong mix is its tank; otherwise the whole-day list, opened.
+        const nowKey = nowLines.find(l => l.key === `inputs:${v.hostEventId}`)?.key;
+        if (nowKey) {
+            setOpenLines(prev => new Set(prev).add(nowKey));
+            setScrollTo(nowKey);
+            return;
+        }
         const key = lineKeyOfVerdict(lines, v);
         if (!key) return;
-        setOpenLines(prev => new Set(prev).add(key));
-        setScrollTo(key);
+        setDayOpen(true);
+        setOpenLines(prev => new Set(prev).add(`day:${key}`));
+        setScrollTo(`day:${key}`);
     };
     const redHint = (() => {
         const v = reds[0];
@@ -193,7 +208,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const toWords = () => scrollBelowHeader(latest.current);
 
     return (
-        <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
+        <div ref={root} className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
             <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
             <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
@@ -215,8 +230,11 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 ))}
             </div>
 
+
+            {/* Founder 2026-11-20, after seeing option B on the test app: "the animation must be on top". The ring and its animation come FIRST, where
+                they always were; HIS WORDS are the card right under it, open, and when the animation settles the page glides down to them (onSettled). */}
             <ResultHero farmId={p.farmId} dayDate={primary.log.date} plotId={plotId} savedLogId={primary.id} recordingKey={p.recordingKey}
-                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} typed={primary.typed} />
+                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} onSettled={toWords} typed={primary.typed} />
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold">
@@ -237,20 +255,8 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     <p className="m-0 mt-2 text-[14px] font-bold leading-snug text-stone-700" data-testid="vr-speaker-done">{copy.speakerDone}</p>
                 )}
 
-                {/* The day as ONE tappable line per part, nothing expanded (lane IT4 Task 1). */}
-                <div className="mt-3" data-testid="vr-day-lines">
-                    <h3 className="m-0 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{onDay ? DS.title(onDay) : RS.dayTitle}</h3>
-                    <p className="m-0 mb-1 text-[12px] text-stone-600">{RS.tapForHistory}</p>
-                    <DaySummaryLines day={day} open={openLines} onToggle={toggleLine} verdicts={verdicts} kit={kit}
-                        onOpenProduct={kit ? (item, logId) => setCard({ item, logId }) : undefined} />
-                    {day.blockersNow.length > 0 && (
-                        <div className="mt-2 space-y-1.5" data-testid="vr-blockers">
-                            {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
-                        </div>
-                    )}
-                </div>
-
-                {/* His words, folded under ONE line with his recording's play button (lane IT4 Task 1). */}
+                {/* Lane RWF (founder 2026-11-20; design v2 of 25 Oct): HIS WORDS come first and OPEN, right under the ring, with his play button. */}
+                <div className="motion-safe:animate-plr-rise" data-testid="vr-words-first">
                 <WordsFold open={wordsOpen} onToggle={() => setWordsOpen(o => !o)}
                     player={primary.typed ? <TypedNote /> : clip ? (
                         <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
@@ -268,6 +274,19 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                         </div>
                     )}
                 </WordsFold>
+                </div>
+
+                {/* Then what THIS recording added: ONE tappable line per part, nothing expanded (lane IT4 Task 1; lane RWF scope `now`). */}
+                <div className="mt-3 motion-safe:animate-plr-rise" style={{ animationDelay: '140ms' }} data-testid="vr-day-lines">
+                    <h3 className="m-0 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{onDay ? DS.title(onDay) : RS.addedTitle}</h3>
+                    <DaySummaryLines day={day} scope="now" open={openLines} onToggle={toggleLine} verdicts={verdicts} kit={kit}
+                        onOpenProduct={kit ? (item, logId) => setCard({ item, logId }) : undefined} />
+                    {day.blockersNow.length > 0 && (
+                        <div className="mt-2 space-y-1.5" data-testid="vr-blockers">
+                            {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
+                        </div>
+                    )}
+                </div>
 
                 {p.questionPanel && <div className="mt-3">{p.questionPanel}</div>}
 
@@ -280,7 +299,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     <div className="mt-3">
                         <div className="mb-1.5 text-base font-extrabold" data-testid="vr-confirm-basis">{heard ? RS.listenAndConfirm : RS.readAndConfirm}</div>
                         <button type="button" onClick={p.onConfirm} data-testid="vr-confirm"
-                            className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white">
+                            className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white motion-safe:animate-plr-cue">
                             {`✔ ${RS.confirm}`}
                         </button>
                         {p.confirmFailed && <p className="m-0 mt-1 text-[13px] font-bold text-red-700" data-testid="vr-confirm-failed">{RS.confirmFailed}</p>}
@@ -311,6 +330,26 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
             {p.extras}
 
+            {/* Lane RWF: the plot's whole day (every recording of it) is ONE folded line; the parts above are only THIS recording's. */}
+            {day.earlier.length > 0 && (
+                <section className="rounded-2xl border border-stone-200 bg-white" data-testid="vr-dayfold" data-open={dayOpen ? 'yes' : 'no'}>
+                    <button type="button" onClick={() => setDayOpen(o => !o)} aria-expanded={dayOpen} data-testid="vr-dayfold-toggle"
+                        className="flex min-h-[54px] w-full items-center justify-between gap-2 px-3 py-2 text-left">
+                        <span>
+                            <span className="block text-sm font-extrabold text-stone-800" data-testid="vr-dayfold-title">{onDay ? DS.title(onDay) : RS.dayTitle}</span>
+                            <span className="block text-[12px] text-stone-600">{RS.tapForHistory}</span>
+                        </span>
+                        <ChevronDown size={20} className={`shrink-0 text-stone-400 transition-transform ${dayOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </button>
+                    {dayOpen && (
+                        <div className="border-t border-stone-100 px-2 pb-2" data-testid="vr-dayfold-body">
+                            <DaySummaryLines day={day} scope="day" open={openLines} onToggle={toggleLine} verdicts={verdicts} kit={kit}
+                                onOpenProduct={kit ? (item, logId) => setCard({ item, logId }) : undefined} />
+                        </div>
+                    )}
+                </section>
+            )}
+
             {day.earlier.length > 0 && (
                 <div className="space-y-2" data-testid="vr-earlier">
                     <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{onDay ? DS.earlier : RS.earlierTitle}</h3>
@@ -325,7 +364,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             <div className="flex items-center gap-2 pt-1" data-testid="vr-actionbar">
                 <FlowBackButton onClick={p.onBack} testId="vr-back" />
                 <button type="button" onClick={p.onAddAnother} data-testid="vr-add-another"
-                    className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[17px] font-extrabold text-white active:scale-95">
+                    className={`flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[17px] font-extrabold text-white active:scale-95 ${p.canConfirm && !p.confirmed ? '' : 'motion-safe:animate-plr-cue'}`}>
                     <Mic size={20} aria-hidden="true" /> {RS.addAnother}
                 </button>
             </div>
