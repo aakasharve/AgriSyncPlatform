@@ -242,3 +242,20 @@ describe('nextPlotName (pure)', () => {
         expect(nextPlotName(['G14', 'G15', 'माझा बाग'])).toBe('G16');
     });
 });
+
+describe('the step counter in the header (CTO finding 2026-11-21): Marathi digits in Marathi mode', () => {
+    it('Marathi mode reads "पायरी १/३", then "पायरी २/३" - never Latin digits', () => {
+        renderWizard();
+        expect(screen.getByText(/पायरी\s*१\/३/)).toBeInTheDocument();
+        expect(screen.queryByText(/पायरी\s*1\/3/)).toBeNull();
+        toStepTwo();
+        expect(screen.getByText(/पायरी\s*२\/३/)).toBeInTheDocument();
+        expect(screen.queryByText(/पायरी\s*2\/3/)).toBeNull();
+    });
+
+    it('English mode keeps "Step 1/3" with 0-9', () => {
+        lang.current = 'en';
+        renderWizard();
+        expect(screen.getByText(/Step\s*1\/3/i)).toBeInTheDocument();
+    });
+});
