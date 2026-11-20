@@ -36,7 +36,7 @@ import AttachmentStatusBadge from '../../attachments/components/AttachmentStatus
 import { useMoneyEvidence } from '../../finance/moneyEntryState';
 import { billMoneyLines, billPaymentMode, isGivenAmount } from '../billMoney';
 import { SANS } from '../../../shared/components/ui/placeUi';
-import { cropNameIn } from '../../../shared/names/namesIn';
+import { BillCropChoice, BillPlotChoice } from './BillPlacePickers';
 
 /** Shown while a photo taken offline waits to be read (the reader's own message is English). */
 const QUEUED_OFFLINE_MR = 'बिलाचा फोटो फोनवर ठेवला आहे. इंटरनेट आल्यावर वाचला जाईल.';
@@ -513,36 +513,19 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                             cropName={chosenCropName}
                                         />
 
-                                        {/* Conditional Context Selectors */}
+                                        {/* Conditional Context Selectors - spec: plr-d10-redesign-real-integration-2026-10-25 (UI-9a, item 5):
+                                            the plot and crop drop-downs are the shared picker (the scope choice above is unchanged). */}
                                         {scope === 'PLOT' && (
-                                            <div className="mt-4 animate-in fade-in">
-                                                <label className="text-[13px] font-bold text-stone-600">कोणता प्लॉट?</label>
-                                                <select
-                                                    value={selectedPlotId}
-                                                    onChange={(e) => setSelectedPlotId(e.target.value)}
-                                                    className="w-full mt-1 p-3 bg-gray-50 rounded-lg font-bold text-gray-700 outline-none border border-gray-200 focus:border-emerald-500"
-                                                >
-                                                    <option value="">— प्लॉट निवडा —</option>
-                                                    {crops.flatMap(c => c.plots).map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                                    ))}
-                                                </select>
+                                            <div className="mt-4 space-y-2 animate-in fade-in">
+                                                <p className="m-0 text-[13px] font-bold text-stone-600">कोणता प्लॉट?</p>
+                                                <BillPlotChoice crops={crops} plotId={selectedPlotId} onPickPlot={setSelectedPlotId} />
                                             </div>
                                         )}
 
                                         {scope === 'CROP' && (
-                                            <div className="mt-4 animate-in fade-in">
-                                                <label className="text-[13px] font-bold text-stone-600">कोणतं पीक?</label>
-                                                <select
-                                                    value={selectedCropId}
-                                                    onChange={(e) => setSelectedCropId(e.target.value)}
-                                                    className="w-full mt-1 p-3 bg-gray-50 rounded-lg font-bold text-gray-700 outline-none border border-gray-200 focus:border-emerald-500"
-                                                >
-                                                    <option value="">— पीक निवडा —</option>
-                                                    {crops.map(c => (
-                                                        <option key={c.id} value={c.id}>{cropNameIn(c.name, 'mr', c.masterId)}</option>
-                                                    ))}
-                                                </select>
+                                            <div className="mt-4 space-y-2 animate-in fade-in">
+                                                <p className="m-0 text-[13px] font-bold text-stone-600">कोणतं पीक?</p>
+                                                <BillCropChoice crops={crops} cropId={selectedCropId} onPickCrop={setSelectedCropId} />
                                             </div>
                                         )}
                                     </div>

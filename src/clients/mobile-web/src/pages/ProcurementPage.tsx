@@ -31,7 +31,8 @@ import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer'
 import { billClaim, useMoneyEvidence } from '../features/finance/moneyEntryState';
 import { billMoneyLines } from '../features/procurement/billMoney';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { BigButton, Chip, ChoiceChips, GlassCard, PageBar, RowLink, SANS, SectionHead } from '../shared/components/ui/placeUi';
+import { BuyPlacePicker } from '../features/procurement/components/BillPlacePickers';
+import { BigButton, Chip, PageBar, RowLink, SANS, SectionHead } from '../shared/components/ui/placeUi';
 
 interface Props {
     crops: CropProfile[];
@@ -78,19 +79,9 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
                     खत, औषध, अवजारं, दुरुस्ती — जे विकत घेतलं ते इथे.{crops.length > 0 && ' आधी पीक निवडा, मग प्लॉट.'}
                 </p>
 
-                {crops.length > 0 && (
-                    <GlassCard testId="buy-pick">
-                        <p className="m-0 mb-2 text-[13.5px] font-extrabold text-stone-700">पीक</p>
-                        <ChoiceChips items={[[ALL, 'सर्व'] as const, ...crops.map(c => [c.id, c.name] as const)]} value={pick.cropId} onPick={pickCrop} testId="buy-crop" />
-                        {activeCrop && activeCrop.plots.length > 0 && (
-                            <>
-                                <p className="m-0 mb-2 mt-3 text-[13.5px] font-extrabold text-stone-700">प्लॉट</p>
-                                <ChoiceChips items={[[ALL, `सर्व ${activeCrop.name}`] as const, ...activeCrop.plots.map(p => [p.id, p.name] as const)]}
-                                    value={pick.plotId} onPick={setPlotPick} testId="buy-plot" />
-                            </>
-                        )}
-                    </GlassCard>
-                )}
+                {/* spec: plr-d10-redesign-real-integration-2026-10-25 (UI-9a, item 5) - the shared picker: the "सर्व पिकं" card with the crops in
+                    Marathi, then the plots (chips / number grid), "सर्व <पीक>" the first quick button, chosen = dark green, the count line. */}
+                {crops.length > 0 && <BuyPlacePicker crops={crops} pick={pick} onPickCrop={pickCrop} onPickPlot={setPlotPick} />}
 
                 {/* The totals say what they cover: the picked place, and only the bills added here. */}
                 <p className="m-0 px-1 text-[13px] font-bold text-stone-600" data-testid="buy-totals-cover">
