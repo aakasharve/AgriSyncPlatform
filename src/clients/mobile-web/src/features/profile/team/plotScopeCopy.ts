@@ -27,6 +27,8 @@ export interface PlotScopeCopy {
     pickOne: string;
     /** No plot on this phone yet. */
     noPlots: string;
+    /** Over the plots that no crop of this phone holds, when other plots are drawn under their crop (lane UI-9a, item 6). */
+    otherPlots: string;
     save: string;
     cancel: string;
     /** The overview's title for a person who covers chosen plots (it must not say "whole farm" to him). */
@@ -59,6 +61,7 @@ const mr: PlotScopeCopy = {
     sheetTitle: 'कोणते प्लॉट?', // PROPOSED (Marathi)
     pickOne: 'किमान एक प्लॉट निवडा.', // PROPOSED (Marathi)
     noPlots: 'या फोनवर अजून प्लॉट नाहीत.', // PROPOSED (Marathi)
+    otherPlots: 'इतर प्लॉट', // draft Marathi - needs review
     save: 'ठेवा', // PROPOSED (Marathi)
     cancel: 'राहू द्या', // the authority switches' word (lane 2b)
     overviewTitle: 'माझ्या प्लॉटचा आढावा', // PROPOSED (Marathi)
@@ -85,6 +88,7 @@ const en: PlotScopeCopy = {
     sheetTitle: 'Which plots?', // PROPOSED (English)
     pickOne: 'Choose at least one plot.', // PROPOSED (English)
     noPlots: 'No plots on this phone yet.', // PROPOSED (English)
+    otherPlots: 'Other plots', // draft English - needs review
     save: 'Keep', // PROPOSED (English)
     cancel: 'Not now', // the authority switches' word (lane 2b)
     overviewTitle: 'My plots overview', // PROPOSED (English)
