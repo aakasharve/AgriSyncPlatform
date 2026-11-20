@@ -61,6 +61,7 @@ export type { StandingNoteProps } from './StandingNote';
 export { NotMeasured } from './NotMeasured';
 export type { NotMeasuredProps } from './NotMeasured';
 export { Masked } from './Masked';
+export { PhoneText, HIDDEN_PHONE_TEXT } from './PhoneText';
 export type { MaskedProps } from './Masked';
 
 /* promoted from features/farmer-health — see each file's header */

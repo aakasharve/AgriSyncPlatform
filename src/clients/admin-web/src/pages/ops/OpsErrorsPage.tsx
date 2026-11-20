@@ -10,7 +10,8 @@ import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useListUrlState } from '@/lib/useListUrlState';
 import { PersonName } from '@/components/ui/PersonName';
-import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
+import { useFarmContactsState, type FarmContact } from '@/hooks/useFarmContacts';
+import { FarmNamesNeedTick } from '@/components/FarmNamesNeedTick';
 import { useOpsErrors, type OpsErrorEvent } from '@/hooks/useOpsErrors';
 
 /**
@@ -387,7 +388,7 @@ export default function OpsErrorsPage() {
     () => rows.map((r) => r.farmId).filter((id): id is string => !!id),
     [rows],
   );
-  const contacts = useFarmContacts(farmIds);
+  const { contacts, refused: farmNamesRefused } = useFarmContactsState(farmIds);
   const columns = useMemo(() => buildColumns(contacts), [contacts]);
 
   /* THE ENVELOPE SENDS `lastRefreshedUtc`. Read it through the one accessor
@@ -443,6 +444,8 @@ export default function OpsErrorsPage() {
         </div>
         <FreshnessChip source={data?.meta?.source ?? 'live'} lastRefreshed={lastRefreshed} />
       </div>
+
+      <FarmNamesNeedTick refused={farmNamesRefused} />
 
       {/* A16 — the control this param has never had. */}
       <div className="flex flex-col gap-2">

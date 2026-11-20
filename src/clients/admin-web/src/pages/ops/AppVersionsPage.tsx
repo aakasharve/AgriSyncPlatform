@@ -368,7 +368,13 @@ function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays
             )}
           </div>
 
-          {data.onOlderVersions.length === 0 ? (
+          {data.onOlderVersionsHiddenReason === 'needs_all_farms' ? (
+            /* CR-3 (AM7): the counts above stand; the names need the All farms tick. Said, never an
+               empty list: an empty list would read as "nobody is on an older version". */
+            <p data-hidden-reason="needs_all_farms" className="glass-panel rounded-panel px-5 py-4 text-body text-text-1">
+              Names are hidden: seeing who is on an older version needs the All farms tick.
+            </p>
+          ) : data.onOlderVersions.length === 0 ? (
             <MeasuredZero
               what={`No one was seen on an older version in the last ${days} days`}
               checkedAt={checkedAtWords(data)}

@@ -18,7 +18,7 @@ import { useFarmsList, type FarmSummary } from '@/hooks/useFarms';
 import { useUsersList, type UserSummary } from '@/hooks/useUsers';
 import { fmt } from '@/lib/format';
 import { ModuleKeys } from '@/lib/moduleKeys';
-import { DRILLDOWN_MODULE, DRILLDOWN_PATH, NAV } from './nav';
+import { DRILLDOWN_MODULE, DRILLDOWN_PATH, NAV, navVisible } from './nav';
 
 /**
  * THE COMMAND PALETTE — v2. Cmd-K, and it now knows about people.
@@ -238,7 +238,7 @@ function deepLink(path: string, term: string | null): string {
 
 /* ── the static half of the index, built once ──────────────────────────── */
 
-const NAV_ENTRIES: Array<Entry & { module: string | null }> = NAV.map((item) => ({
+const NAV_ENTRIES: Array<Entry & { module: string | null; founderOnly: boolean }> = NAV.map((item) => ({
   id: `nav:${item.to}`,
   group: item.group,
   Icon: item.Icon,
@@ -247,6 +247,7 @@ const NAV_ENTRIES: Array<Entry & { module: string | null }> = NAV.map((item) => 
   to: item.to,
   haystack: searchHaystack([item.label, item.group]),
   module: item.module,
+  founderOnly: item.founderOnly === true,
 }));
 
 export function CommandPalette() {
@@ -378,7 +379,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [idx, setIdx] = useState(0);
   const navigate = useNavigate();
-  const { canRead } = useAdminScope();
+  const { canRead, isPlatformAdmin } = useAdminScope();
   const dialog = useRef<HTMLDivElement>(null);
   const trapTab = useTabTrap(dialog);
 
@@ -444,7 +445,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   const entries: Entry[] = [];
 
   for (const entry of NAV_ENTRIES) {
-    if (entry.module === null || canRead(entry.module)) entries.push(entry);
+    if (navVisible(entry, { canRead, isPlatformAdmin })) entries.push(entry);
   }
 
   /**
@@ -581,7 +582,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   }
 
   const scopeParts = [
-    `${n(NAV_ENTRIES.filter((e) => e.module === null || canRead(e.module)).length)} screens`,
+    `${n(NAV_ENTRIES.filter((e) => navVisible(e, { canRead, isPlatformAdmin })).length)} screens`,
     heldLine(
       'farms',
       canReadFarms || canReadHealth,

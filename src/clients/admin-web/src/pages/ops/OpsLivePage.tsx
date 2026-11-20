@@ -16,7 +16,8 @@ import { metaRefreshedAt, type AdminResponse } from '@/lib/api';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { PersonName } from '@/components/ui/PersonName';
-import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
+import { useFarmContactsState, type FarmContact } from '@/hooks/useFarmContacts';
+import { FarmNamesNeedTick } from '@/components/FarmNamesNeedTick';
 import { useOpsHealth } from '@/hooks/useOpsHealth';
 import { isVoiceCheckForbidden, useOpsVoiceCheck } from '@/hooks/useOpsVoiceCheck';
 import {
@@ -571,7 +572,7 @@ export default function OpsLivePage() {
   const events = useMemo(() => data?.recentErrors ?? [], [data]);
   const sufferingFarms = Array.isArray(data?.topSufferingFarms) ? data.topSufferingFarms : null;
   /* ONE contacts instance for both lists: a farm in both is asked once per page load. */
-  const contacts = useFarmContacts(
+  const { contacts, refused: farmNamesRefused } = useFarmContactsState(
     useMemo(
       () => [
         ...(sufferingFarms ?? []).map((f) => f.farmId),
@@ -737,6 +738,8 @@ export default function OpsLivePage() {
           <span className="text-caption text-text-3">no server timestamp</span>
         )}
       </div>
+
+      <FarmNamesNeedTick refused={farmNamesRefused} />
 
       {feedDown && (
         <FeedDown

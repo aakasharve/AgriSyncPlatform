@@ -18,6 +18,9 @@ const server = new FakeServer().install();
 const LOGOUT = '/user/auth/logout';
 const LOGIN = '/user/auth/login';
 const VERIFY = '/user/auth/verify-otp';
+/** CR-3: the console's own door. Its check-code answer sets the refresh cookie; send-code sets none. */
+const DOOR_CHECK = '/shramsafal/admin/sign-in/check-code';
+const DOOR_SEND = '/shramsafal/admin/sign-in/send-code';
 
 const signedIn = {
   userId: PERSON,
@@ -39,6 +42,8 @@ describe('an owed sign-out and a sign-in the server accepts', () => {
     ['/user/auth/verify-otp', VERIFY, ok(signedIn)],
     ['/user/auth/verify-otp, held', VERIFY, ok(heldSignIn)],
     ['/user/auth/verify-otp, answered 201', VERIFY, status(201, signedIn)],
+    ['the door check-code (CR-3)', DOOR_CHECK, ok(signedIn)],
+    ['the door check-code, held (CR-3)', DOOR_CHECK, ok(heldSignIn)],
   ];
   for (const [what, route, answer] of accepted) {
     it(`a 2xx from ${what} removes the owed marker`, async () => {
@@ -67,7 +72,7 @@ describe('an owed sign-out and a sign-in the server accepts', () => {
     });
   }
 
-  for (const route of ['/user/auth/start-otp', '/user/auth/me']) {
+  for (const route of ['/user/auth/start-otp', '/user/auth/me', DOOR_SEND]) {
     it(`a 2xx from another sign-in route (${route}) leaves the marker alone`, async () => {
       const { api } = await loadConsole(server);
       browser.store.put(SIGN_OUT_OWED_KEY, '1');

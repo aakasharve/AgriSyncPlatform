@@ -1,4 +1,4 @@
-import { Masked, MetricLines } from '@/components/state';
+import { MetricLines, PhoneText } from '@/components/state';
 import { PersonName } from '@/components/ui/PersonName';
 
 /**
@@ -35,7 +35,7 @@ export function FarmerIdentity({
         </dd>
         <dt className="text-text-3">Phone</dt>
         <dd data-field="phone" className="tabular-nums text-text-1">
-          {hasPhone ? <Masked value={phone} /> : 'Phone not recorded'}
+          <PhoneText value={hasPhone ? phone : null} />
         </dd>
         {farmName ? (
           <>

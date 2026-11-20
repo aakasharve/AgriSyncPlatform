@@ -93,6 +93,21 @@ function server({ modules = [], dataStatus = 200, dataBody = emptyList }: Server
     }
     /* The SMS code way (plan CR-2d D14 (1)-(3)): the code is sent, then checked. Made-up
        answers in the shape User.Api sends on the web (no refresh token in the body). */
+    /* CR-3 (D-155 (4)): the console's own door. The same answers, on the door's two routes. */
+    if (req.url.includes('/shramsafal/admin/sign-in/send-code')) {
+      return { status: 200, data: { resendAfterSeconds: 30, message: 'calm' } };
+    }
+    if (req.url.includes('/shramsafal/admin/sign-in/check-code')) {
+      return {
+        status: 200,
+        data: {
+          userId: SESSION.userId,
+          accessToken: SESSION.accessToken,
+          expiresAtUtc: SESSION.expiresAtUtc,
+          createdNewUser: false,
+        },
+      };
+    }
     if (req.url.includes('/user/auth/start-otp')) {
       return {
         status: 200,
@@ -241,7 +256,7 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
  * A9 (a deep link opened while signed OUT survives the sign-in) is unchanged and pinned above.
  */
 
-describe('the three deliberately ungated routes really do open (A4, Step 4)', () => {
+describe('the deliberately ungated routes really do open (A4, Step 4; three before CR-3 K28)', () => {
   /*
    * A tidy-minded port adds a guard to these "for consistency" and locks every
    * user out of Schedules and Settings PERMANENTLY, because no ModuleKey
@@ -255,8 +270,8 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
   it.each([
     // B24 (founder, 2026-11-17): Home moved from / to /home (and is now titled Home); / redirects to the guarded /MIS/overview.
     ['/home', 'Home'],
-    ['/schedules/templates', 'Schedule Templates'],
-    ['/settings/admins', 'Admin Users'],
+    // CR-3 (D-155): "Settings" is "My access" now. /schedules/templates is no longer ungated (K28).
+    ['/settings/admins', 'My access'],
   ])('%s opens for a resolved scope with no modules at all', async (route, heading) => {
     authStore.set(SESSION);
     stub = server({ modules: [] });
@@ -266,6 +281,27 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
 
     expect(await screen.findByText(heading, { selector: 'h1, h3' }, { timeout: WAIT })).toBeInTheDocument();
     expect(at()).toBe(route);
+  });
+
+  it('Templates_is_guarded_by_the_schedules_tick: a scope without it is turned away, with it Templates opens (K28)', async () => {
+    // Before CR-3 this route was ungated and every farm organisation's seat could open it.
+    authStore.set(SESSION);
+    stub = server({ modules: readOnly(ModuleKeys.FarmsList) });
+    go('/schedules/templates');
+    const first = render(<App />);
+    expect(
+      await screen.findByRole('heading', { name: 'You do not have access to this page.' }, { timeout: WAIT }),
+    ).toBeInTheDocument();
+    expect(at()).toBe('/403');
+    first.unmount();
+    stub.restore();
+    appQueryClient().clear();
+
+    stub = server({ modules: readOnly(ModuleKeys.ScheduleReview) });
+    go('/schedules/templates');
+    render(<App />);
+    expect(await screen.findByText('Schedule Templates', { selector: 'h1, h3' }, { timeout: WAIT })).toBeInTheDocument();
+    expect(at()).toBe('/schedules/templates');
   });
 
   it('and a GUARDED route still turns that same scope away', async () => {

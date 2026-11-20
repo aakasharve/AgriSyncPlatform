@@ -15,13 +15,12 @@ const SAYS: Record<NoAccessView, { heading: string; sentence: string; wayBack: b
   },
   'one-page': {
     heading: 'You do not have access to this page.',
-    sentence:
-      "This account is on the control room's team, but this page is not open to it. Ask the owner to open it for you.",
+    sentence: 'This part is not open for you. Ask Akash if you need it.',
     wayBack: true,
   },
   'no-reason': {
     heading: 'You do not have access to this page.',
-    sentence: 'This page is not open to this account.',
+    sentence: 'This part is not open for you. Ask Akash if you need it.',
     wayBack: true,
   },
 };

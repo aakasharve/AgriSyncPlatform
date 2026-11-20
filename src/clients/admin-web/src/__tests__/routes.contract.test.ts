@@ -9,7 +9,7 @@ import App from '@/App';
 import appSource from '../App.tsx?raw';
 import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
-import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { EntitlementGuard, FounderOnly } from '@/components/EntitlementGuard';
 import { ModuleKeys } from '@/lib/moduleKeys';
 
 /**
@@ -53,10 +53,15 @@ const ROUTE_GUARDS: Record<string, string | null> = {
   '/MIS/farms': ModuleKeys.MetricsNsm,
   '/MIS/operations': ModuleKeys.MetricsNsm,
   '/MIS': null,                       // a redirect to /MIS/overview, which is guarded
-  '/schedules/templates': null,       // deliberate — no ModuleKey exists yet
+  // CR-3 K28 (D-155): Templates is ShramSafal's own review surface, so it is behind the schedules tick.
+  // Until CR-3 it was ungated and a farm organisation's seat could open it; now an FPO seat is refused.
+  '/schedules/templates': ModuleKeys.ScheduleReview,
   // CR-2d join, Task 3 Step 2: the go-live line's schedule check, on its own key (schedules.review).
   '/schedules/check': ModuleKeys.ScheduleReview,
-  '/settings/admins': null,           // deliberate — no ModuleKey exists yet
+  '/settings/admins': null,           // deliberate — no ModuleKey exists yet. CR-3: this is "My access" now.
+  // CR-3 (K29): the founder's pages. No ModuleKey and no tick: `FounderOnly` (see the test below).
+  '/people': null,
+  '/people/history': null,
 };
 
 /** Routes that sit OUTSIDE the auth + scope shell, by design. */
@@ -114,12 +119,13 @@ afterEach(() => {
 describe('route to module-key map (A3)', () => {
   // CR-2d join (plan D3, D14 (3)): 24 -> 26, the two ports (/ops/app-versions, /schedules/check).
   // The lane-by-lane union is pinned in joinRoutes.contract.test.ts.
-  it('declares exactly the twenty-six routes the console has today', () => {
+  it('declares exactly the twenty-eight routes the console has today', () => {
     const paths = declaredRoutes.map((r) => r.path);
     expect(paths.slice().sort()).toEqual(
       [...Object.keys(ROUTE_GUARDS), ...PUBLIC_ROUTES, CATCH_ALL].sort(),
     );
-    expect(paths).toHaveLength(26);
+    // CR-3 Task A7: 26 -> 28, /people and /people/history.
+    expect(paths).toHaveLength(28);
   });
 
   it('gives every guarded route its exact module key', () => {
@@ -131,10 +137,11 @@ describe('route to module-key map (A3)', () => {
     expect(actual).toEqual(ROUTE_GUARDS);
   });
 
-  it('guards eighteen routes and no more', () => {
+  it('guards nineteen routes and no more', () => {
     // B24 (founder, 2026-11-17): 17 -> 16, the /ops/voice route is removed (V1-V5 are doubles of Company MIS Quality).
     // CR-2d join (plan D3, D14 (3)): 16 -> 18, /ops/app-versions (ops.live) and /schedules/check (schedules.review).
-    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(18);
+    // CR-3 K28: 18 -> 19, /schedules/templates (schedules.review).
+    expect(declaredRoutes.filter((r) => r.guard !== null)).toHaveLength(19);
   });
 
   it('uses only module keys that exist in the ModuleKeys registry', () => {
@@ -161,8 +168,8 @@ describe('route to module-key map (A3)', () => {
   });
 });
 
-describe('the three deliberately ungated routes (A4)', () => {
-  it.each(['/', '/home', '/schedules/templates', '/settings/admins'])(
+describe('the deliberately ungated routes (A4; three before CR-3 K28 guarded Templates)', () => {
+  it.each(['/', '/home', '/settings/admins'])(
     '%s carries no EntitlementGuard, and that is the intended behaviour',
     (path) => {
       const route = declaredRoutes.find((r) => r.path === path);
@@ -170,6 +177,16 @@ describe('the three deliberately ungated routes (A4)', () => {
       expect(route?.guard).toBeNull();
     },
   );
+
+  it('wraps the two founder pages in FounderOnly, which has no module key and no tick (K29)', () => {
+    for (const path of ['/people', '/people/history']) {
+      const route = routeElements.find((r) => propsOf(r).path === path);
+      expect(route, path).toBeDefined();
+      const element = flatten(propsOf(route as ReactElement).element);
+      expect(element.some((e) => e.type === FounderOnly), `${path} is inside FounderOnly`).toBe(true);
+      expect(element.some((e) => e.type === EntitlementGuard), `${path} has no module guard`).toBe(false);
+    }
+  });
 
   it('keeps the comment explaining why Home is ungated', () => {
     // A4 preserves the REASONS, not only the absence. Comments do not survive

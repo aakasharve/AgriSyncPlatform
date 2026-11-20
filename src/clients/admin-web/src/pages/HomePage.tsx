@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { LoadingState, MetricLines, NotBuiltYet } from '@/components/state';
+import { LoadingState, MetricLines, NotBuiltYet, PhoneText } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { PersonName } from '@/components/ui/PersonName';
 import { notMeasuredWords } from '@/lib/silentFarms';
@@ -107,7 +107,11 @@ function CallList() {
                   <PersonName name={r.name ?? ''} fallback={`${r.farmId.slice(0, 8)}…`} />
                 </span>
                 <span className="text-body text-text-2">
-                  {r.ownerPhone ?? (r.phoneKnown ? 'Phone not recorded' : 'Phone not fetched')}
+                  {/* A phone the caller may not see is "Hidden for you", never "Phone not recorded" (CR-3). */}
+                  <PhoneText
+                    value={r.ownerPhone}
+                    whenNone={r.phoneKnown ? 'Phone not recorded' : 'Phone not fetched'}
+                  />
                 </span>
                 <span className="text-caption text-text-3">
                   {r.reasons.map((x) => x.label).join('; ')}

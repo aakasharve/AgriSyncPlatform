@@ -38,6 +38,12 @@ export interface AppVersions {
   versions: AppVersionRow[];
   /** Most recently seen first; the server sends at most 200. */
   onOlderVersions: OlderVersionPerson[];
+  /**
+   * CR-3 (AM7): why the names above are not sent. `needs_all_farms` means the caller has the
+   * server-health tick but not All farms, so they get the counts and no names. `null` or absent
+   * (an older server) means nothing is hidden.
+   */
+  onOlderVersionsHiddenReason?: string | null;
 }
 
 /**

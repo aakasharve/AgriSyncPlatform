@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAdminAuth } from './AdminAuthProvider';
 import { useActiveOrg } from './ActiveOrgProvider';
-import { GROUP_ORDER, NAV, type NavGroup } from './nav';
+import { GROUP_ORDER, NAV, navVisible, type NavGroup } from './nav';
 import { useNavBadges } from './navBadges';
 import { ToastHost } from './ToastHost';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
@@ -124,6 +124,9 @@ export function AdminShell() {
      which nothing sets today and which stays for the same reason it always
      has: a declared slot is harder to delete by accident than an absent one. */
   const badges = useNavBadges();
+  /* CR-3 (D-155 menu rule): only the parts this person may open are in the menu. The shell sits
+     inside RequireScope, so the scope is resolved by now; `canRead` fails closed until it is. */
+  const { canRead, isPlatformAdmin } = useAdminScope();
 
   return (
     /* 1280 is the design width and gets the full 236px sidebar; 1024-1279
@@ -207,7 +210,9 @@ export function AdminShell() {
         </div>
 
         {GROUP_ORDER.map((group) => {
-          const items = NAV.filter((n) => n.group === group);
+          const items = NAV.filter(
+            (n) => n.group === group && navVisible(n, { canRead, isPlatformAdmin }),
+          );
           if (items.length === 0) return null;
           const accent = GROUP_ACCENT[group];
           return (
