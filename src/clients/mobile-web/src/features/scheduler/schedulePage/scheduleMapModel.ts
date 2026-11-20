@@ -22,6 +22,7 @@ import { resolvePlotSchedule, type ResolvedSchedule } from './resolveSchedule';
 import type { PlotScheduleChoices } from './usePlotScheduleChoices';
 import { scheduleColour } from './scheduleColours';
 import { realCreatorName } from './ScheduleCreatorBadge';
+import { sortedNaturally } from '../../context/components/plotSelectorRules';
 
 export interface MapPlot {
     plotId: string;
@@ -116,7 +117,9 @@ export function buildScheduleMap(input: {
 
     for (const crop of crops) {
         if (crop.plots.length === 0) emptyCrops.push({ id: crop.id, name: cropName(crop) });
-        for (const plot of crop.plots) {
+        // Natural number order (G2 before G10) - the founder's rule everywhere plots are listed. The map still groups the rows by schedule (a
+        // schedule's card spans consecutive rows, so that is deliberate), but inside a group, and inside the dashed one, the plots follow the numbers.
+        for (const plot of sortedNaturally(crop.plots, p => p.name)) {
             const resolved = resolvePlotSchedule(crop, plot, todayKey, choices.get(plot.id));
             const followed = followedOf(resolved);
             const base = { plotId: plot.id, cropId: crop.id, plotName: plot.name, cropName: cropName(crop), cropRawName: crop.name, iconName: crop.iconName, masterId: crop.masterId };

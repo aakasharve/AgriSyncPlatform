@@ -23,6 +23,7 @@ import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { VarietySelector } from '../../context/components/VarietySelector';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 import PlotStartQuestion, { type PlotStartMode } from '../plotStart/PlotStartQuestion';
 import { nextPlotName, plotWizardWords } from './addPlotWords';
 import {
@@ -208,7 +209,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             </div>
                         </div>
                     </div>
-                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {step}/3</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {digitsFor(step, language)}/{digitsFor(3, language)}</span>
                 </div>
 
                 <div className="p-6 overflow-y-auto flex-1">
