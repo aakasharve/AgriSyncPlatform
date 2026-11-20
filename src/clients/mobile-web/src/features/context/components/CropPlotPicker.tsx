@@ -65,12 +65,23 @@ export const PlotCount: React.FC<{ total: number; picked?: number; language: Lan
         : <><Num>{picked}</Num> पैकी <Num>{total}</Num> {w.plot}</>;
 };
 
-/** The crop's real picture (round), or a plain leaf. Matched by the crop master id, then name, then icon (`cropImage.ts`). */
+/** The crop's real picture (a rounded square, founder 2026-11-20: never a circle), or a plain leaf. Matched by the crop master id, then name, then icon (`cropImage.ts`). */
 export const PickerCropPhoto: React.FC<{ crop: Pick<PickerCrop, 'name' | 'iconName' | 'masterId'>; px: number; className?: string }> = ({ crop, px, className = '' }) => {
     const { src, onError } = useCropPicture({ name: crop.name, iconName: crop.iconName, masterId: crop.masterId }, 480);
     return src
-        ? <img src={src} alt="" width={px} height={px} style={{ width: px, height: px }} className={`shrink-0 select-none rounded-full object-cover shadow-sm ${className}`} draggable={false} loading="lazy" onError={onError} />
-        : <span style={{ width: px, height: px }} className={`grid shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 ${className}`} aria-hidden="true"><Sprout size={Math.round(px * 0.5)} /></span>;
+        ? <img src={src} alt="" width={px} height={px} style={{ width: px, height: px }} className={`shrink-0 select-none rounded-xl object-cover shadow-sm ${className}`} draggable={false} loading="lazy" onError={onError} />
+        : <span style={{ width: px, height: px }} className={`grid shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700 ${className}`} aria-hidden="true"><Sprout size={Math.round(px * 0.5)} /></span>;
+};
+
+/**
+ * The crop's picture as wide as the card it sits in (founder 2026-11-20, option R): edge to edge, the card's own rounded top corners
+ * shape it, so no circle cuts the picture. The 960 px picture (it is shown large); the same fallbacks as `PickerCropPhoto`.
+ */
+export const CropPhotoFill: React.FC<{ crop: Pick<PickerCrop, 'name' | 'iconName' | 'masterId'>; heightPx?: number }> = ({ crop, heightPx = 176 }) => {
+    const { src, onError } = useCropPicture({ name: crop.name, iconName: crop.iconName, masterId: crop.masterId }, 960);
+    return src
+        ? <img src={src} alt="" style={{ height: heightPx }} className="block w-full select-none object-cover" draggable={false} loading="lazy" onError={onError} />
+        : <span style={{ height: heightPx }} className="grid w-full place-items-center bg-emerald-100 text-emerald-700" aria-hidden="true"><Sprout size={48} /></span>;
 };
 
 export interface CropTileProps {
@@ -89,10 +100,30 @@ export interface CropTileProps {
     wide?: boolean;
     /** Extra classes on the button (a ring that says "needs a plot", a width). */
     className?: string;
+    /**
+     * `'photo'` (founder 2026-11-20, option R): the photo goes edge to edge at the top of the card (pass a `CropPhotoFill`), under it a caption on
+     * a soft tint of the crop's colour with a thin strip of the colour on top; the tick sits on the caption line, never on the picture.
+     * Default `'round'`: the look before.
+     */
+    look?: 'round' | 'photo';
 }
 
 /** A crop (or the whole farm) as a photo tile. Chosen = green border, tick; the strip across the top is the crop's own colour. */
-export const CropTile: React.FC<CropTileProps> = ({ testId, name, on, onClick, disabled, photo, color, count, wide = false, className = '' }) => (
+export const CropTile: React.FC<CropTileProps> = ({ testId, name, on, onClick, disabled, photo, color, count, wide = false, className = '', look = 'round' }) => look === 'photo' ? (
+    <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-pressed={on} data-look="photo"
+        className={`relative flex w-full flex-col items-stretch overflow-hidden rounded-3xl border-2 text-left transition active:scale-[0.98] disabled:opacity-60 ${on ? 'border-emerald-600 shadow-[0_8px_20px_-10px_rgba(4,120,87,0.6)]' : 'border-stone-200'} bg-white ${className}`}>
+        {photo}
+        <span className="relative block w-full px-3.5 pb-3 pt-3.5">
+            <span aria-hidden="true" data-part="tint" className={`absolute inset-0 opacity-[0.14] ${cropColorOf(color)}`} />
+            <span aria-hidden="true" data-part="accent" className={`absolute inset-x-0 top-0 h-[5px] ${cropColorOf(color)}`} />
+            <span className="relative block pr-10">
+                <span className="line-clamp-1 block break-words text-[20px] font-extrabold leading-tight text-stone-900">{name}</span>
+                {count !== undefined && count !== null && <span className="mt-1 inline-block rounded-full bg-white/85 px-2.5 py-0.5 text-[13px] font-extrabold leading-snug text-stone-700">{count}</span>}
+            </span>
+        </span>
+        {on && <span className="absolute bottom-3.5 right-3.5 grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white" data-part="tick"><Check size={16} strokeWidth={3} aria-hidden="true" /></span>}
+    </button>
+) : (
     <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-pressed={on}
         className={`relative flex overflow-hidden rounded-3xl border-2 transition active:scale-[0.97] disabled:opacity-60 ${wide ? 'w-full items-center gap-2.5 px-3 py-2.5 text-left' : 'flex-col items-center px-2 pb-2.5 pt-4 text-center'} ${on ? 'border-emerald-600 bg-emerald-50 shadow-[0_8px_20px_-10px_rgba(4,120,87,0.6)]' : 'border-stone-200 bg-white'} ${className}`}>
         {color && <span aria-hidden="true" data-part="accent" className={`absolute ${wide ? 'inset-y-0 left-0 w-1.5' : 'inset-x-0 top-0 h-1.5'} ${color}`} />}

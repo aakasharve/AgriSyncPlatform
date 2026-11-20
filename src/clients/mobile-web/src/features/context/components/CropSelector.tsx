@@ -120,7 +120,7 @@ export const CropSymbol = ({ name, size = 'lg' }: { name: string, size?: 'xs' | 
                 <img
                     src={imageUrl}
                     alt={name}
-                    className={`${imgSizeClass} rounded-full object-cover select-none shadow-sm`}
+                    className={`${imgSizeClass} rounded-xl object-cover select-none shadow-sm`}
                     onError={(e) => {
                         // Fallback to emoji on error (hide image, show sibling span)
                         e.currentTarget.style.display = 'none';

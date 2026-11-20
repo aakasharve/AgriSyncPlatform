@@ -33,7 +33,7 @@ import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, useCropPicture } 
 import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
-import { CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
+import { CropPhotoFill, CropTile, PickerCropPhoto, PlotChip, PlotCount, cropColorOf } from './CropPlotPicker';
 import {
     EMPTY_SELECTION, allCropsSelected, allPlotsSelected, isGlobal, isReady, pendingCrops,
     plotsOf, selectAllPlots, selectEverything, toggleCrop, toggleGlobal, togglePlot, type Selection,
@@ -108,12 +108,12 @@ export interface CropPlotStepperProps extends StepperExtras {
     disabled?: boolean;
 }
 
-/** A round crop photo (emoji-free fallback: a sprout), sized in px. */
+/** A crop photo, a rounded square (founder 2026-11-20; emoji-free fallback: a sprout), sized in px. */
 const RoundCrop: React.FC<{ iconName: string; name: string; px: number }> = ({ iconName, name, px }) => {
     const { src, onError } = useCropPicture({ name, iconName }, 480);
     return src
-        ? <img src={src} alt={name} width={px} height={px} style={{ width: px, height: px }} className="select-none rounded-full object-cover" draggable={false} loading="lazy" onError={onError} />
-        : <span className="grid place-items-center rounded-full bg-emerald-100 text-emerald-700" style={{ width: px, height: px }}><Sprout size={Math.round(px * 0.6)} /></span>;
+        ? <img src={src} alt={name} width={px} height={px} style={{ width: px, height: px }} className="select-none rounded-xl object-cover" draggable={false} loading="lazy" onError={onError} />
+        : <span className="grid place-items-center rounded-xl bg-emerald-100 text-emerald-700" style={{ width: px, height: px }}><Sprout size={Math.round(px * 0.6)} /></span>;
 };
 
 /** A crop's photo card: its picture by the crop master (spec I18), falling back to the app's photo, then a plain mark. */
@@ -148,15 +148,16 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const renderLead = (cropNames: string[]) => (typeof lead === 'function' ? lead({ step, cropNames, global }) : lead);
 
     if (step === 'crop' && !classic) {
-        // Lane UI-7 — the shared look: a photo tile per crop (its colour strip, "N प्लॉट"), two to a row, then "संपूर्ण शेत" as one wide row.
+        // Lane UI-7 — the shared look: a photo tile per crop (its colour strip, "N प्लॉट"), then "संपूर्ण शेत" as one wide row. Founder 2026-11-20
+        // (option R): one crop per row, the photo as wide as the card, the caption on a soft tint of the crop's colour.
         // The question is the same as before (which crop, or the whole farm) and a tap does exactly what the old card did.
         return (
             <div className="px-3 pb-3 pt-2" style={{ fontFamily: SANS }} data-testid="flow-step-crop" data-crop-count={crops.length}>
                 {renderLead([])}
-                <div className="grid grid-cols-2 gap-2.5" data-testid="flow-crop-grid">
+                <div className="grid grid-cols-1 gap-3" data-testid="flow-crop-grid">
                     {crops.map(c => (
-                        <CropTile key={c.id} testId={`flow-crop-${c.id}`} name={c.name} on={false} disabled={disabled}
-                            color={cropColorOf(c.color)} photo={<PickerCropPhoto crop={c} px={64} />}
+                        <CropTile key={c.id} testId={`flow-crop-${c.id}`} name={c.name} on={false} disabled={disabled} look="photo"
+                            color={cropColorOf(c.color)} photo={<CropPhotoFill crop={c} />}
                             count={<PlotCount total={c.plots.length} language={countLanguage} />}
                             onClick={() => { emit(sel.crops.includes(c.id) ? sel : toggleCrop(sel, c)); go('plot'); }} />
                     ))}
@@ -164,7 +165,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                 {!hideEntireFarm && (
                     <div className="mt-2.5">
                         <CropTile wide testId="flow-crop-whole-farm" name={entireFarm} on={false} disabled={disabled}
-                            photo={<img src={ENTIRE_FARM_IMAGE} alt="" width={56} height={56} className="h-14 w-14 shrink-0 select-none rounded-full object-cover shadow-sm" draggable={false} />}
+                            photo={<img src={ENTIRE_FARM_IMAGE} alt="" width={56} height={56} className="h-14 w-14 shrink-0 select-none rounded-2xl object-cover shadow-sm" draggable={false} />}
                             count={<span data-testid="flow-crop-whole-farm-sub">{labels?.entireFarmShort ?? entireFarmHint}</span>}
                             onClick={() => { emit(toggleGlobal(EMPTY_SELECTION)); go('plot'); }} />
                     </div>
