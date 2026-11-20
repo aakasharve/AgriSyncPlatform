@@ -8,9 +8,9 @@
  * 30 px, under the 44 px thumb rule) in the ONE chosen look every plot and crop picker uses - dark green (emerald-800), white letters, a white tick
  * (a shape, so it reads in sunlight); not chosen: white with a grey border. The last chip, "Other", reads "अन्य" in Marathi mode and the typing box's
  * placeholder is Marathi there too (draft Marathi - needs review). The variety names themselves are the farmer's crop's own names and are shown as
- * stored; the stored value of the last chip stays "Other".
+ * stored. The last chip is a CHOICE, not a value: its box holds the farmer's own variety text (see the state below).
  */
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { getVarietiesForCrop } from '../data/varietyCatalog';
 
@@ -31,21 +31,45 @@ interface VarietySelectorProps {
 
 export const VarietySelector: React.FC<VarietySelectorProps> = ({ cropName, value, onChange, error, language }) => {
     const varieties = getVarietiesForCrop(cropName);
-    const isCustom = !varieties.includes(value) && value !== '';
     const w = VARIETY_WORDS[language === 'en' ? 'en' : 'mr'];
+    // The last chip ("Other") is its own state, not a value: a farmer whose variety is not in the list taps it, the typing box opens, and what he types
+    // is his own variety text - saved exactly as typed, never rewritten and never matched to a list entry (typing the name of a list variety does not
+    // flip the choice back to that chip or close the box). Before this, tapping "Other" set the value to '' - the chip never showed chosen and the box
+    // never appeared, so a variety outside the list could not be entered (CTO ruling 2026-11-21).
+    const [otherOpen, setOtherOpen] = useState(() => value === 'Other' || (value !== '' && !varieties.includes(value)));
+    const boxRef = useRef<HTMLInputElement>(null);
+    const justOpened = useRef(false);
+    useEffect(() => {
+        if (otherOpen && justOpened.current) {
+            justOpened.current = false;
+            boxRef.current?.focus();
+        }
+    }, [otherOpen]);
 
     return (
         <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
                 {varieties.map(v => {
-                    const on = value === v || (v === 'Other' && isCustom);
+                    const on = v === 'Other' ? otherOpen : !otherOpen && value === v;
                     return (
                         <button
                             key={v}
                             type="button"
                             data-testid={`variety-chip-${v}`}
                             aria-pressed={on}
-                            onClick={() => onChange(v === 'Other' ? '' : v)}
+                            onClick={() => {
+                                if (v === 'Other') {
+                                    if (!otherOpen) {
+                                        justOpened.current = true;
+                                        setOtherOpen(true);
+                                        // a list variety picked before is not "his own text": start the box empty; text he already typed stays.
+                                        if (varieties.includes(value)) onChange('');
+                                    }
+                                    return;
+                                }
+                                setOtherOpen(false);
+                                onChange(v);
+                            }}
                             className={`inline-flex min-h-[48px] items-center gap-1.5 rounded-xl border-2 px-4 text-[15px] font-bold transition-colors active:scale-95 ${
                                 on
                                     ? 'border-emerald-800 bg-emerald-800 text-white'
@@ -59,9 +83,11 @@ export const VarietySelector: React.FC<VarietySelectorProps> = ({ cropName, valu
                 })}
             </div>
 
-            {(value === 'Other' || isCustom) && (
+            {otherOpen && (
                 <input
+                    ref={boxRef}
                     type="text"
+                    data-testid="variety-other-input"
                     placeholder={w.typed}
                     value={value === 'Other' ? '' : value}
                     onChange={(e) => onChange(e.target.value)}
