@@ -31,7 +31,7 @@ internal static class DtoMappingExtensions
             farm.ModifiedAtUtc);
 
     public static PlotDto ToDto(this Plot plot) =>
-        new(plot.Id, plot.FarmId, plot.Name, plot.AreaInAcres, plot.CreatedAtUtc, plot.ModifiedAtUtc);
+        new(plot.Id, plot.FarmId, plot.Name, plot.AreaInAcres, plot.CreatedAtUtc, plot.ModifiedAtUtc, plot.GroupName);
 
     public static CropCycleDto ToDto(this CropCycle cropCycle) =>
         new(

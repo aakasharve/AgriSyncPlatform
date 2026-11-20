@@ -129,6 +129,7 @@ public static class DependencyInjection
         services.AddScoped<GetCoordinateWeatherHandler>();
         services.AddScoped<UpdateFarmBoundaryHandler>();
         services.AddScoped<CreatePlotHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupHandler>();
         services.AddScoped<CreateCropCycleHandler>();
 
         // AI Intelligence Plan WP-2c — confirm-time Track-B ledger derivation
@@ -730,6 +731,39 @@ public static class DependencyInjection
                     ShramSafal.Application.Contracts.Dtos.PlotDto>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand>>())));
+
+        // spec: plr-d10 lane GRP-1a (SetPlotGroup): caller-shape validation
+        // + farm-existence + edit-farm-setup authority, exactly CreatePlot's
+        // gate. Endpoint (PATCH /farms/{farmId}/plots/{plotId}) gets the
+        // canonical InvalidCommand → FarmNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand>,
+            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand>,
+            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand,
+            ShramSafal.Application.Contracts.Dtos.PlotDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand,
+                            ShramSafal.Application.Contracts.Dtos.PlotDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Farms.SetPlotGroup.SetPlotGroupCommand>>())));
 
         // T-IGH-03-PIPELINE-ROLLOUT (CreateCropCycle): caller-shape +
         // farm-existence + plot-existence-on-farm + farm-membership.

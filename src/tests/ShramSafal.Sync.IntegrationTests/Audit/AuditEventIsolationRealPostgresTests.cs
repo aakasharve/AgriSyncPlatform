@@ -1421,6 +1421,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // the records) and the two stated columns (method, carrier water), so a rollback loses those two stated fields; the deploy rollback plan relies on the
         // snapshot, not on Down(). Re-Up recreates all of it.
         "20261119105639_AddInputUseFacts",
+        // spec: plr-d10 lane GRP-1a (owner-named groups of plots, 2026-11-20) - Up() and Down() read in full: Up() adds ONE nullable column (group_name, varchar(30)) to
+        // ssf.plots and nothing else (no default, no back-fill, no index, no policy, no grant, no seat). It touches no audit_events object. Down() is DATA-DESTROYING by
+        // design: it drops that one column, so a rollback loses every group name typed since (the plots stay); the deploy rollback plan relies on the snapshot, not on
+        // Down(), as for AddInputUseFacts. Re-Up recreates the column empty.
+        "20261120111737_AddPlotGroupName",
     ];
 
     /// <summary>

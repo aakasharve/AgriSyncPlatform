@@ -235,6 +235,7 @@ PUT /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/identity
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/access
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/authorities
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/plot-scope
+PUT /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/group
 PUT /shramsafal/farms/{farmId:guid}/reminder-settings
 PUT /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
 PUT /shramsafal/pictures/institution/{rootId:guid}
