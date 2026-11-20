@@ -50,4 +50,24 @@ internal sealed class ControlRoomHistory(
             .ToList();
         return new HistoryRead(lines, lines.Count == limit);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
+        Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0) return new Dictionary<Guid, DateTime>();
+
+        var wanted = userIds.Distinct().Select(id => new AgriSync.SharedKernel.Contracts.Ids.UserId(id)).ToList();
+        await using var admin = await adminFactory.CreateAsync("ControlRoomHistory.lastSignedIn", readerUserId, ct);
+
+        var found = await admin.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.EntityType == ControlRoomHistoryAction.EntityType
+                && a.Action == ControlRoomHistoryAction.SignedIn
+                && wanted.Contains(a.ActorUserId))
+            .GroupBy(a => a.ActorUserId)
+            .Select(g => new { Actor = g.Key, At = g.Max(a => a.OccurredAtUtc) })
+            .ToListAsync(ct);
+
+        return found.ToDictionary(f => f.Actor.Value, f => f.At);
+    }
 }

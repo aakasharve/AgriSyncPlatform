@@ -215,7 +215,7 @@ public sealed class ControlRoomPeopleGateTests
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(new FixedSeatResolver(ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>())));
         services.AddSingleton<ISmsSender>(sms ?? new CountingSmsSender());
-        services.AddSingleton(new ListPeopleHandler(store, directory, history, clock));
+        services.AddSingleton(new ListPeopleHandler(store, directory, history));
         services.AddSingleton(new AddPersonHandler(store, directory, clock));
         services.AddSingleton(new ChangePersonHandler(store, clock));
         services.AddSingleton(new RemovePersonHandler(store, clock));
@@ -368,6 +368,12 @@ public sealed class ControlRoomPeopleGateTests
         {
             Written.Add(entry);
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+        {
+            Reads++;
+            return Task.FromResult<IReadOnlyDictionary<Guid, DateTime>>(new Dictionary<Guid, DateTime>());
         }
 
         public Task<HistoryRead> ReadAsync(Guid readerUserId, DateTime fromUtc, DateTime toUtc, string? action, int limit, CancellationToken ct)

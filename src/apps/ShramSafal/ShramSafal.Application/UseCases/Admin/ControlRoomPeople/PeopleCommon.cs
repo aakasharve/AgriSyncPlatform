@@ -27,13 +27,6 @@ internal static class PeopleCommon
     /// <summary>The first tick key that is not known, or null when every one is.</summary>
     public static string? FirstUnknownTick(IEnumerable<string> ticks) => ticks.FirstOrDefault(t => !ControlRoomTicks.IsKnown(t));
 
-    /// <summary>The newest <c>signed_in</c> time of each actor in the read.</summary>
-    public static Dictionary<Guid, DateTime> LastByActor(HistoryRead signIns) =>
-        signIns.Lines
-            .Where(l => l.Action == ControlRoomHistoryAction.SignedIn)
-            .GroupBy(l => l.ActorUserId)
-            .ToDictionary(g => g.Key, g => g.Max(l => l.AtUtc));
-
     public static ControlRoomHistoryEntry Entry(
         string action, Guid actorId, Guid subjectId, object payload, string deviceId, string ipHash) =>
         new(action, actorId, subjectId, payload, deviceId, ipHash);

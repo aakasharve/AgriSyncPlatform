@@ -27,9 +27,12 @@ public sealed class GetTrustReportHandler(
         var signedIn = await history.ReadAsync(readerUserId, month, to, ControlRoomHistoryAction.SignedIn, ReadLimit, ct);
         var kept = await history.ReadAsync(readerUserId, month, to, ControlRoomHistoryAction.PersonKept, ReadLimit, ct);
 
-        var lastSignedIn = PeopleCommon.LastByActor(signedIn);
+        // Who is listed as unused is decided by the 30-day read (K15); the date shown is the true last sign-in.
+        var active = await store.ListActiveAsync(ct);
+        var lastSignedIn = await history.LastSignedInAsync(
+            readerUserId, active.Where(p => p.UserId is not null).Select(p => p.UserId!.Value).ToList(), ct);
         var people = new List<TrustReportPerson>();
-        foreach (var person in await store.ListActiveAsync(ct))
+        foreach (var person in active)
         {
             string? boundName = null;
             DateTime? last = null;

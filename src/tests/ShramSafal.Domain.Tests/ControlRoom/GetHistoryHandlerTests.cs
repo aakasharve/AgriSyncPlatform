@@ -55,6 +55,9 @@ public sealed class GetHistoryHandlerTests
 
         public Task RecordNowAsync(ControlRoomHistoryEntry entry, CancellationToken ct) => throw new NotSupportedException();
 
+        public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public Task<HistoryRead> ReadAsync(Guid readerUserId, DateTime fromUtc, DateTime toUtc, string? action, int limit, CancellationToken ct)
         {
             Asked = (fromUtc, toUtc, action, limit);

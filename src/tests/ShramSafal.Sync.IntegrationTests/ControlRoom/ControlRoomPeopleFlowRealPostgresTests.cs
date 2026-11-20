@@ -76,7 +76,8 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         {
             var sp = scope.ServiceProvider;
             var result = await new AddPersonHandler(sp.GetRequiredService<IControlRoomStore>(), directory, clock)
-                .HandleAsync(new AddPersonCommand(Founder, "Example: Asha", AccountPhone, "viewer", null, device, ip));
+                .HandleAsync(new AddPersonCommand(
+                    Founder, "Example: Asha", AccountPhone, "viewer", [ControlRoomTicks.CompanyNumbers, ControlRoomTicks.ServerHealth], device, ip));
             result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Code : string.Empty);
             added = result.Value!;
         }
@@ -124,7 +125,7 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         rows.Single(r => r.Action == "seat_bound").Subject.Should().Be(seatId, "K10: seat_bound names the membership");
         rows[2].Subject.Should().Be(personId);
         rows[3].Subject.Should().Be(personId);
-        rows[2].Payload.Should().Contain("\"role\":\"admin\"").And.Contain("\"added\":[\"all_farms\"]").And.Contain("\"removed\":[");
+        rows[2].Payload.Should().Contain("\"role\":\"admin\"").And.Contain("\"added\":[\"all_farms\"]").And.Contain("\"removed\":[\"server_health\"]");
         rows.Should().OnlyContain(r => !r.Payload.Contains(AccountPhone) && !r.Payload.Contains("Asha"), "History holds ids and keys, never a number or a name");
     }
 
@@ -166,7 +167,7 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         await using (var scope = AdminScope(provider))
         {
             var sp = scope.ServiceProvider;
-            list = await new ListPeopleHandler(sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(), clock)
+            list = await new ListPeopleHandler(sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>())
                 .HandleAsync(Founder);
         }
 
@@ -232,8 +233,92 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
             report.Downloads.NotMeasuredReason.Should().Be("downloads_start_with_field_visits");
         }
 
-        // Every read opened the audited factory as the founder: one admin_cross_tenant row each (list, history, 4 for the report).
-        (await CrossFarmAuditRowsAsync(Founder)).Should().Be(1 + 1 + 4);
+        // Every read opened the audited factory as the founder: one admin_cross_tenant row each (list 1, history 1, report 4 reads + 1 last-sign-in).
+        (await CrossFarmAuditRowsAsync(Founder)).Should().Be(1 + 1 + 5);
+    }
+
+    // Fix round 1: "Not signed in yet" is true only for a person with no signed_in row at all. The date comes from its own
+    // unwindowed, uncapped grouped read, so it is right however old the sign-in is and however many sign-ins came since.
+    [SkippableFact]
+    public async Task The_last_sign_in_is_the_true_date_however_old_and_however_many_since()
+    {
+        await GuardAsync();
+
+        var provider = BuildProvider();
+        var directory = new UsersDirectory(AppConn);
+        var clock = new UtcClock();
+        var old = DateTime.UtcNow.AddDays(-120);
+
+        await using (var scope = AdminScope(provider))
+        {
+            var add = new AddPersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), directory, clock);
+            (await add.HandleAsync(new AddPersonCommand(Founder, "Example: Asha", AccountPhone, "viewer", null, "d", "i"))).IsSuccess.Should().BeTrue();
+            (await add.HandleAsync(new AddPersonCommand(Founder, "Example: Ravi", NoAccountPhone, "viewer", null, "d", "i"))).IsSuccess.Should().BeTrue();
+        }
+
+        await using (var scope = AdminScope(provider))
+        {
+            var history = scope.ServiceProvider.GetRequiredService<IControlRoomHistory>();
+            await history.RecordNowAsync(new ControlRoomHistoryEntry(ControlRoomHistoryAction.SignedIn, Account, Account, new { }, "d", "i"), default);
+        }
+
+        // Asha's only sign-in is 120 days old.
+        await ExecAsSuperuserAsync(
+            "UPDATE ssf.audit_events SET occurred_at_utc = @t WHERE actor_user_id = @a AND action = 'signed_in'",
+            ("t", old), ("a", Account));
+
+        async Task<PeopleAnswerDto> ListAsync()
+        {
+            await using var scope = AdminScope(provider);
+            var sp = scope.ServiceProvider;
+            return await new ListPeopleHandler(sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>())
+                .HandleAsync(Founder);
+        }
+
+        async Task<TrustReportDto> ReportAsync()
+        {
+            await using var scope = AdminScope(provider);
+            var sp = scope.ServiceProvider;
+            return await new GetTrustReportHandler(sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(), clock)
+                .HandleAsync(Founder);
+        }
+
+        var list = await ListAsync();
+        var asha = list.People.Single(p => p.DisplayName == "Example: Asha");
+        asha.LastSignedInUtc.Should().NotBeNull("she did sign in, 120 days ago: the page must not say she never did");
+        asha.LastSignedInUtc!.Value.Should().BeCloseTo(old, TimeSpan.FromMinutes(1));
+        list.People.Single(p => p.DisplayName == "Example: Ravi").LastSignedInUtc.Should().BeNull("Ravi has no signed_in row at all");
+
+        var report = await ReportAsync();
+        report.NotSignedInNotMeasuredReason.Should().BeNull();
+        var unused = report.NotSignedIn30Days.Single(p => p.DisplayName == "Example: Asha");
+        unused.LastSignedInUtc.Should().NotBeNull("listed as not signed in for 30 days, with the date she last did");
+        unused.LastSignedInUtc!.Value.Should().BeCloseTo(old, TimeSpan.FromMinutes(1));
+        report.NotSignedIn30Days.Single(p => p.DisplayName == "Example: Ravi").LastSignedInUtc.Should().BeNull();
+
+        // More than the 1000 newest sign-ins since: the capped read no longer holds Asha, her date must still be true.
+        await using (var scope = AdminScope(provider))
+        {
+            await scope.ServiceProvider.GetRequiredService<IControlRoomHistory>().RecordNowAsync(
+                new ControlRoomHistoryEntry(ControlRoomHistoryAction.SignedIn, Founder, Founder, new { }, "d", "i"), default);
+        }
+
+        await ExecAsSuperuserAsync("""
+            CREATE TEMP TABLE crowd AS
+                SELECT a.* FROM ssf.audit_events a, generate_series(1, 1001)
+                WHERE a.actor_user_id = @f AND a.action = 'signed_in';
+            UPDATE crowd SET "Id" = gen_random_uuid();
+            INSERT INTO ssf.audit_events SELECT * FROM crowd;
+            """, ("f", Founder));
+
+        var crowded = await ListAsync();
+        var ashaAgain = crowded.People.Single(p => p.DisplayName == "Example: Asha");
+        ashaAgain.LastSignedInUtc.Should().NotBeNull("the true date does not depend on the capped sign-in read");
+        ashaAgain.LastSignedInUtc!.Value.Should().BeCloseTo(old, TimeSpan.FromMinutes(1));
+        crowded.People.Single(p => p.IsFounder).LastSignedInUtc.Should().NotBeNull();
+
+        var crowdedReport = await ReportAsync();
+        crowdedReport.NotSignedInNotMeasuredReason.Should().Be("history_read_limit", "the capped read still decides the 30-day list by the K15 rule");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

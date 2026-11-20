@@ -150,15 +150,15 @@ public sealed class PeopleHandlersTests
     }
 
     [Fact]
-    public async Task Add_without_ticks_starts_from_the_role_preset_and_writes_person_added()
+    public async Task Add_writes_person_added_with_the_role_and_the_ticks_given()
     {
         var (store, _, handler) = Make();
 
-        var result = await handler.HandleAsync(Add(role: "viewer"));
+        var result = await handler.HandleAsync(Add(role: "viewer", ticks: [ControlRoomTicks.CompanyNumbers, ControlRoomTicks.ServerHealth]));
 
         result.IsSuccess.Should().BeTrue();
         var person = store.People.Single();
-        person.Ticks.Should().Equal(ControlRoomRoles.PresetTicks(ControlRoomRole.Viewer));
+        person.Ticks.Should().Equal(ControlRoomTicks.CompanyNumbers, ControlRoomTicks.ServerHealth);
         person.AddedByUserId.Should().Be(FounderUser);
         person.PhoneE164.Should().Be("+919000000021");
 
@@ -171,6 +171,23 @@ public sealed class PeopleHandlersTests
         Payload<string[]>(row, "ticks").Should().Equal(person.Ticks);
         result.Value!.PersonId.Should().Be(person.Id);
         result.Value!.BoundAccountName.Should().BeNull("no account has this number yet");
+    }
+
+    // Ruled item 2 (founder D-155c, H13): presets are the console's prefill only; the server never fills ticks from a role.
+    [Fact]
+    public async Task Add_without_ticks_gives_no_ticks_never_the_preset()
+    {
+        var (store, _, handler) = Make();
+        ControlRoomRoles.PresetTicks(ControlRoomRole.FieldOperator).Should().Contain(ControlRoomTicks.FarmerPhones, "the control: the preset does hold the phone tick");
+
+        var result = await handler.HandleAsync(Add(role: "field_operator", ticks: null));
+
+        result.IsSuccess.Should().BeTrue();
+        var person = store.People.Single();
+        person.Ticks.Should().BeEmpty();
+        person.Ticks.Should().NotContain(ControlRoomTicks.FarmerPhones);
+        person.StartingRole.Should().Be(ControlRoomRole.FieldOperator);
+        Payload<string[]>(store.Records.Single(), "ticks").Should().BeEmpty();
     }
 
     [Fact]
@@ -285,6 +302,24 @@ public sealed class PeopleHandlersTests
             FounderUser, person.Id, null, "admin", [ControlRoomTicks.CompanyNumbers], Device, Ip));
         JsonDocument.Parse(JsonSerializer.Serialize(store.Records.Single().Payload)).RootElement.TryGetProperty("role", out _)
             .Should().BeFalse("role is present only when it changed");
+    }
+
+    [Fact]
+    public async Task Change_without_ticks_keeps_the_current_ticks()
+    {
+        var (store, _, add) = Make();
+        await add.HandleAsync(Add(role: "viewer", ticks: [ControlRoomTicks.CompanyNumbers]));
+        var person = store.People.Single();
+        store.Records.Clear();
+
+        var result = await new ChangePersonHandler(store, new FixedClock()).HandleAsync(
+            new ChangePersonCommand(FounderUser, person.Id, "Example: Asha K", "field_operator", null, Device, Ip));
+
+        result.IsSuccess.Should().BeTrue();
+        person.Ticks.Should().Equal([ControlRoomTicks.CompanyNumbers], "a role change never refills ticks");
+        var row = store.Records.Should().ContainSingle().Which;
+        Payload<string[]>(row, "added").Should().BeEmpty();
+        Payload<string[]>(row, "removed").Should().BeEmpty();
     }
 
     [Fact]

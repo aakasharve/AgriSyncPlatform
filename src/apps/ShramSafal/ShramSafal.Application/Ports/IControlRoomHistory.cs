@@ -27,4 +27,13 @@ public interface IControlRoomHistory
     /// Opens the audited cross-tenant factory as <paramref name="readerUserId"/>: one <c>admin_cross_tenant</c> row per read.
     /// </summary>
     Task<HistoryRead> ReadAsync(Guid readerUserId, DateTime fromUtc, DateTime toUtc, string? action, int limit, CancellationToken ct);
+
+    /// <summary>
+    /// The newest <c>signed_in</c> time of each of <paramref name="userIds"/> (a person with no <c>signed_in</c> row is
+    /// absent): one grouped query with no window and no row cap, so a date is true however old it is and however many
+    /// sign-ins came since. Opens the audited cross-tenant factory as <paramref name="readerUserId"/>; with no ids it
+    /// opens nothing.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
+        Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct);
 }

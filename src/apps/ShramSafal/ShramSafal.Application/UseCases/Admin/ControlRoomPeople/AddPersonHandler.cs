@@ -12,7 +12,7 @@ namespace ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
 /// <summary>
 /// The founder approves a number. A number that is not an Indian mobile, one already on the list, one whose account
 /// holds a Platform Owner seat (the founder is never added as a person), a role that does not parse (no "founder") and
-/// an unknown tick are refused before anything is written. When an account already has the number it is bound at once
+/// an unknown tick are refused before anything is written. Omitted ticks mean NO ticks, never the role's preset. When an account already has the number it is bound at once
 /// (H3): its existing non-owner Platform seat is reused, else an Employee seat is made. The person, the seat and the
 /// <c>person_added</c> (+ <c>seat_bound</c>) History rows commit in ONE save. Nothing is texted (D2).
 /// </summary>
@@ -27,7 +27,8 @@ public sealed class AddPersonHandler(IControlRoomStore store, IControlRoomPhoneD
         if (!ControlRoomRoles.TryParse(command.StartingRole, out var role))
             return Result.Failure<PersonDto>(PeopleCommon.RoleNotAllowed());
 
-        var ticks = command.Ticks ?? ControlRoomRoles.PresetTicks(role).ToArray();
+        // Presets are the console's prefill only (founder D-155c, H13): the server never fills ticks from a role.
+        var ticks = command.Ticks ?? [];
         if (PeopleCommon.FirstUnknownTick(ticks) is { } unknown)
             return Result.Failure<PersonDto>(PeopleCommon.TickUnknown(unknown));
 
