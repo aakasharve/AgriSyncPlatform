@@ -61,4 +61,39 @@ describe('Copy for AI buttons (CR-3 A8)', () => {
     const box = (await screen.findByRole('textbox', { name: 'Copy this text' })) as HTMLTextAreaElement;
     expect(box.value).toBe(misToAiText(d, 'overview'));
   });
+
+  it('A_change_of_section_clears_the_box_and_Copied', async () => {
+    setClipboard(undefined);
+    const d = misFixture();
+    const { rerender } = render(<CopyForAiButtons answer={d} section="quality" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy as JSON' }));
+    expect(await screen.findByRole('textbox', { name: 'Copy this text' })).toBeTruthy();
+    rerender(<CopyForAiButtons answer={d} section="farms" />);
+    expect(screen.queryByRole('textbox', { name: 'Copy this text' })).toBeNull();
+    expect(screen.queryByText('Copied')).toBeNull();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    setClipboard({ writeText });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy for AI (text)' }));
+    expect(await screen.findByText('Copied')).toBeTruthy();
+    rerender(<CopyForAiButtons answer={d} section="overview" />);
+    expect(screen.queryByText('Copied')).toBeNull();
+  });
+
+  it('A_change_of_range_clears_the_box_and_Copied', async () => {
+    setClipboard(undefined);
+    const d = misFixture();
+    const { rerender } = render(<CopyForAiButtons answer={d} section="quality" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy for AI (text)' }));
+    expect(await screen.findByRole('textbox', { name: 'Copy this text' })).toBeTruthy();
+    const later = misFixture({ range: { from: '2026-10-18', to: '2026-11-16', days: 30 } });
+    rerender(<CopyForAiButtons answer={later} section="quality" />);
+    expect(screen.queryByRole('textbox', { name: 'Copy this text' })).toBeNull();
+
+    setClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy for AI (text)' }));
+    expect(await screen.findByText('Copied')).toBeTruthy();
+    rerender(<CopyForAiButtons answer={d} section="quality" />);
+    expect(screen.queryByText('Copied')).toBeNull();
+  });
 });

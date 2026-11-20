@@ -29,7 +29,7 @@ async function writeToClipboard(pack: string): Promise<boolean> {
   }
 }
 
-export function CopyForAiButtons({ answer, section }: { answer: CompanyMis; section: MisSectionKey }) {
+function CopyForAiPack({ answer, section }: { answer: CompanyMis; section: MisSectionKey }) {
   const [copied, setCopied] = useState<Kind | null>(null);
   const [shownPack, setShownPack] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,5 +75,19 @@ export function CopyForAiButtons({ answer, section }: { answer: CompanyMis; sect
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The pack and its "Copied" belong to one page, one range and one answer. A change of any of them
+ * starts the buttons afresh, so a box left open never shows another page's numbers.
+ */
+export function CopyForAiButtons({ answer, section }: { answer: CompanyMis; section: MisSectionKey }) {
+  return (
+    <CopyForAiPack
+      key={`${section}:${answer.range.from}:${answer.range.to}:${answer.countedAtUtc}`}
+      answer={answer}
+      section={section}
+    />
   );
 }
