@@ -83,7 +83,8 @@ describe('the two lines on the Company MIS pages (B24)', () => {
       await countedShown();
       const text = v.container.textContent ?? '';
       expect(text, s).not.toContain('Not built yet');
-      expect(text, s).not.toMatch(/\bAI\b/);
+      // D-156b: "Copy for AI (text)" is the founder's own label on this console page; nothing else may say AI.
+      expect(text.replace('Copy for AI (text)', ''), s).not.toMatch(/\bAI\b/);
       v.unmount();
       stub.restore();
       stub = null;

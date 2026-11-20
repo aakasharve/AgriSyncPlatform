@@ -32,15 +32,17 @@ import { RetentionSection } from './MisRetention';
 import { QualitySection } from './MisQuality';
 import { FarmsSection } from './MisFarms';
 import { OperationsSection } from './MisOperations';
+import { CopyForAiButtons } from './CopyForAiButtons';
+import { MIS_PAGE_NAMES } from './copyForAi';
 
 const SECTIONS: Record<MisSectionKey, { label: string; icon: LucideIcon }> = {
-  overview: { label: 'Overview', icon: LayoutDashboard },
-  acquisition: { label: 'Acquisition', icon: Download },
-  engagement: { label: 'Engagement', icon: Activity },
-  retention: { label: 'Retention', icon: Repeat2 },
-  quality: { label: 'Quality', icon: AudioLines },
-  farms: { label: 'Farms & geography', icon: MapPinned },
-  operations: { label: 'Operations', icon: LifeBuoy },
+  overview: { label: MIS_PAGE_NAMES.overview, icon: LayoutDashboard },
+  acquisition: { label: MIS_PAGE_NAMES.acquisition, icon: Download },
+  engagement: { label: MIS_PAGE_NAMES.engagement, icon: Activity },
+  retention: { label: MIS_PAGE_NAMES.retention, icon: Repeat2 },
+  quality: { label: MIS_PAGE_NAMES.quality, icon: AudioLines },
+  farms: { label: MIS_PAGE_NAMES.farms, icon: MapPinned },
+  operations: { label: MIS_PAGE_NAMES.operations, icon: LifeBuoy },
 };
 
 const PRESETS: { key: MisPreset; label: string }[] = [
@@ -193,6 +195,11 @@ export default function MisPage({ section }: { section: MisSectionKey }) {
           <span data-testid="mis-range-label">{shownRange}</span>
           {period.preset === 'custom' && <span className="text-stone-400">(custom ranges can span up to {MIS_MAX_DAYS} days)</span>}
         </p>
+        {data && !problem && (
+          <div className="mt-3">
+            <CopyForAiButtons answer={data} section={section} />
+          </div>
+        )}
       </header>
 
       {body}
