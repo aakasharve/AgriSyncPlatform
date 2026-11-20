@@ -47,6 +47,15 @@ public static class EntitlementMatrix
             };
         }
 
+        // spec: trusted-control-room-2026-11-20 (CR-3, Task A1) - the control-room keys, gated BEFORE the blanket Platform branches.
+        // Only the Platform Owner (the founder seat) holds them: read on all four, write on the two visit keys, never export.
+        // A team member gets them through ControlRoomTicks; Platform Analyst and Employee, and every other organisation type, get nothing.
+        if (IsControlRoomKey(moduleKey))
+        {
+            var owner = type == OrganizationType.Platform && role == OrganizationRole.Owner;
+            return (owner, false, owner && IsWriteModule(moduleKey));
+        }
+
         if (type == OrganizationType.Platform && role == OrganizationRole.Owner)
             return (true, true, IsWriteModule(moduleKey));
 
@@ -65,6 +74,12 @@ public static class EntitlementMatrix
             _ => (false, false, false)
         };
     }
+
+    private static bool IsControlRoomKey(string key) =>
+        key == ModuleKey.FarmsPhones
+        || key == ModuleKey.ExportsDaySheet
+        || key == ModuleKey.VisitsAssign
+        || key == ModuleKey.VisitsMine;
 
     private static bool IsWriteModule(string key) =>
         key == ModuleKey.AdminOrgsWrite

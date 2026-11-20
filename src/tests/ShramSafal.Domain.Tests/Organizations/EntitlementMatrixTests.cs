@@ -74,6 +74,22 @@ public sealed class EntitlementMatrixTests
         }
         foreach (var key in new[] { ModuleKey.FarmsPhones, ModuleKey.ExportsDaySheet })
             result.Single(x => x.ModuleKey == key).CanRead.Should().BeTrue(key);
+        foreach (var key in new[] { ModuleKey.FarmsPhones, ModuleKey.ExportsDaySheet, ModuleKey.VisitsAssign, ModuleKey.VisitsMine })
+            result.Single(x => x.ModuleKey == key).CanExport.Should().BeFalse(key);
+        foreach (var key in new[] { ModuleKey.FarmsPhones, ModuleKey.ExportsDaySheet })
+            result.Single(x => x.ModuleKey == key).CanWrite.Should().BeFalse(key);
+    }
+
+    [Fact]
+    public void Only_the_platform_owner_holds_a_control_room_key()
+    {
+        string[] keys = [ModuleKey.FarmsPhones, ModuleKey.VisitsAssign, ModuleKey.VisitsMine, ModuleKey.ExportsDaySheet];
+        foreach (var role in Enum.GetValues<OrganizationRole>().Where(r => r != OrganizationRole.Owner))
+            foreach (var key in keys)
+            {
+                var e = EntitlementMatrix.For(OrganizationType.Platform, role).Single(x => x.ModuleKey == key);
+                (e.CanRead || e.CanExport || e.CanWrite).Should().BeFalse($"(Platform, {role}) must not hold {key}");
+            }
     }
 
     [Theory]
