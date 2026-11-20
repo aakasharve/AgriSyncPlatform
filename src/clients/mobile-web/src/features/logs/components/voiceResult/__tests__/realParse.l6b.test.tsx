@@ -133,7 +133,6 @@ describe('the real typed Marathi entry, after the first sync pull', () => {
         expect(after.contentVersion).toBe(1);
         expect(after.legacyPartial).toBe(false);
         mount(logs, [after], true, false); // the screen reads the pulled RECORD, not the write
-        fireEvent.click(screen.getByTestId('vr-words-toggle')); // his words are folded under one line (lane IT4 Task 1)
         expect(screen.getByTestId('vr-link-inputs')).toBeTruthy();
         expect(screen.getByTestId('vr-link-crop')).toBeTruthy();
     });
@@ -150,7 +149,6 @@ describe('the real typed Marathi entry, after the first sync pull', () => {
         const logs = written(TYPED_MARATHI, true);
         const history = await pulled(logs);
         const { container } = mount(logs, history, true, false);
-        fireEvent.click(screen.getByTestId('vr-words-toggle')); // his words are folded under one line (lane IT4 Task 1)
 
         // Why-tiles: in the order he said them; the first open; his phrase marked.
         expect(screen.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
@@ -196,7 +194,6 @@ describe('the real spoken English sample (the other field names)', () => {
 
         const history = await pulled(logs);
         mount(logs, history, false, false);
-        fireEvent.click(screen.getByTestId('vr-words-toggle')); // his words are folded under one line (lane IT4 Task 1)
         // His words carry a capital letter and a full stop the parser's phrase does not: the tiles still find them.
         expect(screen.getByTestId('vr-why-cue-inputs-0').textContent).toBe('Ethyl 250 milliliters in 500 liters of water');
         const line = document.querySelector('[data-testid^="vr-line-head-inputs:"]') as HTMLElement;

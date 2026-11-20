@@ -160,7 +160,12 @@ afterEach(() => { cleanup(); clearAuthSession(); lng.v = 'mr'; });
 async function openEverything(): Promise<void> {
     await screen.findByTestId('vr-lines');
     for (const row of screen.getAllByTestId(/^vr-line-row-/)) fireEvent.click(row);
-    fireEvent.click(screen.getByTestId('vr-words-toggle'));
+    // lane RWF: his words are open from the start; the whole day (when an earlier recording exists) is folded - open it and every line in it.
+    const fold = screen.queryByTestId('vr-dayfold-toggle');
+    if (fold) {
+        fireEvent.click(fold);
+        for (const row of screen.getAllByTestId(/^vr-day-line-row-/)) fireEvent.click(row);
+    }
     for (const d of Array.from(document.querySelectorAll('details'))) d.setAttribute('open', '');
     await waitFor(() => expect(screen.getAllByTestId(/^vr-prow-/).length).toBeGreaterThan(0));
     // The clips of this phone: the big player and the earlier recording's player (the clip length is a number on the screen).
@@ -178,10 +183,10 @@ describe('IT-D2 - the result screen in Marathi mode shows no Latin digit', () =>
         expect(screen.getByTestId('vr-ring').textContent).toMatch(/७.*१०/); // the meter: the score of 10, "७ / १०"
         expect(screen.getByTestId('vr-mix-banner')).toBeTruthy(); // the red tank (calcium with 19:19:19) is on the screen: the banner and the box are scanned
         expect(screen.getByTestId('vr-count').textContent).toBe('आज २ वेळा सांगितलं');
-        expect(screen.getByTestId('vr-prow-m-conf').textContent).toContain('२५० मिली');
-        expect(screen.getByTestId('vr-prow-m-prem').textContent).toContain('१.५ किलो');
-        expect(screen.getByTestId('vr-prow-d-can').textContent).toContain('२ किलो');
-        fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
+        expect(screen.getAllByTestId('vr-prow-m-conf')[0].textContent).toContain('२५० मिली');
+        expect(screen.getAllByTestId('vr-prow-m-prem')[0].textContent).toContain('१.५ किलो');
+        expect(screen.getAllByTestId('vr-prow-d-can')[0].textContent).toContain('२ किलो');
+        fireEvent.click(screen.getAllByTestId('vr-prow-m-conf')[0]);
         expect(screen.getByTestId('vr-product-card')).toBeTruthy();
         expect(latinDigitFindings(screen.getByTestId('voice-result'), ALLOWED)).toEqual([]);
     });
@@ -221,8 +226,8 @@ describe('IT-D2 - English mode keeps 0-9', () => {
         render(<VoiceResultContainer {...props([fullLog(), earlierLog()])} />);
         await openEverything();
         expect(screen.getByTestId('vr-count').textContent).toBe('Told 2 times today');
-        expect(screen.getByTestId('vr-prow-m-conf').textContent).toContain('250 ml');
-        expect(screen.getByTestId('vr-prow-m-prem').textContent).toContain('1.5 kg');
+        expect(screen.getAllByTestId('vr-prow-m-conf')[0].textContent).toContain('250 ml');
+        expect(screen.getAllByTestId('vr-prow-m-prem')[0].textContent).toContain('1.5 kg');
         expect(within(screen.getByTestId('vr-lines')).getByTestId('vr-line-head-part:labour').textContent).toMatch(/^3 Male workers · 2 Female workers|4 people/);
         for (const id of ['vr-count', 'vr-lines']) expect(screen.getByTestId(id).textContent, id).not.toMatch(/[०-९]/);
     });
@@ -330,7 +335,7 @@ describe('IT-D2 - display only: the stored record is never touched, and his own 
         const before = structuredClone(history);
         render(<VoiceResultContainer {...props(history)} />);
         await openEverything();
-        fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
+        fireEvent.click(screen.getAllByTestId('vr-prow-m-conf')[0]);
         expect(history).toEqual(before);
         expect(JSON.stringify(history)).toContain('"dose":250'); // the number itself is still the number
     });
@@ -346,7 +351,6 @@ describe('IT-D2 - display only: the stored record is never touched, and his own 
         render(<VoiceResultContainer {...props(history)} />);
         await screen.findByTestId('vr-lines');
         fireEvent.click(screen.getByTestId('vr-line-row-part:labour'));
-        fireEvent.click(screen.getByTestId('vr-words-toggle'));
         expect(screen.getByTestId('vr-line-head-part:labour').textContent).toBe('४ जण');
         // his words, in the folded block and as the quote under the part, still carry the 4 he said
         expect(screen.getByTestId('vr-words-body').textContent).toContain('4 मजूर आले');

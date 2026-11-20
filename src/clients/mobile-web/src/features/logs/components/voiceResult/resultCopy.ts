@@ -104,6 +104,8 @@ export interface ResultCopy {
     /** The folded "his words" line. */
     yourWords: string;
     seeWords: string;
+    /** Lane RWF: his words are open when the screen comes; the line under the title says a tap closes them. */
+    hideWords: string;
 }
 
 const mr: ResultCopy = {
@@ -190,6 +192,7 @@ const mr: ResultCopy = {
     mixSource: (title: string) => `स्रोत: ${title}`,
     yourWords: 'तुमचं बोलणं',
     seeWords: 'शब्द पाहण्यासाठी दाबा',
+    hideWords: 'लपवण्यासाठी दाबा', // PROPOSED (Marathi)
 };
 
 const en: ResultCopy = {
@@ -260,6 +263,7 @@ const en: ResultCopy = {
     mixSource: (title: string) => `Source: ${title}`,
     yourWords: 'Your words',
     seeWords: 'Tap to see the words',
+    hideWords: 'Tap to hide', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

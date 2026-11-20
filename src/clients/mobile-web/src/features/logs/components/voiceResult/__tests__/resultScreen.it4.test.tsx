@@ -196,16 +196,16 @@ describe('Task 1 - the simple form, one tappable line per part', () => {
         expect(screen.getByTestId('vr-line-part:labour').getAttribute('data-open')).toBe('yes');
     });
 
-    it('HisWords_FoldedUnderOneLine_WithPlay', async () => {
+    it('HisWords_OpenFromTheStart_WithPlay_AndATapOnTheTitleHidesThem', async () => {
         await getDatabase().voiceClips.bulkPut([clipRow()]);
         mount(props({ history: [sevenParts()] }));
-        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy()); // his recording's play button is on the fold
-        expect(screen.queryByTestId('vr-words')).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy()); // his recording's play button is under his words
+        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर'); // lane RWF: open, no tap
         expect(screen.getByTestId('vr-words-toggle').textContent).toContain('तुमचं बोलणं');
         fireEvent.click(screen.getByTestId('vr-words-toggle'));
-        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर');
-        fireEvent.click(screen.getByTestId('vr-words-toggle'));
         expect(screen.queryByTestId('vr-words')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr-words-toggle'));
+        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर');
     });
 
     it('ConfirmAndEdit_StillPresent_ForOwnerOnly', () => {

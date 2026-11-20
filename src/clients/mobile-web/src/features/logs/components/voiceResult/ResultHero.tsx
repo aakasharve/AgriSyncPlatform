@@ -76,6 +76,11 @@ export interface ResultHeroProps {
     onReadMore: () => void;
     /** Lane L6b — he typed it: the ring's "read below" arrow does not offer to listen. */
     typed?: boolean;
+    /**
+     * Lane RWF (founder 2026-11-20: "after the animation I want a direct transcription view"): what happens when the ring has settled.
+     * The result screen glides to his words. Absent = the meter scrolls to itself, as before.
+     */
+    onSettled?: () => void;
 }
 
 type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'onTellMore'>;
@@ -141,7 +146,7 @@ const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'
 };
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed }) => {
+const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed, onSettled }) => {
     const RS = useResultStr();
     const heroTop = useRef<HTMLDivElement>(null);
     const language = useOptionalLanguage()?.language;
@@ -163,7 +168,7 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId,
                 <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RS.ringHeading}</p>
             </div>
             <RingStage score={noWork ? null : score} nodes={nodes} variant={ringVariant()} saveKey={recordingKey}
-                onSettled={() => scrollBelowHeader(heroTop.current)} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
+                onSettled={() => (onSettled ? onSettled() : scrollBelowHeader(heroTop.current))} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
                 onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
                 fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RS.noWorkDay : RS.meterPending}</p>} />
             {ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
