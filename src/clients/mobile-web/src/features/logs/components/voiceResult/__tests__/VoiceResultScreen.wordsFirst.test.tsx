@@ -90,13 +90,14 @@ describe('his words come first and open', () => {
         expect(screen.getByTestId('vr-words')).toBeTruthy();
     });
 
-    it('TheWordsSitFirst_AboveThePartsOfThisRecording_AndAboveTheRing_OptionB', () => {
+    it('TheRingAndItsAnimationAreOnTop_HisWordsAreTheCardRightUnderIt_ThenThePartsOfThisRecording', () => {
         show();
         const before = (a: HTMLElement, b: HTMLElement) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-        expect(before(screen.getByTestId('vr-words-first'), screen.getByTestId('vr-hero'))).toBe(true); // option B: the recording card, then the ring
+        // founder 2026-11-20 on the test app: "the animation must be on top" (option B had put it below his words)
+        expect(before(screen.getByTestId('vr-hero'), screen.getByTestId('vr-latest'))).toBe(true);
+        expect(before(screen.getByTestId('vr-hero'), screen.getByTestId('vr-words-first'))).toBe(true);
         expect(before(screen.getByTestId('vr-words-first'), screen.getByTestId('vr-day-lines'))).toBe(true);
         expect(before(screen.getByTestId('vr-day-lines'), screen.getByTestId('vr-confirm'))).toBe(true);
-        expect(before(screen.getByTestId('vr-latest'), screen.getByTestId('vr-hero'))).toBe(true);
     });
 });
 
@@ -186,6 +187,25 @@ const realCurrent = mk('log-real', `${DATE}T13:28:36.312Z`, {
     ],
 });
 const showReal = () => render(<VoiceResultScreen {...screenProps({ day: buildDayView([realCurrent], [realCurrent], deps), nodes: ringNodesForDay([realCurrent], DATE) }, [realCurrent])} />);
+
+// ---- the founder's NEWEST real log (stored 23:01 IST, the AI's own fullTranscript, 409 letters): all of it is on the screen, and under the ring ----
+const NEWEST_SAID = 'आज घड बांधायचं काम झालं आणि शेंडा मारला. 8 बायका आणि 2 गडी होते. बायकांना ₹400, गड्यांना ₹500 मजुरी होती. कराटे 250 ml आणि कॉर्नफिल्डावर 100 ml 200 L पाण्यात मिसळून मारलं. ते बघ मग 2 19 19 19 5 kg आणि Calcium Nitrate 3 kg सोडलं. नेहमीप्रमाणे 2 तास पाणी गेलं. फवाऱ्याला tractor 4 तास चालला. Diesel-ला ₹500 गेले. खालच्या पानांवर थोडी भुरी दिसत आहे, त्यासाठी उद्या board तयार करायचा आहे आणि खुरपणी पण करायची आहे.';
+
+describe('his newest real log: every word he said is on the screen, under the ring', () => {
+    it('TheWholeStoredTranscriptIsDrawn_OpenOnTheFirstCard_AndTheRingIsAboveIt', () => {
+        const newest = mk('log-newest', `${DATE}T17:31:37.818Z`, {
+            fullTranscript: NEWEST_SAID,
+            labour: [{ id: 'lb9', count: 8, sourceText: '8 बायका आणि 2 गडी होते', provenanceVerified: true }],
+        });
+        render(<VoiceResultScreen {...screenProps({ day: buildDayView([newest], [newest], deps), nodes: ringNodesForDay([newest], DATE) }, [newest])} />);
+        const squash = (t: string | null) => (t ?? '').replace(/\s+/g, '');
+        // nothing he said is cut: the words card holds the whole transcript (marks may split it, never drop a letter)
+        expect(squash(screen.getByTestId('vr-words').textContent)).toContain(squash(NEWEST_SAID));
+        expect(screen.getByTestId('vr-words-fold').getAttribute('data-open')).toBe('yes');
+        const before = (a: HTMLElement, b: HTMLElement) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(before(screen.getByTestId('vr-hero'), screen.getByTestId('vr-words'))).toBe(true);
+    });
+});
 
 describe('every part is flagged on his words, and a tap shows how Sathi understood it', () => {
     it('TheSpraysAreColouredToo_NotOnlyTheSoilWork', () => {
