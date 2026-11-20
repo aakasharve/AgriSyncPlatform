@@ -396,6 +396,8 @@ export const CropActivityEventSchema = z.object({
     title: z.string(),
     workTypes: z.array(z.string()).optional(),
     status: CropActivityStatusSchema.optional(),
+    // PLR lane AI-PARSE-FIX - the server's tag for a future task (his words are future tense): kept, not counted as work done.
+    plannedOnly: z.boolean().optional(),
     quantity: z.number().optional(),
     unit: z.string().optional(),
     notes: z.string().optional(),

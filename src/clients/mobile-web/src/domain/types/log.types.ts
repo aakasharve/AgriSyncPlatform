@@ -110,6 +110,12 @@ export interface CropActivityEvent {
     title: string; // Was taskName. Open-ended activity name (e.g. "Pruning", "Weeding")
     workTypes?: string[]; // Specific tasks inside this global holder (e.g. ["Pruning", "Weeding"])
     status?: 'completed' | 'partial' | 'pending' | 'gap_recorded';
+    /**
+     * PLR lane AI-PARSE-FIX: the server tagged this activity as work still to be done ("खुरपणी पण करायची आहे" - his own words are
+     * future tense). It stays in the log with his words, but it is not work done: no "work done" row and no done-work task line.
+     * Absent on every older parse (never coerced to false).
+     */
+    plannedOnly?: boolean;
     quantity?: number; // Was quantityCompleted
     unit?: string;
     notes?: string;

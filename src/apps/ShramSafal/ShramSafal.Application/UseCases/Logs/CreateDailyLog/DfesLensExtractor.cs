@@ -2,6 +2,7 @@ using System.Text.Json;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Domain.Inputs;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
@@ -295,7 +296,7 @@ internal static class DfesLensExtractor
     // ── coverage rules (ported from scoreVlog.ts) ───────────────────────────
     private static double CoverWhat(IReadOnlyList<JsonElement> roots)
     {
-        var hasActivity = roots.Any(r => Arr(r, "cropActivities").Any(a => !string.IsNullOrWhiteSpace(Str(a, "title"))));
+        var hasActivity = roots.Any(r => DoneActivities(r).Any(a => !string.IsNullOrWhiteSpace(Str(a, "title"))));
         var hasDisturbance = roots.Any(HasDisturbanceReason);
         var hasSummary = roots.Any(r => !string.IsNullOrWhiteSpace(Str(r, "summary")));
         if (hasActivity || hasDisturbance) return 1.0;
@@ -383,7 +384,7 @@ internal static class DfesLensExtractor
         new(StringComparer.OrdinalIgnoreCase) { "spray", "fertigation" };
 
     private static bool HasApplicationOperation(IReadOnlyList<JsonElement> roots)
-        => roots.Any(r => Arr(r, "cropActivities")
+        => roots.Any(r => DoneActivities(r)
             .Select(a => Str(a, "title"))
             .Any(t => !string.IsNullOrWhiteSpace(t)
                       && ApplicationBuckets.Contains(CompareEngine.Categorize(t!))));
@@ -566,7 +567,7 @@ internal static class DfesLensExtractor
         => obs.Any(o => !string.IsNullOrWhiteSpace(o.Learning) || o.NoteType == ObservationNoteType.Tip);
 
     private static bool HasWork(JsonElement r)
-        => Arr(r, "cropActivities").Any() || Arr(r, "inputs").Any() || Arr(r, "irrigation").Any()
+        => DoneActivities(r).Any() || Arr(r, "inputs").Any() || Arr(r, "irrigation").Any()
            || Arr(r, "labour").Any() || Arr(r, "machinery").Any();
 
     private static bool HasDisturbanceReason(JsonElement r)
@@ -622,6 +623,11 @@ internal static class DfesLensExtractor
         => dim.Applicable && dim.Coverage < 1.0 && gaps.Any(g => g.Dimension == dimension)
             ? dim with { Coverage = 1.0 }
             : dim;
+
+    // PLR lane AI-PARSE-FIX: a cropActivities item tagged plannedOnly is a future task, not work done - it must not count as
+    // "what happened", as an application operation, or as a work day (P4: no figure on evidence that does not exist).
+    private static IEnumerable<JsonElement> DoneActivities(JsonElement root)
+        => Arr(root, "cropActivities").Where(a => !PlannedOnlyMarker.IsSet(a));
 
     private static IEnumerable<JsonElement> Arr(JsonElement el, string prop)
         => el.ValueKind == JsonValueKind.Object && el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Array
