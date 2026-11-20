@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using AgriSync.Bootstrapper.Infrastructure;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -145,17 +146,20 @@ public sealed class ControlRoomPeopleGateTests
         Code(missing.Body).Should().Be("control_room.person_not_found");
     }
 
-    // D2: a person is only added to a list. Nothing is texted. (The queue-empty half is added with the real queue, Task A6.)
+    // D2: a person is only added to a list. Nothing is texted, and nothing is queued for the console door's background
+    // sender (the real queue, Task A6).
     [Fact]
     public async Task Nothing_is_sent_when_a_person_is_added()
     {
         var sms = new CountingSmsSender();
+        var queue = new ControlRoomCodeQueue();
 
-        var answer = await Ask("POST", Routes[1].Route, Routes[1].Body, Founder(), sms);
+        var answer = await Ask("POST", Routes[1].Route, Routes[1].Body, Founder(), sms, queue);
 
         answer.Status.Should().Be(StatusCodes.Status201Created, answer.Body);
         answer.Fakes.Store.People.Should().ContainSingle(p => p.PhoneE164 == "+919000000051", "the person really was added");
         sms.Sent.Should().Be(0, "adding a person sends no text message");
+        queue.Count.Should().Be(0, "adding a person queues no code either");
     }
 
     // ------------------------------------------------------------------
@@ -197,7 +201,8 @@ public sealed class ControlRoomPeopleGateTests
         return true;
     }
 
-    private static async Task<Answer> Ask(string method, string route, string? body, AdminScope scope, CountingSmsSender? sms = null)
+    private static async Task<Answer> Ask(
+        string method, string route, string? body, AdminScope scope, CountingSmsSender? sms = null, ControlRoomCodeQueue? queue = null)
     {
         var endpoint = Endpoint(method, route);
         var store = new RecordingStore();
@@ -215,6 +220,7 @@ public sealed class ControlRoomPeopleGateTests
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(new FixedSeatResolver(ResolveResult.Resolved(scope, Array.Empty<MembershipSummary>())));
         services.AddSingleton<ISmsSender>(sms ?? new CountingSmsSender());
+        services.AddSingleton(queue ?? new ControlRoomCodeQueue());
         services.AddSingleton(new ListPeopleHandler(store, directory, history));
         services.AddSingleton(new AddPersonHandler(store, directory, clock));
         services.AddSingleton(new ChangePersonHandler(store, clock));

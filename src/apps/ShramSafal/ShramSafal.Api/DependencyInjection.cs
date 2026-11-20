@@ -839,6 +839,9 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.KeepPersonHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetTrustReportHandler>();
+        // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A6) — the console door's decision and its History rows.
+        // Its two routes, the code queue and the background sender are the host's: they call the User handlers.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomDoor.ControlRoomDoor>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 4) — silent farms counted live. Needs
         // ICompanyMisReader, CompanyMisExclusions, ISubscriptionReader and the scoped DbContext (Infrastructure),
         // IAdminMisRepository (below) and TimeProvider.

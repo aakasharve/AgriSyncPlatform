@@ -346,6 +346,10 @@ try
     // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — the control room reads User accounts only through the host.
     builder.Services.AddScoped<ShramSafal.Application.Ports.IControlRoomPhoneDirectory,
         AgriSync.Bootstrapper.Adapters.ControlRoomPhoneDirectory>();
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A6, AM2) — the console door never texts inside the request:
+    // an approved number's code goes into this bounded queue and the background sender sends it after the answer.
+    builder.Services.AddSingleton<AgriSync.Bootstrapper.Infrastructure.ControlRoomCodeQueue>();
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Infrastructure.ControlRoomCodeSender>();
 
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")
@@ -789,6 +793,8 @@ try
     app.MapFirstFarmBootstrapEndpoints();
     // spec R-11 (b) — admin-only grant / list of server-managed pilot access extensions.
     app.MapAccessExtensionAdminEndpoints();
+    // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A6) — the console door: send-code and check-code.
+    app.MapControlRoomSignInEndpoints();
 
     // agrisync-prompt-ops Phase 1 — env-gated test/staging endpoint
     // (POST /api/ai/eval-parse). Internally returns early in Production

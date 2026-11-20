@@ -130,6 +130,8 @@ POST /shramsafal/admin/people/{id:guid}/keep
 POST /shramsafal/admin/people/{id:guid}/remove
 POST /shramsafal/admin/pii-review/{id:guid}/approve
 POST /shramsafal/admin/pii-review/{id:guid}/reject
+POST /shramsafal/admin/sign-in/check-code
+POST /shramsafal/admin/sign-in/send-code
 POST /shramsafal/ai/cove-reverify
 POST /shramsafal/ai/document-sessions/patti
 POST /shramsafal/ai/document-sessions/receipt
