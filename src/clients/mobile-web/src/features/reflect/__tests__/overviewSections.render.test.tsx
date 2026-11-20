@@ -53,7 +53,7 @@ describe('शेताची स्थिती (FarmStatus)', () => {
         expect(screen.getAllByTestId(/^farm-plot-/)).toHaveLength(2);
         expect(screen.getByTestId('farm-plot-g1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('farm-plot-g2')).toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('1 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('१ पैकी २ प्लॉट');
     });
 
     it('no crop yet: says so plainly', () => {

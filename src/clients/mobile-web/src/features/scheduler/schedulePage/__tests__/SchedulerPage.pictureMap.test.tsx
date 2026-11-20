@@ -64,9 +64,9 @@ describe('the picture map: who follows what, at a glance', () => {
         const university = screen.getByTestId(`map-schedule-${T.university}`);
         const cane = screen.getByTestId(`map-schedule-${T.ownCane}`);
         expect(university).toHaveAttribute('data-plots', '2');
-        expect(university.textContent).toContain('2 प्लॉट');
+        expect(university.textContent).toContain('२ प्लॉट');
         expect(cane).toHaveAttribute('data-plots', '1');
-        expect(cane.textContent).toContain('1 प्लॉट');
+        expect(cane.textContent).toContain('१ प्लॉट');
 
         // one line per plot, ending at ITS schedule
         const lines = [...document.querySelectorAll('[data-testid^="map-line-"]')].map(l => l.getAttribute('data-testid'));

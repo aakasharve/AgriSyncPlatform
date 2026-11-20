@@ -48,7 +48,7 @@ vi.mock('../../../i18n/LanguageContext', async (importActual) => ({
 }));
 
 import ReflectPage from '../ReflectPage';
-import { CANE, CROPS, GRAPE } from './reflectFixtures';
+import { CANE, CROPS, GRAPE, crop, log, plot } from './reflectFixtures';
 
 const SPENT = { id: 'e1', plotId: 'g1', dateKey: '2026-10-25', direction: 'Expense', category: 'Labour', amount: 1500 };
 
@@ -118,6 +118,45 @@ describe('आढावा page — starts on every crop and every plot', () => {
         renderPage(CROPS);
         expect(screen.getByTestId('farm-crop-all')).toHaveTextContent('All crops');
         expect(screen.getByTestId('farm-crop-all-line')).toHaveTextContent('2 crops · 3 plots');
+    });
+});
+
+describe('आढावा page — an owner with 15 plots of one crop (lane UI-9a)', () => {
+    const BIG = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 15 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
+    // work recorded today on three plots, and on a plot of an earlier day (not today's)
+    const history = [
+        log({ id: 't1', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }] }),
+        log({ id: 't2', plotIds: ['g2', 'g3'], cropActivities: [{ id: 'b', title: 'फवारणी' }] }),
+        log({ id: 'old', date: '2026-10-24', plotIds: ['g4'], cropActivities: [{ id: 'c', title: 'काम' }] }),
+    ];
+
+    it('the picker is a number grid in place; "आज सांगितलेले ३" and "आज बाकी १२" come from the records of today only; the plots are small cards under one photo', () => {
+        renderPage([BIG], { history });
+        expect(screen.getByTestId('farm-grid-grape').children.length).toBe(15);
+        expect(screen.getByTestId('farm-quick-toldToday')).toHaveTextContent('आज सांगितलेले ३'); // yesterday's g4 does not count as today
+        expect(screen.getByTestId('farm-quick-todayLeft')).toHaveTextContent('आज बाकी १२');
+        expect(screen.getByTestId('plot-small-cards-grape').children.length).toBe(15);
+        expect(screen.getByTestId('plot-group-header-grape').querySelector('img, svg')).toBeTruthy();
+        expect(screen.getByTestId('plot-status-grape:g2')).toHaveAttribute('data-status', 'told');
+        expect(screen.getByTestId('plot-status-grape:g4')).toHaveAttribute('data-status', 'left');
+    });
+
+    it('one tap on a number narrows every section below to that plot: its one full card with the photo, and "फक्त G7 दिसतो"', () => {
+        renderPage([BIG], { history });
+        fireEvent.click(screen.getByTestId('farm-plot-g7'));
+        expect(screen.getByTestId('farm-solo-line')).toHaveTextContent('फक्त G7 दिसतो');
+        expect(screen.queryByTestId('plot-small-cards-grape')).toBeNull();
+        expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(1);
+        expect(screen.getByTestId('plot-card-grape:g7').querySelector('[data-part="banner"]')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('farm-solo-all'));
+        expect(screen.getByTestId('plot-small-cards-grape').children.length).toBe(15);
+    });
+
+    it('"आज सांगितलेले" narrows the page to the plots told today', () => {
+        renderPage([BIG], { history });
+        fireEvent.click(screen.getByTestId('farm-quick-toldToday'));
+        expect(screen.getAllByTestId(/^plot-card-[^:]+:/)).toHaveLength(3);
+        expect(screen.getByTestId('farm-picked-count')).toHaveTextContent('१५ पैकी ३ निवडले');
     });
 });
 
