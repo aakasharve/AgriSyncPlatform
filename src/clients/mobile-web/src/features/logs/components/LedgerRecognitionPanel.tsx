@@ -210,7 +210,9 @@ export function LedgerRecognitionPanel({
     // log cannot fire a second write (the stash is emptied synchronously inside settle
     // anyway, so this is belt AND braces).
     const savedLogId = savedLog?.id;
-    const spokenText = savedLog?.transcriptSnapshot?.raw;
+    // Lane DFES-Q bug 1: his words are on `fullTranscript`. `transcriptSnapshot` is written by no production path, so reading it
+    // alone dropped every spoken answer; it stays as the fallback for an older log that carries one. Blank is no answer (P4).
+    const spokenText = savedLog?.fullTranscript?.trim() || savedLog?.transcriptSnapshot?.raw?.trim() || undefined;
     useEffect(() => {
         if (!savedLogId || !spokenText) return;
         void settlePendingQuestionAnswer({ transcript: spokenText });
