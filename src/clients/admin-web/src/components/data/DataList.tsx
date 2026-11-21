@@ -383,7 +383,8 @@ export function DataList<T>(config: DataListConfig<T>) {
       return (
         <span>
           Showing <b>{count(sorted.length)}</b> of <b>{count(rows.length)}</b>{' '}
-          {nounFor(rows.length, noun)} matching &ldquo;{query.trim()}&rdquo;
+          {shownNotCounted > 0 ? 'listed' : nounFor(rows.length, noun)} matching &ldquo;{query.trim()}&rdquo;
+          {shownNotCounted > 0 && ' (test farms are listed but not counted)'}
         </span>
       );
     }

@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
 import { installContactsStub, type ContactsStub } from '@/test/contactsStub';
@@ -610,5 +610,82 @@ describe('round 1 m7: Home fetches no owner phones for a half it does not show',
     await waitFor(() => expect(body()).toContain('Farms with repeated problems could not be counted.'), WAIT);
     await new Promise((r) => setTimeout(r, 200));
     expect(cs.contactCalls()).toHaveLength(0);
+  });
+});
+
+/* ═════════════════════════════════════════════════════════════ fix round 2 */
+
+describe('round 2', () => {
+  it('R3_no_exact_window_note_while_History_is_loading_or_failed', async () => {
+    stub = installAdapter(async () => neverSettles());
+    renderWithProviders(<HistoryPage />, { route: '/people/history?action=phones_shown&fromUtc=2026-11-15T10:00:00Z&toUtc=2026-11-22T10:01:00Z&countedLooksOnly=true' });
+    await screen.findByRole('status', { name: /Loading/ }, WAIT);
+    expect(screen.queryByTestId('history-exact-window')).toBeNull();
+    stub.restore();
+    stub = installAdapter(async () => ({ status: 500, data: { message: 'x' } }));
+    renderWithProviders(<HistoryPage />, { route: '/people/history?action=phones_shown&fromUtc=2026-11-15T10:00:00Z&toUtc=2026-11-22T10:01:00Z&countedLooksOnly=true' });
+    await screen.findByText(/Couldn.t load History/, undefined, WAIT);
+    expect(screen.queryByText(/Showing exactly/)).toBeNull();
+  });
+
+  it('R3_the_limit_line_states_the_number_of_lines_actually_shown_for_counted_looks', async () => {
+    const lines = Array.from({ length: 3 }, (_, i) => ({
+      atUtc: `2026-11-19T05:0${i}:00Z`, action: 'phones_shown', actorName: 'Example: A', subjectName: null, details: { page: 'farms' },
+    }));
+    stub = installAdapter(async () => ({ status: 200, data: { lines, hitLimit: true, limit: 500 } }));
+    renderWithProviders(<HistoryPage />, { route: '/people/history?action=phones_shown&fromUtc=2026-11-15T10:00:00Z&toUtc=2026-11-22T10:01:00Z&countedLooksOnly=true' });
+    await waitFor(() => expect(body()).toContain('Showing 3 lines, the newest the server read (at most 500). Older counted lines are not shown.'), WAIT);
+    expect(body()).not.toContain('Showing the newest 500');
+  });
+
+  it('R7_a_server_that_hands_back_seven_fractional_digits_to_a_strict_engine_still_gets_its_window_unchanged', async () => {
+    // A strict engine (older Safari) refuses more than three fractional digits. Old code judged the window by Date.parse and fell back to days=7.
+    const real = Date.parse;
+    const spy = vi.spyOn(Date, 'parse').mockImplementation((s: string) => (/\.\d{4,}/.test(s) ? Number.NaN : real(s)));
+    try {
+      const from = '2026-11-15T10:00:00.1234567Z';
+      const to = '2026-11-22T10:01:00.7654321Z';
+      const s = installAdapter(async () => ({ status: 200, data: { lines: [], hitLimit: false, limit: 500 } }));
+      stub = s;
+      renderWithProviders(<HistoryPage />, { route: `/people/history?fromUtc=${from}&toUtc=${to}&countedLooksOnly=true` });
+      await waitFor(() => expect(s.requests.length).toBeGreaterThan(0), WAIT);
+      const url = s.requests[0].url;
+      expect(url).toContain(`fromUtc=${encodeURIComponent(from)}`);
+      expect(url).toContain(`toUtc=${encodeURIComponent(to)}`);
+      expect(url).not.toContain('days=');
+      expect(parseInstantMs(from)).toBe(real('2026-11-15T10:00:00.123Z'));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('item4_no_contact_lookup_for_a_problems_half_that_failed_or_is_forbidden', async () => {
+    const F1 = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const scope = {
+      outcome: 'Resolved',
+      scope: { userId: 'u1', orgId: ORG, orgType: 'Platform', orgRole: 'Owner', isPlatformAdmin: true, modules: ['farms.silent-churn', 'farms.suffering'].map((key) => ({ key, canRead: true, canExport: false, canWrite: false })) },
+      memberships: [],
+    };
+    const qc = makeTestQueryClient();
+    let fail = false;
+    const cs = installContactsStub((r) => {
+      if (r.path.endsWith('/me/scope')) return scope;
+      if (r.path.endsWith('/admin/farms/silent-churn')) return { data: { countedAtUtc: '2026-11-22T06:00:00Z', farms: [], notMeasuredReason: null }, meta: META };
+      if (r.path.endsWith('/admin/farms/suffering')) {
+        if (fail) return { status: 500, data: { message: 'x' } } as never;
+        return { data: [{ farmId: F1, problemCount: 5, syncProblems: 1, entryProblems: 1, voiceProblems: 1, otherProblems: 2, lastProblemAt: '2026-11-21T09:00:00Z' }], meta: META };
+      }
+      return { data: null, meta: META };
+    }, { [F1]: 'Example Mala' });
+    stub = cs;
+    renderWithProviders(<HomePage />, { route: `/home?org=${ORG}`, queryClient: qc });
+    await waitFor(() => expect(cs.contactCalls().length).toBe(1), WAIT);
+    // A later failed re-read keeps the older rows in hand; the half no longer shows, so the lookup key empties.
+    fail = true;
+    await act(async () => { await qc.refetchQueries({ queryKey: ['farms', 'suffering'] }); });
+    await waitFor(() => expect(body()).toMatch(/Could not load the farms with repeated problems list/), WAIT);
+    const before = cs.contactCalls().length;
+    await new Promise((r) => setTimeout(r, 200));
+    expect(cs.contactCalls().length).toBe(before);
   });
 });

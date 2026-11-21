@@ -444,7 +444,7 @@
     "key": "farms.acres",
     "label": "Acres covered",
     "status": "real",
-    "what": "Acres of plots on farms that saved an entry in the last 7 days.",
+    "what": "Acres of plots on farms with an entry that reached the server in the last 7 days.",
     "why": "Shows how much farmland the app really covers, a figure partners and funders ask for."
   },
   {

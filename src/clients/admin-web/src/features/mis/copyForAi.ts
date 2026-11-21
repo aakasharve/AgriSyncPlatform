@@ -125,8 +125,8 @@ function engagementValues(d: CompanyMis, headline: string): Record<string, () =>
     }),
     'engagement.featureUse': () => fromChart(v.features, (c) => joined(c.rows.map((r) =>
       (r.people === null ? `${r.label} ${r.word}` : `${r.label} ${fmtInt(r.people)} people (${r.shareText})`)))),
-    'engagement.roleMix': () => fromChart(v.roles, (c) => joined(c.parts.map((p) =>
-      `${p.label} ${fmtInt(p.people)}${p.share ? ` (${p.share})` : ''}`))),
+    'engagement.roleMix': () => fromChart(v.roles, (c) => `${joined(c.parts.map((p) =>
+      `${p.label} ${fmtInt(p.people)}${p.share ? ` (${p.share})` : ''}`))}${c.todaySoFar ? ` (${TODAY_SO_FAR}, not compared)` : ''}`),
     'engagement.featureByRole': () => fromChart(v.featureRoles, (c) => joined(c.rows.map((r) =>
       `${r.label}: ${c.roles.map((role, k) => (r.cells[k] === null ? null : `${role.label} ${fmtInt(r.cells[k] as number)}`))
         .filter((x): x is string => x !== null).join(', ')}`))),

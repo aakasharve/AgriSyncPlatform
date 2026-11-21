@@ -344,3 +344,38 @@ describe('round 1 m4 and m6: what is counted, in words', () => {
     expect(headlineFor('overview', misFixture(), false)).toMatch(/^412 farms had an entry reach the server in the 7 days to/);
   });
 });
+
+describe('round 2 MIS leftovers', () => {
+  const partial = () => misFixture({ lastDayComplete: false });
+
+  it('R1_the_empty_curve_says_what_is_counted_now', () => {
+    expect(overviewView(misFixture()).tiles.length).toBeGreaterThan(0);
+    const d = misFixture({ overview: { signUps: { current: { value: 0, notMeasuredReason: null }, previous: { value: 0, notMeasuredReason: null }, currentByDay: null, previousByDay: null } }, retention: { curve: [] } });
+    const v = retentionView(d);
+    expect(v.curve).toEqual({ kind: 'none', what: 'No account with a verified phone was made in this range' });
+  });
+
+  it('R2_farms_subtitle_and_acres_line_say_reached_the_server_and_role_mix_follows_w2', () => {
+    const text = misToAiText(misFixture(), 'farms');
+    expect(text).toContain('Acres of plots on farms with an entry that reached the server in the last 7 days.');
+    expect(text).not.toContain('farms that saved an entry');
+    const roles = engagementView(partial()).roles;
+    if (roles.kind !== 'chart') throw new Error('expected a chart');
+    expect(roles.data.todaySoFar).toBe(true);
+    const whole = engagementView(misFixture()).roles;
+    if (whole.kind !== 'chart') throw new Error('expected a chart');
+    expect(whole.data.todaySoFar).toBe(false);
+    expect(misToAiText(partial(), 'engagement')).toMatch(/Monthly active people by role: .*\(today so far, not compared\)/);
+    const none = engagementView(misFixture({ lastDayComplete: false, engagement: { roleMixOfMau: [] } })).roles;
+    expect(none).toMatchObject({ kind: 'none' });
+    expect((none as { what: string }).what).toContain('had an entry reach the server');
+    expect((none as { what: string }).what).toContain('today so far');
+  });
+
+  it('item6_retention_and_farms_headlines_mark_today_so_far', () => {
+    expect(headlineFor('retention', partial(), true)).toContain('can still be won back (as of today so far, not compared).');
+    expect(headlineFor('farms', partial(), true)).toContain('(7 days to today so far, not compared).');
+    expect(headlineFor('retention', misFixture(), true)).not.toContain('today so far');
+    expect(headlineFor('farms', misFixture(), true)).not.toContain('today so far');
+  });
+});

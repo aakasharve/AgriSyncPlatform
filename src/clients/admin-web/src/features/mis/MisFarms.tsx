@@ -27,7 +27,7 @@ export const FarmsSection: React.FC<MisSectionProps<FarmsView>> = ({ view, compa
                 item="farms.byDistrict"
                 className="col-span-12 xl:col-span-7"
                 title="Active farms by district"
-                subtitle="Farms that saved an entry in the last 7 days. Open a district to see its talukas."
+                subtitle="Farms with an entry that reached the server in the last 7 days. Open a district to see its talukas."
             >
                 <NotMeasuredYet why={why('farms.byDistrict')} />
             </ChartCard>
