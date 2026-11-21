@@ -252,6 +252,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// Mapped to <c>ssf.question_events</c>; migration REVOKEs UPDATE/DELETE.</summary>
     public DbSet<ShramSafal.Domain.Dfes.QuestionEvent> QuestionEvents =>
         Set<ShramSafal.Domain.Dfes.QuestionEvent>();
+    /// <summary>Lane DFES-Q — append-only photo-proof checks (<c>ssf.question_photo_checks</c>).</summary>
+    public DbSet<ShramSafal.Domain.Dfes.QuestionPhotoCheck> QuestionPhotoChecks =>
+        Set<ShramSafal.Domain.Dfes.QuestionPhotoCheck>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();

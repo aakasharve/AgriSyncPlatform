@@ -44,8 +44,20 @@ internal sealed class QuestionEventConfiguration : IEntityTypeConfiguration<Ques
         builder.Property(x => x.Skipped).HasColumnName("skipped");                                // nullable bool
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // Lane DFES-Q (founder D-B, D-D, D-G, 2026-11-21) — additive, nullable; an older phone's row has none of them.
+        builder.Property(x => x.AskedUserId).HasColumnName("asked_user_id");
+        builder.Property(x => x.PromptText).HasColumnName("prompt_text").HasColumnType("text");
+        builder.Property(x => x.PromptOrigin).HasColumnName("prompt_origin").HasMaxLength(20);
+        builder.Property(x => x.QuestionKind).HasColumnName("question_kind").HasMaxLength(40);
+        builder.Property(x => x.SourceRefsJson).HasColumnName("source_refs").HasColumnType("jsonb");
+        builder.Property(x => x.ScheduleCardRef).HasColumnName("schedule_card_ref").HasMaxLength(200);
+        builder.Property(x => x.DeviationReasonCode).HasColumnName("deviation_reason_code").HasMaxLength(40);
+        builder.Property(x => x.DeviationChallenge).HasColumnName("deviation_challenge").HasColumnType("text");
+        builder.Property(x => x.PhotoAttachmentId).HasColumnName("photo_attachment_id");
+
         builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_question_events_farm_id");
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_question_events_daily_log_id");
+        builder.HasIndex(x => new { x.FarmId, x.AskedUserId }).HasDatabaseName("ix_question_events_farm_asked_user");
         builder.Ignore(x => x.DomainEvents);
     }
 }

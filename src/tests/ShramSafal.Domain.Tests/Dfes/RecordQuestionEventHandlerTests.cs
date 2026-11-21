@@ -15,7 +15,7 @@ using Xunit;
 
 namespace ShramSafal.Domain.Tests.Dfes;
 
-public sealed class RecordQuestionEventHandlerTests
+public sealed partial class RecordQuestionEventHandlerTests
 {
     private static readonly DateTime FixedNow = new(2026, 7, 12, 6, 0, 0, DateTimeKind.Utc);
 
@@ -30,13 +30,17 @@ public sealed class RecordQuestionEventHandlerTests
         AnswerObservationId: null, ShownAtUtc: FixedNow, TriggerReason: "gap DOSE",
         WeatherContext: null, Response: "10 ml", StageConfirmed: null, PhotoSubmitted: false, Skipped: false);
 
+    /// <summary>
+    /// Lane DFES-Q (founder D-B, 2026-11-21): the agronomist flag no longer gates; a cited source does (see the SourceGate
+    /// partial). The Marathi gate stays for approved-copy text, so the rejection path this test pins is now Marathi-unapproved.
+    /// </summary>
     [Fact]
-    public async Task Rejects_row_that_is_not_both_approved()
+    public async Task Rejects_bank_copy_that_is_not_marathi_approved()
     {
         var farmId = Guid.NewGuid(); var userId = Guid.NewGuid();
         var repo = new CapturingRepo(memberOfFarm: true);
         var handler = new RecordQuestionEventHandler(repo, new NullDailyRichnessDerivationService(), new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
-        var cmd = ValidCommand(farmId, userId) with { AgronomistApproved = false };
+        var cmd = ValidCommand(farmId, userId) with { MarathiApproved = false };
 
         var result = await handler.HandleAsync(cmd, CancellationToken.None);
 
@@ -137,9 +141,10 @@ public sealed class RecordQuestionEventHandlerTests
         var repo = new CapturingRepo(memberOfFarm: true);
         var derivation = new RecordingDerivation();
         var handler = new RecordQuestionEventHandler(repo, derivation, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
-        // A real, useful answer — but safety.* names no scored dimension, so it can
-        // credit nothing and the day does not need rebuilding.
-        var cmd = ValidCommand(Guid.NewGuid(), Guid.NewGuid()) with { QuestionKey = "safety.mask", Response = "होय" };
+        // A real, useful answer — but learning.* names no scored dimension, so it can
+        // credit nothing and the day does not need rebuilding. (Lane DFES-Q: this used a made-up safety.* key; a safety
+        // question now states agronomy and needs a resolved source, so a no-source learning key keeps the test's point.)
+        var cmd = ValidCommand(Guid.NewGuid(), Guid.NewGuid()) with { QuestionKey = "learning.deepen_hypothesis", Response = "होय" };
 
         var result = await handler.HandleAsync(cmd, CancellationToken.None);
 

@@ -584,6 +584,8 @@ public static class DependencyInjection
         services.AddScoped<SarvamChatClient>();
         services.AddScoped<SarvamVisionClient>();
         services.AddScoped<SarvamDocIntelClient>();
+        // Lane DFES-Q — fail closed until Shram Safal's published schedule is embedded (plan Task 2 swaps the implementation).
+        services.AddSingleton<IQuestionSourceResolver, AI.Dfes.NoScheduleSourceResolver>();
         services.AddScoped<IAiProvider, SarvamAiProvider>();
         services.AddScoped<IAiProvider, GeminiAiProvider>();
 
