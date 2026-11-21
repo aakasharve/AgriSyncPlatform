@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { FreshnessChip } from '../FreshnessChip';
 
@@ -60,5 +60,23 @@ describe('FreshnessChip — it may only state an age it actually has', () => {
     render(<FreshnessChip source="live" lastRefreshed={undefined} />);
 
     expect(screen.getByText(/Live/).textContent).toBe('Live · age not reported');
+  });
+});
+
+describe('W-9 FreshnessChip ticks so its age stays true', () => {
+  it('W-9: the age grows while the page stays open and nothing re-renders it', () => {
+    vi.useFakeTimers();
+    try {
+      const start = new Date('2026-11-22T10:00:00Z');
+      vi.setSystemTime(start);
+      render(<FreshnessChip source="live" lastRefreshed={start.toISOString()} />);
+      expect(screen.getByText(/Live/).textContent).not.toMatch(/10m ago/);
+      act(() => {
+        vi.advanceTimersByTime(10 * 60_000);
+      });
+      expect(screen.getByText(/Live/).textContent).toMatch(/10m ago/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

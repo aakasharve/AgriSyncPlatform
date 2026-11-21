@@ -424,9 +424,17 @@ export function DataList<T>(config: DataListConfig<T>) {
    * a genuine empty into a no-match.
    */
   const searched = !!search && hasQuery;
-  const showNoMatch = !states.isLoading && !states.error && !states.feedDown && sorted.length === 0
-    && (filtered || searched);
-  const showMeasuredZero = !states.isLoading && !states.error && !states.feedDown
+  /**
+   * CR-3 fix wave W-10 (check2 M-I4). A server-paged list whose server total is above zero but
+   * whose page holds no rows is a page past the end (a bookmarked `?page=9`, or a list that
+   * shrank under the reader). It is not "the feed returned nothing", and it is not a filter that
+   * matched nothing: the server says there are rows, so the reader is told where they are.
+   */
+  const pastEnd = serverPaged && pagination.totalCount > 0 && rows.length === 0
+    && !states.isLoading && !states.error && !states.feedDown;
+  const showNoMatch = !pastEnd && !states.isLoading && !states.error && !states.feedDown
+    && sorted.length === 0 && (filtered || searched);
+  const showMeasuredZero = !pastEnd && !states.isLoading && !states.error && !states.feedDown
     && sorted.length === 0 && !showNoMatch;
 
   function body(): ReactNode {
@@ -476,6 +484,26 @@ export function DataList<T>(config: DataListConfig<T>) {
     /* Nothing below a dead feed is current, so nothing below it is drawn. */
     if (states.feedDown) {
       return <FeedDown since={states.feedDown.since} lastGood={states.feedDown.lastGood} what={label} />;
+    }
+
+    if (pastEnd && serverPaged) {
+      return (
+        <div role="status" data-testid="datalist-past-end" className="p-6 text-body text-text-2">
+          <p>
+            This page is past the end; there {pagination.totalCount === 1 ? 'is' : 'are'}{' '}
+            <b>{count(pagination.totalCount)}</b> {nounFor(pagination.totalCount, noun)}.
+          </p>
+          <p className="mt-2">
+            <button
+              type="button"
+              className="text-accent underline"
+              onClick={() => pagination.onPage(1)}
+            >
+              Go to page 1
+            </button>
+          </p>
+        </div>
+      );
     }
 
     if (showNoMatch) {

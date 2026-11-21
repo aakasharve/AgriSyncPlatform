@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +60,19 @@ export interface FreshnessChipProps {
 /** Not an age, and deliberately not shaped like one. */
 const NO_AGE = 'age not reported';
 
+/**
+ * CR-3 fix wave W-9: THE AGE MUST STAY TRUE WHILE THE PAGE IS OPEN. This chip formats one instant
+ * at render; with no re-render it froze at "Live · 2s ago" over a snapshot that grew old. Same
+ * remedy as the shell chip (`ScreenRefresh` in AdminShell): a 30-second tick.
+ */
+export const FRESHNESS_TICK_MS = 30_000;
+
 export function FreshnessChip({ source, lastRefreshed, className }: FreshnessChipProps) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), FRESHNESS_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
   const age = fmt.age(lastRefreshed) || NO_AGE;
   const label = source === 'materialized' ? `Nightly · ${age}` : `Live · ${age}`;
   const cls = source === 'materialized' ? 'chip-mat' : 'chip-live';
