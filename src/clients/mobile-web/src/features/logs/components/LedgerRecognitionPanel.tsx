@@ -81,6 +81,7 @@ import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
 import SurfaceSection from './shramsathi/SurfaceSection';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { SathiAppreciation } from './SathiAppreciation';
 
 /**
  * Task 4A: project the live WeatherWidget data (DetailedWeather) onto the
@@ -279,7 +280,14 @@ export function LedgerRecognitionPanel({
                 <SurfaceSection tone="ask" labelKey="dfes.sectionAsk" noteKey="dfes.askRaisesScore" testId="section-ask">
                     {question}
                 </SurfaceSection>
-            ) : question}
+            ) : (
+                <>
+                    {/* Lane DFES-Q: on the result screen Sathi first names each piece of work he logged (hidden until the
+                        founder ticks the wording), then asks the day's one question. */}
+                    {look === 'sathi' && savedLog ? <SathiAppreciation record={savedLog} /> : null}
+                    {question}
+                </>
+            )}
 
             {FEATURE_FLAGS.disciplineSystem && engagement ? (
                 <SurfaceSection tone="streak" labelKey="dfes.sectionStreak" testId="section-streak">
