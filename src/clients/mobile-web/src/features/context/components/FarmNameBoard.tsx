@@ -331,10 +331,19 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                      * name -- an ellipsis hides meaning that the board exists to
                                      * show -- simply applied one element down, where it had been
                                      * written and then not followed. */
-                                    <span className="relative mt-[3px] flex items-center justify-center gap-1.5">
+                                    /* FEEL-1 (register F313) - THE NARROW-BOARD CLAUSE. At 320px the column beside the shield is only
+                                     * ~87px (the name is fitted to it), but "Managed by Shram Safal" is ~120px on one line, so the
+                                     * nowrap text overflowed the column and the chamfer clipped both ends ("anaged by Shram Safa").
+                                     * The row is now `w-full max-w-full`, so it can never be wider than its column, and BELOW 400px the
+                                     * text may WRAP (never truncate, never clip: "Managed by" / "Shram Safal"). From 400px up the column
+                                     * always has room, so the text is exactly what it was: one unshrinkable line, with the gold rules
+                                     * (`min-[400px]:block`; below 400px they would only squeeze the text, and a flex row that shrinks it
+                                     * by even a fraction of a pixel wraps it). So: 320px = two lines, 360px = one line, 420px = one line.
+                                     * Checked in a browser at 320, 360, 380 and 420px, with a one-letter farm name too. */
+                                    <span className="relative mt-[3px] flex w-full max-w-full items-center justify-center gap-1.5">
                                         <i
                                             aria-hidden="true"
-                                            className="h-px min-w-0 flex-1 basis-4"
+                                            className="hidden h-px min-w-0 flex-1 basis-4 min-[400px]:block"
                                             style={{
                                                 maxWidth: '1.25rem',
                                                 background: `linear-gradient(90deg,rgba(217,180,91,0),${BRASS})`,
@@ -342,14 +351,14 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                         />
                                         <span
                                             data-testid="farm-nameboard-subtitle"
-                                            className="shrink-0 whitespace-nowrap text-[9px] font-semibold tracking-[0.06em]"
+                                            className="min-w-0 text-balance text-center text-[9px] font-semibold tracking-[0.06em] min-[400px]:shrink-0 min-[400px]:whitespace-nowrap"
                                             style={{ color: '#EAD9A8', ...bodyFontFor(relationWord ?? SUBTITLE) }}
                                         >
                                             {relationWord ?? SUBTITLE}
                                         </span>
                                         <i
                                             aria-hidden="true"
-                                            className="h-px min-w-0 flex-1 basis-4"
+                                            className="hidden h-px min-w-0 flex-1 basis-4 min-[400px]:block"
                                             style={{
                                                 maxWidth: '1.25rem',
                                                 background: `linear-gradient(90deg,${BRASS},rgba(217,180,91,0))`,
