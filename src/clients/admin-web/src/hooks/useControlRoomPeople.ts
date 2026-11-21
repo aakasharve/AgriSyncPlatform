@@ -92,6 +92,9 @@ export function controlRoomErrorCode(err: unknown): string | null {
   return null;
 }
 
+/** The server's limit: the `display_name` column is 80 characters (ControlRoomPersonConfiguration). */
+export const DISPLAY_NAME_MAX = 80;
+
 /** The plain sentence for a refusal of add / change / remove / keep. Never a code, never a status. */
 export function peopleErrorText(err: unknown): string {
   switch (controlRoomErrorCode(err)) {
@@ -105,6 +108,14 @@ export function peopleErrorText(err: unknown): string {
       return 'Choose Admin, Field operator or Viewer.';
     case 'control_room.tick_unknown':
       return 'One of the parts you ticked is not known to the server. Reload the page and try again.';
+    case 'control_room.name_invalid':
+      return `Type a name between 1 and ${DISPLAY_NAME_MAX} letters.`;
+    case 'control_room.person_not_found':
+      return 'This person is no longer on the list. Refresh the page.';
+    case 'control_room.history_range_invalid':
+      return 'Pick a range of 7 to 90 days.';
+    case 'control_room.history_action_unknown':
+      return 'That kind of History line is not known. Show all lines instead.';
     case 'control_room.founder_only':
       return 'People and access is for the founder only.';
     default:

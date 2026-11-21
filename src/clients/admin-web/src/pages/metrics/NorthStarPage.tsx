@@ -15,6 +15,7 @@ import { PersonName } from '@/components/ui/PersonName';
 import { metaRefreshedAt } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { isForbiddenError } from '@/lib/silentFarms';
+import { FarmNamesNeedTick } from '@/components/FarmNamesNeedTick';
 import { useFarmContactsState } from '@/hooks/useFarmContacts';
 import { useWvfd, type WvfdWeekDto } from '@/hooks/useWvfd';
 
@@ -219,7 +220,7 @@ export default function NorthStarPage() {
   );
 
   const farmIds = useMemo(() => farms.map((f) => f.farmId), [farms]);
-  const { contacts } = useFarmContactsState(farmIds);
+  const { contacts, refused: farmNamesRefused } = useFarmContactsState(farmIds, { namesOnly: true });
 
   const countedAt = fmt.dateTime(answer?.countedAtUtc);
 
@@ -382,6 +383,7 @@ export default function NorthStarPage() {
               </p>
             ) : (
               <div className="overflow-x-auto">
+                <FarmNamesNeedTick refused={farmNamesRefused} />
                 <table className="w-full text-left text-body">
                   <caption className="sr-only">Checked days last week, by farm</caption>
                   <thead>
@@ -400,6 +402,8 @@ export default function NorthStarPage() {
                           <td className="py-1.5 pr-4 text-text-1">
                             {contact ? (
                               <PersonName name={contact.name} fallback="Name not fetched" />
+                            ) : farmNamesRefused ? (
+                              <span className="text-text-3">{f.farmId.slice(0, 8)}</span>
                             ) : (
                               <span className="text-text-3">Name not fetched</span>
                             )}

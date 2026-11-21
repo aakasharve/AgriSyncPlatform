@@ -108,6 +108,22 @@ describe('My access: a team seat', () => {
     expect(within(item("Farmers' phone numbers")).queryByText(NOTE)).not.toBeInTheDocument();
   });
 
+  it('My_access_speaks_to_the_reader', async () => {
+    serveScope(scopeBody({ controlRoom: teamSeat(['farmer_phones', 'downloads', 'my_visits', 'users']) }));
+    render();
+    await screen.findByText("Farmers' phone numbers", undefined, { timeout: SETTLE_WAIT });
+    const item = (label: string) => screen.getByText(label).closest('li') as HTMLElement;
+    // The same meaning, in the second person, and labels exactly as in the add panel.
+    expect(within(item("Farmers' phone numbers")).getByText("Lets you see and call farmers' numbers. Each look is recorded.")).toBeInTheDocument();
+    expect(within(item('Users')).getByText('Lets you see the list of app users.')).toBeInTheDocument();
+    expect(within(item('My visits')).getByText(/^Lets you see only your own visits/)).toBeInTheDocument();
+    // No founder instructions and no third person.
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/Off until you tick it/);
+    expect(text).not.toMatch(/Lets them/);
+    expect(text).not.toMatch(/the downloader's name/);
+  });
+
   it('says so, and does not invent a part, when no tick is held', async () => {
     serveScope(scopeBody({ controlRoom: teamSeat([], 'viewer') }));
     render();

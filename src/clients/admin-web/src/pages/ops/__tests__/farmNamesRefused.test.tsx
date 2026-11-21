@@ -4,6 +4,7 @@ import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type StubbedAdapter } from '@/test/stubAdapter';
 import OpsErrorsPage from '../OpsErrorsPage';
 import OpsLivePage from '../OpsLivePage';
+import NorthStarPage from '@/pages/metrics/NorthStarPage';
 
 /**
  * spec: trusted-control-room-2026-11-20 (CR-3, Task A7; K22, the AM7 rule on two more pages).
@@ -119,6 +120,43 @@ describe('Live_health_and_api_errors_say_farm_names_need_the_all_farms_tick', ()
     renderWithProviders(<OpsErrorsPage />, { route: `/ops/errors?org=${ORG}` });
 
     expect(await screen.findByText('Example: Named Farm', undefined, SETTLE)).toBeInTheDocument();
+    expect(screen.queryByText(SENTENCE)).not.toBeInTheDocument();
+  });
+});
+
+describe('North_Star_says_farm_names_need_the_all_farms_tick (G1 fix 1, M4)', () => {
+  const wvfd = {
+    data: {
+      currentWvfd: 3, currentSelfOnlyDays: 0, priorWvfd: 2, goalWvfd: null,
+      weeks: [{ weekStart: '2026-11-09', avgWvfd: 3, avgSelfOnlyDays: 0, activeFarms: 1, isPartial: false }],
+      farms: [{ farmId: FARM, checkedDays: 3, selfOnlyDays: 0, engagementTier: 'B' }],
+      countedAtUtc: '2026-11-19T04:00:00Z',
+      notMeasuredReason: null,
+    },
+    meta: META,
+  };
+
+  it('says the sentence, and not "Name not fetched", when the names call is refused', async () => {
+    stub = installAdapter(async (req) => {
+      if (req.url.includes('/farms/contacts')) return contactsAnswer('module');
+      return { status: 200, data: wvfd };
+    });
+    renderWithProviders(<NorthStarPage />, { route: `/metrics/nsm?org=${ORG}` });
+
+    expect(await screen.findByText(SENTENCE, undefined, SETTLE)).toBeInTheDocument();
+    expect(screen.queryByText('Name not fetched')).not.toBeInTheDocument();
+    expect(screen.getByText(FARM.slice(0, 8))).toBeInTheDocument();
+  });
+
+  it('a request that merely failed keeps "Name not fetched" and claims no missing tick', async () => {
+    stub = installAdapter(async (req) => {
+      if (req.url.includes('/farms/contacts')) return contactsAnswer('broken');
+      return { status: 200, data: wvfd };
+    });
+    renderWithProviders(<NorthStarPage />, { route: `/metrics/nsm?org=${ORG}` });
+
+    await waitFor(() => expect(contactCalls().length).toBeGreaterThan(0), SETTLE);
+    expect(await screen.findByText('Name not fetched', undefined, SETTLE)).toBeInTheDocument();
     expect(screen.queryByText(SENTENCE)).not.toBeInTheDocument();
   });
 });

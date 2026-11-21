@@ -89,8 +89,15 @@ export function historyText(line: HistoryLine): string {
     case 'code_not_sent':
       return `A code for ${tail(line)} could not be sent: ${notSentReason(d.reason)}`;
     case 'signed_in':
-      return `${actor} signed in.`;
+      return d.heldForQuestion === 'true'
+        ? `${actor} entered a correct code on a new phone; the sign-in waited for the new-phone question.`
+        : `${actor} signed in.`;
     case 'phones_shown':
+      if (d.page === 'users') {
+        const n = Number(d.personCount);
+        const people = n === 1 ? '1 person' : `${Number.isFinite(n) ? n : 0} people`;
+        return `${actor} looked at the phone numbers of ${people} on the Users page.`;
+      }
       return d.farms
         ? `${actor} looked at farmers' phone numbers for: ${d.farms}`
         : `${actor} looked at farmers' phone numbers.`;

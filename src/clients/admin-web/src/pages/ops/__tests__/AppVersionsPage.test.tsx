@@ -187,6 +187,23 @@ describe('the app-versions page reads the joined server answer (Review Focus 3)'
     expect(screen.queryByText(/No one was seen on an older version/)).not.toBeInTheDocument();
   });
 
+  it('An_unknown_hidden_reason_keeps_counts_and_says_names_are_hidden', async () => {
+    const answer = joinedAnswer();
+    answer.onOlderVersions = [];
+    answer.onOlderVersionsHiddenReason = 'some_future_reason';
+    serve(answer);
+    renderWithProviders(<AppVersionsPage />, { route: '/ops/app-versions' });
+
+    expect(await screen.findByRole('table', { name: 'App versions in use' }, { timeout: WAIT })).toBeInTheDocument();
+    expect(figure('People who used the app')).toBe('41');
+    expect(figure('People on an older version')).toBe('12');
+    expect(screen.getByText('Names are hidden.')).toBeInTheDocument();
+    // Not the needs-a-tick sentence, not a false zero, not an empty list.
+    expect(screen.queryByText(/needs the All farms tick/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No one was seen on an older version/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'People still on an older version' })).not.toBeInTheDocument();
+  });
+
   it('with no hidden reason, the names show as before', async () => {
     const answer = joinedAnswer();
     answer.onOlderVersionsHiddenReason = null;

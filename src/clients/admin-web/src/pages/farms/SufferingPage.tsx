@@ -108,7 +108,10 @@ function buildColumns(contacts: Map<string, FarmContact>): DataListColumn<Suffer
 export default function SufferingPage() {
   const { data, isLoading, isFetching, isError, error, refetch } = useSuffering();
   const items = useMemo(() => data?.data ?? [], [data]);
-  const contacts = useFarmContacts(useMemo(() => items.map((i) => i.farmId), [items]));
+  const contacts = useFarmContacts(
+    useMemo(() => items.map((i) => i.farmId), [items]),
+    { namesOnly: true },
+  );
   const columns = useMemo(() => buildColumns(contacts), [contacts]);
 
   const lastRefreshed = metaRefreshedAt(data?.meta);

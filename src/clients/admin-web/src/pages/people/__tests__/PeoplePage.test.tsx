@@ -444,6 +444,25 @@ describe('People and access: the weekly trust report', () => {
     expect(writes(s)[0].url).toContain(`/shramsafal/admin/people/${F1}/keep`);
   });
 
+  it('No_sign_in_here_yet_reads_the_same_for_every_row_the_founders_included', async () => {
+    const answer = peopleAnswer();
+    answer.people[0] = { ...answer.people[0], lastSignedInUtc: null };
+    serve({ people: answer });
+    renderPeople();
+    await screen.findByText('Example: Field Person', undefined, WAIT);
+    expect(screen.getAllByText('No sign-in here yet')).toHaveLength(2);
+    expect(screen.queryByText('Not signed in yet')).not.toBeInTheDocument();
+  });
+
+  it('The_trust_report_says_test_accounts_are_left_out_of_the_phone_looks', async () => {
+    serve();
+    renderPeople();
+    const block = (await screen.findByRole('heading', { name: "Farmers' phone numbers looked at" }, WAIT)).closest('section')!;
+    expect(within(block).getByText('Test accounts and their farms are left out.')).toBeInTheDocument();
+    const other = screen.getByRole('heading', { name: 'Downloads' }).closest('section')!;
+    expect(within(other).queryByText('Test accounts and their farms are left out.')).not.toBeInTheDocument();
+  });
+
   it('says the people-with-access number is the current list', async () => {
     serve();
     renderPeople();

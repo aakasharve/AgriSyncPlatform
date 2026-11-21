@@ -374,6 +374,12 @@ function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays
             <p data-hidden-reason="needs_all_farms" className="glass-panel rounded-panel px-5 py-4 text-body text-text-1">
               Names are hidden: seeing who is on an older version needs the All farms tick.
             </p>
+          ) : data.onOlderVersionsHiddenReason ? (
+            /* A reason this page does not know: never a false zero and never an empty list. The
+               counts above stand (the card and the version table); the names are hidden. */
+            <p data-hidden-reason="other" className="glass-panel rounded-panel px-5 py-4 text-body text-text-1">
+              Names are hidden.
+            </p>
           ) : data.onOlderVersions.length === 0 ? (
             <MeasuredZero
               what={`No one was seen on an older version in the last ${days} days`}
