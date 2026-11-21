@@ -798,6 +798,33 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
             ShramSafal.Domain.ControlRoom.ControlRoomTicks.ModulesFor([ShramSafal.Domain.ControlRoom.ControlRoomTicks.FarmerHealth]),
             IsPlatformAdmin: false);
 
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N7, N1-I7): "last entry reached the server" is the farm's
+    // newest ssf.daily_logs row inside its own scope, entries saved by test accounts left out: the same source as All
+    // Farms' Last Log, never analytics.events (a swallowed analytics write can no longer freeze it).
+    [SkippableFact]
+    public async Task The_last_entry_comes_from_the_farms_entries_not_analytics_and_leaves_out_test_accounts()
+    {
+        await GuardAsync();
+
+        var ownersEntry = DateTime.SpecifyKind(Now.AddHours(-30), DateTimeKind.Utc);
+        await using (var db = await OpenSuperuserAsync())
+        {
+            await EntryAsync(db, Farm1, Owner1, ownersEntry);
+            await EntryAsync(db, Farm1, TestAccount, Now.AddHours(-2));   // newer, but by a test account
+            await EntryAsync(db, Farm2, Owner2, Now.AddHours(-1));        // newer, but another farm
+            // No log.created event is written for any of them (as when analytics writes fail).
+        }
+
+        await using var scope = AdminScope(BuildProvider(new[] { TestAccount }));
+        var page = await Repository(scope.ServiceProvider).GetAsync(Farm1, PlatformOwner, Admin);
+
+        Output.WriteLine($"[EVIDENCE] last entry = {page!.SyncState?.LastSyncAt:O}");
+        page.SyncState.Should().NotBeNull("the platform owner holds the API errors tick");
+        page.SyncState!.LastSyncAt.Should().NotBeNull("the farm has an entry; analytics holding none does not hide it");
+        DateTime.SpecifyKind(page.SyncState.LastSyncAt!.Value, DateTimeKind.Utc)
+            .Should().BeCloseTo(ownersEntry, TimeSpan.FromSeconds(1), "the owner's entry; the test account's newer one is left out");
+    }
+
     private static AdminScope FpoEmployee =>
         new(Org, OrganizationType.FPO, OrganizationRole.Employee,
             EntitlementMatrix.For(OrganizationType.FPO, OrganizationRole.Employee), IsPlatformAdmin: false);

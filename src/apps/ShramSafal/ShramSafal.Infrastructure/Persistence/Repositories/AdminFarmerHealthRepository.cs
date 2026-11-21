@@ -42,7 +42,13 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// <para>
 /// <b>Test accounts</b> (<c>CompanyMis:ExcludedUserIds</c>) are left out by the person who did the counted thing:
 /// entries by their saver, checks by their checker, reading jobs by the person who started them, problems by
-/// <see cref="AdminErrorFarm.PersonSql"/>. The closure columns (P3) and the last activity (P8) are unchanged.
+/// <see cref="AdminErrorFarm.PersonSql"/>. The closure columns (P3) are unchanged.
+/// </para>
+/// <para>
+/// <b>Last entry that reached the server</b> (P8, CR-3 fix wave S-N7, N1-I7): the newest <c>ssf.daily_logs</c> row of
+/// the farm, read inside the farm scope this page already opens, leaving out entries saved by test accounts (the Silent
+/// Churn rule). It is the same source as All Farms' "Last Log", never <c>analytics.events</c>, so a swallowed analytics
+/// write can never freeze it.
 /// </para>
 /// <para>
 /// The farm score is not computed here (P2, plan H-SCORE): <see cref="FarmerHealthDto.Score"/> is null.
@@ -87,15 +93,15 @@ public sealed class AdminFarmerHealthRepository(
 
         // 3. The farm's own rows, as the app login, through row-level security, in one scope.
         var readAiJobs = scope.CanRead(ModuleKey.OpsVoice);
+        var readSyncState = scope.CanRead(ModuleKey.OpsErrors);
         var farmRows = await RlsIdentityScope.RunAsFarmAsync(
             db, farmId, identity.OwnerAccountId, actorUserId: null,
-            token => ReadFarmRowsAsync(farmId, window, readAiJobs, token),
+            token => ReadFarmRowsAsync(farmId, window, readAiJobs, readSyncState, token),
             ct);
 
         // 4. Events and the owner's phone, through the analytics connection.
-        var readSyncState = scope.CanRead(ModuleKey.OpsErrors);
         var events = await WithAnalyticsConnectionAsync(
-            conn => ReadEventsAsync(conn, farmId, identity.OwnerUserId, window, readSyncState, ct), ct);
+            conn => ReadEventsAsync(conn, farmId, identity.OwnerUserId, window, ct), ct);
 
         var timeline = new List<FarmerHealthTimelineDto>(WindowDays);
         for (var d = window.FirstDay; d <= window.LastDay; d = d.AddDays(1))
@@ -117,7 +123,7 @@ public sealed class AdminFarmerHealthRepository(
             Phone: events.OwnerPhone,
             Score: null,
             Timeline: timeline,
-            SyncState: readSyncState ? new FarmerHealthSyncStateDto(events.LastActivityUtc) : null,
+            SyncState: readSyncState ? new FarmerHealthSyncStateDto(farmRows.LastEntryUtc) : null,
             AiHealth: farmRows.AiHealth,
             Verifications: farmRows.Verifications,
             WorkerSummary: farmRows.Workers,
@@ -200,10 +206,12 @@ public sealed class AdminFarmerHealthRepository(
         FarmerHealthVerificationCountsDto Verifications,
         Dictionary<DateOnly, int> ChecksByDay,
         IReadOnlyList<FarmerHealthWorkerSummaryDto> Workers,
-        FarmerHealthAiHealthDto? AiHealth);
+        FarmerHealthAiHealthDto? AiHealth,
+        DateTime? LastEntryUtc);
 
     /// <summary>Runs inside the farm's own row-level security scope, as the app login.</summary>
-    private async Task<FarmRows> ReadFarmRowsAsync(Guid farmGuid, Window window, bool readAiJobs, CancellationToken ct)
+    private async Task<FarmRows> ReadFarmRowsAsync(
+        Guid farmGuid, Window window, bool readAiJobs, bool readLastEntry, CancellationToken ct)
     {
         var farmId = new FarmId(farmGuid);
 
@@ -314,11 +322,23 @@ public sealed class AdminFarmerHealthRepository(
             ? await ReadReadingAsync(farmGuid, farmId, window, excludedUsers, excludedGuids, ct)
             : null;
 
+        // P8 (S-N7): the newest entry of this farm that reached the server, entries saved by test accounts left out.
+        DateTime? lastEntry = null;
+        if (readLastEntry)
+        {
+            var newest = await db.DailyLogs
+                .AsNoTracking()
+                .Where(l => l.FarmId == farmId && !excludedUsers.Contains(l.OperatorUserId))
+                .MaxAsync(l => (DateTime?)l.CreatedAtUtc, ct);
+            lastEntry = newest is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null;
+        }
+
         return new FarmRows(
             new FarmerHealthVerificationCountsDto(confirmed, verified, disputed, waiting, selfChecked),
             checksByDay,
             workers,
-            aiHealth);
+            aiHealth,
+            lastEntry);
     }
 
     /// <summary>
@@ -384,11 +404,10 @@ public sealed class AdminFarmerHealthRepository(
         string? OwnerPhone,
         string? OwnerName,
         Dictionary<DateOnly, ClosureDay> Closures,
-        Dictionary<DateOnly, int> ProblemsByDay,
-        DateTime? LastActivityUtc);
+        Dictionary<DateOnly, int> ProblemsByDay);
 
     private async Task<EventRows> ReadEventsAsync(
-        DbConnection conn, Guid farmId, Guid ownerUserId, Window window, bool readLastActivity, CancellationToken ct)
+        DbConnection conn, Guid farmId, Guid ownerUserId, Window window, CancellationToken ct)
     {
         // The owner's phone (C15) and display name (C23). public.users: key column "Id" (EF default, quoted); the
         // phone is "phone".
@@ -464,27 +483,7 @@ public sealed class AdminFarmerHealthRepository(
             }
         }
 
-        // P8: the last activity, unchanged.
-        DateTime? lastActivity = null;
-        if (readLastActivity)
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT MAX(occurred_at_utc) FROM analytics.events
-                WHERE farm_id = @farm AND event_type IN ('sync.completed', 'log.created')
-                """;
-            AddParam(cmd, "@farm", farmId);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            lastActivity = raw switch
-            {
-                null or DBNull => null,
-                DateTime dt => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
-                _ => throw new InvalidOperationException(
-                    $"The last activity came back as {raw.GetType().Name}, not a time."),
-            };
-        }
-
-        return new EventRows(phone, ownerName, closures, problems, lastActivity);
+        return new EventRows(phone, ownerName, closures, problems);
     }
 
     private static string? ReadText(DbDataReader r, int i, string column)

@@ -530,6 +530,10 @@ public static class DependencyInjection
         // The company MIS rows: farm keys through the admin factory, every counted row per farm under
         // row-level security on the scoped context.
         services.AddScoped<ICompanyMisReader, CompanyMisReader>();
+        // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9) — "nothing happened" told apart from "nothing was
+        // recorded": one check (the month partition, the newest log.created against the newest entry), cached 60 s.
+        services.AddSingleton<AnalyticsRecordingCache>();
+        services.AddScoped<IAnalyticsRecordingCheck, AnalyticsRecordingCheck>();
         // spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 6, C32) — confirmed farm-days rows: farm keys
         // through the admin factory (or from the caller's own open), every farm's entries and checks under
         // row-level security on the scoped context.

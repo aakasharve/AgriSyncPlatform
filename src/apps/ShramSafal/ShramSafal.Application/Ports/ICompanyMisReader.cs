@@ -132,7 +132,11 @@ public sealed record MisPlotRow(Guid FarmId, decimal AreaInAcres);
 public sealed record MisVoiceJobRow(
     Guid JobId, Guid FarmId, Guid UserId, DateTime CreatedAtUtc, string Status, IReadOnlyList<int> SuccessfulLatenciesMs);
 
-public sealed record MisUserRow(Guid UserId, DateTime PhoneVerifiedAtUtc);
+/// <summary>
+/// A verified account and its sign-up instant: <c>public.users.created_at_utc</c>, which never moves (CR-3 fix wave
+/// S-N3). Only accounts whose phone has been verified are read; a later SMS sign-in never changes the instant.
+/// </summary>
+public sealed record MisUserRow(Guid UserId, DateTime SignedUpAtUtc);
 
 public sealed record MisFpoScopeRow(Guid FarmId, string OrganizationName, DateTime GrantedAtUtc);
 

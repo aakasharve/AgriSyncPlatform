@@ -180,7 +180,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         if (additionsSinceUtc is { } additionsSince)
         {
             appSeen = await ReadAppSeenAsync(additionsSince, countedAtUtc, ct);
-            syncDays = await ReadSyncDaysAsync(additionsSince, countedAtUtc, ct);
+            syncDays = await ReadSyncDaysAsync(additionsSince, countedAtUtc, excludedUserIds, ct);
         }
 
         return new CompanyMisRows(
@@ -363,11 +363,16 @@ public sealed class CompanyMisReader : ICompanyMisReader
         {
             using var cmd = conn.CreateCommand();
             // public.users: key column "Id" (EF default, quoted). No phone number is read.
+            // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N3, N1-C2): a sign-up is an account whose phone has
+            // been verified, dated by created_at_utc, which never moves. phone_verified_at_utc is re-stamped on every SMS
+            // sign-in (MarkPhoneVerified), so it would turn a returning farmer into a new sign-up and move his cohort.
+            // The window uses the same column.
             cmd.CommandText = """
-                SELECT u."Id", u.phone_verified_at_utc
+                SELECT u."Id", u.created_at_utc
                 FROM public.users u
-                WHERE u.phone_verified_at_utc >= @since
-                  AND u.phone_verified_at_utc < @counted
+                WHERE u.phone_verified_at_utc IS NOT NULL
+                  AND u.created_at_utc >= @since
+                  AND u.created_at_utc < @counted
                 """;
             AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
             AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
@@ -526,16 +531,21 @@ public sealed class CompanyMisReader : ICompanyMisReader
     /// <item>Accepted changes: <c>ssf.sync_mutations</c> rows by <c>processed_at_utc</c>, on the scoped context as
     /// the app login (the table has no farm column and no row-level security; nothing deletes from it).</item>
     /// </list>
+    /// CR-3 fix wave S-N6 (N1-I1): the refused side leaves out test accounts by the person the row carries
+    /// (<c>props.personId</c>, <see cref="AdminErrorFarm.PersonSql"/>; a row naming nobody still counts). The accepted
+    /// side records only a device id, with no account (the same device id can be shared, or a placeholder), so it cannot
+    /// be tied to a person: it still counts every upload, and the answer says so
+    /// (<see cref="ShramSafal.Application.Contracts.Dtos.MisQualityDto.SyncAcceptedIncludesTestPhones"/>).
     /// </summary>
     private async Task<IReadOnlyList<MisSyncDayRow>> ReadSyncDaysAsync(
-        DateTime sinceUtc, DateTime countedAtUtc, CancellationToken ct)
+        DateTime sinceUtc, DateTime countedAtUtc, IReadOnlySet<Guid> excludedUserIds, CancellationToken ct)
     {
         var refused = await ReadDayCountsAsync(
             _analytics.Database.GetDbConnection(),
             transaction: null,
-            """
+            $"""
             SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
-                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{1,9}$'
+                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{{1,9}}$'
                                      THEN (props->>'rejectedWorkItems')::int END), 0)::bigint AS refused
             FROM analytics.events
             WHERE event_type = 'sync.mutation_rejected'
@@ -543,9 +553,10 @@ public sealed class CompanyMisReader : ICompanyMisReader
               AND actor_role = 'system'
               AND occurred_at_utc >= @since
               AND occurred_at_utc < @counted
+              AND NOT COALESCE({AdminErrorFarm.PersonSql} = ANY(@excluded), false)
             GROUP BY 1
             """,
-            sinceUtc, countedAtUtc, ct);
+            sinceUtc, countedAtUtc, excludedUserIds, ct);
 
         var accepted = await ReadDayCountsAsync(
             _db.Database.GetDbConnection(),
@@ -558,7 +569,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
               AND processed_at_utc < @counted
             GROUP BY 1
             """,
-            sinceUtc, countedAtUtc, ct);
+            sinceUtc, countedAtUtc, excludedUserIds: null, ct);
 
         return refused.Keys.Union(accepted.Keys)
             .Order()
@@ -576,6 +587,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
         string sql,
         DateTime sinceUtc,
         DateTime countedAtUtc,
+        IReadOnlySet<Guid>? excludedUserIds,
         CancellationToken ct)
     {
         var counts = new Dictionary<DateOnly, long>();
@@ -588,6 +600,10 @@ public sealed class CompanyMisReader : ICompanyMisReader
             cmd.CommandText = sql;
             AddParam(cmd, "@since", DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc));
             AddParam(cmd, "@counted", DateTime.SpecifyKind(countedAtUtc, DateTimeKind.Utc));
+            if (excludedUserIds is not null)
+            {
+                AddParam(cmd, "@excluded", excludedUserIds.ToArray());
+            }
 
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))

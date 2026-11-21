@@ -36,4 +36,11 @@ public interface IControlRoomHistory
     /// </summary>
     Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
         Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct);
+
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (fix wave S-N2): when History began, the time of the oldest
+    /// <c>control_room</c> row, or null when there is none yet. One query; opens the audited cross-tenant factory as
+    /// <paramref name="readerUserId"/>.
+    /// </summary>
+    Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct);
 }

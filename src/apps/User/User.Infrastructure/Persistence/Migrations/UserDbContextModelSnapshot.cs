@@ -198,19 +198,23 @@ namespace User.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("provider_request_id");
 
+                    b.Property<short>("Purpose")
+                        .HasColumnType("smallint")
+                        .HasColumnName("purpose");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PhoneNumberNormalized")
-                        .IsUnique()
-                        .HasDatabaseName("ux_otp_challenges_pending_per_phone")
-                        .HasFilter("status = 1");
-
                     b.HasIndex("PhoneNumberNormalized", "CreatedAtUtc")
                         .HasDatabaseName("ix_otp_challenges_phone_created");
+
+                    b.HasIndex("PhoneNumberNormalized", "Purpose")
+                        .IsUnique()
+                        .HasDatabaseName("ux_otp_challenges_pending_per_phone_purpose")
+                        .HasFilter("status = 1");
 
                     b.ToTable("otp_challenges", "public");
                 });

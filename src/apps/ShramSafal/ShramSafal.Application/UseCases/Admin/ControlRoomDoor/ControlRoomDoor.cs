@@ -76,19 +76,23 @@ public sealed class ControlRoomDoor(
         if (step is not (StepSend or StepCheck))
             throw new ArgumentException("The step is 'send' or 'check'.", nameof(step));
 
-        return history.RecordNowAsync(new ControlRoomHistoryEntry(
-            ControlRoomHistoryAction.DoorRefused,
-            SystemActor.ControlRoomDoor,
-            SubjectOf(d),
-            new { step, phoneTail = IndianMobile.Tail(d.PhoneE164), reason = d.RefusalReason },
-            deviceId,
-            ipHash), ct);
+        return history.RecordNowAsync(
+            RefusedEntry(SubjectOf(d), step, IndianMobile.Tail(d.PhoneE164), d.RefusalReason ?? ReasonNotListed, deviceId, ipHash), ct);
     }
+
+    /// <summary>
+    /// The <c>door_refused</c> row, <c>{ step, phoneTail, reason }</c> by the door: the one builder for the row, used
+    /// here and by the background writer that records a refused send (fix wave S-A6: a refused send's row is written
+    /// after the answer, as an approved send's work is).
+    /// </summary>
+    public static ControlRoomHistoryEntry RefusedEntry(Guid subjectId, string step, string phoneTail, string reason, string deviceId, string ipHash) =>
+        new(ControlRoomHistoryAction.DoorRefused, SystemActor.ControlRoomDoor, subjectId, new { step, phoneTail, reason }, deviceId, ipHash);
 
     /// <summary>
     /// <c>signed_in</c> by <paramref name="userId"/> (the People page groups sign-ins by who signed in). An unbound person is
     /// bound to that account first (H3), with its <c>seat_bound</c> row; the bind and both rows commit in ONE save, so a
-    /// failure leaves nothing half-granted and throws (the route answers 500 and hands out no token, K26).
+    /// failure leaves nothing half-granted and throws (the route hands out no token, K26, and answers the one refusal,
+    /// fix wave S-A6).
     /// </summary>
     public async Task RecordSignedInAsync(
         DoorDecision d, Guid userId, bool heldForQuestion, string deviceId, string ipHash, CancellationToken ct)

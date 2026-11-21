@@ -5,7 +5,9 @@ using ShramSafal.Application.Ports;
 namespace ShramSafal.Application.UseCases.Admin.GetOpsRecorded;
 
 /// <param name="Minutes">How far back to read. Null means <see cref="GetOpsRecordedHandler.DefaultMinutes"/>.</param>
-public sealed record GetOpsRecordedQuery(int? Minutes);
+/// <param name="MayReadNames">spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A7, AM7): the All farms tick (or
+/// the founder). Without it every row's <c>PersonName</c> is left blank, as App Versions leaves its names out.</param>
+public sealed record GetOpsRecordedQuery(int? Minutes, bool MayReadNames = false);
 
 /// <summary>
 /// spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task R1).
@@ -37,6 +39,11 @@ public sealed class GetOpsRecordedHandler(IAdminOpsRepository opsRepo, TimeProvi
         var nowUtc = clock.GetUtcNow().UtcDateTime;
 
         var rows = await opsRepo.GetRecordedAsync(nowUtc.AddMinutes(-minutes), ct);
+        if (!query.MayReadNames)
+        {
+            // AM7: a person's name needs the All farms tick; the API errors tick alone does not open it.
+            rows = rows.Select(r => r with { PersonName = null }).ToList();
+        }
 
         return Result.Success(new AdminResponseDto<IReadOnlyList<OpsRecordedRowDto>>(rows,
             new AdminMetaDto(

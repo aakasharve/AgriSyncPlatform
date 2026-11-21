@@ -18,6 +18,14 @@ public sealed record FarmsListDto(
     /// </summary>
     [JsonIgnore]
     public string? RefusalCode { get; init; }
+
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N5, N1-I2): how many farms owned by test accounts
+    /// (<c>CompanyMis:ExcludedUserIds</c>) match this list and are still shown in it (each row says "test account").
+    /// <see cref="TotalCount"/> leaves them out, as Company MIS "Farms registered" does, so the rows in the whole list
+    /// are <see cref="TotalCount"/> + <see cref="TestFarmsShown"/> (the number paging needs).
+    /// </summary>
+    public int TestFarmsShown { get; init; }
 }
 
 /// <summary>

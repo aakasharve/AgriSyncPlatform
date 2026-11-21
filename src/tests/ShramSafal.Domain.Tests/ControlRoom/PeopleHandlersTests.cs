@@ -91,6 +91,26 @@ public sealed class PeopleHandlersTests
         public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
             Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<Guid, DateTime>>(new Dictionary<Guid, DateTime>());
+
+        public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct) => Task.FromResult<DateTime?>(null);
+    }
+
+    /// <summary>Fix wave S-A4: the accounts whose console sessions a removal ended; can be made to fail.</summary>
+    private sealed class FakeDoorSessions : IControlRoomDoorSessions
+    {
+        public List<(Guid UserId, DateTime At)> Ended { get; } = [];
+        public bool Fail { get; set; }
+
+        public Task<int> EndDoorSessionsAsync(Guid userId, DateTime utcNow, CancellationToken ct)
+        {
+            if (Fail)
+            {
+                throw new InvalidOperationException("Example: the session registry went away.");
+            }
+
+            Ended.Add((userId, utcNow));
+            return Task.FromResult(1);
+        }
     }
 
     private static OrganizationMembership Seat(Guid user, OrganizationRole role) =>
@@ -271,7 +291,7 @@ public sealed class PeopleHandlersTests
         var seat = store.Seats[user];
         store.Records.Clear();
 
-        var result = await new RemovePersonHandler(store, new FixedClock())
+        var result = await new RemovePersonHandler(store, new FixedClock(), new FakeDoorSessions())
             .HandleAsync(new RemovePersonCommand(FounderUser, created.Value!.PersonId!.Value, Device, Ip));
 
         result.IsSuccess.Should().BeTrue();
@@ -281,6 +301,49 @@ public sealed class PeopleHandlersTests
         var row = store.Records.Should().ContainSingle().Which;
         row.Action.Should().Be("person_removed");
         row.SubjectId.Should().Be(person.Id);
+    }
+
+    // Fix wave S-A4 (AU-M1): removing a person ends their console sessions, before the removal is saved.
+    [Fact]
+    public async Task Remove_ends_the_persons_console_sessions_before_the_removal_is_saved()
+    {
+        var (store, directory, add) = Make();
+        var user = Guid.Parse("00000000-0000-0000-0000-0000000000b6");
+        directory.ByPhone["9000000021"] = new ControlRoomAccount(user, "9000000021", "Example: Account Holder");
+        var created = await add.HandleAsync(Add());
+        var personId = created.Value!.PersonId!.Value;
+        var savesBefore = store.Saves;
+
+        // If the sessions cannot be ended, nothing is removed (the founder tries again).
+        var failing = new FakeDoorSessions { Fail = true };
+        var act = () => new RemovePersonHandler(store, new FixedClock(), failing)
+            .HandleAsync(new RemovePersonCommand(FounderUser, personId, Device, Ip));
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        store.People.Single().IsActive.Should().BeTrue("the removal is not saved when the sessions were not ended");
+        store.Saves.Should().Be(savesBefore);
+
+        var sessions = new FakeDoorSessions();
+        var result = await new RemovePersonHandler(store, new FixedClock(), sessions)
+            .HandleAsync(new RemovePersonCommand(FounderUser, personId, Device, Ip));
+
+        result.IsSuccess.Should().BeTrue();
+        sessions.Ended.Should().ContainSingle().Which.UserId.Should().Be(user, "the bound account's console sessions are ended");
+        store.People.Single().IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Removing_a_person_who_never_signed_in_ends_no_session()
+    {
+        var (store, _, add) = Make();
+        var created = await add.HandleAsync(Add());
+        store.People.Single().UserId.Should().BeNull("arrange: no account holds the number, so the person is unbound");
+        var sessions = new FakeDoorSessions();
+
+        var result = await new RemovePersonHandler(store, new FixedClock(), sessions)
+            .HandleAsync(new RemovePersonCommand(FounderUser, created.Value!.PersonId!.Value, Device, Ip));
+
+        result.IsSuccess.Should().BeTrue();
+        sessions.Ended.Should().BeEmpty("an unbound person has no console session");
     }
 
     [Fact]
@@ -294,7 +357,7 @@ public sealed class PeopleHandlersTests
         store.People.Add(person);
         store.Seats[user] = owner;
 
-        var result = await new RemovePersonHandler(store, new FixedClock())
+        var result = await new RemovePersonHandler(store, new FixedClock(), new FakeDoorSessions())
             .HandleAsync(new RemovePersonCommand(FounderUser, person.Id, Device, Ip));
 
         result.IsSuccess.Should().BeTrue();
@@ -397,7 +460,7 @@ public sealed class PeopleHandlersTests
 
         await new ChangePersonHandler(store, clock).HandleAsync(new ChangePersonCommand(FounderUser, id, null, null, [ControlRoomTicks.CompanyNumbers], Device, Ip));
         await new KeepPersonHandler(store, clock).HandleAsync(new KeepPersonCommand(FounderUser, id, Device, Ip));
-        await new RemovePersonHandler(store, clock).HandleAsync(new RemovePersonCommand(FounderUser, id, Device, Ip));
+        await new RemovePersonHandler(store, clock, new FakeDoorSessions()).HandleAsync(new RemovePersonCommand(FounderUser, id, Device, Ip));
 
         store.Records.Select(r => r.Action).Should().Equal(
             "person_added", "seat_bound", "person_changed", "person_kept", "person_removed");

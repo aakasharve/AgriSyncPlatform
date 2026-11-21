@@ -167,6 +167,12 @@ try
         builder.Configuration.GetSection(User.Infrastructure.Otp.Msg91Options.SectionName)
             .Get<User.Infrastructure.Otp.Msg91Options>() ?? new User.Infrastructure.Otp.Msg91Options());
 
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A3): outside Development and Testing the API never signs with
+    // a missing key or a key committed in this repository's appsettings files (public, so anyone could mint any token).
+    AgriSync.BuildingBlocks.Auth.Jwt.JwtSigningKeyStartupGuard.EnsureSafeForEnvironment(
+        builder.Environment.EnvironmentName,
+        builder.Configuration[$"{AgriSync.BuildingBlocks.Auth.Jwt.JwtOptions.SectionName}:SigningKey"]);
+
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     // spec: plr-d10 lane WID — a worker's one-time code goes by REAL SMS only once its own DLT template is approved
@@ -346,6 +352,10 @@ try
     // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — the control room reads User accounts only through the host.
     builder.Services.AddScoped<ShramSafal.Application.Ports.IControlRoomPhoneDirectory,
         AgriSync.Bootstrapper.Adapters.ControlRoomPhoneDirectory>();
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A4) — removing a person ends their console sessions, which
+    // live in the User module; registered after the module so it replaces the module's loud fallback.
+    builder.Services.AddScoped<ShramSafal.Application.Ports.IControlRoomDoorSessions,
+        AgriSync.Bootstrapper.Adapters.ControlRoomDoorSessions>();
     // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A6, AM2) — the console door never texts inside the request:
     // an approved number's code goes into this bounded queue and the background sender sends it after the answer.
     builder.Services.AddSingleton<AgriSync.Bootstrapper.Infrastructure.ControlRoomCodeQueue>();

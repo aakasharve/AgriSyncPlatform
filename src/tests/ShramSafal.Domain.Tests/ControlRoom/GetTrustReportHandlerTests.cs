@@ -41,7 +41,7 @@ public sealed class GetTrustReportHandlerTests
     ];
 
     [Fact]
-    public async Task The_report_leaves_out_test_accounts_and_the_farms_they_own()
+    public async Task The_report_leaves_out_test_farms_but_never_a_look_because_of_who_looked()
     {
         var farms = new Owners(new Dictionary<Guid, Guid>
         {
@@ -53,12 +53,35 @@ public sealed class GetTrustReportHandlerTests
 
         var report = await Handler(new Reads(Looks), farms, exclusions).HandleAsync(Founder);
 
-        report.PhoneLooks.Should().Be(new MisValueDto(1, null), "the teammate's look that named a real farm");
-        report.PhoneFarms.Should().Be(new MisValueDto(1, null), "the real farm only");
-        report.PhoneLookers.Should().Be(new MisValueDto(1, null), "the teammate; the founder is a test account");
+        // Fix wave S-N1: the founder is on the list (for Company MIS), and his look at a real farm still counts.
+        report.PhoneLooks.Should().Be(new MisValueDto(2, null), "the founder's look and the teammate's look that named a real farm");
+        report.PhoneFarms.Should().Be(new MisValueDto(2, null), "the real farm and the founder's farm; never the test farm");
+        report.PhoneLookers.Should().Be(new MisValueDto(2, null), "the founder and the teammate");
+        report.PhoneLooksLeftOutTestFarmsOnly.Should().Be(new MisValueDto(1, null), "the look at the test farm only");
         farms.Calls.Should().Be(1, "one owner read for the whole report");
         farms.Reader.Should().Be(Founder, "the reader is named in the cross-farm audit row");
         farms.Asked.Should().BeEquivalentTo(new[] { RealFarm, TestFarm, FounderOnlyFarm });
+    }
+
+    // Fix wave S-N1 (FR-C1, the deploy order's step 6): staff accounts are put on the test-account list so Company MIS
+    // leaves them out; their looks at farmers' numbers must still be counted here.
+    [Fact]
+    public async Task A_looker_who_is_a_listed_person_and_on_the_test_account_list_is_counted()
+    {
+        var listed = ControlRoomPerson.Add(U(500), "+919000000500", "Example: Field Operator", ControlRoomRole.FieldOperator, [], Founder, Now.AddDays(-40));
+        listed.BindTo(Teammate, U(501), Now.AddDays(-40));
+        var farms = new Owners(new Dictionary<Guid, Guid> { [RealFarm] = RealOwner });
+        var exclusions = new CompanyMisExclusions(new HashSet<Guid> { Teammate });
+
+        var report = await new GetTrustReportHandler(
+                new NoPeople(listed), new NoDirectory(), new Reads([Look(Teammate, RealFarm)]), farms, exclusions, new FixedClock())
+            .HandleAsync(Founder);
+
+        report.PhoneLooks.Should().Be(new MisValueDto(1, null), "a listed person's look counts, whatever list their account is on");
+        report.PhoneLookers.Should().Be(new MisValueDto(1, null));
+        report.PhoneFarms.Should().Be(new MisValueDto(1, null));
+        report.PeopleWithAccess.Should().Be(2, "the founder and the listed person");
+        report.HistoryStartedAtUtc.Should().Be(HistoryBegan, "the time of the first History row is sent");
     }
 
     [Fact]
@@ -88,9 +111,13 @@ public sealed class GetTrustReportHandlerTests
         public DateTime UtcNow => Now;
     }
 
+    private static readonly DateTime HistoryBegan = Now.AddDays(-3);
+
     private sealed class Reads(ControlRoomHistoryLine[] phones, bool phonesHitLimit = false) : IControlRoomHistory
     {
         public Task RecordNowAsync(ControlRoomHistoryEntry entry, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct) => Task.FromResult<DateTime?>(HistoryBegan);
 
         public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
             Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
@@ -139,10 +166,10 @@ public sealed class GetTrustReportHandlerTests
             throw new NotSupportedException();
     }
 
-    private sealed class NoPeople : IControlRoomStore
+    private sealed class NoPeople(params ControlRoomPerson[] people) : IControlRoomStore
     {
         public Task<IReadOnlyList<ControlRoomPerson>> ListActiveAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<ControlRoomPerson>>([]);
+            Task.FromResult<IReadOnlyList<ControlRoomPerson>>(people);
 
         public Task<IReadOnlyList<Guid>> PlatformOwnerUserIdsAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<Guid>>([Founder]);

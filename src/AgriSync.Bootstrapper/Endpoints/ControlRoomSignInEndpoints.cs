@@ -29,6 +29,13 @@ namespace AgriSync.Bootstrapper.Endpoints;
 /// </list>
 /// Both routes hold every answer until <see cref="ControlRoomDoor.AnswerFloor"/> has passed since the request began
 /// (D10: on the injected <see cref="TimeProvider"/>), so the answers do not tell an approved number from another by time.
+/// <para>
+/// Fix wave S-A6 (AU-M6, FR-M4): the answers do not depend on the path taken either. Any fault inside a route (a database
+/// that went away, a failed bind) becomes that route's one refusal answer (send-code: the calm 200; check-code: 401
+/// <c>code_not_accepted</c>), held to the same floor, and is logged by its type name only (never the number, never the
+/// code). A refused send's History row is written by the background writer after the answer, as an approved send's work
+/// is; a refused check's row and an approved check's rows are both written inside the timed window.
+/// </para>
 /// Lives in the host because it calls the User handlers, which ShramSafal may not reference (E2).
 /// </summary>
 public static class ControlRoomSignInEndpoints
@@ -43,6 +50,7 @@ public static class ControlRoomSignInEndpoints
     private const string LogCategory = "AgriSync.Bootstrapper.Endpoints.ControlRoomSignInEndpoints";
     private static readonly EventId BindFailed = new(4602, "ControlRoomBindFailed");
     private static readonly EventId RefusalNotRecorded = new(4603, "ControlRoomRefusalNotRecorded");
+    private static readonly EventId DoorFault = new(4604, "ControlRoomDoorFault");
 
     public sealed record SendCodeRequest(string? Phone);
 
@@ -95,7 +103,25 @@ public static class ControlRoomSignInEndpoints
         return endpoints;
     }
 
+    /// <summary>S-A6: any fault becomes the calm answer every valid number gets (a malformed number never reaches a fault).</summary>
     private static async Task<IResult> SendCodeAsync(
+        HttpContext http, SendCodeRequest? request, ControlRoomDoor door, ControlRoomCodeQueue queue, TimeProvider time,
+        OtpPolicyOptions policy, ILoggerFactory logs, CancellationToken ct)
+    {
+        try
+        {
+            return await SendCodeCoreAsync(http, request, door, queue, time, policy, logs, ct);
+        }
+        catch (Exception ex)
+        {
+            logs.CreateLogger(LogCategory).LogError(DoorFault,
+                "ControlRoomDoorFault: a send try ended in a fault ({Failure}); it was answered as every valid number is.",
+                ex.GetType().Name);
+            return CalmAnswer(policy);
+        }
+    }
+
+    private static async Task<IResult> SendCodeCoreAsync(
         HttpContext http, SendCodeRequest? request, ControlRoomDoor door, ControlRoomCodeQueue queue, TimeProvider time,
         OtpPolicyOptions policy, ILoggerFactory logs, CancellationToken ct)
     {
@@ -108,7 +134,15 @@ public static class ControlRoomSignInEndpoints
         var (deviceId, ipHash) = http.AuditClaims();
         if (decision.Outcome == DoorOutcome.NotApproved)
         {
-            await RecordRefusalAsync(door, decision, ControlRoomDoor.StepSend, deviceId, ipHash, logs, ct);
+            // S-A6: written after the answer by the background writer, as an approved send's work is. Only the last four
+            // digits are queued. If the queue will not take it, it is written now (never lost).
+            var refusal = ControlRoomCodeRequest.ForRefusal(
+                ControlRoomDoor.SubjectOf(decision), ControlRoomDoor.StepSend, decision.RefusalReason ?? ControlRoomDoor.ReasonNotListed,
+                IndianMobile.Tail(decision.PhoneE164!), deviceId, ipHash, time.GetUtcNow().UtcDateTime);
+            if (!queue.TryEnqueue(refusal))
+            {
+                await RecordRefusalAsync(door, decision, ControlRoomDoor.StepSend, deviceId, ipHash, logs, ct);
+            }
         }
         else
         {
@@ -123,14 +157,39 @@ public static class ControlRoomSignInEndpoints
         }
 
         // The same answer for every valid number: approved, refused, rate-limited or not queued.
-        return Results.Ok(new
-        {
-            resendAfterSeconds = (int)(policy.ShortWindow.TotalSeconds / Math.Max(1, policy.MaxShortWindowRequests)),
-            message = CalmSentence,
-        });
+        return CalmAnswer(policy);
     }
 
+    /// <summary>
+    /// The calm answer. <c>resendAfterSeconds</c> is the door's own one-code-per-minute limit (S-A1:
+    /// <see cref="OtpPolicyOptions.DoorMinInterval"/>, 60 seconds).
+    /// </summary>
+    private static IResult CalmAnswer(OtpPolicyOptions policy) =>
+        Results.Ok(new
+        {
+            resendAfterSeconds = (int)policy.DoorMinInterval.TotalSeconds,
+            message = CalmSentence,
+        });
+
+    /// <summary>S-A6: any fault becomes the one refusal answer (401 <c>code_not_accepted</c>), logged by its type name only.</summary>
     private static async Task<IResult> CheckCodeAsync(
+        HttpContext http, CheckCodeRequest? request, ControlRoomDoor door, VerifyOtpHandler verify, IHostEnvironment env,
+        ILoggerFactory logs, CancellationToken ct)
+    {
+        try
+        {
+            return await CheckCodeCoreAsync(http, request, door, verify, env, logs, ct);
+        }
+        catch (Exception ex)
+        {
+            logs.CreateLogger(LogCategory).LogError(DoorFault,
+                "ControlRoomDoorFault: a check try ended in a fault ({Failure}); it was answered as a refused code.",
+                ex.GetType().Name);
+            return NotAccepted();
+        }
+    }
+
+    private static async Task<IResult> CheckCodeCoreAsync(
         HttpContext http, CheckCodeRequest? request, ControlRoomDoor door, VerifyOtpHandler verify, IHostEnvironment env,
         ILoggerFactory logs, CancellationToken ct)
     {
@@ -170,11 +229,12 @@ public static class ControlRoomSignInEndpoints
         catch (Exception ex)
         {
             // K26 (P1: the bind is a grant and commits with its History row). The tokens just minted are never handed out;
-            // the stored refresh row is an orphan that expires on its own, and the person tries again.
+            // the stored refresh row is an orphan that expires on its own, and the person tries again. S-A6: the answer is
+            // the one refusal, so no fault on this path answers differently from a refused number.
             logs.CreateLogger(LogCategory).LogError(BindFailed,
                 "ControlRoomBindFailed: the sign-in of the number ending {PhoneTail} was not recorded ({Failure}); no token and no cookie were handed out.",
                 IndianMobile.Tail(decision.PhoneE164!), ex.GetType().Name);
-            return Results.StatusCode(StatusCodes.Status500InternalServerError);
+            return NotAccepted();
         }
 
         http.Response.Cookies.Append(

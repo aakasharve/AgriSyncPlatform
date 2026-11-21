@@ -91,14 +91,18 @@ public static class ControlRoomEndpoints
         .WithName("KeepControlRoomPerson");
 
         // GET /admin/people/history?days=7..90&action= - { lines, hitLimit, limit }. No cache: one audited read.
+        // CR-3 fix wave S-N1: &fromUtc=..&toUtc=.. (an exact window, replacing days) and &countedLooksOnly=true (only the
+        // phones_shown lines the trust report counts), so the report's link opens exactly what it counted.
         group.MapGet(Root + "/history", async (
-            HttpContext http, IEntitlementResolver resolver, GetHistoryHandler h, int? days, string? action, CancellationToken ct) =>
+            HttpContext http, IEntitlementResolver resolver, GetHistoryHandler h, int? days, string? action,
+            string? fromUtc, string? toUtc, bool? countedLooksOnly, CancellationToken ct) =>
         {
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!scope.IsPlatformAdmin) return FounderOnly();
 
-            var r = await h.HandleAsync(new GetHistoryQuery(ActorId(http), days ?? GetHistoryHandler.MinDays, action), ct);
+            var r = await h.HandleAsync(new GetHistoryQuery(
+                ActorId(http), days ?? GetHistoryHandler.MinDays, action, fromUtc, toUtc, countedLooksOnly ?? false), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : ToErrorResult(r.Error);
         })
         .WithName("GetControlRoomHistory");

@@ -36,6 +36,7 @@ using FluentAssertions;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.Admin;
@@ -523,7 +524,7 @@ public sealed class GetAppVersionsHandlerTests
             Devices = new SignInDevices(Phones: 4, OtherDevices: 1, PeopleWithUnknownDevice: 2),
         };
 
-        var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
+        var handler = new GetAppVersionsHandler(repo, CompanyMisExclusions.None, new FixedClock(Now));
         var result = await handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true));
 
         result.IsSuccess.Should().BeTrue("\"nothing recorded yet\" is an answer, not a failure");
@@ -675,7 +676,7 @@ public sealed class GetAppVersionsHandlerTests
             repo.Names[Ramesh] = "Ramesh Patil";
             repo.FarmNames[Ramesh] = new[] { "Patil Wadi" };
 
-            var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
+            var handler = new GetAppVersionsHandler(repo, CompanyMisExclusions.None, new FixedClock(Now));
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => handler.HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true)));
@@ -693,6 +694,57 @@ public sealed class GetAppVersionsHandlerTests
     // ------------------------------------------------------------------
 
     private static AppSeenRow Seen(Guid person, string version, DateTime atUtc) => new(person, version, atUtc);
+
+    // Fix wave S-N4 (N1-C3): test accounts stay out of every number on this page, as Company MIS leaves them out.
+    [Fact]
+    public async Task Test_accounts_are_left_out_of_people_versions_older_versions_and_signed_in_phones()
+    {
+        var testAccount = Guid.Parse("eeeeeeee-0000-0000-0000-000000000009");
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        repo.Rows.Add(Seen(Sunita, "1.0.19", Now.AddHours(-1)));
+        repo.Rows.Add(Seen(Ramesh, "1.0.18", Now.AddHours(-2)));
+        repo.Rows.Add(Seen(testAccount, "1.0.20", Now.AddHours(-3)));   // a test phone on a newer build
+        repo.Names[Ramesh] = "Example: Ramesh";
+        var exclusions = new CompanyMisExclusions(new HashSet<Guid> { testAccount });
+
+        var result = await new GetAppVersionsHandler(repo, exclusions, new FixedClock(Now))
+            .HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true));
+
+        var data = result.Value!.Data;
+        data.People.Should().Be(2, "the test account is not a person who used the app");
+        data.NewestVersion.Should().Be("1.0.19", "a test phone's build does not set the newest version");
+        data.Versions.Select(v => v.AppVersion).Should().Equal("1.0.19", "1.0.18");
+        data.OnOlderVersions.Should().ContainSingle().Which.Name.Should().Be("Example: Ramesh");
+        repo.NameCalls.SelectMany(c => c).Should().NotContain(testAccount, "nothing is looked up about a test account");
+        repo.SignInDevicesExcluded.Should().ContainSingle().Which.Should().BeEquivalentTo(new[] { testAccount },
+            "the signed-in phone totals leave the test accounts out too");
+    }
+
+    // Fix wave S-N9 (N1-C1): while analytics is not recording, the page's numbers are not measured, never "No one".
+    [Fact]
+    public async Task While_analytics_is_not_recording_the_page_is_not_measured()
+    {
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-30) };
+        var stopped = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = await new GetAppVersionsHandler(repo, CompanyMisExclusions.None, new FixedClock(Now), new FixedRecording(new AnalyticsRecording(false, stopped)))
+            .HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true));
+
+        result.Value!.Data.MeasuredSinceUtc.Should().BeNull("the page's own 'not measured', never 'No one was seen using the app'");
+        result.Value.Meta.AnalyticsNotMeasuredReason.Should().Be(AnalyticsRecording.NotRecordingReason);
+        result.Value.Meta.AnalyticsStoppedAtUtc.Should().Be(stopped);
+
+        // The control: recording, the same empty week is a measured nobody.
+        var recording = await new GetAppVersionsHandler(repo, CompanyMisExclusions.None, new FixedClock(Now), new FixedRecording(AnalyticsRecording.Recording))
+            .HandleAsync(new GetAppVersionsQuery(7, AdminUser, MayReadNames: true));
+        recording.Value!.Data.MeasuredSinceUtc.Should().Be(Now.AddDays(-30));
+        recording.Value.Meta.AnalyticsNotMeasuredReason.Should().BeNull();
+    }
+
+    private sealed class FixedRecording(AnalyticsRecording state) : IAnalyticsRecordingCheck
+    {
+        public Task<AnalyticsRecording> CheckAsync(Guid readerUserId, CancellationToken ct) => Task.FromResult(state);
+    }
 
     /// <summary>
     /// Counting began forty days ago. Sunita used the app two days ago and
@@ -737,7 +789,7 @@ public sealed class GetAppVersionsHandlerTests
     /// <summary>Asks as the admin, at <see cref="Now"/>, and expects an answer.</summary>
     private static async Task<(AppVersionsDto Data, AdminMetaDto Meta)> Ask(FakeOpsRepository repo, int? days = 7, bool mayReadNames = true)
     {
-        var handler = new GetAppVersionsHandler(repo, new FixedClock(Now));
+        var handler = new GetAppVersionsHandler(repo, CompanyMisExclusions.None, new FixedClock(Now));
 
         var result = await handler.HandleAsync(new GetAppVersionsQuery(days, AdminUser, mayReadNames));
 
@@ -811,10 +863,13 @@ public sealed class GetAppVersionsHandlerTests
                 : Task.FromResult(CountingBeganUtc);
         }
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default)
+        public List<IReadOnlyCollection<Guid>?> SignInDevicesExcluded { get; } = new();
+
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default)
         {
             Calls.Add(nameof(GetSignInDevicesAsync));
             SignInDevicesSince.Add(sinceUtc);
+            SignInDevicesExcluded.Add(excludedUserIds);
 
             return FailIn == nameof(GetSignInDevicesAsync)
                 ? Task.FromException<SignInDevices>(Failure)

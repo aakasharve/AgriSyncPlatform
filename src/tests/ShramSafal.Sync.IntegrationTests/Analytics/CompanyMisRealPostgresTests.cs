@@ -453,6 +453,40 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N3, N1-C2): a sign-up is dated by public.users.created_at_utc,
+    // which never moves. phone_verified_at_utc is re-stamped on every SMS sign-in, so a farmer who joined in September
+    // and signs in again by SMS in November must stay a September sign-up and keep his cohort.
+    [SkippableFact]
+    public async Task A_september_sign_up_who_signs_in_again_by_sms_in_november_stays_a_september_sign_up()
+    {
+        await GuardAsync();
+
+        var returning = G("103");
+        var joined = Ist(9, 15, 10);
+        await using (var db = new NpgsqlConnection(SuperuserConn))
+        {
+            await db.OpenAsync();
+            // Created in September; phone_verified_at_utc re-stamped by an SMS sign-in on 12 Nov.
+            await SeedUserAsync(db, returning, "000000103", "Fake Returning Farmer", joined, Ist(11, 12, 9));
+        }
+
+        var provider = BuildProvider();
+        await using (var scope = AdminScope(provider))
+        {
+            var rows = await scope.ServiceProvider.GetRequiredService<ICompanyMisReader>()
+                .ReadAsync(Admin, Ist(9, 1), CountedAt, new HashSet<Guid>());
+            var row = rows.VerifiedUsers.Single(u => u.UserId == returning);
+            Output.WriteLine($"[EVIDENCE] sign-up instant read = {row.SignedUpAtUtc:O}");
+            DateTime.SpecifyKind(row.SignedUpAtUtc, DateTimeKind.Utc).Should().Be(joined, "the account's creation, never the last SMS sign-in");
+        }
+
+        var november = await LoadAsync(provider, new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 13));
+        november.Overview.SignUps.Current.Should().Be(new MisValueDto(2m, null), "U1 and U2 only: the returning farmer is not a November sign-up");
+
+        var september = await LoadAsync(provider, new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 15));
+        september.Overview.SignUps.Current.Should().Be(new MisValueDto(1m, null), "he is still counted on the day he joined");
+    }
+
     private static GetCompanyMisHandler Handler(IServiceProvider sp) =>
         new(sp.GetRequiredService<ICompanyMisReader>(), sp.GetRequiredService<IAdminOpsRepository>(), sp.GetRequiredService<CompanyMisExclusions>(), new FixedClock(CountedAt));
 

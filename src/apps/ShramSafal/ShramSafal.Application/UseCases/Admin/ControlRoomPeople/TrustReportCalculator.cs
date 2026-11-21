@@ -1,4 +1,4 @@
-// spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5)
+// spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5; fix wave S-N1, S-N2)
 using System.Text.Json;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -12,9 +12,10 @@ public sealed record TrustReportPerson(ControlRoomPerson Person, PersonDto Dto);
 /// <summary>
 /// What the report is counted from: the active people, the number of founders, and ONE History read per action (K15).
 /// <see cref="PhonesShown"/> and <see cref="DoorRefused"/> are read for the last 7 days, <see cref="SignedIn"/> and
-/// <see cref="PersonKept"/> for the last 30. <see cref="TestAccountUserIds"/> are the test accounts
-/// (<c>CompanyMis:ExcludedUserIds</c>) and <see cref="TestFarmIds"/> the farms they own (M9): both are required, so a
-/// caller cannot count test accounts by forgetting them; pass empty sets to leave nothing out.
+/// <see cref="PersonKept"/> for the last 30. <see cref="TestFarmIds"/> are the farms owned by test accounts
+/// (<c>CompanyMis:ExcludedUserIds</c>, M9): required, so a caller cannot count test farms by forgetting them; pass an
+/// empty set to leave nothing out. <see cref="HistoryStartedAtUtc"/> is the time of the first History row (null when
+/// there is none), so the report can say since when it counts (fix wave S-N2).
 /// </summary>
 public sealed record TrustReportInput(
     DateTime NowUtc,
@@ -24,20 +25,27 @@ public sealed record TrustReportInput(
     HistoryRead DoorRefused,
     HistoryRead SignedIn,
     HistoryRead PersonKept,
-    IReadOnlySet<Guid> TestAccountUserIds,
-    IReadOnlySet<Guid> TestFarmIds);
+    IReadOnlySet<Guid> TestFarmIds,
+    DateTime? HistoryStartedAtUtc = null);
 
 /// <summary>
 /// The weekly trust report's numbers. Pure: it counts the rows it is given inside the windows and never reads anything.
 /// A read that hit its limit is "not measured" with <see cref="HistoryReadLimitReason"/>, never a cut number (K15, P4).
 /// In Release 1 downloads are not counted at all: all three carry <see cref="DownloadsReason"/>, never 0 (K20).
 /// <para>
-/// G1 fix round 1 (M9; global rule: test accounts stay out of every count). The three phone-look counts leave out every
-/// <c>phones_shown</c> row whose actor is a test account, and every test farm from the farm sets. A row whose farms are
-/// all test farms is not a look, so it adds to no count. A Users-page row (it carries <c>personCount</c>, no farms) and a
-/// row whose payload cannot be read are left out only when the actor is a test account. The sign-in and kept rows are
-/// NOT filtered by actor: they decide which named people are listed as unused, and the founder (a test account) is the
-/// actor of every <c>person_kept</c> row, so dropping them would list kept or signed-in people as unused, which is untrue.
+/// Fix wave S-N1 (FR-C1, FR-M3): a phone look is never left out because of WHO looked. Every person who can look at
+/// farmers' numbers is the founder or a team member, and staff accounts are put on the test-account list for Company MIS;
+/// leaving out looks by listed accounts would empty the report under normal use. Only the SUBJECT filter stays: a row
+/// whose farms are all test farms is not a look (M9). The count is "times phone numbers were shown" (one row per answer
+/// that carried a real phone), and the report sends the exact window it counted and how many rows it left out, so the
+/// console can label it so and open exactly the History lines it counted (History's <c>countedLooksOnly</c>).
+/// </para>
+/// <para>
+/// Fix wave S-N2 (FR-I1): "not signed in" is split in two true groups. <see cref="TrustReportDto.NotSignedIn30Days"/>:
+/// people added 30 or more days ago who have signed in before but not in the last 30 days.
+/// <see cref="TrustReportDto.NeverSignedIn"/>: people who have never signed in, whenever they were added (a person added
+/// an hour ago is here, never under "30 days"). A person is in one group at most. A person the founder kept in the last
+/// 30 days is in neither. The sign-in and kept rows are not filtered by actor.
 /// </para>
 /// </summary>
 public static class TrustReportCalculator
@@ -48,29 +56,37 @@ public static class TrustReportCalculator
     public const int ShortWindowDays = 7;
     public const int LongWindowDays = 30;
 
+    /// <summary>Every read ends this long after the moment of counting (a row written in the same second is in).</summary>
+    public static readonly TimeSpan ReadSlack = TimeSpan.FromMinutes(1);
+
     public static TrustReportDto Calculate(TrustReportInput input)
     {
         var weekAgo = input.NowUtc.AddDays(-ShortWindowDays);
         var monthAgo = input.NowUtc.AddDays(-LongWindowDays);
 
-        var phones = Looks(input, weekAgo);
+        var shown = Rows(input.PhonesShown, ControlRoomHistoryAction.PhonesShown, weekAgo)
+            .Select(r => (Row: r, Farms: FarmIds(r.PayloadJson)))
+            .ToList();
+        var phones = shown.Where(r => IsCountedLook(r.Farms, input.TestFarmIds)).ToList();
         var refused = Rows(input.DoorRefused, ControlRoomHistoryAction.DoorRefused, weekAgo);
 
-        MisValueDto looks, farms, lookers, doorRefused;
+        MisValueDto looks, farms, lookers, leftOut, doorRefused;
         if (input.PhonesShown.HitLimit)
         {
-            looks = farms = lookers = NotMeasured(HistoryReadLimitReason);
+            looks = farms = lookers = leftOut = NotMeasured(HistoryReadLimitReason);
         }
         else
         {
             looks = Counted(phones.Count);
             farms = Counted(phones.SelectMany(r => r.Farms).Where(f => !input.TestFarmIds.Contains(f)).Distinct().Count());
             lookers = Counted(phones.Select(r => r.Row.ActorUserId).Distinct().Count());
+            leftOut = Counted(shown.Count - phones.Count);
         }
 
         doorRefused = input.DoorRefused.HitLimit ? NotMeasured(HistoryReadLimitReason) : Counted(refused.Count);
 
-        IReadOnlyList<PersonDto> notSignedIn = [];
+        var notSignedIn = new List<PersonDto>();
+        var neverSignedIn = new List<PersonDto>();
         string? notSignedInReason = null;
         if (input.SignedIn.HitLimit || input.PersonKept.HitLimit)
         {
@@ -78,14 +94,24 @@ public static class TrustReportCalculator
         }
         else
         {
-            var signedIn = Rows(input.SignedIn, ControlRoomHistoryAction.SignedIn, monthAgo)
+            var signedInRecently = Rows(input.SignedIn, ControlRoomHistoryAction.SignedIn, monthAgo)
                 .Select(r => r.ActorUserId).ToHashSet();
             var kept = Rows(input.PersonKept, ControlRoomHistoryAction.PersonKept, monthAgo)
                 .Select(r => r.SubjectId).ToHashSet();
-            notSignedIn = input.People
-                .Where(p => !(p.Person.UserId is { } user && signedIn.Contains(user)) && !kept.Contains(p.Person.Id))
-                .Select(p => p.Dto)
-                .ToList();
+            foreach (var p in input.People.Where(p => !kept.Contains(p.Person.Id)))
+            {
+                var recent = (p.Person.UserId is { } user && signedInRecently.Contains(user))
+                    || p.Dto.LastSignedInUtc >= monthAgo;
+                var ever = recent || p.Dto.LastSignedInUtc is not null;
+                if (!ever)
+                {
+                    neverSignedIn.Add(p.Dto);
+                }
+                else if (!recent && p.Person.AddedAtUtc <= monthAgo)
+                {
+                    notSignedIn.Add(p.Dto);
+                }
+            }
         }
 
         var byRole = new Dictionary<string, int>();
@@ -97,7 +123,12 @@ public static class TrustReportCalculator
         return new TrustReportDto(
             input.NowUtc, input.FounderCount + input.People.Count, byRole,
             looks, farms, lookers, downloads, downloads, downloads,
-            notSignedIn, notSignedInReason, doorRefused);
+            notSignedIn, notSignedInReason, doorRefused,
+            PhoneLooksFromUtc: weekAgo,
+            PhoneLooksToUtc: input.NowUtc + ReadSlack,
+            PhoneLooksLeftOutTestFarmsOnly: leftOut,
+            NeverSignedIn: neverSignedIn,
+            HistoryStartedAtUtc: input.HistoryStartedAtUtc);
     }
 
     private static MisValueDto Counted(int n) => new(n, null);
@@ -108,15 +139,12 @@ public static class TrustReportCalculator
         read.Lines.Where(l => l.Action == action && l.AtUtc >= fromUtc).ToList();
 
     /// <summary>
-    /// The <c>phones_shown</c> rows of the window that count as looks, each with its farm ids (M9): not by a test account,
-    /// and not naming test farms only. A row with no farm ids (the Users page, or a payload that cannot be read) counts.
+    /// The one rule for which <c>phones_shown</c> rows count as looks (M9, S-N1): a row naming at least one farm that is
+    /// not a test farm, or naming no farm at all (the Users page, or a payload that cannot be read). Who looked never
+    /// matters. Shared with History's <c>countedLooksOnly</c>, so the lines it opens are exactly the lines counted.
     /// </summary>
-    private static List<(ControlRoomHistoryLine Row, IReadOnlyList<Guid> Farms)> Looks(TrustReportInput input, DateTime fromUtc) =>
-        Rows(input.PhonesShown, ControlRoomHistoryAction.PhonesShown, fromUtc)
-            .Where(r => !input.TestAccountUserIds.Contains(r.ActorUserId))
-            .Select(r => (Row: r, Farms: FarmIds(r.PayloadJson)))
-            .Where(r => r.Farms.Count == 0 || r.Farms.Any(f => !input.TestFarmIds.Contains(f)))
-            .ToList();
+    internal static bool IsCountedLook(IReadOnlyList<Guid> farmIds, IReadOnlySet<Guid> testFarmIds) =>
+        farmIds.Count == 0 || farmIds.Any(f => !testFarmIds.Contains(f));
 
     /// <summary>Every farm id named by the <c>phones_shown</c> rows of <paramref name="read"/>.</summary>
     internal static IReadOnlyCollection<Guid> FarmIdsIn(HistoryRead read) =>
@@ -125,7 +153,7 @@ public static class TrustReportCalculator
             .ToHashSet();
 
     /// <summary>The <c>farmIds</c> of a <c>phones_shown</c> payload; none for the Users page (which carries <c>personCount</c>) or an unreadable payload.</summary>
-    private static IReadOnlyList<Guid> FarmIds(string payloadJson)
+    internal static IReadOnlyList<Guid> FarmIds(string payloadJson)
     {
         try
         {

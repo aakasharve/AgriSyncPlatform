@@ -345,7 +345,7 @@ public sealed class AdminCompanyMisGateTests
         public Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(

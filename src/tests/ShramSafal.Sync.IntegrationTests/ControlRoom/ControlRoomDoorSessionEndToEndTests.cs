@@ -326,7 +326,7 @@ public sealed class ControlRoomDoorSessionEndToEndTests : IAsyncLifetime
 
     private async Task<Token> DoorSignInAsync(string tenDigits)
     {
-        _codes.Seed(tenDigits, "123456");
+        _codes.Seed(tenDigits, "123456", OtpPurpose.ControlRoomDoor);
         var answer = await PostAsync(ControlRoomSignInEndpoints.CheckCodeRoute,
             $$"""{"phone":"{{tenDigits}}","otp":"123456","deviceId":"console-e2e","platform":"web"}""");
         answer.StatusCode.Should().Be(HttpStatusCode.OK, await answer.Content.ReadAsStringAsync());
@@ -335,7 +335,7 @@ public sealed class ControlRoomDoorSessionEndToEndTests : IAsyncLifetime
 
     private async Task<Token> FarmerSignInAsync(string tenDigits, string? platform)
     {
-        _codes.Seed(tenDigits, "654321");
+        _codes.Seed(tenDigits, "654321", OtpPurpose.FarmerApp);
         var platformJson = platform is null ? "null" : JsonSerializer.Serialize(platform);
         var answer = await PostAsync("/user/auth/verify-otp",
             $$"""{"phone":"{{tenDigits}}","otp":"654321","deviceId":"phone-e2e","platform":{{platformJson}}}""");
@@ -611,16 +611,17 @@ public sealed class ControlRoomDoorSessionEndToEndTests : IAsyncLifetime
     {
         private readonly List<OtpChallenge> _rows = [];
 
-        public void Seed(string tenDigits, string code)
+        /// <summary>A pending code for one door (CR-3 fix wave S-A1: each door sees only its own codes).</summary>
+        public void Seed(string tenDigits, string code, OtpPurpose purpose)
         {
             lock (_rows)
             {
-                foreach (var old in _rows.Where(r => r.PhoneNumberNormalized == tenDigits && r.IsPending))
+                foreach (var old in _rows.Where(r => r.PhoneNumberNormalized == tenDigits && r.Purpose == purpose && r.IsPending))
                 {
                     old.ExpireManually(DateTime.UtcNow);
                 }
 
-                _rows.Add(OtpChallenge.Issue(Guid.NewGuid(), tenDigits, "h:" + code, DateTime.UtcNow, TimeSpan.FromMinutes(5), 5));
+                _rows.Add(OtpChallenge.Issue(Guid.NewGuid(), tenDigits, "h:" + code, DateTime.UtcNow, TimeSpan.FromMinutes(5), 5, purpose));
             }
         }
 
@@ -630,12 +631,17 @@ public sealed class ControlRoomDoorSessionEndToEndTests : IAsyncLifetime
             return Task.CompletedTask;
         }
 
-        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, CancellationToken ct = default)
+        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, OtpPurpose purpose, CancellationToken ct = default)
         {
-            lock (_rows) return Task.FromResult(_rows.LastOrDefault(r => r.PhoneNumberNormalized == phoneNumberNormalized && r.IsPending));
+            lock (_rows) return Task.FromResult(_rows.LastOrDefault(r => r.PhoneNumberNormalized == phoneNumberNormalized && r.Purpose == purpose && r.IsPending));
         }
 
-        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, OtpPurpose purpose, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(0);
+
+        public Task<bool> TryCountAttemptAsync(OtpChallenge challenge, DateTime utcNow, CancellationToken ct = default)
+        {
+            lock (_rows) return Task.FromResult(challenge.TryCountAttempt(utcNow));
+        }
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

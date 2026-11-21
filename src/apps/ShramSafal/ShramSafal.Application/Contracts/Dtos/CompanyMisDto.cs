@@ -21,7 +21,15 @@ public sealed record CompanyMisDto(
     MisEngagementDto Engagement,
     MisRetentionDto Retention,
     MisQualityDto Quality,
-    MisFarmsDto Farms);
+    MisFarmsDto Farms)
+{
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N8, N1-I3, N2-M-I1): false when the range ends today in
+    /// India time, so its last day is still running and every "as of the last day" number is today so far. A range with
+    /// no dates given ends yesterday, so it is always true then.
+    /// </summary>
+    public bool LastDayComplete { get; init; } = true;
+}
 
 public sealed record MisRangeDto(DateOnly From, DateOnly To, int Days);
 
@@ -106,7 +114,9 @@ public sealed record MisRetentionDto(
 /// Plan CR-2c: UnderstandingSpread (#49) is the scored farm-days of the current period per score 0..10, all eleven
 /// present (zeros real), or "no_samples" when there is none. Sync (#47, #50, amendment E2): SyncRefusedChanges =
 /// refused attempts (a change refused twice counts twice), SyncAcceptedChanges = changes the server accepted,
-/// SyncRefusedPct = refused ÷ (refused + accepted); every upload counts, test accounts included; refused and the
+/// SyncRefusedPct = refused ÷ (refused + accepted); CR-3 fix wave S-N6: refused attempts by test accounts are left out
+/// (the row carries the person), accepted changes cannot be tied to a person and still count test phones
+/// (<see cref="SyncAcceptedIncludesTestPhones"/>); refused and the
 /// share are "not_recorded" for a period that starts before refusals were recorded in production; nothing sent
 /// is "denominator_zero"; the day chart reads their CurrentByDay (E8). AppVersions (#52) is the current period
 /// only; AppVersionsSeenSince is the India day of the first app.seen row the server wrote (null: none), so a
@@ -124,7 +134,15 @@ public sealed record MisQualityDto(
     MisNumberDto SyncAcceptedChanges,
     MisNumberDto SyncRefusedPct,
     MisListDto<MisVersionShareDto> AppVersions,
-    DateOnly? AppVersionsSeenSince);
+    DateOnly? AppVersionsSeenSince)
+{
+    /// <summary>
+    /// CR-3 fix wave S-N6 (N1-I1): always true. The accepted side (<c>ssf.sync_mutations</c>) records a device id and no
+    /// account, so test phones' accepted changes cannot be left out of <see cref="SyncAcceptedChanges"/> or of the
+    /// share's denominator; the console says so. The refused side does leave test accounts out.
+    /// </summary>
+    public bool SyncAcceptedIncludesTestPhones { get; init; } = true;
+}
 
 /// <summary>Plan CR-2c (#59): CropsOnActiveFarms is the current period only.</summary>
 public sealed record MisFarmsDto(

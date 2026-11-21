@@ -5,8 +5,9 @@ using ShramSafal.Application.Ports;
 namespace ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 /// <summary>
-/// From and To are India-time calendar days; both null means "the last 30 days
-/// ending today". IsPlatformSeat is true when the caller's resolved seat belongs to the Platform organisation.
+/// From and To are India-time calendar days; both null means "the last 30 complete days, ending yesterday" (CR-3 fix
+/// wave S-N8: today is still running). IsPlatformSeat is true when the caller's resolved seat belongs to the Platform
+/// organisation.
 /// </summary>
 public sealed record GetCompanyMisQuery(DateOnly? From, DateOnly? To, Guid ActorId, bool IsPlatformSeat);
 
@@ -32,8 +33,16 @@ public sealed record GetCompanyMisQuery(DateOnly? From, DateOnly? To, Guid Actor
 /// <para><b>A reader failure is not caught.</b> It escapes to the server's error
 /// path (500). An empty answer would read as "no farmers".</para>
 /// </summary>
+/// <remarks>
+/// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9): version adoption (#52) and the refused side of sync
+/// failures (#47, #50) are read from <c>analytics.events</c>. While the store is not recording they are not measured
+/// with <see cref="AnalyticsRecording.NotRecordingReason"/> (the refused share with them), and the meta says so; every
+/// other number here comes from the farm tables and is unchanged. The check is asked after the reads; it is optional
+/// only for hand-built test handlers.
+/// </remarks>
 public sealed class GetCompanyMisHandler(
-    ICompanyMisReader reader, IAdminOpsRepository opsRepo, CompanyMisExclusions exclusions, TimeProvider clock)
+    ICompanyMisReader reader, IAdminOpsRepository opsRepo, CompanyMisExclusions exclusions, TimeProvider clock,
+    IAnalyticsRecordingCheck? recording = null)
 {
     public const int MaxRangeDays = 180;
 
@@ -69,7 +78,8 @@ public sealed class GetCompanyMisHandler(
         DateOnly to;
         if (query.From is null && query.To is null)
         {
-            to = today;
+            // S-N8: no range given ends on yesterday (India time), the last complete day; today is asked for explicitly.
+            to = today.AddDays(-1);
             from = to.AddDays(-(DefaultRangeDays - 1));
         }
         else if (query.From is null || query.To is null)
@@ -110,13 +120,37 @@ public sealed class GetCompanyMisHandler(
 
         var data = CompanyMisCalculator.Compute(
             rows, exclusions, from, to, previousFrom, previousTo, countedAtUtc);
+        data = data with { LastDayComplete = to < today };
 
-        return Result.Success(new AdminResponseDto<CompanyMisDto>(data,
-            new AdminMetaDto(
-                Source: "live",
-                Window: $"{from:yyyy-MM-dd}..{to:yyyy-MM-dd}",
-                LastRefreshedUtc: countedAtUtc,
-                TtlSeconds: 0)));
+        var meta = new AdminMetaDto(
+            Source: "live",
+            Window: $"{from:yyyy-MM-dd}..{to:yyyy-MM-dd}",
+            LastRefreshedUtc: countedAtUtc,
+            TtlSeconds: 0);
+        if (recording is not null)
+        {
+            var state = await recording.CheckAsync(query.ActorId, ct);
+            meta = meta.WithAnalytics(state);
+            if (!state.IsRecording)
+            {
+                data = data with { Quality = NotRecording(data.Quality) };
+            }
+        }
+
+        return Result.Success(new AdminResponseDto<CompanyMisDto>(data, meta));
+    }
+
+    /// <summary>S-N9: the analytics-backed Quality numbers, not measured while the store is not recording.</summary>
+    private static MisQualityDto NotRecording(MisQualityDto quality)
+    {
+        var notMeasured = new MisValueDto(null, AnalyticsRecording.NotRecordingReason);
+        var number = new MisNumberDto(notMeasured, notMeasured);
+        return quality with
+        {
+            SyncRefusedChanges = number,
+            SyncRefusedPct = number,
+            AppVersions = new MisListDto<MisVersionShareDto>([], AnalyticsRecording.NotRecordingReason),
+        };
     }
 
     /// <summary>The India-time calendar day of a UTC instant.</summary>

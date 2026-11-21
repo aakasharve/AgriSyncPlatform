@@ -24,27 +24,38 @@ public sealed class TrustReportCalculatorTests
 
     private static HistoryRead Empty => Read(false);
 
-    private static ControlRoomPerson Person(int n, Guid? user, ControlRoomRole role = ControlRoomRole.Viewer)
+    private static ControlRoomPerson Person(int n, Guid? user, ControlRoomRole role = ControlRoomRole.Viewer, int addedDaysAgo = 60)
     {
         var p = ControlRoomPerson.Add(
-            U(n), $"+91900000{n:D4}", $"Example: Person {n}", role, [], Founder, Now.AddDays(-60));
-        if (user is { } u) p.BindTo(u, U(n + 5000), Now.AddDays(-59));
+            U(n), $"+91900000{n:D4}", $"Example: Person {n}", role, [], Founder, Now.AddDays(-addedDaysAgo));
+        if (user is { } u) p.BindTo(u, U(n + 5000), Now.AddDays(-addedDaysAgo).AddHours(1));
         return p;
     }
 
-    private static PersonDto Dto(ControlRoomPerson p) =>
-        new(p.Id, false, p.DisplayName, p.PhoneE164[3..], ControlRoomRoles.Key(p.StartingRole), p.Ticks, null, null, p.KeptAtUtc);
+    /// <summary>A person added <paramref name="addedAgo"/> before now (fix wave S-N2: "added an hour ago").</summary>
+    private static ControlRoomPerson PersonAdded(int n, Guid? user, TimeSpan addedAgo)
+    {
+        var p = ControlRoomPerson.Add(
+            U(n), $"+91900000{n:D4}", $"Example: Person {n}", ControlRoomRole.Viewer, [], Founder, Now - addedAgo);
+        if (user is { } u) p.BindTo(u, U(n + 5000), Now - addedAgo);
+        return p;
+    }
+
+    private static PersonDto Dto(ControlRoomPerson p, DateTime? lastSignedIn = null) =>
+        new(p.Id, false, p.DisplayName, p.PhoneE164[3..], ControlRoomRoles.Key(p.StartingRole), p.Ticks, null, lastSignedIn, p.KeptAtUtc);
 
     private static TrustReportInput Input(
         IReadOnlyList<ControlRoomPerson>? people = null,
         HistoryRead? phones = null, HistoryRead? door = null, HistoryRead? signedIn = null, HistoryRead? kept = null,
-        int founders = 1, IReadOnlySet<Guid>? testAccounts = null, IReadOnlySet<Guid>? testFarms = null)
+        int founders = 1, IReadOnlySet<Guid>? testFarms = null,
+        IReadOnlyDictionary<Guid, DateTime>? lastSignedIn = null, DateTime? historyStartedAt = null)
     {
         var list = people ?? [];
+        DateTime? Last(ControlRoomPerson p) => lastSignedIn is not null && lastSignedIn.TryGetValue(p.Id, out var at) ? at : null;
         return new TrustReportInput(
-            Now, list.Select(p => new TrustReportPerson(p, Dto(p))).ToList(), founders,
+            Now, list.Select(p => new TrustReportPerson(p, Dto(p, Last(p)))).ToList(), founders,
             phones ?? Empty, door ?? Empty, signedIn ?? Empty, kept ?? Empty,
-            testAccounts ?? new HashSet<Guid>(), testFarms ?? new HashSet<Guid>());
+            testFarms ?? new HashSet<Guid>(), historyStartedAt);
     }
 
     private static ControlRoomHistoryLine Look(Guid actor, int daysAgo, params Guid[] farms) =>
@@ -53,29 +64,24 @@ public sealed class TrustReportCalculatorTests
     private static ControlRoomHistoryLine UsersLook(Guid actor, int daysAgo) =>
         Line(ControlRoomHistoryAction.PhonesShown, actor, actor, Now.AddDays(-daysAgo), new { page = "users", personCount = 25, count = 25 });
 
-    // ── G1 fix round 1 (M9): test accounts and their farms stay out of every count ─────────────────────────
+    // ── fix wave S-N1 (FR-C1): a look is never left out because of who looked; test FARMS stay out ───────────
 
     [Fact]
-    public void Looks_by_test_accounts_are_left_out()
+    public void Every_look_counts_whoever_looked()
     {
         var a = U(901); var b = U(902); var c = U(903);
         var phones = Read(false,
-            Look(Founder, 1, a, b),        // the founder is a test account (D-147a)
-            UsersLook(Founder, 1),         // a Users-page look by a test account
+            Look(Founder, 1, a, b),        // the founder: on the test-account list for Company MIS, still a looker
+            UsersLook(Founder, 1),
             Look(U(1), 2, c),
-            UsersLook(U(1), 2));           // a Users-page look by a team member still counts
+            UsersLook(U(1), 2));
 
-        var report = TrustReportCalculator.Calculate(Input(phones: phones, testAccounts: new HashSet<Guid> { Founder }));
+        var report = TrustReportCalculator.Calculate(Input(phones: phones));
 
-        report.PhoneLooks.Should().Be(new MisValueDto(2, null), "only the team member's two looks");
-        report.PhoneFarms.Should().Be(new MisValueDto(1, null), "farm c; a and b were looked at by a test account only");
-        report.PhoneLookers.Should().Be(new MisValueDto(1, null), "the founder is not counted");
-
-        // The control: with no test accounts the same rows count in full.
-        var all = TrustReportCalculator.Calculate(Input(phones: phones));
-        all.PhoneLooks.Value.Should().Be(4);
-        all.PhoneFarms.Value.Should().Be(3);
-        all.PhoneLookers.Value.Should().Be(2);
+        report.PhoneLooks.Should().Be(new MisValueDto(4, null), "four answers carried phone numbers");
+        report.PhoneFarms.Should().Be(new MisValueDto(3, null));
+        report.PhoneLookers.Should().Be(new MisValueDto(2, null), "the founder's looks are looks at farmers' numbers too");
+        report.PhoneLooksLeftOutTestFarmsOnly.Should().Be(new MisValueDto(0, null));
     }
 
     [Fact]
@@ -106,6 +112,8 @@ public sealed class TrustReportCalculatorTests
         report.PhoneLooks.Should().Be(new MisValueDto(1, null), "a look at test farms only is not a look");
         report.PhoneFarms.Should().Be(new MisValueDto(1, null));
         report.PhoneLookers.Should().Be(new MisValueDto(1, null), "U(1) only looked at test farms, so is not counted as a looker");
+        report.PhoneLooksLeftOutTestFarmsOnly.Should().Be(new MisValueDto(1, null),
+            "the console says how many lines of the window were left out, so its History link can match the count");
     }
 
     [Fact]
@@ -152,7 +160,51 @@ public sealed class TrustReportCalculatorTests
         var report = TrustReportCalculator.Calculate(Input([kept, unused, signed, neverBound], signedIn: signedIn, kept: keptRows));
 
         report.NotSignedInNotMeasuredReason.Should().BeNull();
-        report.NotSignedIn30Days.Select(p => p.PersonId).Should().BeEquivalentTo(new Guid?[] { unused.Id, neverBound.Id });
+        report.NeverSignedIn.Select(p => p.PersonId).Should().BeEquivalentTo(new Guid?[] { unused.Id, neverBound.Id },
+            "neither ever signed in (S-N2); the kept and the signed-in person are in no list");
+        report.NotSignedIn30Days.Should().BeEmpty("nobody here signed in before and then stopped");
+    }
+
+    // Fix wave S-N2 (FR-I1): "not signed in" is two true groups, and a person added an hour ago is never "30 days".
+    [Fact]
+    public void Not_signed_in_is_split_into_lapsed_and_never_signed_in()
+    {
+        var lapsed = Person(1, U(101));                                        // added 60 days ago, last in 40 days ago
+        var neverOld = Person(2, U(102));                                      // added 60 days ago, never signed in
+        var neverNew = PersonAdded(3, null, TimeSpan.FromHours(1));            // added an hour ago, never signed in
+        var active = Person(4, U(104));                                        // signed in 5 days ago
+        var readded = PersonAdded(5, U(105), TimeSpan.FromDays(5));            // added again 5 days ago, last in 40 days ago
+
+        var signedIn = Read(false, Line(ControlRoomHistoryAction.SignedIn, U(104), U(104), Now.AddDays(-5)));
+        var last = new Dictionary<Guid, DateTime>
+        {
+            [lapsed.Id] = Now.AddDays(-40),
+            [active.Id] = Now.AddDays(-5),
+            [readded.Id] = Now.AddDays(-40),
+        };
+
+        var report = TrustReportCalculator.Calculate(Input([lapsed, neverOld, neverNew, active, readded], signedIn: signedIn, lastSignedIn: last));
+
+        report.NotSignedIn30Days.Select(p => p.PersonId).Should().Equal(new Guid?[] { lapsed.Id },
+            "added 30 or more days ago, signed in before, not in the last 30 days");
+        report.NeverSignedIn.Select(p => p.PersonId).Should().BeEquivalentTo(new Guid?[] { neverOld.Id, neverNew.Id },
+            "never signed in, whenever added: the person added an hour ago is here");
+        report.NotSignedIn30Days.Select(p => p.PersonId).Should().NotContain(neverNew.Id, "an hour-old person is never 'not signed in for 30 days'");
+        report.NotSignedIn30Days.Concat(report.NeverSignedIn).Select(p => p.PersonId).Should().NotContain(new Guid?[] { active.Id, readded.Id },
+            "a recent sign-in, or a person added again less than 30 days ago, is in neither group");
+    }
+
+    [Fact]
+    public void The_report_says_when_history_began_and_the_exact_window_its_looks_count()
+    {
+        var began = Now.AddDays(-3);
+
+        var report = TrustReportCalculator.Calculate(Input(historyStartedAt: began));
+
+        report.HistoryStartedAtUtc.Should().Be(began, "the headings can say since when History counts");
+        report.PhoneLooksFromUtc.Should().Be(Now.AddDays(-7));
+        report.PhoneLooksToUtc.Should().Be(Now + TrustReportCalculator.ReadSlack);
+        TrustReportCalculator.Calculate(Input()).HistoryStartedAtUtc.Should().BeNull("no History row yet: no date is made up");
     }
 
     [Fact]
@@ -175,7 +227,8 @@ public sealed class TrustReportCalculatorTests
         // A sign-in 31 days ago does not count for the 30-day list.
         var person = Person(1, U(101));
         var old = Read(false, Line(ControlRoomHistoryAction.SignedIn, U(101), U(101), Now.AddDays(-31)));
-        TrustReportCalculator.Calculate(Input([person], signedIn: old)).NotSignedIn30Days.Should().ContainSingle();
+        TrustReportCalculator.Calculate(Input([person], signedIn: old, lastSignedIn: new Dictionary<Guid, DateTime> { [person.Id] = Now.AddDays(-31) }))
+            .NotSignedIn30Days.Should().ContainSingle();
     }
 
     [Fact]
@@ -196,6 +249,8 @@ public sealed class TrustReportCalculatorTests
         report.RefusedAtDoor.Should().Be(new MisValueDto(null, reason));
         report.NotSignedInNotMeasuredReason.Should().Be(reason);
         report.NotSignedIn30Days.Should().BeEmpty("a cut list would name the wrong people");
+        report.NeverSignedIn.Should().BeEmpty("the same reason covers both groups");
+        report.PhoneLooksLeftOutTestFarmsOnly.Should().Be(new MisValueDto(null, reason));
 
         // The kept read at its limit does the same.
         var keptCapped = TrustReportCalculator.Calculate(Input([Person(1, U(101))], kept: Read(true)));

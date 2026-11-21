@@ -95,8 +95,6 @@ public sealed class ControlRoomLockTwoGateTests
             ControlRoomTicks.Users, ModuleKey.AdminUsers, false),
         new("mis-company", "/shramsafal/admin/mis/company", "/shramsafal/admin/mis/company", "",
             ControlRoomTicks.CompanyNumbers, ModuleKey.MetricsNsm, true),
-        new("cohort", "/admin/farmer-health/cohort", "/admin/farmer-health/cohort", "",
-            ControlRoomTicks.FarmerHealth, ModuleKey.FarmerHealth, false),
         new("farmer-health", "/admin/farmer-health/{farmId:guid}", $"/admin/farmer-health/{Farm1:D}", "",
             ControlRoomTicks.FarmerHealth, ModuleKey.FarmerHealth, false),
     ];
@@ -181,7 +179,6 @@ public sealed class ControlRoomLockTwoGateTests
     }
 
     [Theory]
-    [InlineData("cohort")]
     [InlineData("farmer-health")]
     public async Task A_non_platform_seat_holding_farmer_health_is_refused_the_cross_farm_pages(string name)
     {
@@ -578,7 +575,7 @@ public sealed class ControlRoomLockTwoGateTests
         services.AddSingleton(new GetCompanyMisHandler(ports, ops, CompanyMisExclusions.None, clock));
         services.AddSingleton(new GetFarmerHealthHandler(ports, new PassThroughRedactor(), new NoAuditEmitter(), history, store));
         services.AddSingleton(new GetCohortPatternsHandler(ports, new PassThroughRedactor(), new NoAuditEmitter()));
-        services.AddSingleton(new GetAppVersionsHandler(ops, clock));
+        services.AddSingleton(new GetAppVersionsHandler(ops, ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.None, clock));
     }
 
     /// <summary>Registers, for every class a route asks for, an instance that was never constructed.</summary>
@@ -772,7 +769,7 @@ public sealed class ControlRoomLockTwoGateTests
             Task.FromResult<IReadOnlyList<AppSeenRow>>(
                 [new AppSeenRow(Sunita, "1.0.18", Now.AddHours(-1)), new AppSeenRow(Ramesh, "1.0.17", Now.AddDays(-2))]);
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default) =>
             Task.FromResult(new SignInDevices(2, 0, 0));
 
         public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(

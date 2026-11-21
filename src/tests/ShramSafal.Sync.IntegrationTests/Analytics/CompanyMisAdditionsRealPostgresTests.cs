@@ -252,8 +252,8 @@ public sealed class CompanyMisAdditionsRealPostgresTests(Xunit.Abstractions.ITes
     public async Task A_non_number_refused_count_does_not_break_the_page()
     {
         // Review Focus 5 + C4: a rejectedWorkItems that is not a plain number of at most nine digits counts nothing
-        // and the page answers. E11(6): only server-written rows count. Global Constraints: every upload counts,
-        // test accounts included.
+        // and the page answers. E11(6): only server-written rows count. CR-3 fix wave S-N6 (N1-I1): a refusal whose row
+        // names a test account (props.personId) is left out; the accepted side cannot be tied to a person and says so.
         await GuardAgrisyncAppAsync();
         await using (var db = await OpenSuperuserAsync())
         {
@@ -272,11 +272,17 @@ public sealed class CompanyMisAdditionsRealPostgresTests(Xunit.Abstractions.ITes
         var dto = await LoadAsync(BuildProvider(new[] { TestAccount }), From, To);
         Output.WriteLine($"[EVIDENCE] refused={dto.Quality.SyncRefusedChanges.Current.Value} accepted={dto.Quality.SyncAcceptedChanges.Current.Value} pct={dto.Quality.SyncRefusedPct.Current.Value}");
 
-        dto.Quality.SyncRefusedChanges.Current.Should().Be(new MisValueDto(3m, null),
-            "2 + 1 (a test account's refusal still counts: the server is measured); the garbage rows count nothing");
+        dto.Quality.SyncRefusedChanges.Current.Should().Be(new MisValueDto(2m, null),
+            "2 only: the test account's refusal is left out (fix wave S-N6); the garbage rows count nothing");
         dto.Quality.SyncAcceptedChanges.Current.Should().Be(new MisValueDto(1m, null));
-        dto.Quality.SyncRefusedPct.Current.Should().Be(new MisValueDto(75.0m, null), "3 of (3 + 1)");
-        dto.Quality.SyncRefusedChanges.CurrentByDay.Should().Equal(0m, 0m, 3m, 0m);
+        dto.Quality.SyncRefusedPct.Current.Should().Be(new MisValueDto(66.7m, null), "2 of (2 + 1)");
+        dto.Quality.SyncRefusedChanges.CurrentByDay.Should().Equal(0m, 0m, 2m, 0m);
+        dto.Quality.SyncAcceptedIncludesTestPhones.Should().BeTrue(
+            "the accepted side records a device and no account, so it still counts test phones and the answer says so");
+
+        // The control: with no test accounts listed, the same refusal counts.
+        var unlisted = await LoadAsync(BuildProvider(), From, To);
+        unlisted.Quality.SyncRefusedChanges.Current.Should().Be(new MisValueDto(3m, null));
     }
 
     [SkippableFact]

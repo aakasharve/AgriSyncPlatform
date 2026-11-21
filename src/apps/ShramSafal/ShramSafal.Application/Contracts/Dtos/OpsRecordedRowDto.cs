@@ -37,7 +37,8 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// <c>client.error</c> that came through the app's failure reporter has no
 /// sender, because that route records none.
 /// </param>
-/// <param name="PersonName">That person's name on record; null when there is no user record or no name.</param>
+/// <param name="PersonName">That person's name on record; null when there is no user record or no name, and always null
+/// for a seat without the All farms tick (CR-3 fix wave S-A7, AM7).</param>
 /// <param name="RouteFarmId">The farm the request addressed. Not proof the person belongs to it.</param>
 /// <param name="RecoveredCount">Only on <c>sync.push_outcome</c>: saves that had failed and then arrived.</param>
 /// <param name="NeedsReviewCount">Only on <c>sync.push_outcome</c>: saves sent to the farmer to review.</param>

@@ -31,4 +31,15 @@ public sealed record FarmerHealthDto(
     FarmerHealthAiHealthDto? AiHealth,
     FarmerHealthVerificationCountsDto Verifications,
     IReadOnlyList<FarmerHealthWorkerSummaryDto> WorkerSummary,
-    string FarmName);
+    string FarmName)
+{
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9): <c>"analytics_not_recording"</c> when the analytics
+    /// store is not recording; then the timeline's four closure columns and its errors per day (read from
+    /// <c>analytics.events</c>) are not measured, not zeros. Null when recording.
+    /// </summary>
+    public string? AnalyticsNotMeasuredReason { get; init; }
+
+    /// <summary>When analytics recording stopped, where known (with <see cref="AnalyticsNotMeasuredReason"/>).</summary>
+    public DateTime? AnalyticsStoppedAtUtc { get; init; }
+}

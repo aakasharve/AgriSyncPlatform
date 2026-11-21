@@ -70,4 +70,13 @@ internal sealed class ControlRoomHistory(
 
         return found.ToDictionary(f => f.Actor.Value, f => f.At);
     }
+
+    public async Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct)
+    {
+        await using var admin = await adminFactory.CreateAsync("ControlRoomHistory.firstRecorded", readerUserId, ct);
+        return await admin.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.EntityType == ControlRoomHistoryAction.EntityType)
+            .MinAsync(a => (DateTime?)a.OccurredAtUtc, ct);
+    }
 }

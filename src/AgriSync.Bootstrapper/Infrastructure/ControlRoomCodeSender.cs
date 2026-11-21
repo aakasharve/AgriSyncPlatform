@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Persistence;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.ControlRoomDoor;
 using User.Application.UseCases.Auth.StartOtp;
+using User.Domain.Security;
 
 namespace AgriSync.Bootstrapper.Infrastructure;
 
@@ -21,6 +22,11 @@ namespace AgriSync.Bootstrapper.Infrastructure;
 /// in-memory queue with no row; the person sees no code, the screen already tells them to try again or ask Akash, and the
 /// code table shows no code was issued.
 /// </para>
+/// <para>
+/// Fix wave S-A1 (D-159): every code is issued as a control-room code (<see cref="OtpPurpose.ControlRoomDoor"/>), under the
+/// door's own limits, and the farmer routes never see it. Fix wave S-A6: a refused send queued by the door is written here
+/// as its <c>door_refused</c> row (after the answer, like an approved send's work); at shutdown it is still written.
+/// </para>
 /// No number, whole or hashed, is ever logged or written: the last four digits only.
 /// </summary>
 public sealed class ControlRoomCodeSender(
@@ -32,6 +38,7 @@ public sealed class ControlRoomCodeSender(
     public const string ReasonServerStopping = "server_stopping";
 
     private static readonly EventId NotSent = new(4601, "ControlRoomCodeNotSent");
+    private static readonly EventId RefusalNotRecorded = new(4603, "ControlRoomRefusalNotRecorded");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -73,8 +80,15 @@ public sealed class ControlRoomCodeSender(
         var drained = 0;
         while (queue.Reader.TryRead(out var request))
         {
-            drained++;
             await using var scope = scopes.CreateAsyncScope();
+            if (request.Refusal is { } refusal)
+            {
+                // A refused try is still recorded as refused: nothing was going to be sent for it.
+                await RecordRefusedAsync(scope.ServiceProvider, request, refusal, logger, CancellationToken.None);
+                continue;
+            }
+
+            drained++;
             await RecordNotSentAsync(scope.ServiceProvider, request, ReasonServerStopping, logger, CancellationToken.None);
         }
 
@@ -84,19 +98,28 @@ public sealed class ControlRoomCodeSender(
         }
     }
 
-    /// <summary>Sends one queued code; a refusal or an exception is written as <c>code_not_sent</c> in the same scope.</summary>
+    /// <summary>
+    /// Sends one queued code; a refusal or an exception is written as <c>code_not_sent</c> in the same scope. A queued
+    /// refused send (<see cref="ControlRoomCodeRequest.Refusal"/>) is written as its <c>door_refused</c> row instead.
+    /// </summary>
     public async Task SendOneAsync(ControlRoomCodeRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
 
+        if (request.Refusal is { } refusal)
+        {
+            await RecordRefusedAsync(services, request, refusal, logger, ct);
+            return;
+        }
+
         string reason;
         try
         {
             services.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
             var result = await services.GetRequiredService<StartOtpHandler>()
-                .HandleAsync(new StartOtpCommand(request.TenDigits), ct);
+                .HandleAsync(new StartOtpCommand(request.TenDigits, OtpPurpose.ControlRoomDoor), ct);
             if (result.IsSuccess)
             {
                 return;
@@ -111,6 +134,33 @@ public sealed class ControlRoomCodeSender(
         }
 
         await RecordNotSentAsync(services, request, reason, logger, ct);
+    }
+
+    /// <summary>
+    /// One <c>door_refused</c> row for a refused send, in the given scope (S-A6). Never throws: when History cannot take the
+    /// row, the log line (tail and reason only) is the record and says so.
+    /// </summary>
+    public static async Task RecordRefusedAsync(
+        IServiceProvider services, ControlRoomCodeRequest request, ControlRoomRefusal refusal, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            var tenant = services.GetRequiredService<TenantContext>();
+            if (!tenant.IsAdminCrossTenant)
+            {
+                tenant.ElevateToAdminCrossTenant();
+            }
+
+            await services.GetRequiredService<IControlRoomHistory>().RecordNowAsync(
+                ControlRoomDoor.RefusedEntry(refusal.SubjectId, refusal.Step, request.PhoneTail, refusal.Reason, request.DeviceId, request.IpHash),
+                ct);
+        }
+        catch (Exception historyFailure)
+        {
+            logger.LogError(RefusalNotRecorded,
+                "ControlRoomRefusalNotRecorded: a {Step} try by the number ending {PhoneTail} was refused ({Reason}) and the history write failed ({Failure}). This log line is the only record.",
+                refusal.Step, request.PhoneTail, refusal.Reason, historyFailure.GetType().Name);
+        }
     }
 
     /// <summary>

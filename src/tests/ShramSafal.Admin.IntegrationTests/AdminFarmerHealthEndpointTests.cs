@@ -64,8 +64,10 @@ public sealed class AdminFarmerHealthEndpointTests
     // Layer 1 — endpoint mapping (no DB, no HTTP)
     // --------------------------------------------------------------
 
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N10, N1-M7): the cohort route made up values and no screen
+    // requested it, so it is no longer mapped; the drilldown is the only route left.
     [Fact]
-    public void MapAdminFarmerHealth_Registers_Drilldown_And_Cohort_Routes()
+    public void MapAdminFarmerHealth_Registers_Only_The_Drilldown_Route_And_Not_The_Cohort()
     {
         var endpoints = BuildAdminFarmerHealthEndpoints();
 
@@ -76,10 +78,10 @@ public sealed class AdminFarmerHealthEndpointTests
 
         paths.Should().Contain("/admin/farmer-health/{farmId:guid}",
             "Mode A drilldown route per DWC v2 §3.8 Step 1");
-        paths.Should().Contain("/admin/farmer-health/cohort",
-            "Mode B cohort route per DWC v2 §3.8 Step 1");
-        endpoints.OfType<RouteEndpoint>().Should().HaveCount(2,
-            "MapAdminFarmerHealth must register exactly the two DWC v2 routes — adding more without updating this gate is a scope-creep red flag");
+        paths.Should().NotContain("/admin/farmer-health/cohort",
+            "the cohort route made up values (a last activity of now minus 30 days, tier D, zeros on failure) and is not mapped");
+        endpoints.OfType<RouteEndpoint>().Should().HaveCount(1,
+            "MapAdminFarmerHealth registers exactly the drilldown route — adding more without updating this gate is a scope-creep red flag");
     }
 
     [Fact]

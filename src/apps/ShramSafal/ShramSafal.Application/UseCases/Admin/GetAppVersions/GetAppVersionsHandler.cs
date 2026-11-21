@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 
 namespace ShramSafal.Application.UseCases.Admin.GetAppVersions;
 
@@ -31,8 +32,21 @@ public sealed record GetAppVersionsQuery(int? Days, Guid ActorId, bool MayReadNa
 /// error path, which logs it and answers 500. An empty answer would tell the
 /// team that nobody is on an older version.
 /// </para>
+/// <para>
+/// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N4, N1-C3): test accounts (the Company MIS list,
+/// <see cref="CompanyMisExclusions"/>) are left out of every number here, as Company MIS leaves them out of the same
+/// number: people, the per-version counts, the people on an older version and the sign-in device totals.
+/// </para>
 /// </summary>
-public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvider clock)
+/// <remarks>
+/// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9): the people and versions come from <c>app.seen</c> rows in
+/// <c>analytics.events</c>. While the store is not recording, <see cref="AppVersionsDto.MeasuredSinceUtc"/> is sent null
+/// (the page's own "not measured") and the meta carries the reason, never "No one was seen using the app". The check is
+/// optional only for hand-built test handlers.
+/// </remarks>
+public sealed class GetAppVersionsHandler(
+    IAdminOpsRepository opsRepo, CompanyMisExclusions exclusions, TimeProvider clock,
+    IAnalyticsRecordingCheck? recording = null)
 {
     public const int MaxOlderVersionPeople = 200;
 
@@ -61,9 +75,11 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
         var nowUtc = clock.GetUtcNow().UtcDateTime;
         var sinceUtc = nowUtc.AddDays(-days);
 
-        var rows = await opsRepo.GetAppSeenAsync(sinceUtc, ct);
+        var rows = (await opsRepo.GetAppSeenAsync(sinceUtc, ct))
+            .Where(r => !exclusions.UserIds.Contains(r.PersonId))
+            .ToList();
         var measuredSinceUtc = await opsRepo.GetAppSeenStartAsync(ct);
-        var devices = await opsRepo.GetSignInDevicesAsync(sinceUtc, ct);
+        var devices = await opsRepo.GetSignInDevicesAsync(sinceUtc, exclusions.UserIds.ToArray(), ct);
 
         var people = LatestUsePerPerson(rows);
         var versions = CountByVersion(people);
@@ -85,12 +101,22 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
             OnOlderVersions: onOlderVersions,
             OnOlderVersionsHiddenReason: query.MayReadNames ? null : NeedsAllFarmsReason);
 
-        return Result.Success(new AdminResponseDto<AppVersionsDto>(data,
-            new AdminMetaDto(
-                Source: "live",
-                Window: $"last {days} days",
-                LastRefreshedUtc: nowUtc,
-                TtlSeconds: 0)));
+        var meta = new AdminMetaDto(
+            Source: "live",
+            Window: $"last {days} days",
+            LastRefreshedUtc: nowUtc,
+            TtlSeconds: 0);
+        if (recording is not null)
+        {
+            var state = await recording.CheckAsync(query.ActorId, ct);
+            meta = meta.WithAnalytics(state);
+            if (!state.IsRecording)
+            {
+                data = data with { MeasuredSinceUtc = null };
+            }
+        }
+
+        return Result.Success(new AdminResponseDto<AppVersionsDto>(data, meta));
     }
 
     /// <summary>One row per person: their most recent use in the period (the shared rule, plan CR-2c E9).</summary>

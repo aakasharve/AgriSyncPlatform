@@ -1,7 +1,6 @@
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Admin;
 using ShramSafal.Application.Admin.Ports;
-using ShramSafal.Application.UseCases.Admin.GetCohortPatterns;
 using ShramSafal.Application.UseCases.Admin.GetFarmerHealth;
 using ShramSafal.Domain.Organizations;
 
@@ -9,7 +8,7 @@ namespace AgriSync.Bootstrapper;
 
 /// <summary>
 /// DWC v2 §3.8 — admin endpoints for the Daily Work Closure
-/// farmer-health dashboard. Two GETs grouped under
+/// farmer-health dashboard. One GET under
 /// <c>/admin/farmer-health</c>:
 /// </summary>
 /// <list type="bullet">
@@ -18,11 +17,13 @@ namespace AgriSync.Bootstrapper;
 ///   checks on entries, workers; plan CR-2e Task 3). Platform owners
 ///   seats only, uncached; an unknown farm answers 404; a read failure 500.
 ///   Audit-logged, redacted per <see cref="ModuleKey.FarmerHealth"/>.</item>
-/// <item><c>GET /admin/farmer-health/cohort</c> — Mode B cohort
-///   patterns (intervention queue, watchlist, distributions, heatmap,
-///   trends, top-10 suffering). Same gates: the module, then a Platform seat
-///   (spec trusted-control-room-2026-11-20, plan CR-3, Task A4).</item>
 /// </list>
+/// <para>
+/// <c>GET /admin/farmer-health/cohort</c> is no longer mapped (spec trusted-control-room-2026-11-20, CR-3 fix wave
+/// S-N10, N1-M7): it made up values (a "last active" of now minus 30 days for a farm with no activity, tier D for a
+/// farm with no row, zeros and empty lists on any failure) and no screen requests it, so it cannot be wired to one as
+/// it stands.
+/// </para>
 /// <remarks>
 /// <para>
 /// Mapped directly on the root <see cref="IEndpointRouteBuilder"/>
@@ -85,29 +86,6 @@ public static class AdminFarmerHealthEndpoints
                 : Results.BadRequest();
         })
         .WithName("GetAdminFarmerHealthDrilldown");
-
-        grp.MapGet("/cohort", async (
-            HttpContext http,
-            IEntitlementResolver resolver,
-            GetCohortPatternsHandler handler,
-            CancellationToken ct) =>
-        {
-            var scope = await ShramSafal.Api.Endpoints.AdminScopeHelper
-                .ResolveOrDenyAsync(http, resolver, ct);
-            if (scope is null) return Results.Empty;
-            if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
-                    .RequireReadAsync(http, scope, ModuleKey.FarmerHealth))
-                return Results.Empty;
-
-            if (!await ShramSafal.Api.Endpoints.AdminScopeHelper
-                    .RequirePlatformSeatAsync(http, scope))
-                return Results.Empty;
-
-            var result = await handler.HandleAsync(
-                new GetCohortPatternsQuery(scope), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest();
-        })
-        .WithName("GetAdminFarmerHealthCohort");
 
         return app;
     }

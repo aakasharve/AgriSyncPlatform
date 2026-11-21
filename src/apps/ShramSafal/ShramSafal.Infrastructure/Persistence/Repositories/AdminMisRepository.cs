@@ -150,7 +150,12 @@ public sealed class AdminMisRepository(
             query = query.Where(f => tierFarmIds.Contains(f.Id));
         }
 
-        var total = await query.CountAsync(ct);
+        // CR-3 fix wave S-N5: "Total farms" leaves out farms owned by test accounts (they stay in the list, marked); the
+        // answer says how many of them the list still shows.
+        var listed = await query.CountAsync(ct);
+        var testOwners = exclusions.UserIds.Select(id => new UserId(id)).ToList();
+        var testFarmsShown = testOwners.Count == 0 ? 0 : await query.CountAsync(f => testOwners.Contains(f.OwnerUserId), ct);
+        var total = listed - testFarmsShown;
 
         var farms = await query
             .OrderByDescending(f => f.CreatedAtUtc)
@@ -170,7 +175,7 @@ public sealed class AdminMisRepository(
 
         if (farms.Count == 0)
         {
-            return new FarmsListDto([], total, page, pageSize);
+            return new FarmsListDto([], total, page, pageSize) { TestFarmsShown = testFarmsShown };
         }
 
         // With the tier filter every farm was already counted; otherwise only the farms on this page are read, with
@@ -211,7 +216,7 @@ public sealed class AdminMisRepository(
             })
             .ToList();
 
-        return new FarmsListDto(items, total, page, pageSize);
+        return new FarmsListDto(items, total, page, pageSize) { TestFarmsShown = testFarmsShown };
     }
 
     /// <summary>

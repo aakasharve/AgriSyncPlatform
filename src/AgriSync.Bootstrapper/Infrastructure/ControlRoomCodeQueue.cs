@@ -7,8 +7,25 @@ namespace AgriSync.Bootstrapper.Infrastructure;
 /// One approved number's code, waiting for <see cref="ControlRoomCodeSender"/>. <see cref="TenDigits"/> is the normalised
 /// number (never the typed text, so a 0-prefixed number cannot reach a different account); it lives only in this
 /// in-memory queue. <see cref="PhoneTail"/> is the most History or a log line ever holds of it.
+/// <para>
+/// Fix wave S-A6 (AU-M6, FR-M4): a refused send is queued too, as a <see cref="Refusal"/> to record, so its History row is
+/// written after the answer exactly as an approved send's work is (outside the timed window). A refusal carries no number
+/// at all: <see cref="TenDigits"/> is empty and only the last four digits travel.
+/// </para>
 /// </summary>
-public sealed record ControlRoomCodeRequest(string TenDigits, string PhoneTail, string DeviceId, string IpHash, DateTime QueuedAtUtc);
+public sealed record ControlRoomCodeRequest(string TenDigits, string PhoneTail, string DeviceId, string IpHash, DateTime QueuedAtUtc)
+{
+    /// <summary>Set when this is a refused send to record (<c>door_refused</c>), not a code to send.</summary>
+    public ControlRoomRefusal? Refusal { get; init; }
+
+    /// <summary>A refused send to record: the subject (the matched person, else the door), the step and the reason.</summary>
+    public static ControlRoomCodeRequest ForRefusal(
+        Guid subjectId, string step, string reason, string phoneTail, string deviceId, string ipHash, DateTime queuedAtUtc) =>
+        new(string.Empty, phoneTail, deviceId, ipHash, queuedAtUtc) { Refusal = new ControlRoomRefusal(subjectId, step, reason) };
+}
+
+/// <summary>What a queued <c>door_refused</c> row says, besides the last four digits and the audit claims.</summary>
+public sealed record ControlRoomRefusal(Guid SubjectId, string Step, string Reason);
 
 /// <summary>
 /// The console door's bounded code queue (AM2): the door answers on its floor and never texts inside the request; the
@@ -26,6 +43,7 @@ public sealed class ControlRoomCodeQueue
 
     private readonly Channel<ControlRoomCodeRequest> _channel;
     private readonly object _writeGate = new();
+    private readonly int _refusalCeiling;
     private ControlRoomCodeRequest? _dropped;
 
     public ControlRoomCodeQueue() : this(DefaultCapacity)
@@ -34,6 +52,7 @@ public sealed class ControlRoomCodeQueue
 
     public ControlRoomCodeQueue(int capacity)
     {
+        _refusalCeiling = Math.Max(1, capacity / 2);
         _channel = Channel.CreateBounded<ControlRoomCodeRequest>(
             new BoundedChannelOptions(capacity)
             {
@@ -52,12 +71,21 @@ public sealed class ControlRoomCodeQueue
     /// <summary>True once the sender has stopped: nothing more is taken (<see cref="TryEnqueue"/> answers false).</summary>
     public bool IsClosed { get; private set; }
 
-    /// <summary>True when the request is queued; false when the queue is full (the request was dropped) or closed.</summary>
+    /// <summary>
+    /// True when the request is queued; false when the queue is full (the request was dropped) or closed. A refused send
+    /// to record (S-A6) is taken only while the queue is under half full, so refused tries can never crowd out an approved
+    /// number's code; the door writes a refusal it was not given room for at once.
+    /// </summary>
     public bool TryEnqueue(ControlRoomCodeRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         lock (_writeGate)
         {
+            if (request.Refusal is not null && _channel.Reader.Count >= _refusalCeiling)
+            {
+                return false;
+            }
+
             _dropped = null;
             var written = _channel.Writer.TryWrite(request);
             var dropped = ReferenceEquals(_dropped, request);

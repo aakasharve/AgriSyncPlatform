@@ -38,7 +38,19 @@ public sealed record AdminOpsHealthDto(
 
     // Obsolete (C30): same reason and same exit. Always null: the voice check lives on its own route
     // (GET /shramsafal/admin/ops/voice-check).
-    bool? VoiceDegraded = null);
+    bool? VoiceDegraded = null)
+{
+    /// <summary>
+    /// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9): <c>"analytics_not_recording"</c> when the analytics
+    /// store is not recording. Then R9 is not judged (no count, the same reason), the recent errors and the farms with
+    /// repeated problems are not measured (sent empty, never as "no errors"), and the five voice figures are not
+    /// facts. Null when recording.
+    /// </summary>
+    public string? AnalyticsNotMeasuredReason { get; init; }
+
+    /// <summary>When analytics recording stopped, where known (with <see cref="AnalyticsNotMeasuredReason"/>).</summary>
+    public DateTime? AnalyticsStoppedAtUtc { get; init; }
+}
 
 /// <summary>
 /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, Task 5, C29). One alert check, judged live.

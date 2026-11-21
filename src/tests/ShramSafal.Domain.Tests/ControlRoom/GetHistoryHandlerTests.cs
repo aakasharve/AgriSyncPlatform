@@ -6,6 +6,7 @@ using FluentAssertions;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.ControlRoom;
 using ShramSafal.Domain.Organizations;
 using Xunit;
@@ -58,6 +59,9 @@ public sealed class GetHistoryHandlerTests
         public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
             throw new NotSupportedException();
 
+        public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct) =>
+            throw new NotSupportedException("History's page never asks when History began.");
+
         public Task<HistoryRead> ReadAsync(Guid readerUserId, DateTime fromUtc, DateTime toUtc, string? action, int limit, CancellationToken ct)
         {
             Asked = (fromUtc, toUtc, action, limit);
@@ -81,8 +85,17 @@ public sealed class GetHistoryHandlerTests
         public Task<IReadOnlyList<FarmContactDto>> GetFarmContactsAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
             throw new NotSupportedException("History never loads owner phones to name farms.");
 
-        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
-            throw new NotSupportedException();
+        /// <summary>Fix wave S-N1: the owner of each farm, for <c>countedLooksOnly</c> (test farms are farms of test accounts).</summary>
+        public Dictionary<Guid, Guid> Owners { get; } = [];
+
+        public int OwnerReads { get; private set; }
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> GetFarmOwnersAsync(Guid adminUserId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        {
+            OwnerReads++;
+            return Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(
+                Owners.Where(o => farmIds.Contains(o.Key)).ToDictionary(o => o.Key, o => o.Value));
+        }
 
         public Task<FarmsListDto> GetFarmsListAsync(Guid adminUserId, int page, int pageSize, string? search, string? tier, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<UsersListDto> GetUsersListAsync(int page, int pageSize, string? search, bool matchPhone, CancellationToken ct = default) => throw new NotSupportedException();
@@ -98,7 +111,7 @@ public sealed class GetHistoryHandlerTests
     {
         history = new FixedHistory(new HistoryRead(lines, hit));
         farms = new Farms(farmRows ?? []);
-        return new GetHistoryHandler(new ReadOnlyStore(people), new Directory(accounts), history, farms, new FixedClock());
+        return new GetHistoryHandler(new ReadOnlyStore(people), new Directory(accounts), history, farms, CompanyMisExclusions.None, new FixedClock());
     }
 
     [Fact]
@@ -168,9 +181,95 @@ public sealed class GetHistoryHandlerTests
         lines[0].Details["farmCount"].Should().Be("12");
         lines[0].Details["farms"].Should().Be(string.Join(", ", Enumerable.Range(1, 10).Select(n => $"Example: Farm {n}")) + " and 2 more");
         lines[1].Details["farms"].Should().Be("Example: Farm 1");
-        lines[2].Details.Should().BeEquivalentTo(new Dictionary<string, string?> { ["personCount"] = "25" });
+        lines[2].Details.Should().BeEquivalentTo(new Dictionary<string, string?> { ["page"] = "users", ["personCount"] = "25" });
         lines[2].Details.Should().NotContainKey("farms");
         lines.Should().OnlyContain(l => l.ActorName == "Example: Reader" && l.SubjectName == null);
+    }
+
+    // Fix wave S-N11 (FR-M2): a Users-page phone look carries page "users" with its person count, so History can say
+    // "looked at the phone numbers of N people on the Users page"; a farm look carries its page too.
+    [Fact]
+    public async Task A_users_page_phone_look_carries_page_users_and_its_person_count()
+    {
+        var handler = Make(out _, out _, [], [new ControlRoomAccount(U(51), "9000000051", "Example: Reader")], null, false,
+            Line(ControlRoomHistoryAction.PhonesShown, U(51), U(51), new { page = "users", personCount = 7, count = 7 }, 2),
+            Line(ControlRoomHistoryAction.PhonesShown, U(51), U(51), new { page = "farms", farmIds = Array.Empty<Guid>(), count = 0 }, 1));
+
+        var result = await handler.HandleAsync(new GetHistoryQuery(Founder, 7, ControlRoomHistoryAction.PhonesShown));
+
+        var lines = result.Value!.Lines;
+        lines[0].Details["page"].Should().Be("users");
+        lines[0].Details["personCount"].Should().Be("7");
+        lines[1].Details["page"].Should().Be("farms");
+        lines[1].Details.Should().NotContainKey("personCount");
+    }
+
+    // Fix wave S-N1 (FR-M3): the trust report's link opens exactly the lines it counted: its exact window, and only the
+    // phones_shown lines it counts (a line naming test farms only is left out; who looked never matters).
+    [Fact]
+    public async Task Counted_looks_only_opens_exactly_the_lines_the_trust_report_counts()
+    {
+        var founder = U(70);
+        var testOwner = U(71);
+        var realFarm = U(880);
+        var testFarm = U(881);
+        var history = new FixedHistory(new HistoryRead(
+        [
+            Line(ControlRoomHistoryAction.PhonesShown, founder, founder, new { page = "contacts", farmIds = new[] { realFarm }, count = 1 }, 5),
+            Line(ControlRoomHistoryAction.PhonesShown, founder, founder, new { page = "contacts", farmIds = new[] { testFarm }, count = 1 }, 4),
+            Line(ControlRoomHistoryAction.PhonesShown, founder, founder, new { page = "contacts", farmIds = new[] { testFarm, realFarm }, count = 2 }, 3),
+            Line(ControlRoomHistoryAction.PhonesShown, founder, founder, new { page = "users", personCount = 3, count = 3 }, 2),
+            Line(ControlRoomHistoryAction.SignedIn, founder, founder, new { }, 1),
+        ], false));
+        var farms = new Farms(new FarmNameDto(realFarm, "Example: Real Farm"), new FarmNameDto(testFarm, "Example: Test Farm"));
+        farms.Owners[realFarm] = U(72);
+        farms.Owners[testFarm] = testOwner;
+        // The founder is on the test-account list too (staff are, for Company MIS): his looks still count.
+        var exclusions = new CompanyMisExclusions(new HashSet<Guid> { testOwner, founder });
+        var handler = new GetHistoryHandler(
+            new ReadOnlyStore(), new Directory(new ControlRoomAccount(founder, "9000000070", "Example: Founder")),
+            history, farms, exclusions, new FixedClock());
+        var from = Now.AddDays(-7);
+        var to = Now.AddMinutes(1);
+
+        var result = await handler.HandleAsync(new GetHistoryQuery(
+            Founder, 7, ControlRoomHistoryAction.PhonesShown, from.ToString("O"), to.ToString("O"), CountedLooksOnly: true));
+
+        result.IsSuccess.Should().BeTrue();
+        var asked = history.Asked!.Value;
+        asked.From.Should().Be(from, "the exact window the report counted");
+        asked.To.Should().Be(to);
+        var lines = result.Value!.Lines;
+        lines.Should().HaveCount(3, "the real-farm look, the mixed look and the Users-page look; never the test-farm-only look");
+        lines.Should().OnlyContain(l => l.Action == ControlRoomHistoryAction.PhonesShown);
+        lines.Select(l => l.Details["page"]).Should().Equal("contacts", "contacts", "users");
+        farms.OwnerReads.Should().Be(1, "the owners are read once for the whole page");
+
+        // The control: without the flag every line of the window is shown.
+        var all = await handler.HandleAsync(new GetHistoryQuery(Founder, 7, null, from.ToString("O"), to.ToString("O")));
+        all.Value!.Lines.Should().HaveCount(5);
+    }
+
+    [Fact]
+    public async Task An_exact_window_needs_both_ends_in_order_and_at_most_ninety_days()
+    {
+        var handler = Make(out var history, out _, [], [], null, false);
+        var from = Now.AddDays(-7).ToString("O");
+        var to = Now.ToString("O");
+
+        var windows = new (string? From, string? To)[]
+        {
+            (from, null), (null, to), (to, from), ("not a time", to), (Now.AddDays(-92).ToString("O"), to),
+        };
+        foreach (var (f, t) in windows)
+        {
+            var refused = await handler.HandleAsync(new GetHistoryQuery(Founder, 7, null, f, t));
+            refused.IsFailure.Should().BeTrue($"{f} .. {t}");
+            refused.Error.Code.Should().Be("control_room.history_range_invalid");
+        }
+
+        history.Asked.Should().BeNull("nothing is read for a refused window");
+        (await handler.HandleAsync(new GetHistoryQuery(Founder, 7, null, from, to))).IsSuccess.Should().BeTrue();
     }
 
     // G1 fix round 1 (M2): a sign-in held for the new-phone question is said to be held; any other sign-in has no key.
@@ -218,7 +317,7 @@ public sealed class GetHistoryHandlerTests
     {
         var bad = new ControlRoomHistoryLine(Guid.NewGuid(), Now.AddMinutes(-1), ControlRoomHistoryAction.PersonAdded, Founder, U(1), "not json");
         var handler = new GetHistoryHandler(
-            new ReadOnlyStore(), new Directory(), new FixedHistory(new HistoryRead([bad], false)), new Farms(), new FixedClock());
+            new ReadOnlyStore(), new Directory(), new FixedHistory(new HistoryRead([bad], false)), new Farms(), CompanyMisExclusions.None, new FixedClock());
 
         var result = await handler.HandleAsync(new GetHistoryQuery(Founder, 7, null));
 

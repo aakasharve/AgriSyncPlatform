@@ -2,7 +2,7 @@
 //
 // Handler tests for GetCompanyMisHandler, written by the test-writer from the
 // spec and the plan only. Expected values come from the plan's contract:
-//   - both dates absent: to = today in India time, from = to - 29
+//   - both dates absent: to = yesterday in India time (fix wave S-N8: today is still running), from = to - 29
 //   - a range is at most 180 days; only one date, from > to, to after today: refused
 //   - the previous period has the same length and ends the day before `from`
 //   - the reader is asked from the start of the previous period minus 30 days
@@ -49,7 +49,7 @@ public sealed class GetCompanyMisHandlerTests
     }
 
     [Fact]
-    public async Task No_dates_means_the_last_30_india_days_ending_today()
+    public async Task No_dates_means_the_last_30_complete_india_days_ending_yesterday()
     {
         var reader = new RecordingReader();
         var result = await Handler(reader, Noon14NovIst)
@@ -57,8 +57,10 @@ public sealed class GetCompanyMisHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var data = result.Value!.Data;
-        data.Range.Should().Be(new MisRangeDto(new DateOnly(2026, 10, 16), new DateOnly(2026, 11, 14), 30));
-        result.Value.Meta.Window.Should().Be("2026-10-16..2026-11-14");
+        data.Range.Should().Be(new MisRangeDto(new DateOnly(2026, 10, 15), new DateOnly(2026, 11, 13), 30),
+            "fix wave S-N8: with no range given the last day is yesterday, the last complete India day");
+        data.LastDayComplete.Should().BeTrue();
+        result.Value.Meta.Window.Should().Be("2026-10-15..2026-11-13");
         result.Value.Meta.Source.Should().Be("live");
         result.Value.Meta.TtlSeconds.Should().Be(0);
         data.TimeZone.Should().Be("Asia/Kolkata");
@@ -135,8 +137,8 @@ public sealed class GetCompanyMisHandlerTests
 
         var noDates = await Handler(new RecordingReader(), clock)
             .HandleAsync(new GetCompanyMisQuery(null, null, AdminUser, IsPlatformSeat: true));
-        noDates.Value!.Data.Range.To.Should().Be(new DateOnly(2026, 11, 15));
-        noDates.Value.Data.Range.From.Should().Be(new DateOnly(2026, 10, 17));
+        noDates.Value!.Data.Range.To.Should().Be(new DateOnly(2026, 11, 14), "15 Nov is today in India, so yesterday is 14 Nov");
+        noDates.Value.Data.Range.From.Should().Be(new DateOnly(2026, 10, 16));
 
         var endingToday = await Handler(new RecordingReader(), clock).HandleAsync(new GetCompanyMisQuery(
             new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformSeat: true));
@@ -151,6 +153,45 @@ public sealed class GetCompanyMisHandlerTests
         var notYet = await Handler(new RecordingReader(), lateEvening).HandleAsync(new GetCompanyMisQuery(
             new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 15), AdminUser, IsPlatformSeat: true));
         notYet.Error.Kind.Should().Be(ErrorKind.Validation);
+    }
+
+    // Fix wave S-N8 (N1-I3, N2-M-I1): every answer says whether its last day is complete.
+    [Fact]
+    public async Task A_range_ending_today_says_its_last_day_is_not_complete()
+    {
+        var endingToday = await Handler(new RecordingReader(), Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
+            new DateOnly(2026, 11, 8), new DateOnly(2026, 11, 14), AdminUser, IsPlatformSeat: true));
+        endingToday.Value!.Data.LastDayComplete.Should().BeFalse("14 Nov is today in India: its numbers are today so far");
+
+        var endingYesterday = await Handler(new RecordingReader(), Noon14NovIst).HandleAsync(new GetCompanyMisQuery(
+            new DateOnly(2026, 11, 7), new DateOnly(2026, 11, 13), AdminUser, IsPlatformSeat: true));
+        endingYesterday.Value!.Data.LastDayComplete.Should().BeTrue();
+    }
+
+    // Fix wave S-N9 (N1-C1): while analytics is not recording, the numbers read from analytics.events are not measured.
+    [Fact]
+    public async Task While_analytics_is_not_recording_version_adoption_and_refused_sync_are_not_measured()
+    {
+        var stopped = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        var check = new FixedRecording(new AnalyticsRecording(false, stopped));
+
+        var result = await Handler(new RecordingReader(), Noon14NovIst, recording: check).HandleAsync(new GetCompanyMisQuery(
+            new DateOnly(2026, 11, 7), new DateOnly(2026, 11, 13), AdminUser, IsPlatformSeat: true));
+
+        var quality = result.Value!.Data.Quality;
+        quality.AppVersions.Items.Should().BeEmpty();
+        quality.AppVersions.NotMeasuredReason.Should().Be("analytics_not_recording", "never an empty list that reads as nobody");
+        quality.SyncRefusedChanges.Current.Should().Be(new MisValueDto(null, "analytics_not_recording"), "never 0");
+        quality.SyncRefusedPct.Current.Should().Be(new MisValueDto(null, "analytics_not_recording"), "never 0.0%");
+        result.Value.Meta.AnalyticsNotMeasuredReason.Should().Be("analytics_not_recording");
+        result.Value.Meta.AnalyticsStoppedAtUtc.Should().Be(stopped);
+        check.AskedBy.Should().Be(AdminUser, "the reader is named in the check's audited read");
+
+        // The control: recording, the same numbers are what the calculator counted, and the meta carries no reason.
+        var recording = await Handler(new RecordingReader(), Noon14NovIst, recording: new FixedRecording(AnalyticsRecording.Recording))
+            .HandleAsync(new GetCompanyMisQuery(new DateOnly(2026, 11, 7), new DateOnly(2026, 11, 13), AdminUser, IsPlatformSeat: true));
+        recording.Value!.Meta.AnalyticsNotMeasuredReason.Should().BeNull();
+        recording.Value.Data.Quality.SyncRefusedChanges.Current.NotMeasuredReason.Should().NotBe("analytics_not_recording");
     }
 
     [Fact]
@@ -192,8 +233,20 @@ public sealed class GetCompanyMisHandlerTests
     // ------------------------------------------------------------------
 
     private static GetCompanyMisHandler Handler(
-        ICompanyMisReader reader, DateTime nowUtc, IReadOnlySet<Guid>? excluded = null) =>
-        new(reader, new NoAppSeenOpsRepository(), new CompanyMisExclusions(excluded ?? new HashSet<Guid>()), new FixedClock(nowUtc));
+        ICompanyMisReader reader, DateTime nowUtc, IReadOnlySet<Guid>? excluded = null, IAnalyticsRecordingCheck? recording = null) =>
+        new(reader, new NoAppSeenOpsRepository(), new CompanyMisExclusions(excluded ?? new HashSet<Guid>()), new FixedClock(nowUtc), recording);
+
+    /// <summary>Fix wave S-N9: a recording check with a fixed answer; remembers who asked.</summary>
+    private sealed class FixedRecording(AnalyticsRecording state) : IAnalyticsRecordingCheck
+    {
+        public Guid? AskedBy { get; private set; }
+
+        public Task<AnalyticsRecording> CheckAsync(Guid readerUserId, CancellationToken ct)
+        {
+            AskedBy = readerUserId;
+            return Task.FromResult(state);
+        }
+    }
 
     /// <summary>
     /// Compile-only (plan CR-2c, E9): the handler asks when app.seen rows began; here none were ever written.
@@ -215,7 +268,7 @@ public sealed class GetCompanyMisHandlerTests
         public Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyDictionary<Guid, string?>> GetPeopleNamesAsync(

@@ -264,7 +264,8 @@ public sealed class AdminOpsRecordedRouteTests
     {
         var endpoint = RecordedEndpoint();
 
-        var answer = await Ask(endpoint, SignedIn(Admin), Seat(OnlyOpsErrors()));
+        // CR-3 fix wave S-A7 (AM7): a name needs the All farms tick as well as API errors.
+        var answer = await Ask(endpoint, SignedIn(Admin), Seat(OpsErrorsAndAllFarms()));
 
         answer.Status.Should().Be(StatusCodes.Status200OK);
 
@@ -294,6 +295,30 @@ public sealed class AdminOpsRecordedRouteTests
         typeof(OpsRecordedRowDto).GetProperties().Select(p => p.Name).Should().NotContain(
             name => neverReturned.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase)),
             "the recorded row has no place to put a phone number or a device id");
+    }
+
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A7, FR-M1, AM7): a seat with the API errors tick but not the
+    // All farms tick gets the rows with every PersonName left blank, as App Versions leaves its names out.
+    [Fact]
+    public async Task A_seat_without_all_farms_gets_the_rows_with_no_names()
+    {
+        var endpoint = RecordedEndpoint();
+
+        var answer = await Ask(endpoint, SignedIn(Admin), Seat(OnlyOpsErrors()));
+
+        answer.Status.Should().Be(StatusCodes.Status200OK);
+        answer.Body.Should().Contain(NamedError.EventId.ToString("D"), "the row itself is still answered");
+        answer.Body.Should().NotContain("Sunita", "a person's name needs the All farms tick");
+        using var doc = JsonDocument.Parse(answer.Body);
+        var names = Properties(doc.RootElement)
+            .Where(p => string.Equals(p.Name, "personName", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        names.Should().NotBeEmpty("the field is still there");
+        names.Should().OnlyContain(p => p.Value.ValueKind == JsonValueKind.Null, "and blank");
+
+        // The control: the same rows with the All farms tick carry the name.
+        var named = await Ask(endpoint, SignedIn(Admin), Seat(OpsErrorsAndAllFarms()));
+        named.Body.Should().Contain("Sunita Pawar");
     }
 
     // ------------------------------------------------------------------
@@ -419,6 +444,18 @@ public sealed class AdminOpsRecordedRouteTests
         OrganizationType.Platform,
         OrganizationRole.Analyst,
         new[] { new ModuleEntitlement(ModuleKey.OpsErrors, CanRead: true, CanExport: false, CanWrite: false) },
+        IsPlatformAdmin: false);
+
+    /// <summary>A seat that reads ops.errors and the All farms list (CR-3 fix wave S-A7: names need both).</summary>
+    private static AdminScope OpsErrorsAndAllFarms() => new(
+        Org,
+        OrganizationType.Platform,
+        OrganizationRole.Analyst,
+        new[]
+        {
+            new ModuleEntitlement(ModuleKey.OpsErrors, CanRead: true, CanExport: false, CanWrite: false),
+            new ModuleEntitlement(ModuleKey.FarmsList, CanRead: true, CanExport: false, CanWrite: false),
+        },
         IsPlatformAdmin: false);
 
     /// <summary>A signed-in caller, shaped like the principal the JWT handler builds.</summary>
@@ -619,7 +656,7 @@ public sealed class AdminOpsRecordedRouteTests
             throw new NotSupportedException();
         }
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default)
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default)
         {
             Calls.Add(nameof(GetSignInDevicesAsync));
             throw new NotSupportedException();

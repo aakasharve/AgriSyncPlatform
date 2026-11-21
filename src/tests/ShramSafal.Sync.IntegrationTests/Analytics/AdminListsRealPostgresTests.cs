@@ -117,6 +117,33 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         page2.Items.Select(i => i.FarmId).Should().Equal(FarmId(2), FarmId(1));
     }
 
+    // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N5, N1-I2): "Total farms" leaves out farms owned by test
+    // accounts, as Company MIS "Farms registered" does; they stay in the list (marked) and the answer says how many.
+    [SkippableFact]
+    public async Task Farms_total_leaves_out_test_farms_and_says_how_many_the_list_still_shows()
+    {
+        await GuardAsync();
+
+        var provider = BuildProvider(new[] { OwnerId(3), OwnerId(11) });
+
+        var all = await FarmsAsync(provider, 1, 50, null);
+        Output.WriteLine($"[EVIDENCE] total={all.TotalCount} testFarmsShown={all.TestFarmsShown} items={all.Items.Count}");
+        all.TotalCount.Should().Be(FarmCount - 2, "the two farms owned by test accounts are not farms of the platform");
+        all.TestFarmsShown.Should().Be(2);
+        all.Items.Should().HaveCount(FarmCount, "the list still shows them, each marked as a test account");
+        all.Items.Where(i => i.ConfirmedDaysNotMeasuredReason == "test_account").Select(i => i.FarmId)
+            .Should().BeEquivalentTo(new[] { FarmId(3), FarmId(11) });
+
+        var found = await FarmsAsync(provider, 1, 50, "fake list farm 1");
+        found.TotalCount.Should().Be(2, "10 and 12 match; 11 is a test farm");
+        found.TestFarmsShown.Should().Be(1);
+
+        // The control: with no test accounts every farm counts.
+        var none = await FarmsAsync(BuildProvider(), 1, 50, null);
+        none.TotalCount.Should().Be(FarmCount);
+        none.TestFarmsShown.Should().Be(0);
+    }
+
     [SkippableFact]
     public async Task Farms_list_plan_is_null_not_trial()
     {

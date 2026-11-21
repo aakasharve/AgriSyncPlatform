@@ -256,9 +256,9 @@ public sealed class ControlRoomPeopleGateTests
         services.AddSingleton(new ListPeopleHandler(store, directory, history));
         services.AddSingleton(new AddPersonHandler(store, directory, clock));
         services.AddSingleton(new ChangePersonHandler(store, clock));
-        services.AddSingleton(new RemovePersonHandler(store, clock));
+        services.AddSingleton(new RemovePersonHandler(store, clock, new RecordingDoorSessions()));
         services.AddSingleton(new KeepPersonHandler(store, clock));
-        services.AddSingleton(new GetHistoryHandler(store, directory, history, misRepo, clock));
+        services.AddSingleton(new GetHistoryHandler(store, directory, history, misRepo, CompanyMisExclusions.None, clock));
         services.AddSingleton(new GetTrustReportHandler(store, directory, history, misRepo, CompanyMisExclusions.None, clock));
 
         var ctx = new DefaultHttpContext
@@ -418,6 +418,24 @@ public sealed class ControlRoomPeopleGateTests
         {
             Reads++;
             return Task.FromResult(new HistoryRead([], false));
+        }
+
+        public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct)
+        {
+            Reads++;
+            return Task.FromResult<DateTime?>(null);
+        }
+    }
+
+    /// <summary>Fix wave S-A4: records whose console sessions a removal ended; ends none.</summary>
+    private sealed class RecordingDoorSessions : IControlRoomDoorSessions
+    {
+        public List<Guid> Ended { get; } = [];
+
+        public Task<int> EndDoorSessionsAsync(Guid userId, DateTime utcNow, CancellationToken ct)
+        {
+            Ended.Add(userId);
+            return Task.FromResult(0);
         }
     }
 

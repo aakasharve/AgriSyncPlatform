@@ -960,8 +960,8 @@ public static class CompanyMisCalculator
                 .ToHashSet();
 
             var verifiedUsers = rows.VerifiedUsers
-                .Where(u => !excludedUsers.Contains(u.UserId) && u.PhoneVerifiedAtUtc < countedAtUtc)
-                .Select(u => new CohortUser(u.UserId, IstDay(u.PhoneVerifiedAtUtc)))
+                .Where(u => !excludedUsers.Contains(u.UserId) && u.SignedUpAtUtc < countedAtUtc)
+                .Select(u => new CohortUser(u.UserId, IstDay(u.SignedUpAtUtc)))
                 .ToList();
 
             var memberships = rows.Memberships

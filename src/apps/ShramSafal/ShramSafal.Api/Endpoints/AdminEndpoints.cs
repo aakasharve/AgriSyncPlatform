@@ -241,7 +241,9 @@ public static class AdminEndpoints
 
             try
             {
-                var result = await handler.HandleAsync(new GetOpsRecordedQuery(minutes), ct);
+                // CR-3 fix wave S-A7 (AM7): names need the All farms tick, as on App Versions.
+                var result = await handler.HandleAsync(
+                    new GetOpsRecordedQuery(minutes, MayReadNames: scope.IsPlatformAdmin || scope.CanRead(ModuleKey.FarmsList)), ct);
                 return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)

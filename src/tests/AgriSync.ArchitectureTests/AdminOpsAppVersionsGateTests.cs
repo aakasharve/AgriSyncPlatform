@@ -184,7 +184,7 @@ public sealed class AdminOpsAppVersionsGateTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IEntitlementResolver>(resolver);
-        services.AddSingleton(new GetAppVersionsHandler(repository, TimeProvider.System));
+        services.AddSingleton(new GetAppVersionsHandler(repository, ShramSafal.Application.UseCases.Admin.GetCompanyMis.CompanyMisExclusions.None, TimeProvider.System));
 
         var ctx = new DefaultHttpContext
         {
@@ -297,7 +297,7 @@ public sealed class AdminOpsAppVersionsGateTests
             return Task.FromResult<DateTime?>(null);
         }
 
-        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default)
+        public Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default)
         {
             Calls.Add(nameof(GetSignInDevicesAsync));
             return Task.FromResult(new SignInDevices(Phones: 0, OtherDevices: 0, PeopleWithUnknownDevice: 0));

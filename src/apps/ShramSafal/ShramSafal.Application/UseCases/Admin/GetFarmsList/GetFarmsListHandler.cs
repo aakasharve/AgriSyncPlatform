@@ -21,8 +21,14 @@ public sealed record GetFarmsListQuery(
     string AuditDeviceId,
     string AuditIpHash);
 
+/// <remarks>
+/// spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-N9): each farm's "Errors 24h" is counted from
+/// <c>analytics.events</c>; while the store is not recording the meta says so, so those zeros are not measured. The
+/// check is asked after the read; it is optional only for hand-built test handlers.
+/// </remarks>
 public sealed class GetFarmsListHandler(
-    IAdminMisRepository misRepo, IControlRoomHistory history, IControlRoomStore controlRoomStore)
+    IAdminMisRepository misRepo, IControlRoomHistory history, IControlRoomStore controlRoomStore,
+    IAnalyticsRecordingCheck? recording = null)
 {
     /// <summary>
     /// spec: company-mis-real-numbers-2026-11-15 (plan CR-2e, C32). The tier filter counts every farm's checked days
@@ -102,7 +108,12 @@ public sealed class GetFarmsListHandler(
             }
         }
 
-        return Result.Success(new AdminResponseDto<FarmsListDto>(farms,
-            new AdminMetaDto("live-aggregated", "current", DateTime.UtcNow, 60)));
+        var meta = new AdminMetaDto("live-aggregated", "current", DateTime.UtcNow, 60);
+        if (recording is not null)
+        {
+            meta = meta.WithAnalytics(await recording.CheckAsync(q.ActorId, ct));
+        }
+
+        return Result.Success(new AdminResponseDto<FarmsListDto>(farms, meta));
     }
 }

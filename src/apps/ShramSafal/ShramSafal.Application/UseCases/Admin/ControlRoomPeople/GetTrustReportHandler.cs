@@ -15,6 +15,8 @@ namespace ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
 /// <c>CompanyMis:ExcludedUserIds</c>); a test farm is a farm one of them owns. The owners of the farms the phone looks
 /// name are read once, through the audited cross-farm read, and only when there is a test account to find and a
 /// measured look naming a farm; otherwise nothing cross-farm is opened. A failed read is not caught (500).
+/// Fix wave S-N1: the list is used only to find test FARMS; a look is never left out because of who looked (staff are
+/// on the list for Company MIS, and every looker is staff). Fix wave S-N2: the time History began is read once.
 /// </para>
 /// </summary>
 public sealed class GetTrustReportHandler(
@@ -26,10 +28,11 @@ public sealed class GetTrustReportHandler(
     public async Task<TrustReportDto> HandleAsync(Guid readerUserId, CancellationToken ct = default)
     {
         var now = DateTime.SpecifyKind(clock.UtcNow, DateTimeKind.Utc);
-        var to = now.AddMinutes(1);
+        var to = now + TrustReportCalculator.ReadSlack;
         var week = now.AddDays(-TrustReportCalculator.ShortWindowDays);
         var month = now.AddDays(-TrustReportCalculator.LongWindowDays);
 
+        var historyStartedAt = await history.FirstRecordedAtAsync(readerUserId, ct);
         var phones = await history.ReadAsync(readerUserId, week, to, ControlRoomHistoryAction.PhonesShown, ReadLimit, ct);
         var refused = await history.ReadAsync(readerUserId, week, to, ControlRoomHistoryAction.DoorRefused, ReadLimit, ct);
         var signedIn = await history.ReadAsync(readerUserId, month, to, ControlRoomHistoryAction.SignedIn, ReadLimit, ct);
@@ -56,7 +59,7 @@ public sealed class GetTrustReportHandler(
         var founders = (await store.PlatformOwnerUserIdsAsync(ct)).Count;
         var testFarms = await TestFarmsAsync(readerUserId, phones, ct);
         return TrustReportCalculator.Calculate(new TrustReportInput(
-            now, people, founders, phones, refused, signedIn, kept, exclusions.UserIds, testFarms));
+            now, people, founders, phones, refused, signedIn, kept, testFarms, historyStartedAt));
     }
 
     /// <summary>The farms named by the phone looks whose owner is a test account.</summary>

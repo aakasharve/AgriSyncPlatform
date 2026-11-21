@@ -4,12 +4,19 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Domain.ControlRoom;
 
 namespace ShramSafal.Application.UseCases.Admin.ControlRoomPeople;
 
-/// <summary>Days is 7 to 90; Action is one History action, or null for all.</summary>
-public sealed record GetHistoryQuery(Guid ReaderUserId, int Days, string? Action);
+/// <summary>
+/// Days is 7 to 90; Action is one History action, or null for all. Fix wave S-N1 (FR-M3): <paramref name="FromUtc"/> and
+/// <paramref name="ToUtc"/> (ISO-8601, both or neither, at most 90 days apart) replace Days with an exact window, so the
+/// trust report's link opens the window it counted; <paramref name="CountedLooksOnly"/> keeps only the
+/// <c>phones_shown</c> lines the trust report counts (the same rule: a line naming only test farms is left out).
+/// </summary>
+public sealed record GetHistoryQuery(
+    Guid ReaderUserId, int Days, string? Action, string? FromUtc = null, string? ToUtc = null, bool CountedLooksOnly = false);
 
 /// <summary>
 /// The History page: the control room's own trail, newest first, as lines the console shows in a sentence each.
@@ -24,7 +31,7 @@ public sealed record GetHistoryQuery(Guid ReaderUserId, int Days, string? Action
 /// </summary>
 public sealed class GetHistoryHandler(
     IControlRoomStore store, IControlRoomPhoneDirectory directory, IControlRoomHistory history,
-    IAdminMisRepository misRepo, IClock clock)
+    IAdminMisRepository misRepo, CompanyMisExclusions exclusions, IClock clock)
 {
     public const int Limit = 500;
     public const int MinDays = 7;
@@ -50,18 +57,33 @@ public sealed class GetHistoryHandler(
 
     public async Task<Result<HistoryAnswerDto>> HandleAsync(GetHistoryQuery query, CancellationToken ct = default)
     {
-        if (query.Days is < MinDays or > MaxDays)
+        var now = DateTime.SpecifyKind(clock.UtcNow, DateTimeKind.Utc);
+        DateTime fromUtc, toUtc;
+        if (query.FromUtc is null && query.ToUtc is null)
+        {
+            if (query.Days is < MinDays or > MaxDays)
+                return Result.Failure<HistoryAnswerDto>(Error.Validation(
+                    ControlRoomPeopleCodes.RangeInvalid, $"Choose {MinDays} to {MaxDays} days."));
+            fromUtc = now.AddDays(-query.Days);
+            toUtc = now.AddMinutes(1);
+        }
+        else if (!TryParseUtc(query.FromUtc, out fromUtc) || !TryParseUtc(query.ToUtc, out toUtc)
+            || fromUtc >= toUtc || toUtc - fromUtc > TimeSpan.FromDays(MaxDays) + TimeSpan.FromMinutes(1))
+        {
             return Result.Failure<HistoryAnswerDto>(Error.Validation(
-                ControlRoomPeopleCodes.RangeInvalid, $"Choose {MinDays} to {MaxDays} days."));
+                ControlRoomPeopleCodes.RangeInvalid, $"Give both a start and an end, at most {MaxDays} days apart."));
+        }
 
         var action = string.IsNullOrWhiteSpace(query.Action) ? null : query.Action.Trim();
         if (action is not null && !KnownActions.Contains(action))
             return Result.Failure<HistoryAnswerDto>(Error.Validation(
                 ControlRoomPeopleCodes.ActionUnknown, "That kind of History line is not known."));
 
-        var now = DateTime.SpecifyKind(clock.UtcNow, DateTimeKind.Utc);
-        var read = await history.ReadAsync(
-            query.ReaderUserId, now.AddDays(-query.Days), now.AddMinutes(1), action, Limit, ct);
+        var read = await history.ReadAsync(query.ReaderUserId, fromUtc, toUtc, action, Limit, ct);
+        if (query.CountedLooksOnly)
+        {
+            read = read with { Lines = await CountedLooksAsync(query.ReaderUserId, read.Lines, ct) };
+        }
 
         var payloads = read.Lines.Select(l => ParsePayload(l.PayloadJson)).ToList();
         var farmNames = await FarmNamesAsync(query.ReaderUserId, payloads, ct);
@@ -122,6 +144,9 @@ public sealed class GetHistoryHandler(
                     d["heldForQuestion"] = "true";
                 break;
             case ControlRoomHistoryAction.PhonesShown:
+                // Fix wave S-N11 (FR-M2): which page showed the numbers ("users" for the Users page, with its person count).
+                if (ReadString(p, "page") is { } page)
+                    d["page"] = page;
                 if (p.ValueKind == JsonValueKind.Object && p.TryGetProperty("farmIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
                 {
                     var farmIds = ids.EnumerateArray()
@@ -139,6 +164,41 @@ public sealed class GetHistoryHandler(
         }
 
         return d;
+    }
+
+    /// <summary>
+    /// S-N1: only the <c>phones_shown</c> lines the trust report counts (<see cref="TrustReportCalculator.IsCountedLook"/>):
+    /// test farms are the farms owned by a test account, read once through the audited cross-farm read, and only when
+    /// there is a test account and a line naming a farm.
+    /// </summary>
+    private async Task<IReadOnlyList<ControlRoomHistoryLine>> CountedLooksAsync(
+        Guid readerUserId, IReadOnlyList<ControlRoomHistoryLine> lines, CancellationToken ct)
+    {
+        var looks = lines.Where(l => l.Action == ControlRoomHistoryAction.PhonesShown).ToList();
+        IReadOnlySet<Guid> testFarms = new HashSet<Guid>();
+        var farmIds = TrustReportCalculator.FarmIdsIn(new HistoryRead(looks, false));
+        if (exclusions.UserIds.Count > 0 && farmIds.Count > 0)
+        {
+            var owners = await misRepo.GetFarmOwnersAsync(readerUserId, farmIds, ct);
+            testFarms = owners.Where(o => exclusions.UserIds.Contains(o.Value)).Select(o => o.Key).ToHashSet();
+        }
+
+        return looks.Where(l => TrustReportCalculator.IsCountedLook(TrustReportCalculator.FarmIds(l.PayloadJson), testFarms)).ToList();
+    }
+
+    /// <summary>An ISO-8601 instant as UTC; a value with no offset is taken as UTC.</summary>
+    private static bool TryParseUtc(string? text, out DateTime utc)
+    {
+        if (!string.IsNullOrWhiteSpace(text)
+            && DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
+        {
+            utc = parsed.UtcDateTime;
+            return true;
+        }
+
+        utc = default;
+        return false;
     }
 
     private static string? FarmsText(IReadOnlyList<Guid> farmIds, IReadOnlyDictionary<Guid, string> farmNames)

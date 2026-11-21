@@ -55,7 +55,14 @@ public sealed class VerifyOtpHandler(
             return Result.Failure<VerifyOtpResult>(Error.Validation("otp.invalid_code", "OTP is required."));
         }
 
-        var challenge = await otpRepository.GetPendingByPhoneAsync(phone.Value, ct);
+        // spec: trusted-control-room-2026-11-20 (fix wave S-A1, D-159): a code is checked only at the door it was issued
+        // for. Only the console's door builds a session under the reserved platform (every /user/auth route turns a
+        // client-sent one into "unknown"), so the session says which door this is: the farmer route never sees a door
+        // code (it answers exactly as for a number with no code), and the door never accepts a farmer's code.
+        var purpose = command.Session.Platform == ControlRoomSessionClaims.SessionPlatform
+            ? OtpPurpose.ControlRoomDoor
+            : OtpPurpose.FarmerApp;
+        var challenge = await otpRepository.GetPendingByPhoneAsync(phone.Value, purpose, ct);
         if (challenge is null)
         {
             return Result.Failure<VerifyOtpResult>(Error.Unauthenticated(
@@ -64,10 +71,30 @@ public sealed class VerifyOtpHandler(
         }
 
         var utcNow = clock.UtcNow;
-        var matches = passwordHasher.Verify(command.Otp, challenge.OtpHash);
-        var outcome = challenge.Verify(matches, utcNow);
+        OtpVerificationOutcome outcome;
+        if (challenge.ExpireIfLapsed(utcNow))
+        {
+            outcome = OtpVerificationOutcome.Expired;
+        }
+        else if (!await otpRepository.TryCountAttemptAsync(challenge, utcNow, ct))
+        {
+            // S-A2 (AU-F2): the guess is counted in the database BEFORE it is checked, in one conditional statement, so
+            // a burst of parallel guesses can never check more than the code's maximum. Not counted means a parallel guess
+            // used the last attempt (or used or ended the code): this guess is never checked. The re-read status says which.
+            outcome = challenge.Status switch
+            {
+                OtpChallengeStatus.Consumed => OtpVerificationOutcome.AlreadyConsumed,
+                OtpChallengeStatus.Expired => OtpVerificationOutcome.Expired,
+                _ => OtpVerificationOutcome.LockedOut,
+            };
+        }
+        else
+        {
+            var matches = passwordHasher.Verify(command.Otp, challenge.OtpHash);
+            outcome = challenge.ApplyCountedAttempt(matches, utcNow);
+        }
 
-        // Persist the attempt-count / terminal status regardless of outcome.
+        // Persist the terminal status regardless of outcome (the attempt count is already stored).
         await otpRepository.SaveChangesAsync(ct);
 
         if (outcome != OtpVerificationOutcome.Success)

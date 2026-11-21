@@ -165,7 +165,7 @@ public sealed class ControlRoomDoorGateTests
         using var doc = JsonDocument.Parse(approved.Body);
         doc.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal("resendAfterSeconds", "message");
         doc.RootElement.GetProperty("message").GetString().Should().Be(CalmSentence);
-        doc.RootElement.GetProperty("resendAfterSeconds").GetInt32().Should().Be(300, "the OTP policy: 15 minutes / 3 codes");
+        doc.RootElement.GetProperty("resendAfterSeconds").GetInt32().Should().Be(60, "the door's own limit: one code a minute (fix wave S-A1)");
     }
 
     [Fact]
@@ -173,9 +173,10 @@ public sealed class ControlRoomDoorGateTests
     {
         await using var w = World.Create();
         var now = w.Time.GetUtcNow().UtcDateTime;
-        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), BoundTen, Hasher.Of("111111"), now, TimeSpan.FromMinutes(5), 5));
-        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), ListedTen, Hasher.Of("222222"), now.AddMinutes(-10), TimeSpan.FromMinutes(5), 5));
-        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), FounderTen, Hasher.Of("333333"), now, TimeSpan.FromMinutes(5), 1));
+        // Door codes (fix wave S-A1): the door checks only codes issued for it.
+        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), BoundTen, Hasher.Of("111111"), now, TimeSpan.FromMinutes(5), 5, OtpPurpose.ControlRoomDoor));
+        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), ListedTen, Hasher.Of("222222"), now.AddMinutes(-10), TimeSpan.FromMinutes(5), 5, OtpPurpose.ControlRoomDoor));
+        w.Otp.Seed(OtpChallenge.Issue(Guid.NewGuid(), FounderTen, Hasher.Of("333333"), now, TimeSpan.FromMinutes(5), 1, OtpPurpose.ControlRoomDoor));
 
         var unknown = await w.CheckCode(UnknownTen, "123456");
         var wrong = await w.CheckCode(BoundTen, "999999");
@@ -388,8 +389,8 @@ public sealed class ControlRoomDoorGateTests
         var meena = w.Store.Person(MovedTen);
 
         var send = await w.SendCode(MovedTen);
+        await w.DrainAsync();   // fix wave S-A6: a refused send's row is written by the background writer
         var check = await w.CheckCode(MovedTen, "555555");
-        await w.DrainAsync();
 
         send.Status.Should().Be(200);
         check.Status.Should().Be(401);
@@ -472,7 +473,7 @@ public sealed class ControlRoomDoorGateTests
     }
 
     [Fact]
-    public async Task A_failed_bind_answers_500_with_no_token_and_no_cookie()
+    public async Task A_failed_bind_answers_the_one_refusal_with_no_token_and_no_cookie()
     {
         await using var w = World.Create();
         w.Store.FailSaves = true;
@@ -481,7 +482,9 @@ public sealed class ControlRoomDoorGateTests
         await w.DrainAsync();
         var answer = await w.CheckCode(ListedTen, w.Sms.LastCode!);
 
-        answer.Status.Should().Be(500);
+        // Fix wave S-A6: no fault answers differently from a refused number.
+        answer.Status.Should().Be(401);
+        answer.Body.Should().Be("""{"error":"code_not_accepted"}""");
         answer.Body.Should().NotContain("accessToken").And.NotContain("refreshToken");
         answer.SetCookie.Should().BeNull("no cookie when the bind did not commit");
         w.Logs.Entries(nameof(ControlRoomSignInEndpoints)).Should().ContainSingle(e => e.Contains("ControlRoomBindFailed")
@@ -519,6 +522,186 @@ public sealed class ControlRoomDoorGateTests
             .Should().NotContain(c => c.Type == ControlRoomSessionClaims.Type, "a farmer token never carries the door mark");
     }
 
+    // ── fix wave S-A1: door codes are kept apart from farmer codes ─────────────
+
+    [Fact]
+    public async Task After_a_door_send_the_farmer_verify_route_answers_as_for_a_number_with_no_code()
+    {
+        await using var w = World.Create();
+        await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        var doorCode = w.Sms.LastCode!;
+        w.Otp.Pending(ListedTen, OtpPurpose.ControlRoomDoor).Should().NotBeNull("arrange: the door issued a code");
+
+        var noCode = await w.Post("/user/auth/verify-otp", $$"""{"phone":"{{UnknownTen}}","otp":"{{doorCode}}","deviceId":"phone-1"}""");
+        var afterDoor = await w.Post("/user/auth/verify-otp", $$"""{"phone":"{{ListedTen}}","otp":"{{doorCode}}","deviceId":"phone-1"}""");
+
+        noCode.Status.Should().Be(404);
+        noCode.Body.Should().Contain("otp.no_pending_challenge");
+        afterDoor.Status.Should().Be(noCode.Status, "a door code is invisible to the farmer route, even typed right");
+        afterDoor.Body.Should().Be(noCode.Body, "the farmer route cannot tell a number the door sent a code to");
+        afterDoor.SetCookie.Should().BeNull();
+        var stillPending = w.Otp.Pending(ListedTen, OtpPurpose.ControlRoomDoor);
+        stillPending.Should().NotBeNull("the farmer route never touched the door code");
+        stillPending!.AttemptCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Door_sends_never_rate_limit_the_farmer_start_otp_route()
+    {
+        await using var w = World.Create();
+        for (var i = 0; i < 3; i++)
+        {
+            await w.SendCode(BoundTen);
+            await w.DrainAsync();
+            w.Time.Advance(TimeSpan.FromSeconds(61));
+        }
+
+        w.Otp.Issued(BoundTen, OtpPurpose.ControlRoomDoor).Should().Be(3, "arrange: three door codes inside 15 minutes");
+
+        var farmer = await w.Post("/user/auth/start-otp", $$"""{"phone":"{{BoundTen}}"}""");
+
+        farmer.Status.Should().Be(200, "the farmer app counts only its own codes: " + farmer.Body);
+        w.Otp.Issued(BoundTen, OtpPurpose.FarmerApp).Should().Be(1);
+        w.Otp.Pending(BoundTen, OtpPurpose.ControlRoomDoor).Should().NotBeNull("a farmer code never replaces the door's");
+    }
+
+    [Fact]
+    public async Task The_door_refuses_a_farmer_code_and_the_farmer_route_refuses_a_door_code()
+    {
+        await using var w = World.Create();
+
+        // A farmer code for Ravi's number, from the farmer app; then the door is asked with it.
+        (await w.Post("/user/auth/start-otp", $$"""{"phone":"{{BoundTen}}"}""")).Status.Should().Be(200);
+        var farmerCode = w.Sms.LastCode!;
+        var atTheDoor = await w.CheckCode(BoundTen, farmerCode);
+
+        atTheDoor.Status.Should().Be(401);
+        atTheDoor.Body.Should().Be("""{"error":"code_not_accepted"}""");
+        w.Refresh.Added.Should().BeEmpty("no console session from a farmer's code");
+        var farmerPending = w.Otp.Pending(BoundTen, OtpPurpose.FarmerApp);
+        farmerPending.Should().NotBeNull("the door never touched the farmer's code");
+        farmerPending!.AttemptCount.Should().Be(0);
+
+        // A door code for Asha's number; then the farmer route is asked with it.
+        await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        var doorCode = w.Sms.LastCode!;
+        var atTheFarmerRoute = await w.Post("/user/auth/verify-otp", $$"""{"phone":"{{ListedTen}}","otp":"{{doorCode}}","deviceId":"phone-2"}""");
+
+        atTheFarmerRoute.Status.Should().Be(404, atTheFarmerRoute.Body);
+        w.Refresh.Added.Should().BeEmpty("no farmer session from a door code");
+
+        // The control: each code works at its own door.
+        (await w.Post("/user/auth/verify-otp", $$"""{"phone":"{{BoundTen}}","otp":"{{farmerCode}}","deviceId":"phone-3"}""")).Status.Should().Be(200);
+        (await w.CheckCode(ListedTen, doorCode)).Status.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task The_door_has_its_own_limits_one_a_minute_ten_an_hour_and_no_day_lock()
+    {
+        await using var w = World.Create();
+        var asha = w.Store.Person(ListedTen).Id;
+        var calm = await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        w.Sms.Sent.Should().Be(1);
+
+        // Exactly 60 seconds later: still inside the minute, refused calmly (the same answer, a History line).
+        w.Time.Advance(TimeSpan.FromSeconds(60));
+        var at60 = await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        at60.Status.Should().Be(calm.Status);
+        at60.Body.Should().Be(calm.Body);
+        w.Sms.Sent.Should().Be(1);
+        AssertNotSent(w.History.Written.Should().ContainSingle().Subject, asha, "0401", "otp.rate_limited");
+
+        // The 61st second works.
+        w.Time.Advance(TimeSpan.FromSeconds(1));
+        await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        w.Sms.Sent.Should().Be(2, "the 61st second is outside the minute");
+
+        // Eight more, a minute apart: ten in the hour, more than the farmer app's six a day.
+        for (var i = 0; i < 8; i++)
+        {
+            w.Time.Advance(TimeSpan.FromSeconds(61));
+            await w.SendCode(ListedTen);
+            await w.DrainAsync();
+        }
+
+        w.Sms.Sent.Should().Be(10);
+
+        // The eleventh in the hour is refused calmly.
+        w.Time.Advance(TimeSpan.FromSeconds(61));
+        var eleventh = await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        eleventh.Status.Should().Be(calm.Status);
+        eleventh.Body.Should().Be(calm.Body, "a refused send gets the door's calm answer");
+        w.Sms.Sent.Should().Be(10, "at most ten door codes per number per rolling hour");
+        w.History.Written.Should().HaveCount(2);
+        AssertNotSent(w.History.Written[1], asha, "0401", "otp.rate_limited_hourly");
+
+        // No 24-hour lock-out: once the hour has rolled on, codes are sent again.
+        w.Time.Advance(TimeSpan.FromMinutes(60));
+        await w.SendCode(ListedTen);
+        await w.DrainAsync();
+        w.Sms.Sent.Should().Be(11, "the door has no daily cap, so nobody can lock a person out for a day");
+    }
+
+    // ── fix wave S-A6: the door's answers do not depend on the path taken ──────
+
+    [Fact]
+    public async Task A_fault_inside_check_code_answers_exactly_as_a_refused_number()
+    {
+        await using var w = World.Create();
+        var refused = await w.CheckCode(UnknownTen, "123456");
+
+        w.Otp.FailReads = true;
+        var faulted = await w.CheckCode(BoundTen, "123456");
+
+        faulted.Status.Should().Be(refused.Status, "an approved number whose check faults is not told apart");
+        faulted.Body.Should().Be(refused.Body);
+        faulted.Headers.Should().BeEquivalentTo(refused.Headers);
+        faulted.SetCookie.Should().BeNull();
+        w.Logs.Entries(nameof(ControlRoomSignInEndpoints)).Should().ContainSingle(e => e.Contains("ControlRoomDoorFault")
+            && e.Contains(nameof(InvalidOperationException)) && !e.Contains(BoundTen) && !e.Contains("123456"),
+            "the fault is logged by its type, never with the number or the code");
+    }
+
+    [Fact]
+    public async Task A_fault_inside_send_code_answers_the_calm_sentence()
+    {
+        await using var w = World.Create();
+        var calm = await w.SendCode(UnknownTen);
+
+        w.Store.FailFinds = true;
+        var faulted = await w.SendCode(ListedTen);
+
+        faulted.Status.Should().Be(calm.Status);
+        faulted.Body.Should().Be(calm.Body);
+        faulted.Headers.Should().BeEquivalentTo(calm.Headers);
+        w.Logs.Entries(nameof(ControlRoomSignInEndpoints)).Should().ContainSingle(e => e.Contains("ControlRoomDoorFault")
+            && !e.Contains(ListedTen));
+    }
+
+    [Fact]
+    public async Task A_refused_send_is_written_after_the_answer_as_an_approved_sends_work_is()
+    {
+        await using var w = World.Create();
+
+        var answer = await w.SendCode(UnknownTen);
+
+        answer.Status.Should().Be(200);
+        w.History.Written.Should().BeEmpty("inside the timed window the refused path writes nothing, as the approved path does");
+        w.Queue.Count.Should().Be(1, "the refusal waits for the background writer");
+
+        await w.DrainAsync();
+
+        var row = w.History.Written.Should().ContainSingle().Subject;
+        row.Action.Should().Be(ControlRoomHistoryAction.DoorRefused);
+        Payload(row).Should().Be("""{"step":"send","phoneTail":"0406","reason":"not_listed"}""");
+    }
+
     // ── architecture ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -544,6 +727,8 @@ public sealed class ControlRoomDoorGateTests
             Path.Combine("User.Application", "UseCases", "Auth", "RefreshToken", "RefreshTokenHandler.cs"),
             Path.Combine("User.Application", "UseCases", "Auth", "DeviceCheck", "AnswerDeviceCheckHandler.cs"),
             Path.Combine("AgriSync.Bootstrapper", "Endpoints", "ControlRoomSignInEndpoints.cs"),
+            // Fix wave S-A4: removing a person revokes the sessions stored under the reserved platform (it compares only).
+            Path.Combine("AgriSync.Bootstrapper", "Adapters", "ControlRoomDoorSessions.cs"),
         };
         var users = new[] { "apps", "AgriSync.BuildingBlocks", "AgriSync.Bootstrapper", "AgriSync.SharedKernel" }
             .SelectMany(d => Directory.EnumerateFiles(Path.Combine(root, d), "*.cs", SearchOption.AllDirectories))
@@ -799,6 +984,7 @@ public sealed class ControlRoomDoorGateTests
             throw new InvalidOperationException("The door never uses a template text.");
     }
 
+    /// <summary>The code table, by door (fix wave S-A1): each door reads and counts only its own codes, as the real one does.</summary>
     private sealed class InMemoryOtp(IClock clock) : IOtpChallengeRepository
     {
         private readonly List<OtpChallenge> _rows = [];
@@ -806,9 +992,18 @@ public sealed class ControlRoomDoorGateTests
 
         public int Added { get; private set; }
 
+        /// <summary>Every code read throws, as a database that went away would (fix wave S-A6).</summary>
+        public bool FailReads { get; set; }
+
         public void Seed(OtpChallenge challenge) => _rows.Add(challenge);
 
         public void RateLimit(string tenDigits) => _limited.Add(tenDigits);
+
+        public OtpChallenge? Pending(string tenDigits, OtpPurpose purpose) =>
+            _rows.LastOrDefault(c => c.PhoneNumberNormalized == tenDigits && c.Purpose == purpose && c.IsPending);
+
+        public int Issued(string tenDigits, OtpPurpose purpose) =>
+            _rows.Count(c => c.PhoneNumberNormalized == tenDigits && c.Purpose == purpose);
 
         public Task AddAsync(OtpChallenge challenge, CancellationToken ct = default)
         {
@@ -817,13 +1012,24 @@ public sealed class ControlRoomDoorGateTests
             return Task.CompletedTask;
         }
 
-        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, CancellationToken ct = default) =>
-            Task.FromResult(_rows.LastOrDefault(c => c.PhoneNumberNormalized == phoneNumberNormalized && c.IsPending));
+        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, OtpPurpose purpose, CancellationToken ct = default)
+        {
+            if (FailReads)
+            {
+                throw new InvalidOperationException("Example: the database went away.");
+            }
 
-        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, DateTime sinceUtc, CancellationToken ct = default) =>
+            return Task.FromResult(Pending(phoneNumberNormalized, purpose));
+        }
+
+        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, OtpPurpose purpose, DateTime sinceUtc, CancellationToken ct = default) =>
             Task.FromResult(_limited.Contains(phoneNumberNormalized)
                 ? 3
-                : _rows.Count(c => c.PhoneNumberNormalized == phoneNumberNormalized && c.CreatedAtUtc >= sinceUtc && c.CreatedAtUtc <= clock.UtcNow));
+                : _rows.Count(c => c.PhoneNumberNormalized == phoneNumberNormalized && c.Purpose == purpose
+                    && c.CreatedAtUtc >= sinceUtc && c.CreatedAtUtc <= clock.UtcNow));
+
+        public Task<bool> TryCountAttemptAsync(OtpChallenge challenge, DateTime utcNow, CancellationToken ct = default) =>
+            Task.FromResult(challenge.TryCountAttempt(utcNow));
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
@@ -884,12 +1090,20 @@ public sealed class ControlRoomDoorGateTests
         public int Saves { get; private set; }
         public bool FailSaves { get; set; }
 
+        /// <summary>The door's first read throws, as a database that went away would (fix wave S-A6).</summary>
+        public bool FailFinds { get; set; }
+
         public ControlRoomPerson Person(string tenDigits) => People.Single(p => p.PhoneE164 == "+91" + tenDigits);
 
         public void Reset() => Calls.Clear();
 
         public Task<ControlRoomPerson?> FindActiveByPhoneAsync(string phoneE164, CancellationToken ct)
         {
+            if (FailFinds)
+            {
+                throw new InvalidOperationException("Example: the database went away.");
+            }
+
             Calls.Add(nameof(FindActiveByPhoneAsync));
             return Task.FromResult(People.FirstOrDefault(p => p.IsActive && p.PhoneE164 == phoneE164));
         }
@@ -959,6 +1173,9 @@ public sealed class ControlRoomDoorGateTests
             throw new NotSupportedException("The door never reads History.");
 
         public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+            throw new NotSupportedException("The door never reads History.");
+
+        public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct) =>
             throw new NotSupportedException("The door never reads History.");
     }
 

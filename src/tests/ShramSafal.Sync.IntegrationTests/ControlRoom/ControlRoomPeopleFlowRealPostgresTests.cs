@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AgriSync.Bootstrapper.Adapters;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
@@ -101,7 +102,7 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
 
         await using (var scope = AdminScope(provider))
         {
-            var result = await new RemovePersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), clock)
+            var result = await new RemovePersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), clock, new NoDoorSessions())
                 .HandleAsync(new RemovePersonCommand(Founder, personId, device, ip));
             result.IsSuccess.Should().BeTrue();
         }
@@ -202,7 +203,7 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
             var sp = scope.ServiceProvider;
             var history = new GetHistoryHandler(
                 sp.GetRequiredService<IControlRoomStore>(), directory, sp.GetRequiredService<IControlRoomHistory>(),
-                MisRepository(sp), clock);
+                MisRepository(sp), sp.GetRequiredService<CompanyMisExclusions>(), clock);
             var answer = await history.HandleAsync(new GetHistoryQuery(Founder, 7, null));
 
             answer.IsSuccess.Should().BeTrue();
@@ -228,15 +229,19 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
 
             report.PeopleWithAccess.Should().Be(3);
             report.PeopleByRole.Should().BeEquivalentTo(new Dictionary<string, int> { ["founder"] = 1, ["viewer"] = 1, ["field_operator"] = 1 });
-            report.NotSignedIn30Days.Select(p => p.DisplayName).Should().Equal("Example: Ravi");
+            // Fix wave S-N2: Ravi never signed in, so he is in the "never signed in" group, not "not signed in for 30 days".
+            report.NeverSignedIn.Select(p => p.DisplayName).Should().Equal("Example: Ravi");
+            report.NotSignedIn30Days.Should().BeEmpty("nobody was added 30 or more days ago");
+            report.HistoryStartedAtUtc.Should().NotBeNull("History has rows: the time of the first one is sent");
             report.NotSignedInNotMeasuredReason.Should().BeNull();
             report.PhoneLooks.Should().Be(new ShramSafal.Application.Contracts.Dtos.MisValueDto(0, null), "measured, and none in the last 7 days");
             report.RefusedAtDoor.Value.Should().Be(0);
             report.Downloads.NotMeasuredReason.Should().Be("downloads_start_with_field_visits");
         }
 
-        // Every read opened the audited factory as the founder: one admin_cross_tenant row each (list 1, history 1, report 4 reads + 1 last-sign-in).
-        (await CrossFarmAuditRowsAsync(Founder)).Should().Be(1 + 1 + 5);
+        // Every read opened the audited factory as the founder: one admin_cross_tenant row each (list 1, history 1, report
+        // 4 reads + 1 last-sign-in + 1 first History row, fix wave S-N2).
+        (await CrossFarmAuditRowsAsync(Founder)).Should().Be(1 + 1 + 6);
     }
 
     // Fix round 1: "Not signed in yet" is true only for a person with no signed_in row at all. The date comes from its own
@@ -264,10 +269,14 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
             await history.RecordNowAsync(new ControlRoomHistoryEntry(ControlRoomHistoryAction.SignedIn, Account, Account, new { }, "d", "i"), default);
         }
 
-        // Asha's only sign-in is 120 days old.
+        // Asha's only sign-in is 120 days old, and she was added 150 days ago (fix wave S-N2: "not signed in for 30 days"
+        // is for people added 30 or more days ago).
         await ExecAsSuperuserAsync(
             "UPDATE ssf.audit_events SET occurred_at_utc = @t WHERE actor_user_id = @a AND action = 'signed_in'",
             ("t", old), ("a", Account));
+        await ExecAsSuperuserAsync(
+            "UPDATE ssf.control_room_people SET added_at_utc = @t WHERE user_id = @a",
+            ("t", old.AddDays(-30)), ("a", Account));
 
         async Task<PeopleAnswerDto> ListAsync()
         {
@@ -298,7 +307,8 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         var unused = report.NotSignedIn30Days.Single(p => p.DisplayName == "Example: Asha");
         unused.LastSignedInUtc.Should().NotBeNull("listed as not signed in for 30 days, with the date she last did");
         unused.LastSignedInUtc!.Value.Should().BeCloseTo(old, TimeSpan.FromMinutes(1));
-        report.NotSignedIn30Days.Single(p => p.DisplayName == "Example: Ravi").LastSignedInUtc.Should().BeNull();
+        report.NeverSignedIn.Single(p => p.DisplayName == "Example: Ravi").LastSignedInUtc.Should().BeNull(
+            "never signed in: in the second group (fix wave S-N2)");
 
         // More than the 1000 newest sign-ins since: the capped read no longer holds Asha, her date must still be true.
         await using (var scope = AdminScope(provider))
@@ -325,7 +335,139 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         crowdedReport.NotSignedInNotMeasuredReason.Should().Be("history_read_limit", "the capped read still decides the 30-day list by the K15 rule");
     }
 
+    // Fix wave S-A4 (AU-M1): removing a person ends their console sessions in the User module's session registry, so a
+    // person removed and added back never gets an old console session back: the old credential no longer refreshes.
+    [SkippableFact]
+    public async Task Removing_a_person_revokes_their_console_sessions_and_a_re_add_does_not_bring_them_back()
+    {
+        await GuardAsync();
+
+        // Production parity: the app role keeps its own session registry (public tables are provisioned outside the
+        // migration chain; the harness grants SELECT only).
+        await ExecAsSuperuserAsync($"GRANT SELECT, UPDATE ON public.refresh_tokens TO {IntegrationPostgres.AppRoleUser};");
+        var doorRaw = Guid.NewGuid().ToString("N");
+        var farmerRaw = Guid.NewGuid().ToString("N");
+        var doorRow = Guid.NewGuid();
+        var farmerRow = Guid.NewGuid();
+        await SeedSessionAsync(doorRow, Account, doorRaw, "console-laptop", "control-room-door");
+        await SeedSessionAsync(farmerRow, Account, farmerRaw, "phone-1", "android");
+
+        var provider = BuildProvider();
+        await using var users = BuildUserProvider();
+        var directory = new UsersDirectory(AppConn);
+        var clock = new UtcClock();
+
+        Guid personId;
+        await using (var scope = AdminScope(provider))
+        {
+            var added = await new AddPersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), directory, clock)
+                .HandleAsync(new AddPersonCommand(Founder, "Example: Asha", AccountPhone, "viewer", null, "d", "i"));
+            added.IsSuccess.Should().BeTrue(added.IsFailure ? added.Error.Code : string.Empty);
+            personId = added.Value!.PersonId!.Value;
+        }
+
+        await using (var scope = AdminScope(provider))
+        await using (var userScope = UserScope(users))
+        {
+            var sessions = new ControlRoomDoorSessions(userScope.ServiceProvider.GetRequiredService<global::User.Infrastructure.Persistence.UserDbContext>());
+            var removed = await new RemovePersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), clock, sessions)
+                .HandleAsync(new RemovePersonCommand(Founder, personId, "d", "i"));
+            removed.IsSuccess.Should().BeTrue();
+        }
+
+        var rows = await SessionRowsOfAsync(Account);
+        Output.WriteLine("[EVIDENCE] sessions after the removal: " + string.Join(" | ", rows.Select(r => $"{r.Platform} revoked={r.Revoked} reason={r.Reason ?? "-"}")));
+        rows.Single(r => r.Id == doorRow).Revoked.Should().BeTrue("the console session is ended with the removal");
+        rows.Single(r => r.Id == doorRow).Reason.Should().Be(ControlRoomDoorSessions.RevocationReason);
+        rows.Single(r => r.Id == farmerRow).Revoked.Should().BeFalse("the account's farmer-app session is never touched");
+
+        // The founder adds the person back: the old console credential still does not refresh.
+        await using (var scope = AdminScope(provider))
+        {
+            var again = await new AddPersonHandler(scope.ServiceProvider.GetRequiredService<IControlRoomStore>(), directory, clock)
+                .HandleAsync(new AddPersonCommand(Founder, "Example: Asha", AccountPhone, "viewer", null, "d", "i"));
+            again.IsSuccess.Should().BeTrue(again.IsFailure ? again.Error.Code : string.Empty);
+        }
+
+        await using (var userScope = UserScope(users))
+        {
+            var sp = userScope.ServiceProvider;
+            var refresh = new global::User.Application.UseCases.Auth.RefreshToken.RefreshTokenHandler(
+                sp.GetRequiredService<global::User.Application.Ports.IUserRepository>(),
+                sp.GetRequiredService<global::User.Application.Ports.IRefreshTokenRepository>(),
+                sp.GetRequiredService<global::User.Application.Ports.IJwtTokenService>(),
+                new GuidIds(),
+                new SystemClock());
+            var answer = await refresh.HandleAsync(new global::User.Application.UseCases.Auth.RefreshToken.RefreshTokenCommand(
+                doorRaw, new global::User.Application.UseCases.Auth.Session.DeviceSessionRequest("console-laptop", false, null, "web")));
+            answer.IsSuccess.Should().BeFalse("the old console credential no longer refreshes after the person was removed and added back");
+        }
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    private sealed record SessionRow(Guid Id, string Platform, bool Revoked, string? Reason);
+
+    private Task SeedSessionAsync(Guid id, Guid user, string raw, string device, string platform) =>
+        ExecAsSuperuserAsync("""
+            INSERT INTO public.refresh_tokens ("Id", user_id, token_hash, device_id, platform, created_at_utc, expires_at_utc, last_used_at_utc)
+            VALUES (@id, @u, @h, @d, @p, NOW() - INTERVAL '1 hour', NOW() + INTERVAL '20 days', NOW() - INTERVAL '10 minutes');
+            """,
+            ("id", id), ("u", user), ("h", global::User.Application.UseCases.Auth.Session.RefreshTokenHasher.Hash(raw)),
+            ("d", device), ("p", platform));
+
+    private async Task<List<SessionRow>> SessionRowsOfAsync(Guid user)
+    {
+        var rows = new List<SessionRow>();
+        await using var db = new NpgsqlConnection(SuperuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT \"Id\", platform, revoked_at_utc IS NOT NULL, revocation_reason FROM public.refresh_tokens WHERE user_id = @u";
+        cmd.Parameters.AddWithValue("u", user);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            rows.Add(new SessionRow(r.GetGuid(0), r.GetString(1), r.GetBoolean(2), r.IsDBNull(3) ? null : r.GetString(3)));
+        }
+
+        return rows;
+    }
+
+    /// <summary>The User module as the host composes it (its own context, repositories and token issuer), on the app role.</summary>
+    private ServiceProvider BuildUserProvider()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:UserDb"] = AppConn,
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(config);
+        global::User.Infrastructure.DependencyInjection.AddUserInfrastructure(services, config);
+        // A throwaway HMAC key for this test only (64 repeated characters: nothing secret).
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(
+            new AgriSync.BuildingBlocks.Auth.Jwt.JwtOptions { SigningKey = new string('k', 64) }));
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>A User-module scope as the admin skip-list makes it (the tenant interceptor refuses an unscoped command).</summary>
+    private static AsyncServiceScope UserScope(ServiceProvider users)
+    {
+        var scope = users.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        return scope;
+    }
+
+    private sealed class GuidIds : IIdGenerator
+    {
+        public Guid New() => Guid.NewGuid();
+    }
+
+    /// <summary>For tests about History rows: a removal whose session registry has nothing to end.</summary>
+    private sealed class NoDoorSessions : IControlRoomDoorSessions
+    {
+        public Task<int> EndDoorSessionsAsync(Guid userId, DateTime utcNow, CancellationToken ct) => Task.FromResult(0);
+    }
 
     private sealed record Row(string Action, Guid Actor, Guid Subject, string Payload, string Device, string Ip);
 

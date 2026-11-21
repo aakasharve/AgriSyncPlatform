@@ -163,11 +163,13 @@ public class VerifyOtpDeviceSessionTests
         private readonly OtpChallenge _challenge = OtpChallenge.Issue(
             Guid.NewGuid(), phone, "hash", now, TimeSpan.FromMinutes(10), 5);
 
-        public Task<OtpChallenge?> GetPendingByPhoneAsync(string p, CancellationToken ct = default)
+        public Task<OtpChallenge?> GetPendingByPhoneAsync(string p, OtpPurpose purpose, CancellationToken ct = default)
             => Task.FromResult<OtpChallenge?>(_challenge);
 
         public Task AddAsync(OtpChallenge c, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<int> CountIssuedSinceAsync(string p, DateTime since, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> CountIssuedSinceAsync(string p, OtpPurpose purpose, DateTime since, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<bool> TryCountAttemptAsync(OtpChallenge challenge, DateTime utcNow, CancellationToken ct = default) =>
+            Task.FromResult(challenge.TryCountAttempt(utcNow));
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

@@ -836,6 +836,11 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.AddPersonHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.ChangePersonHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.RemovePersonHandler>();
+        // CR-3 fix wave S-A4: the host registers the real console-session adapter (it alone sees the User module); this
+        // fallback only makes a host that forgot it fail a removal loudly instead of leaving sessions open.
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddScoped<
+            ShramSafal.Application.Ports.IControlRoomDoorSessions,
+            ShramSafal.Application.Ports.ControlRoomDoorSessionsNotWired>(services);
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.KeepPersonHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.ControlRoomPeople.GetTrustReportHandler>();

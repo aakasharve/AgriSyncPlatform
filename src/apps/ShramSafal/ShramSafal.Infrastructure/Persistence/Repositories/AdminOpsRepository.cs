@@ -448,7 +448,8 @@ public sealed class AdminOpsRepository(
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 
-    public async Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default)
+    public async Task<SignInDevices> GetSignInDevicesAsync(
+        DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default)
     {
         var conn = analyticsContext.Database.GetDbConnection();
         var wasOpen = conn.State == System.Data.ConnectionState.Open;
@@ -478,11 +479,14 @@ public sealed class AdminOpsRepository(
                         COALESCE(LOWER(BTRIM(platform)), '') = 'android' AS is_android,
                         COALESCE(LOWER(BTRIM(device_id)), '') NOT IN ('', 'unknown', 'legacy') AS device_known
                     FROM public.refresh_tokens
-                    WHERE created_at_utc >= @since
-                       OR last_used_at_utc >= @since
+                    WHERE (created_at_utc >= @since
+                       OR last_used_at_utc >= @since)
+                      AND NOT (user_id = ANY(@excluded))
                 ) s
                 """;
             AddParam(cmd, "@since", AsUtc(sinceUtc));
+            // CR-3 fix wave S-N4: test accounts' sign-ins are not counted (the Company MIS list).
+            AddParam(cmd, "@excluded", (excludedUserIds ?? Array.Empty<Guid>()).ToArray());
 
             using var r = await cmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct))

@@ -38,13 +38,22 @@ internal sealed class OtpChallengeConfiguration : IEntityTypeConfiguration<OtpCh
             .HasColumnName("provider_request_id")
             .HasMaxLength(128);
 
+        // spec: trusted-control-room-2026-11-20 (fix wave S-A1, D-159): which door the code belongs to, a smallint. This
+        // binary always writes it; the column is NOT NULL with the constant default 1 (the farmer app), set by migration
+        // AddOtpChallengePurpose, so existing rows and an older binary's inserts read as farmer-app codes.
+        builder.Property(x => x.Purpose)
+            .HasColumnName("purpose")
+            .HasConversion<short>()
+            .IsRequired();
+
         // Hot-path index for rate-limit counts (plan §5.2).
         builder.HasIndex(x => new { x.PhoneNumberNormalized, x.CreatedAtUtc })
             .HasDatabaseName("ix_otp_challenges_phone_created");
 
-        // Invariant: at most one Pending challenge per phone at a time.
-        builder.HasIndex(x => x.PhoneNumberNormalized)
-            .HasDatabaseName("ux_otp_challenges_pending_per_phone")
+        // Invariant: at most one Pending challenge per phone per door at a time (S-A1: a control-room code and a farmer-app
+        // code for the same number can both be pending, and neither replaces the other).
+        builder.HasIndex(x => new { x.PhoneNumberNormalized, x.Purpose })
+            .HasDatabaseName("ux_otp_challenges_pending_per_phone_purpose")
             .IsUnique()
             .HasFilter("status = 1"); // 1 == Pending
     }

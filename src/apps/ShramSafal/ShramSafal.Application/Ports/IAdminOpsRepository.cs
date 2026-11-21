@@ -46,7 +46,10 @@ public interface IAdminOpsRepository
     /// created or last used from <paramref name="sinceUtc"/> on. Totals only:
     /// no device is ever listed.
     /// </summary>
-    Task<SignInDevices> GetSignInDevicesAsync(DateTime sinceUtc, CancellationToken ct = default);
+    /// <remarks>CR-3 fix wave S-N4: the sign-in records of <paramref name="excludedUserIds"/> (test accounts) are left
+    /// out; null or empty leaves nothing out.</remarks>
+    Task<SignInDevices> GetSignInDevicesAsync(
+        DateTime sinceUtc, IReadOnlyCollection<Guid>? excludedUserIds = null, CancellationToken ct = default);
 
     /// <summary>
     /// The names on record for these people. A person with no user record is

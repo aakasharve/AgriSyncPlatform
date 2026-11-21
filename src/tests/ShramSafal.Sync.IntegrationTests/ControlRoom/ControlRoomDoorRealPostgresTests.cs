@@ -256,8 +256,9 @@ public sealed class ControlRoomDoorRealPostgresTests(Xunit.Abstractions.ITestOut
     private sealed class NoCodes : IOtpChallengeRepository
     {
         public Task AddAsync(OtpChallenge challenge, CancellationToken ct = default) => throw new InvalidOperationException("No code is stored in this test.");
-        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, CancellationToken ct = default) => Task.FromResult<OtpChallenge?>(null);
-        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<OtpChallenge?> GetPendingByPhoneAsync(string phoneNumberNormalized, OtpPurpose purpose, CancellationToken ct = default) => Task.FromResult<OtpChallenge?>(null);
+        public Task<int> CountIssuedSinceAsync(string phoneNumberNormalized, OtpPurpose purpose, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<bool> TryCountAttemptAsync(OtpChallenge challenge, DateTime utcNow, CancellationToken ct = default) => throw new InvalidOperationException("No code is checked in this test.");
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

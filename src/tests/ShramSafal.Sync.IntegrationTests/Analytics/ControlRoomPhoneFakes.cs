@@ -31,6 +31,9 @@ internal sealed class RecordingControlRoomHistory : IControlRoomHistory
     public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
         Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    public Task<DateTime?> FirstRecordedAtAsync(Guid readerUserId, CancellationToken ct) =>
+        throw new NotSupportedException();
 }
 
 /// <summary>Answers only the person lookup the phone rule needs; <see cref="Person"/> null is a reader with no person row (the founder).</summary>
