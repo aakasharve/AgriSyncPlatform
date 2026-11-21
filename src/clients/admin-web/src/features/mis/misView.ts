@@ -528,7 +528,7 @@ export interface FeatureRoleModel {
 export interface EngagementView {
   perFarm: MisChart<MisLineModel>;
   heat: MisChart<{ grid: number[][]; max: number }>;
-  roles: MisChart<{ parts: { key: string; label: string; people: number; share: string | null }[] }>;
+  roles: MisChart<{ parts: { key: string; label: string; people: number; share: string | null }[]; todaySoFar?: boolean }>;
   kinds: MisChart<{ rows: { key: string; label: string; entries: number }[] }>;
   features: MisChart<{ rows: FeatureRowModel[] }>;
   featureRoles: MisChart<FeatureRoleModel>;
@@ -622,10 +622,12 @@ export function engagementView(d: CompanyMis): EngagementView {
   const roles: EngagementView['roles'] = mau.value === null
     ? { kind: 'notMeasured', why: notMeasuredWhy(mau.notMeasuredReason) }
     : e.roleMixOfMau.length === 0
-      ? { kind: 'none', what: `No one saved an entry in the 30 days to ${asOfText(d)}` }
+      ? { kind: 'none', what: `No one had an entry reach the server in the 30 days to ${asOfText(d)}${d.lastDayComplete === false ? ' (today so far)' : ''}` }
       : {
         kind: 'chart',
         data: {
+          /* W-2 and m6: a 30-day count ending on the last day chosen; that day is today so far. */
+          todaySoFar: d.lastDayComplete === false,
           parts: [...e.roleMixOfMau]
             .sort((x, y) => y.people - x.people)
             .map((r) => ({
@@ -741,7 +743,7 @@ export function retentionView(d: CompanyMis): RetentionView {
     ? { kind: 'notMeasured', why: notMeasuredWhy(d1Reason, 'retention.curve') }
     : curvePoints.length === 0 || !hasServedValue(curveCurrent)
       ? nobodySignedUp
-        ? { kind: 'none', what: 'No one verified a phone in this range' }
+        ? { kind: 'none', what: 'No account with a verified phone was made in this range' }
         : { kind: 'notMeasured', why: notMeasuredWhy(d1Reason ?? 'no_complete_window', 'retention.curve') }
       : {
       kind: 'chart',
@@ -1135,7 +1137,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
         first = `${a} ${b}`;
       }
       const second = r.quietFarms7To29.current.value !== null
-        ? `${txt(r.quietFarms7To29.current, 'count')} ${noun(r.quietFarms7To29.current.value, 'farm has', 'farms have')} gone quiet for 7–29 days and can still be won back.`
+        ? `${txt(r.quietFarms7To29.current, 'count')} ${noun(r.quietFarms7To29.current.value, 'farm has', 'farms have')} gone quiet for 7–29 days and can still be won back${d.lastDayComplete === false ? ' (as of today so far, not compared)' : ''}.`
         : notMeasuredClause('Quiet farms', r.quietFarms7To29.current, 'retention.quiet');
       return `${first} ${second}`;
     }
@@ -1153,7 +1155,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const f = d.farms;
       let first: string;
       if (f.activeFarms.current.value !== null && f.acresCovered.current.value !== null) {
-        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')} covering ${txt(f.acresCovered.current, 'acres')} ${noun(f.acresCovered.current.value, 'acre', 'acres')}.`;
+        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')} covering ${txt(f.acresCovered.current, 'acres')} ${noun(f.acresCovered.current.value, 'acre', 'acres')}${d.lastDayComplete === false ? ' (7 days to today so far, not compared)' : ''}.`;
       } else if (f.activeFarms.current.value === null) {
         first = notMeasuredClause('Active farms', f.activeFarms.current, 'farms.activeFarms');
       } else {

@@ -108,7 +108,7 @@ export default function HistoryPage() {
         </label>
       </div>
 
-      {exact && (
+      {exact && q.data && (
         <p data-testid="history-exact-window" className="text-caption text-text-2">
           {q.data?.hitLimit
             ? `Showing only the newest lines of ${exact.countedLooksOnly ? 'the lines the trust report counted' : 'this window'}: the server reads at most ${fmt.num(q.data.limit) ?? q.data.limit}, so some are not shown. The window is from`
@@ -126,7 +126,9 @@ export default function HistoryPage() {
         <>
           {q.data.hitLimit && (
             <p role="status" className="rounded-chip bg-tint-amber px-4 py-2 text-body text-text-1">
-              Showing the newest {fmt.num(q.data.limit) ?? q.data.limit}. Older lines in this period are not shown.
+              {exact?.countedLooksOnly
+                ? `Showing ${fmt.num(q.data.lines.length) ?? q.data.lines.length} ${q.data.lines.length === 1 ? 'line' : 'lines'}, the newest the server read (at most ${fmt.num(q.data.limit) ?? q.data.limit}). Older counted lines are not shown.`
+                : `Showing the newest ${fmt.num(q.data.limit) ?? q.data.limit}. Older lines in this period are not shown.`}
             </p>
           )}
           {q.data.lines.length === 0 ? (

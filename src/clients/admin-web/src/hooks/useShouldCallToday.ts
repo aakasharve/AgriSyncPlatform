@@ -139,13 +139,15 @@ export function useShouldCallToday() {
   const silentFarms = useMemo(() => churn.data?.data.farms ?? [], [churn.data]);
   const sufferingItems = useMemo(() => suffering.data?.data ?? [], [suffering.data]);
 
+  /* m7 and round 2: the problems half shows farms only when it is ready (allowed, loaded, not failed,
+     not forbidden, not flagged not-recording). Otherwise no owner phone is fetched for its farms,
+     whatever older data is in hand: each fetch writes a History look that the trust report counts. */
+  const problemsShown = mayReadSuffering && !suffering.isError && !suffering.isLoading && !problemsFlag;
   const unnamedIds = useMemo(() => {
-    /* m7: while the problems half is not measured it shows no farm, so no owner phone is fetched
-       for it (each fetch writes a History look that the trust report counts). */
-    if (problemsFlag) return [];
+    if (!problemsShown) return [];
     const named = new Set(silentFarms.map((f) => f.farmId.toLowerCase()));
     return sufferingItems.map((s) => s.farmId).filter((id) => !named.has(id.toLowerCase()));
-  }, [silentFarms, sufferingItems, problemsFlag]);
+  }, [silentFarms, sufferingItems, problemsShown]);
   const { contacts, failed: contactsFailed } = useFarmContactsState(unnamedIds);
 
   const silentState: HalfState = !mayReadChurn

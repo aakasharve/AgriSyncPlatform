@@ -127,7 +127,7 @@ export const EngagementSection: React.FC<MisSectionProps<EngagementView>> = ({ v
                     item="engagement.roleMix"
                     className="col-span-12 xl:col-span-7"
                     title="Who uses ShramSafal, and for what"
-                    subtitle="Monthly active people by their role on the farm where they saved most entries"
+                    subtitle="Monthly active people (an entry reached the server in the last month) by their role on the farm with most of their entries"
                 >
                     <ChartBody chart={view.roles} checkedAt={checkedAt}>
                         {(r) => (

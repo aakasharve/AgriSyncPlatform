@@ -514,6 +514,23 @@ describe('the row count', () => {
   });
 });
 
+describe('round 2 item 5: a search over a list that holds test rows', () => {
+  it('item5_says_listed_and_that_test_farms_are_not_counted', async () => {
+    const user = userEvent.setup();
+    renderList(
+      config({
+        pagination: { mode: 'server', page: 1, pageSize: 40, totalCount: 4, shownNotCounted: 1, onPage: vi.fn() },
+        search: { mode: 'client', commit: 'submit', placeholder: 'Search…', keys: (r) => [r.name] },
+      }),
+    );
+    await user.type(screen.getByRole('textbox'), 'farm{Enter}');
+    const line = screen.getByText(/Showing/).textContent ?? '';
+    expect(line).toMatch(/of 4 listed matching/);
+    expect(line).toContain('test farms are listed but not counted');
+    expect(line).not.toMatch(/of 4 farms/);
+  });
+});
+
 /* ═══════════════════════════════════════ 12 the chip, and summary-first */
 
 describe('the summary-first list', () => {

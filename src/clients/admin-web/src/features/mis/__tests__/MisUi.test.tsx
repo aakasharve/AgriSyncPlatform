@@ -372,7 +372,7 @@ describe('empty charts and the habit step (CR-2b B12, B14)', () => {
       for (const item of ['retention.curve', 'retention.cohorts']) {
         const el = chartCard(v.container, item);
         expect.soft([code, item, (el.textContent ?? '').includes(PLAN_REASONS[code])]).toEqual([code, item, true]);
-        expect.soft([code, item, /No one verified a phone in this range/.test(el.textContent ?? '')]).toEqual([code, item, false]);
+        expect.soft([code, item, /No account with a verified phone was made in this range/.test(el.textContent ?? '')]).toEqual([code, item, false]);
         expect.soft([code, item, /No sign-up week starts inside this range/.test(el.textContent ?? '')]).toEqual([code, item, false]);
         expect.soft([code, item, /measured zero/i.test(el.textContent ?? '')]).toEqual([code, item, false]);
       }
@@ -385,7 +385,7 @@ describe('empty charts and the habit step (CR-2b B12, B14)', () => {
       retention: { d1Pct: notMeasured('no_complete_window'), d30Pct: notMeasured('no_complete_window'), curve: [], previousCurve: [], cohortByWeek: [] },
     });
     const r = render(sectionOf('retention', nobody, true));
-    expect(chartCard(r.container, 'retention.curve').textContent).toContain('No one verified a phone in this range');
+    expect(chartCard(r.container, 'retention.curve').textContent).toContain('No account with a verified phone was made in this range');
     expect(chartCard(r.container, 'retention.cohorts').textContent).toContain('No sign-up week starts inside this range');
     r.unmount();
   });
