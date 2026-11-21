@@ -26,6 +26,7 @@ function halfNote(
   half: 'silent' | 'problems',
   state: HalfState,
   notMeasuredReason: string | null,
+  problemsNotMeasuredText: string | null = null,
 ): string | null {
   const quiet = half === 'silent';
   const what = quiet ? 'quiet farms' : 'farms with repeated problems';
@@ -41,19 +42,21 @@ function halfNote(
     case 'failed':
       return `Could not load the ${what} list, so ${what} are not shown. This is not an empty list.`;
     case 'not-measured':
-      return `Quiet farms could not be counted. ${notMeasuredWords(notMeasuredReason ?? '')}`;
+      return quiet
+        ? `Quiet farms could not be counted. ${notMeasuredWords(notMeasuredReason ?? '')}`
+        : `Farms with repeated problems could not be counted. ${problemsNotMeasuredText ?? 'Not measured.'}`;
   }
 }
 
 function CallList() {
-  const { rows, silentState, problemsState, notMeasuredReason, churn, suffering } =
+  const { rows, silentState, problemsState, notMeasuredReason, problemsNotMeasuredText, churn, suffering } =
     useShouldCallToday();
 
   const notes = [
     { half: 'silent' as const, state: silentState },
     { half: 'problems' as const, state: problemsState },
   ]
-    .map((n) => ({ ...n, text: halfNote(n.half, n.state, notMeasuredReason) }))
+    .map((n) => ({ ...n, text: halfNote(n.half, n.state, notMeasuredReason, problemsNotMeasuredText) }))
     .filter((n): n is typeof n & { text: string } => n.text !== null);
 
   const canRetry = silentState === 'failed' || problemsState === 'failed';

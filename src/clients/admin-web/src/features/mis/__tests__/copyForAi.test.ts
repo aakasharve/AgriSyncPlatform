@@ -107,7 +107,8 @@ describe('Copy for AI packs (CR-3 A8)', () => {
   });
 
   it('Test_accounts_left_out_is_stated', () => {
-    expect(misToAiText(misFixture({ excludedTestAccounts: 0 }), 'quality')).toContain('Test accounts left out: 0.');
+    expect(misToAiText(misFixture({ excludedTestAccounts: 0 }), 'quality')).toContain('No test accounts are set up to be left out, so test phones are counted.');
+    expect(misToAiText(misFixture({ excludedTestAccounts: 0 }), 'quality')).not.toContain('left out: 0');
     expect(misToAiText(misFixture(), 'quality')).toContain('Test accounts left out: 3.');
     expect(pack('quality', misFixture({ excludedTestAccounts: 7 })).testAccountsLeftOut).toBe(7);
   });

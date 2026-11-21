@@ -370,7 +370,8 @@ export default function UsersPage() {
     fmt.dateTime(lastRefreshed, DATE_FORMATS.usersLastLogin) ?? 'a time the server did not report';
 
   /** True when the client is holding one page of a larger set. */
-  const pageScoped = totalCount > items.length;
+  /* W-12: a failed load shows no list, so no scope line for it. */
+  const pageScoped = !isError && totalCount > items.length;
 
   return (
     <div className="flex flex-col gap-6">

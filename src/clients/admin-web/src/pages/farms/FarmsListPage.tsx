@@ -1,4 +1,6 @@
+import { useMemo } from 'react';
 import { metaRefreshedAt } from '@/lib/api';
+import { analyticsFlagFromMeta, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { Wheat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { DataList } from '@/components/data';
@@ -159,7 +161,8 @@ const NEVER_LOGGED = 'No log has been recorded on this farm.';
  * command palette already renders `farm.name` through it
  * (`CommandPalette.tsx:365`). The Farm column does the same.
  */
-const COLUMNS: DataListColumn<FarmSummary>[] = [
+function buildColumns(errorsNotMeasured: string | null): DataListColumn<FarmSummary>[] {
+  return [
   {
     key: 'farm',
     label: 'Farm',
@@ -204,9 +207,12 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     key: 'errors24h',
     label: 'Errors 24h',
     align: 'right',
-    render: (f) => fmt.num(f.errors24h) ?? <NotMeasured />,
+    /* W-1: `errors24h` is an int on the wire, so while app events are not being recorded the server
+       still sends a number. The flag says it is not measured, cell by cell. */
+    render: (f) =>
+      errorsNotMeasured ? <NotMeasured why={errorsNotMeasured} /> : (fmt.num(f.errors24h) ?? <NotMeasured />),
     sortType: 'num',
-    sortValue: (f) => f.errors24h,
+    sortValue: (f) => (errorsNotMeasured ? null : f.errors24h),
     defaultDir: 'desc',
   },
   {
@@ -232,7 +238,8 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
     sortValue: (f) => f.createdAt,
     defaultDir: 'desc',
   },
-];
+  ];
+}
 
 /** The expandable-row detail (D11's replacement). Every sentence is derived
  *  from a field on the row — nothing here is typed prose about a farm. */
@@ -290,7 +297,16 @@ export default function FarmsListPage() {
   const tierNotMeasured = isError && isTierFilterNotMeasured(error);
 
   const items = data?.data?.items ?? [];
-  const totalCount = data?.data?.totalCount ?? 0;
+  /* W-5: the headline total is the server's `totalCount`, test farms already left out. The list also
+     holds `testFarmsShown` test-owned rows, so paging runs over the sum. Neither is ever invented:
+     an answer with no `totalCount` pages over nothing. */
+  const countedFarms = data?.data?.totalCount ?? 0;
+  const testFarmsShown = Math.max(0, data?.data?.testFarmsShown ?? 0);
+  const totalCount = countedFarms + testFarmsShown;
+  /* W-1: app events not recording means Errors 24h is not measured. A failed load has no answer to flag. */
+  const analyticsFlag = isError ? null : analyticsFlagFromMeta(data?.meta);
+  const analyticsSentence = analyticsFlag ? analyticsNotMeasuredSentence(analyticsFlag) : null;
+  const columns = useMemo(() => buildColumns(analyticsSentence), [analyticsSentence]);
   const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /**
@@ -303,8 +319,8 @@ export default function FarmsListPage() {
     fmt.dateTime(lastRefreshed, DATE_FORMATS.usersLastLogin) ??
     'a time the server did not report';
 
-  /** True when the client is holding one page of a larger set. */
-  const pageScoped = totalCount > items.length;
+  /** True when the client is holding one page of a larger set. A failed load shows no list, so no scope line (W-12). */
+  const pageScoped = !isError && totalCount > items.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -365,6 +381,19 @@ export default function FarmsListPage() {
         </p>
       )}
 
+      {!isError && testFarmsShown > 0 && (
+        <p data-testid="test-farms-not-counted" className="text-caption text-text-3">
+          {fmt.num(testFarmsShown)} test {testFarmsShown === 1 ? 'farm is' : 'farms are'} in the list but not
+          counted.
+        </p>
+      )}
+
+      {analyticsSentence && (
+        <p data-testid="analytics-not-measured" className="text-caption text-text-2">
+          Errors 24h: {analyticsSentence}
+        </p>
+      )}
+
       {tierNotMeasured ? (
         <p
           role="status"
@@ -391,7 +420,7 @@ export default function FarmsListPage() {
         noun={{ one: 'farm', many: 'farms' }}
         rows={items}
         rowKey={(f) => f.farmId}
-        columns={COLUMNS}
+        columns={columns}
         /* A17 / B4 — the page count comes from the SERVER's totalCount. The
            client holds forty rows and never slices a full set; loading every
            farm to filter it here would be a self-inflicted outage on a 2-vCPU
@@ -401,6 +430,7 @@ export default function FarmsListPage() {
           page,
           pageSize: PAGE_SIZE,
           totalCount,
+          shownNotCounted: testFarmsShown,
           onPage: url.setPage,
         }}
         search={{

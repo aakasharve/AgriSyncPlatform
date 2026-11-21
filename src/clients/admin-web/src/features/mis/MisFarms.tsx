@@ -63,7 +63,7 @@ export const FarmsSection: React.FC<MisSectionProps<FarmsView>> = ({ view, compa
                 item="farms.perFpo"
                 className="col-span-12 xl:col-span-7"
                 title="Farms per producer organisation"
-                subtitle="Registered farms linked to each farmer producer organisation, most farms first"
+                subtitle="Registered farms linked to each farmer producer organisation, most farms first (today's FPO links, not as they were on earlier days)"
                 footnote={NOT_IN_FPO && (
                     <span data-mis-item={NOT_IN_FPO.key} data-mis-fields="">{NOT_IN_FPO.why}</span>
                 )}

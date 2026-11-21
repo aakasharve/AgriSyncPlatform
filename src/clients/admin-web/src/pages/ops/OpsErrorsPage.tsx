@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { MetricLines, NotMeasured, StandingNote } from '@/components/state';
+import { MetricLines, NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt } from '@/lib/api';
+import { analyticsFlagFromMeta, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useListUrlState } from '@/lib/useListUrlState';
@@ -419,8 +420,12 @@ export default function OpsErrorsPage() {
       ? `everything recorded since ${sinceLabel}`
       : `a start time this console cannot read (${since})`;
 
-  /** True when the client is holding one page of a larger set. */
-  const pageScoped = totalCount > rows.length;
+  /** True when the client is holding one page of a larger set. A failed load shows no list, so no scope line (W-12). */
+  const pageScoped = !isError && totalCount > rows.length;
+
+  /* W-1: while app events are not being recorded, the total and the list are not measured. The
+     server still sends a number (`totalCount` is an int on the wire), so the flag decides. */
+  const analyticsFlag = isError ? null : analyticsFlagFromMeta(data?.meta);
 
   return (
     <div className="flex flex-col gap-6">
@@ -505,8 +510,18 @@ export default function OpsErrorsPage() {
       <div className="flex flex-col gap-2">
         <MetricLines metric="errors-list" />
         <MetricLines metric="errors-total" />
+        {/* W-8: this feed measures the server, so test phones' errors are in it. */}
+        <p data-testid="errors-test-phones" className="text-caption text-text-3">
+          Test phones included: errors from test phones are counted here, because this list measures the server.
+        </p>
       </div>
 
+      {analyticsFlag ? (
+        <NotMeasuredPanel
+          title="API errors are not measured"
+          why={<span data-testid="analytics-not-measured">{analyticsNotMeasuredSentence(analyticsFlag)}</span>}
+        />
+      ) : (
       <DataList<OpsErrorRow>
         id="ops-errors"
         label="API errors"
@@ -566,6 +581,7 @@ export default function OpsErrorsPage() {
         /* B12 — shaped like the real thing: six columns. */
         skeleton={{ rows: 8, cells: 6 }}
       />
+      )}
 
       <MetricLines metric="errors-farm" />
 

@@ -15,7 +15,7 @@ import { ChartBody, ChartCard, ItemLines, KpiStrip, NotMeasuredYet, Row, compare
 import { SERIES } from './misTheme';
 import { itemByKey } from './misItems';
 import { fmtCompact, fmtDec, fmtInt, fmtMs, fmtPctPoints } from './misFormat';
-import { SYNC_EVERY_UPLOAD, SYNC_REFUSED_AGAIN, type QualityView } from './misView';
+import { SYNC_EVERY_UPLOAD, SYNC_REFUSED_AGAIN, SYNC_TEST_PHONES, type QualityView } from './misView';
 
 const why = (key: string) => itemByKey(key).why ?? '';
 const pts = (v: number) => fmtPctPoints(v);
@@ -28,7 +28,7 @@ export const QualitySection: React.FC<MisSectionProps<QualityView>> = ({ view, c
     const latency = view.latency;
     const spread = view.spread;
     const sync = view.sync;
-    const syncNote = [SYNC_REFUSED_AGAIN, SYNC_EVERY_UPLOAD, sync.kind === 'chart' && sync.data.refusedWhy !== null ? `Refused changes are not measured: ${sync.data.refusedWhy}` : null]
+    const syncNote = [SYNC_REFUSED_AGAIN, view.syncTestPhones ? SYNC_TEST_PHONES : SYNC_EVERY_UPLOAD, sync.kind === 'chart' && sync.data.refusedWhy !== null ? `Refused changes are not measured: ${sync.data.refusedWhy}` : null]
         .filter((x): x is string => x !== null)
         .join(' ');
     return (

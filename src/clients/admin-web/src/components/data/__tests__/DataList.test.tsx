@@ -941,3 +941,34 @@ describe('the slots a screen fills', () => {
     expect(screen.getByText('farm')).toBeInTheDocument();
   });
 });
+
+describe('W-10 a page past the end', () => {
+  it('W-10: says the page is past the end, with the server total and a link to page 1', async () => {
+    const user = userEvent.setup();
+    const onPage = vi.fn();
+    renderList(
+      config({
+        rows: [],
+        pagination: { mode: 'server', page: 9, pageSize: 40, totalCount: 212, onPage },
+      }),
+      '/?page=9',
+    );
+    expect(screen.getByTestId('datalist-past-end').textContent).toMatch(
+      /This page is past the end; there are 212 farms/,
+    );
+    expect(screen.queryByText(/returned by this feed|No farms in this organisation/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Go to page 1/ }));
+    expect(onPage).toHaveBeenCalledWith(1);
+  });
+
+  it('W-10: a server total of zero is still the measured zero', () => {
+    renderList(
+      config({
+        rows: [],
+        pagination: { mode: 'server', page: 1, pageSize: 40, totalCount: 0, onPage: vi.fn() },
+      }),
+    );
+    expect(screen.queryByTestId('datalist-past-end')).toBeNull();
+    expect(screen.getByText(/No farms in this organisation/)).toBeInTheDocument();
+  });
+});

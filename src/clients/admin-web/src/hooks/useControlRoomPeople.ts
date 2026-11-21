@@ -17,6 +17,8 @@ export interface Person {
   boundAccountName: string | null;
   lastSignedInUtc: string | null;
   keptAtUtc: string | null;
+  /** When the person was added. The server's PersonDto does not carry it today; shown only when sent. */
+  addedAtUtc?: string | null;
 }
 
 /** A tick the server knows. `isPersonalData` is what the console marks orange. */
@@ -56,9 +58,26 @@ export interface TrustReport {
   downloads: MisValue;
   downloadFarmRows: MisValue;
   downloaders: MisValue;
+  /** Added 30 or more days ago, signed in before, no sign-in in the last 30 days. */
   notSignedIn30Days: Person[];
+  /** Added and never signed in, any age. Absent from a server older than the fix wave. */
+  neverSignedIn?: Person[];
   notSignedInNotMeasuredReason: string | null;
   refusedAtDoor: MisValue;
+  /** The exact window the phone-look count covers (fix wave S-N1). Absent from an older server. */
+  phoneLooksFromUtc?: string;
+  phoneLooksToUtc?: string;
+  /** Looks in the window not counted because every farm they name is a test farm. */
+  phoneLooksLeftOutTestFarmsOnly?: MisValue;
+  /** Time of the first History row; null when History has no line yet. */
+  historyStartedAtUtc?: string | null;
+}
+
+/** An exact History window (both ends, or neither) and whether only the counted looks are wanted. */
+export interface HistoryWindow {
+  fromUtc: string;
+  toUtc: string;
+  countedLooksOnly: boolean;
 }
 
 export interface AddPersonBody {
@@ -155,13 +174,21 @@ export function useTrustReport() {
   });
 }
 
-export function useHistory(days: number, action: string | null) {
+export function useHistory(days: number, action: string | null, window?: HistoryWindow | null) {
   const org = useOrgKey();
   return useQuery<HistoryAnswer>({
-    queryKey: ['people', 'history', org, days, action ?? 'all'],
+    queryKey: [
+      'people', 'history', org, window ? 'window' : days, action ?? 'all',
+      window ? `${window.fromUtc}|${window.toUtc}|${window.countedLooksOnly}` : 'days',
+    ],
     queryFn: async () => {
       // The query is written into the address (not `params`) so the request reads as it is sent.
-      const query = `days=${days}${action ? `&action=${encodeURIComponent(action)}` : ''}`;
+      // Fix wave W-3: an exact window replaces `days`; both ends or neither, `days` stays when absent.
+      const span = window
+        ? `fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}`
+          + `${window.countedLooksOnly ? '&countedLooksOnly=true' : ''}`
+        : `days=${days}`;
+      const query = `${span}${action ? `&action=${encodeURIComponent(action)}` : ''}`;
       const { data } = await adminApi.get<unknown>(`${ROOT}/history?${query}`);
       return readHistory(data);
     },

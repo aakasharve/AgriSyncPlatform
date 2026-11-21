@@ -290,7 +290,7 @@ describe('misView: headlines (CR-2b Task 2)', () => {
 
   it('Headlines_use_real_numbers_or_say_not_measured: acquisition', () => {
     expect(headlineFor('acquisition', d, false)).toBe(
-      '271 people verified their phone. 61 of 139 old enough to judge saved entries on 3 of their first 7 days. Installs and channels are not measured yet.',
+      '271 people verified their phone. 61 of 139 old enough to judge had entries reach the server on 3 of their first 7 days. Installs and channels are not measured yet.',
     );
     const nm = headlineFor('acquisition', misFixture({ acquisition: { habit: notMeasured('no_complete_window'), habitEligible: notMeasured('no_complete_window') } }), false);
     expect(nm).toContain(`is not measured: ${PLAN_REASONS.no_complete_window}`);

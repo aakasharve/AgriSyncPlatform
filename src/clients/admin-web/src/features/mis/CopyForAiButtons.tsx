@@ -29,7 +29,7 @@ async function writeToClipboard(pack: string): Promise<boolean> {
   }
 }
 
-function CopyForAiPack({ answer, section }: { answer: CompanyMis; section: MisSectionKey }) {
+function CopyForAiPack({ answer, section, analyticsSentence }: { answer: CompanyMis; section: MisSectionKey; analyticsSentence: string | null }) {
   const [copied, setCopied] = useState<Kind | null>(null);
   const [shownPack, setShownPack] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,7 +37,8 @@ function CopyForAiPack({ answer, section }: { answer: CompanyMis; section: MisSe
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const copy = async (kind: Kind) => {
-    const pack = kind === 'text' ? misToAiText(answer, section) : misToAiJson(answer, section);
+    const opts = { analyticsSentence };
+    const pack = kind === 'text' ? misToAiText(answer, section, opts) : misToAiJson(answer, section, opts);
     const written = await writeToClipboard(pack);
     if (!written) {
       setCopied(null);
@@ -82,12 +83,22 @@ function CopyForAiPack({ answer, section }: { answer: CompanyMis; section: MisSe
  * The pack and its "Copied" belong to one page, one range and one answer. A change of any of them
  * starts the buttons afresh, so a box left open never shows another page's numbers.
  */
-export function CopyForAiButtons({ answer, section }: { answer: CompanyMis; section: MisSectionKey }) {
+export function CopyForAiButtons({
+  answer,
+  section,
+  analyticsSentence = null,
+}: {
+  answer: CompanyMis;
+  section: MisSectionKey;
+  /** W-1: the sentence for "app events are not being recorded", from the answer's envelope; null when recording. */
+  analyticsSentence?: string | null;
+}) {
   return (
     <CopyForAiPack
-      key={`${section}:${answer.range.from}:${answer.range.to}:${answer.countedAtUtc}`}
+      key={`${section}:${answer.range.from}:${answer.range.to}:${answer.countedAtUtc}:${analyticsSentence ?? ''}`}
       answer={answer}
       section={section}
+      analyticsSentence={analyticsSentence}
     />
   );
 }

@@ -110,10 +110,30 @@ function cellStyle(row: RowMeta, pct: number): CSSProperties {
 
 export interface FarmerTimelineProps {
   timeline: FarmerHealthTimelineDayDto[];
+  /**
+   * CR-3 fix wave W-1: the sentence for "app events are not being recorded". When set, the five
+   * analytics-backed rows (Started, Submitted, Proof, Summary, Errors) are not measured and are
+   * not drawn: a row of zeros would read as "nothing happened". "Checked" is not an analytics
+   * count and stays.
+   */
+  analyticsNotMeasured?: string | null;
 }
 
-export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
+/** The rows that are counted from app events. */
+const ANALYTICS_ROWS: ReadonlySet<EventKey> = new Set<EventKey>([
+  'closuresStarted',
+  'closuresSubmitted',
+  'proofAttached',
+  'summariesViewed',
+  'errors',
+]);
+
+export function FarmerTimeline({ timeline, analyticsNotMeasured = null }: FarmerTimelineProps) {
   const days = useMemo(() => timeline.slice(-14), [timeline]);
+  const rowsShown = useMemo(
+    () => (analyticsNotMeasured ? ROWS.filter((r) => !ANALYTICS_ROWS.has(r.key)) : ROWS),
+    [analyticsNotMeasured],
+  );
 
   const maxByRow = useMemo(() => {
     const max: Record<EventKey, number> = {
@@ -125,16 +145,16 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
       errors: 0,
     };
     for (const d of days) {
-      for (const row of ROWS) {
+      for (const row of rowsShown) {
         if (d[row.key] > max[row.key]) max[row.key] = d[row.key];
       }
     }
     return max;
-  }, [days]);
+  }, [days, rowsShown]);
 
   const total = useMemo(
-    () => days.reduce((n, d) => n + ROWS.reduce((m, row) => m + d[row.key], 0), 0),
-    [days]
+    () => days.reduce((n, d) => n + rowsShown.reduce((m, row) => m + d[row.key], 0), 0),
+    [days, rowsShown]
   );
 
   /* No grid at all. The server always backfills fourteen days, so reaching
@@ -146,6 +166,22 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
         <NotMeasuredPanel
           title="No timeline was sent for this farm"
           why="The server builds a fixed fourteen-day window for every farm, including farms with no events at all, so an absent array is a response that did not assemble rather than a farm with nothing on it."
+        />
+      </section>
+    );
+  }
+
+  /* W-1: the analytics-backed rows are not measured; only "Checked" can be drawn. */
+  if (analyticsNotMeasured && total === 0) {
+    return (
+      <section data-band="timeline" aria-label="14-day activity">
+        <NotMeasuredPanel
+          title="The 14-day activity is not measured"
+          why={
+            <span data-testid="analytics-not-measured">
+              Started, Submitted, Proof, Summary and Errors: {analyticsNotMeasured}
+            </span>
+          }
         />
       </section>
     );
@@ -193,6 +229,11 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
         Started and a dark cell in Submitted are not the same number. The figure is in the cell.
       </p>
       <MetricLines metric="fh-timeline" className="mb-3" />
+      {analyticsNotMeasured && (
+        <p data-testid="analytics-not-measured" className="mb-3 text-body text-text-1">
+          Started, Submitted, Proof, Summary and Errors are not shown: {analyticsNotMeasured}
+        </p>
+      )}
 
       <div className="overflow-x-auto">
         <table
@@ -220,7 +261,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
             </tr>
           </thead>
           <tbody>
-            {ROWS.map((row) => (
+            {rowsShown.map((row) => (
               <tr key={row.key}>
                 <th
                   scope="row"
@@ -266,7 +307,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
             <thead>
               <tr className="text-left text-text-2">
                 <th className="py-1 pr-3 font-semibold">Date</th>
-                {ROWS.map((r) => (
+                {rowsShown.map((r) => (
                   <th key={r.key} className="py-1 pr-3 text-right font-semibold">
                     {r.label}
                   </th>
@@ -279,7 +320,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                   <th scope="row" className="py-0.5 pr-3 text-left font-normal text-text-2">
                     {fmt.date(d.date, DATE_FORMATS.churnLastLog) ?? d.date}
                   </th>
-                  {ROWS.map((r) => (
+                  {rowsShown.map((r) => (
                     <td key={r.key} className="py-0.5 pr-3 text-right">
                       {d[r.key]}
                     </td>
@@ -293,7 +334,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
 
       <div className="mt-3 flex flex-col gap-2">
         <MetricLines metric="fh-timeline-verifies" />
-        <MetricLines metric="fh-timeline-errors" />
+        {!analyticsNotMeasured && <MetricLines metric="fh-timeline-errors" />}
       </div>
     </section>
   );

@@ -126,6 +126,12 @@ export interface ServerPagination {
    * without a scope.
    */
   totalCount: number;
+  /**
+   * CR-3 fix wave W-5. Rows in `totalCount` that the list shows but the headline does not count
+   * (test farms, each row marked). Paging still uses `totalCount`, because the server pages over
+   * every row it lists; the headline says `totalCount - shownNotCounted`.
+   */
+  shownNotCounted?: number;
   onPage: (page: number) => void;
 }
 

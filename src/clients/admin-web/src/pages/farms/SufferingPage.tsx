@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { Frown } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { MetricLines, NotMeasured } from '@/components/state';
+import { MetricLines, NotMeasured, NotMeasuredPanel } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { metaRefreshedAt } from '@/lib/api';
+import { analyticsFlagFromMeta, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { useFarmContacts, type FarmContact } from '@/hooks/useFarmContacts';
 import { useSuffering, type SufferingItem } from '@/hooks/useFarms';
@@ -115,6 +116,8 @@ export default function SufferingPage() {
   const columns = useMemo(() => buildColumns(contacts), [contacts]);
 
   const lastRefreshed = metaRefreshedAt(data?.meta);
+  /* W-1: app events are not being recorded, so "no farm has repeated problems" would be a guess. */
+  const analyticsFlag = isError ? null : analyticsFlagFromMeta(data?.meta);
   const checkedAt =
     fmt.dateTime(lastRefreshed, DATE_FORMATS.usersLastLogin) ?? 'a time the server did not report';
 
@@ -139,6 +142,12 @@ export default function SufferingPage() {
         <MetricLines metric="suffering-areas" />
       </div>
 
+      {analyticsFlag ? (
+        <NotMeasuredPanel
+          title="Farms with repeated problems are not measured"
+          why={<span data-testid="analytics-not-measured">{analyticsNotMeasuredSentence(analyticsFlag)}</span>}
+        />
+      ) : (
       <DataList<SufferingItem>
         id="suffering"
         label="Farms with repeated problems"
@@ -160,6 +169,7 @@ export default function SufferingPage() {
         }}
         skeleton={{ rows: 6, cells: 7 }}
       />
+      )}
     </div>
   );
 }

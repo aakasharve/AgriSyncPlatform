@@ -226,6 +226,13 @@ export const DataTable: React.FC<{ table: TableView }> = ({ table }) => (
  */
 export const Delta: React.FC<{ delta: MisDelta; className?: string }> = ({ delta, className }) => {
     if (delta === null) return null;
+    if ('notCompared' in delta) {
+        return (
+            <span className={cx('text-[12px] text-stone-500', className)} data-testid="mis-not-compared">
+                {delta.notCompared}
+            </span>
+        );
+    }
     if ('previousNotMeasured' in delta) {
         return (
             <span className={cx('text-[12px] text-stone-500', className)} title={delta.previousNotMeasured}>
@@ -254,6 +261,9 @@ export const KpiTile: React.FC<{ tile: MisTileModel; compare: boolean }> = ({ ti
         {tile.hint && tile.hint !== itemByKey(tile.item).hint && <p className="text-[12px] leading-snug text-stone-500">{tile.hint}</p>}
         <ItemLines item={tile.item} className="mt-0.5" />
         {tile.note && <p className="text-[12px] leading-snug text-stone-500">{tile.note}</p>}
+        {tile.todaySoFar && tile.current.kind === 'value' && (
+            <p className="text-[12px] font-medium leading-snug text-stone-600" data-testid={`kpi-${tile.item}-today-so-far`}>Today so far</p>
+        )}
         {tile.current.kind === 'value'
             ? (
                 <>
@@ -264,7 +274,7 @@ export const KpiTile: React.FC<{ tile: MisTileModel; compare: boolean }> = ({ ti
                         {compare && (
                             <>
                                 <Delta delta={tile.delta} />
-                                {tile.previous.kind === 'value' && (
+                                {tile.previous.kind === 'value' && !tile.todaySoFar && (
                                     <span className="truncate text-[12px] text-stone-400">from {tile.previous.text}</span>
                                 )}
                             </>

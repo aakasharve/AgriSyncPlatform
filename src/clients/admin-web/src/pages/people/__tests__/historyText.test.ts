@@ -163,4 +163,15 @@ describe('historyText: a held sign-in and Users-page phone looks (G1 fix 1: M2, 
       'Akash looked at the phone numbers of 3 people on the Users page.',
     );
   });
+
+  it('W-11: a Users-page look with no usable person count never says 0 people', () => {
+    const some = "Akash looked at some people's phone numbers on the Users page.";
+    expect(historyText(line('phones_shown', { details: { page: 'users' } }))).toBe(some);
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: null } }))).toBe(some);
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: '' } }))).toBe(some);
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: 'many' } }))).toBe(some);
+    expect(historyText(line('phones_shown', { details: { page: 'users', personCount: '0' } }))).toBe(
+      'Akash looked at the phone numbers of 0 people on the Users page.',
+    );
+  });
 });

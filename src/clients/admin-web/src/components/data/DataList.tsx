@@ -137,6 +137,9 @@ export function DataList<T>(config: DataListConfig<T>) {
      scope. See `facets.ts` for the decision and the two rejected options. */
   const serverPaged = pagination.mode === 'server';
   const totalCount = serverPaged ? pagination.totalCount : rows.length;
+  /* W-5: the number the headline states. Test farms the list shows are paged over but not counted. */
+  const shownNotCounted = serverPaged ? Math.max(0, pagination.shownNotCounted ?? 0) : 0;
+  const headlineTotal = Math.max(0, totalCount - shownNotCounted);
   const pageScoped = serverPaged && pagination.totalCount > rows.length;
   const totalPages = serverPaged
     ? Math.max(1, Math.ceil(pagination.totalCount / Math.max(1, pagination.pageSize)))
@@ -358,7 +361,7 @@ export function DataList<T>(config: DataListConfig<T>) {
   const headline: ReactNode = pageScoped ? (
     <>
       <span>
-        {count(totalCount)} {nounFor(totalCount, noun)}
+        {count(headlineTotal)} {nounFor(headlineTotal, noun)}
       </span>
       <span className="font-normal text-text-3">·</span>
       <span>{count(rows.length)} on this page</span>
@@ -381,6 +384,15 @@ export function DataList<T>(config: DataListConfig<T>) {
         <span>
           Showing <b>{count(sorted.length)}</b> of <b>{count(rows.length)}</b>{' '}
           {nounFor(rows.length, noun)} matching &ldquo;{query.trim()}&rdquo;
+        </span>
+      );
+    }
+    if (pageScoped && shownNotCounted > 0) {
+      /* W-5: the list pages over every row it shows, test farms included; the count says which rows are counted. */
+      return (
+        <span>
+          <b>{count(rows.length)}</b> of <b>{count(totalCount)}</b> listed &middot;{' '}
+          <b>{count(headlineTotal)}</b> {nounFor(headlineTotal, noun)} counted
         </span>
       );
     }
@@ -424,9 +436,17 @@ export function DataList<T>(config: DataListConfig<T>) {
    * a genuine empty into a no-match.
    */
   const searched = !!search && hasQuery;
-  const showNoMatch = !states.isLoading && !states.error && !states.feedDown && sorted.length === 0
-    && (filtered || searched);
-  const showMeasuredZero = !states.isLoading && !states.error && !states.feedDown
+  /**
+   * CR-3 fix wave W-10 (check2 M-I4). A server-paged list whose server total is above zero but
+   * whose page holds no rows is a page past the end (a bookmarked `?page=9`, or a list that
+   * shrank under the reader). It is not "the feed returned nothing", and it is not a filter that
+   * matched nothing: the server says there are rows, so the reader is told where they are.
+   */
+  const pastEnd = serverPaged && pagination.totalCount > 0 && rows.length === 0
+    && !states.isLoading && !states.error && !states.feedDown;
+  const showNoMatch = !pastEnd && !states.isLoading && !states.error && !states.feedDown
+    && sorted.length === 0 && (filtered || searched);
+  const showMeasuredZero = !pastEnd && !states.isLoading && !states.error && !states.feedDown
     && sorted.length === 0 && !showNoMatch;
 
   function body(): ReactNode {
@@ -476,6 +496,26 @@ export function DataList<T>(config: DataListConfig<T>) {
     /* Nothing below a dead feed is current, so nothing below it is drawn. */
     if (states.feedDown) {
       return <FeedDown since={states.feedDown.since} lastGood={states.feedDown.lastGood} what={label} />;
+    }
+
+    if (pastEnd && serverPaged) {
+      return (
+        <div role="status" data-testid="datalist-past-end" className="p-6 text-body text-text-2">
+          <p>
+            This page is past the end; there {pagination.totalCount === 1 ? 'is' : 'are'}{' '}
+            <b>{count(pagination.totalCount)}</b> {nounFor(pagination.totalCount, noun)}.
+          </p>
+          <p className="mt-2">
+            <button
+              type="button"
+              className="text-accent underline"
+              onClick={() => pagination.onPage(1)}
+            >
+              Go to page 1
+            </button>
+          </p>
+        </div>
+      );
     }
 
     if (showNoMatch) {

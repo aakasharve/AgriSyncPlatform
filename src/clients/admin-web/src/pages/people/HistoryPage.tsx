@@ -2,6 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { LoadFailed, LoadingState } from '@/components/state';
 import { useHistory } from '@/hooks/useControlRoomPeople';
 import { DATE_FORMATS, fmt } from '@/lib/format';
+import { fmtIndiaDateTime } from '@/lib/indiaTime';
 import { HISTORY_ACTIONS, historyText } from './historyText';
 
 const DAY_CHOICES = [7, 30, 90] as const;
@@ -11,6 +12,12 @@ function readDays(raw: string | null): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 7) return 7;
   return Math.min(90, Math.round(n));
+}
+
+/** An ISO instant from the address, or null when it is not a date. */
+function readInstant(raw: string | null): string | null {
+  if (!raw) return null;
+  return Number.isFinite(Date.parse(raw)) ? raw : null;
 }
 
 /**
@@ -23,11 +30,24 @@ export default function HistoryPage() {
   const [params, setParams] = useSearchParams();
   const days = readDays(params.get('days'));
   const action = params.get('action') || null;
-  const q = useHistory(days, action);
+  /* W-3: the trust report opens the exact window it counted: `fromUtc` and `toUtc` together (a lone
+     one is ignored, and `days` applies), and `countedLooksOnly` for just the lines it counted. */
+  const fromUtc = readInstant(params.get('fromUtc'));
+  const toUtc = readInstant(params.get('toUtc'));
+  const exact = fromUtc && toUtc
+    ? { fromUtc, toUtc, countedLooksOnly: params.get('countedLooksOnly') === 'true' }
+    : null;
+  const q = useHistory(days, action, exact);
 
   function set(next: { days?: number; action?: string | null }) {
     const merged = new URLSearchParams(params);
-    if (next.days !== undefined) merged.set('days', String(next.days));
+    if (next.days !== undefined) {
+      merged.set('days', String(next.days));
+      /* Choosing a period leaves the trust report's exact window. */
+      merged.delete('fromUtc');
+      merged.delete('toUtc');
+      merged.delete('countedLooksOnly');
+    }
     if (next.action !== undefined) {
       if (next.action) merged.set('action', next.action);
       else merged.delete('action');
@@ -81,6 +101,13 @@ export default function HistoryPage() {
           </select>
         </label>
       </div>
+
+      {exact && (
+        <p data-testid="history-exact-window" className="text-caption text-text-2">
+          Showing exactly the {exact.countedLooksOnly ? 'lines the trust report counted' : 'lines'}, from{' '}
+          {fmtIndiaDateTime(exact.fromUtc) ?? 'an unknown time'} to {fmtIndiaDateTime(exact.toUtc) ?? 'an unknown time'}.
+        </p>
+      )}
 
       {q.isLoading && <LoadingState label="Loading History" height={160} />}
       {(q.isError || (!q.isLoading && !q.data)) && (

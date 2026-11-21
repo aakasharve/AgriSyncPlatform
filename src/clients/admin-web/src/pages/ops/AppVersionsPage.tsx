@@ -18,6 +18,7 @@ import {
 } from '@/components/state';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { PersonName } from '@/components/ui/PersonName';
+import { analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 
 // spec: control-room-app-versions-2026-11-12 (CR-1c Tasks V3 and V4).
@@ -159,7 +160,7 @@ export default function AppVersionsPage() {
             uninstalls are in your Google Play Console.
           </p>
         </div>
-        {loaded && (
+        {loaded && !loaded.analyticsFlag && (
           <span className={since !== null ? 'text-caption text-text-2' : 'text-caption text-text-3'}>
             {since !== null
               ? `Counting since ${readableDay(since)}`
@@ -211,7 +212,10 @@ export default function AppVersionsPage() {
 function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays }) {
   const [search, setSearch] = useState('');
 
-  const measured = measuredSince(data) !== null;
+  /* W-1: while app events are not being recorded every count here is not measured, with the
+     server's reason, and the "has not started" words would be the wrong reason. */
+  const flagSentence = data.analyticsFlag ? analyticsNotMeasuredSentence(data.analyticsFlag) : null;
+  const measured = measuredSince(data) !== null && flagSentence === null;
   const legacyNumber = legacyNumberOf(data);
   const people = countOf(data.people);
   const phones = countOf(data.phones);
@@ -243,10 +247,12 @@ function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays
             label="People who used the app"
             value={null}
             state="unmeasured"
-            caption={measured ? NOT_SENT : NOT_MEASURED}
+            caption={flagSentence ?? (measured ? NOT_SENT : NOT_MEASURED)}
           />
         )}
-        {phones !== null ? (
+        {flagSentence ? (
+          <KpiCard label="Phones signed in" value={null} state="unmeasured" caption={flagSentence} />
+        ) : phones !== null ? (
           <KpiCard label="Phones signed in" value={fmt.num(phones)} note={deviceNote} />
         ) : (
           <KpiCard label="Phones signed in" value={null} state="unmeasured" caption={NOT_SENT} note={deviceNote} />
@@ -258,13 +264,20 @@ function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays
             label="People on an older version"
             value={null}
             state="unmeasured"
-            caption={measured ? NOT_SENT : NOT_MEASURED}
+            caption={flagSentence ?? (measured ? NOT_SENT : NOT_MEASURED)}
           />
         )}
         <KpiCard label="Installs" value={null} state="unmeasured" caption="see Play Console" />
       </div>
 
-      {!measured && (
+      {flagSentence && (
+        <NotMeasuredPanel
+          title="App versions are not measured"
+          why={<p data-testid="analytics-not-measured" className="max-w-[var(--text-measure)]">{flagSentence}</p>}
+        />
+      )}
+
+      {!measured && !flagSentence && (
         <NotMeasuredPanel
           title={NOT_MEASURED}
           why={

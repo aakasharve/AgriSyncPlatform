@@ -1,6 +1,6 @@
 import { createElement } from 'react';
-import { act, render } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, render, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MIS_MAX_DAYS, clampCustom, fmtIndiaTime, istToday, presetPeriod, resetMisPeriod, useMisCompare, useMisPeriod,
   type MisPeriod,
@@ -27,12 +27,34 @@ describe('misPeriod (CR-2b Task 1)', () => {
     expect(istToday(new Date('2026-11-14T18:30:00Z'))).toBe('2026-11-15');
   });
 
-  it('Presets_end_today_and_span_7_30_90_days', () => {
-    expect(presetPeriod('7d', '2026-11-15')).toEqual({ preset: '7d', from: '2026-11-09', to: '2026-11-15' });
-    expect(presetPeriod('30d', '2026-11-15')).toEqual({ preset: '30d', from: '2026-10-17', to: '2026-11-15' });
-    expect(presetPeriod('90d', '2026-11-15')).toEqual({ preset: '90d', from: '2026-08-18', to: '2026-11-15' });
+  it('W2_Presets_end_yesterday_and_span_7_30_90_days', () => {
+    expect(presetPeriod('7d', '2026-11-15')).toEqual({ preset: '7d', from: '2026-11-08', to: '2026-11-14' });
+    expect(presetPeriod('30d', '2026-11-15')).toEqual({ preset: '30d', from: '2026-10-16', to: '2026-11-14' });
+    expect(presetPeriod('90d', '2026-11-15')).toEqual({ preset: '90d', from: '2026-08-17', to: '2026-11-14' });
     // Across a month and year boundary.
-    expect(presetPeriod('7d', '2027-01-02')).toEqual({ preset: '7d', from: '2026-12-27', to: '2027-01-02' });
+    expect(presetPeriod('7d', '2027-01-02')).toEqual({ preset: '7d', from: '2026-12-26', to: '2027-01-01' });
+  });
+
+  it('W2_Today_is_only_an_explicit_choice_and_its_last_day_is_today', () => {
+    expect(presetPeriod('today', '2026-11-15')).toEqual({ preset: 'today', from: '2026-10-17', to: '2026-11-15' });
+  });
+
+  it('W2_The_default_range_is_worked_out_again_when_the_india_date_moves_on', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-15T05:00:00Z'));
+      resetMisPeriod();
+      const first = renderHook(() => useMisPeriod());
+      expect(first.result.current[0]).toEqual({ preset: '30d', from: '2026-10-16', to: '2026-11-14' });
+      first.unmount();
+      // The tab stays open past midnight in India: the next read must not keep the old day.
+      vi.setSystemTime(new Date('2026-11-16T05:00:00Z'));
+      const later = renderHook(() => useMisPeriod());
+      expect(later.result.current[0]).toEqual({ preset: '30d', from: '2026-10-17', to: '2026-11-15' });
+      later.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('Custom_never_ends_after_today_never_reverses_never_exceeds_180', () => {

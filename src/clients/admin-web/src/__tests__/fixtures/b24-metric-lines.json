@@ -28,7 +28,7 @@
     "key": "overview.dau",
     "label": "Daily active people",
     "status": "real",
-    "what": "People who saved at least one entry on the last day chosen.",
+    "what": "People with at least one entry that reached the server on the last day chosen.",
     "why": "Shows for how many people the app is part of their working day."
   },
   {
@@ -140,7 +140,7 @@
     "key": "acquisition.firstLog",
     "label": "Saved a first entry",
     "status": "real",
-    "what": "Of those sign-ups, people who saved at least one entry.",
+    "what": "Of those sign-ups, people with at least one entry that reached the server.",
     "why": "Shows whether new people do the one thing the app is for."
   },
   {
@@ -148,7 +148,7 @@
     "key": "acquisition.habit",
     "label": "Saved entries on 3 of their first 7 days",
     "status": "real",
-    "what": "Sign-ups old enough to judge who saved entries on 3 of their first 7 days.",
+    "what": "Sign-ups old enough to judge who had entries reach the server on 3 of their first 7 days.",
     "why": "Shows whether new people form a habit early, the best sign they will stay."
   },
   {
@@ -180,7 +180,7 @@
     "key": "acquisition.channelHabit",
     "label": "Habit, by channel",
     "status": "not-measured",
-    "what": "For each source of installs, the share who saved entries on 3 of their first 7 days.",
+    "what": "For each install source, the share with entries reaching the server on 3 of their first 7 days.",
     "why": "Shows which source brings farmers who keep using the app."
   },
   {
@@ -260,7 +260,7 @@
     "key": "retention.d1",
     "label": "Came back next day",
     "status": "real",
-    "what": "Share of new sign-ups who saved an entry on the day after they signed up.",
+    "what": "Share of new sign-ups with an entry reaching the server on the day after they signed up.",
     "why": "Shows whether the first day convinced people to return."
   },
   {
@@ -268,7 +268,7 @@
     "key": "retention.d30",
     "label": "Active on day 30",
     "status": "real",
-    "what": "Share of sign-ups who saved an entry on the thirtieth day after signing up.",
+    "what": "Share of sign-ups with an entry reaching the server on the thirtieth day after signing up.",
     "why": "Shows whether the app becomes a lasting habit, not a one-time try."
   },
   {
@@ -292,7 +292,7 @@
     "key": "retention.cohorts",
     "label": "Return by sign-up week",
     "status": "real",
-    "what": "For each week's sign-ups, the share who saved an entry on day 1, 7, 14 and 30.",
+    "what": "For each week's sign-ups, the share with an entry reaching the server on day 1, 7, 14, 30.",
     "why": "Shows whether newer groups of farmers stay longer than older ones after each change."
   },
   {
@@ -300,7 +300,7 @@
     "key": "retention.curve",
     "label": "Return curve",
     "status": "real",
-    "what": "Share of sign-ups who saved an entry on each day after signing up, up to day 30.",
+    "what": "Share of sign-ups with an entry reaching the server each day after signing up, up to day 30.",
     "why": "Shows on which day people drop off, and whether that is getting better."
   },
   {
@@ -597,7 +597,7 @@
     "key": "live-recent-events",
     "label": "Recent events",
     "status": "real",
-    "what": "Every server error, slow save and phone-reported problem in the last two hours.",
+    "what": "Every server error, slow save and phone-reported problem in the last two hours, test phones included.",
     "why": "Shows what is breaking right now, before farmers call to complain.",
     "buildId": "L6"
   },
@@ -624,7 +624,7 @@
     "key": "errors-total",
     "label": "Errors in the chosen window",
     "status": "real",
-    "what": "Number of errors, slow saves and phone-reported problems in the chosen time window.",
+    "what": "Number of errors, slow saves and phone-reported problems in the chosen time window, test phones included.",
     "why": "Shows whether problems are rising or falling across hours and days.",
     "buildId": "E2"
   },

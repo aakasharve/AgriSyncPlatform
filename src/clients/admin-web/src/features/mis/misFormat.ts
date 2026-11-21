@@ -16,10 +16,21 @@ export function fmtInt(v: number): string {
     return INT.format(Math.round(v));
 }
 
-/** One decimal, trimmed: 8.1 / 12 */
-export function fmtDec(v: number, digits = 1): string {
+/** `toFixed`, with a trailing ".0" trimmed: 8.1 / 12. Rounds a tiny positive value to "0"; callers that state a measured value use `fmtDec`. */
+function trimDec(v: number, digits: number): string {
     const s = v.toFixed(digits);
     return s.replace(/\.0+$/, '');
+}
+
+/**
+ * One decimal, trimmed: 8.1 / 12.
+ *
+ * A measured value above zero that would round to "0" prints "less than 0.1" (with `digits` 2,
+ * "less than 0.01"): a small real number is never shown as a true zero (fix wave W-13).
+ */
+export function fmtDec(v: number, digits = 1): string {
+    if (digits >= 1 && v > 0 && v < 0.5 * 10 ** -digits) return `less than ${(10 ** -digits).toFixed(digits)}`;
+    return trimDec(v, digits);
 }
 
 /** 0.712 → "71.2%"; digits default 1. */
@@ -30,15 +41,15 @@ export function fmtPct(ratio: number, digits = 1): string {
 /** Axis ticks: 0 / 800 / 1.2K / 12K / 1.2L (lakh). */
 export function fmtCompact(v: number): string {
     const a = Math.abs(v);
-    if (a >= 100_000) return `${fmtDec(v / 100_000)}L`;
-    if (a >= 10_000) return `${fmtDec(v / 1000, 0)}K`;
-    if (a >= 1000) return `${fmtDec(v / 1000)}K`;
-    return fmtDec(v, a < 10 && a % 1 !== 0 ? 1 : 0);
+    if (a >= 100_000) return `${trimDec(v / 100_000, 1)}L`;
+    if (a >= 10_000) return `${trimDec(v / 1000, 0)}K`;
+    if (a >= 1000) return `${trimDec(v / 1000, 1)}K`;
+    return trimDec(v, a < 10 && a % 1 !== 0 ? 1 : 0);
 }
 
 /** 2140 ms → "2.1 s"; 640 → "640 ms". */
 export function fmtMs(ms: number): string {
-    return ms >= 1000 ? `${fmtDec(ms / 1000, 1)} s` : `${Math.round(ms)} ms`;
+    return ms >= 1000 ? `${trimDec(ms / 1000, 1)} s` : `${Math.round(ms)} ms`;
 }
 
 export function dayDate(utcMs: number): Date {
@@ -96,7 +107,7 @@ export function fmtHour(h: number): string {
 export function fmtRelDelta(cur: number, prev: number): string | null {
     if (!prev) return null;
     const d = (cur - prev) / prev;
-    const s = fmtDec(Math.abs(d) * 100, 1);
+    const s = trimDec(Math.abs(d) * 100, 1);
     if (s === '0') return '0%';
     return `${d > 0 ? '+' : '−'}${s}%`;
 }
@@ -104,7 +115,7 @@ export function fmtRelDelta(cur: number, prev: number): string | null {
 /** Signed percentage-point change between two ratios, e.g. "+1.2 pts". */
 export function fmtPtsDelta(cur: number, prev: number): string {
     const d = (cur - prev) * 100;
-    const s = fmtDec(Math.abs(d), 1);
+    const s = trimDec(Math.abs(d), 1);
     if (s === '0') return '0 pts';
     return `${d > 0 ? '+' : '−'}${s} pts`;
 }
@@ -120,7 +131,7 @@ export function fmtPctPoints(v: number, digits = 1): string {
 /** Signed difference between two values that are already percentages: "+2.5 pts" / "−1 pt" / "0 pts". */
 export function fmtDeltaPoints(cur: number, prev: number): string {
     const d = cur - prev;
-    const s = fmtDec(Math.abs(d), 1);
+    const s = trimDec(Math.abs(d), 1);
     if (s === '0') return '0 pts';
     return `${d > 0 ? '+' : '−'}${s} ${s === '1' ? 'pt' : 'pts'}`;
 }

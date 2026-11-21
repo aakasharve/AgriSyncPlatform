@@ -126,6 +126,9 @@ export interface FarmerHealthDto {
   aiHealth: FarmerHealthReadingsDto | null;
   verifications: FarmerHealthChecksDto | null;
   workerSummary: FarmerHealthWorkerDto[];   // up to 5
+  /** CR-3 fix wave W-1: `analytics_not_recording` means the closure columns and errors are not measured. */
+  analyticsNotMeasuredReason?: string | null;
+  analyticsStoppedAtUtc?: string | null;
 }
 
 // ── Cohort (Mode B) ─────────────────────────────────────────────────────────

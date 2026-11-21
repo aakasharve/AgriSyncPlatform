@@ -225,7 +225,7 @@ export const Heatmap: React.FC<{ grid: number[][]; max: number; rowLabels: strin
 export const CohortGrid: React.FC<{ rows: CohortRowModel[]; days: readonly number[]; scaleMax: number }> = ({ rows, days, scaleMax }) => (
     <div className="overflow-x-auto">
         <table className="w-full border-separate text-[13px]" style={{ borderSpacing: '2px' }}>
-            <caption className="sr-only">Share of new sign-ups who saved an entry on day 1, 7, 14 and 30 after verifying their phone, by sign-up week</caption>
+            <caption className="sr-only">Share of new sign-ups with an entry that reached the server on day 1, 7, 14 and 30 after verifying their phone, by sign-up week</caption>
             <thead>
                 <tr className="text-[12px] text-stone-500">
                     <th scope="col" className="pb-1.5 pr-3 text-left font-medium">Signed up week of</th>
