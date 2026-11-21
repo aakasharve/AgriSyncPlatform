@@ -1,0 +1,57 @@
+[
+ {
+  "n": 1,
+  "title": "One look and five kinds of ask card for every confirm",
+  "q": "Should every place where the farmer confirms, chooses or goes further use this one card look, in these five kinds?",
+  "opts": [
+   {"k": "A", "t": "Approve A", "d": "All five kinds in one shared frame (BIGGER)", "rec": 1,
+    "out": "DESIGN APPROVED, NOT BUILT YET: adopt the ask-card family of DESIGN-ASK-CARDS-WHOLE-APP-2026-11-21.html as the one look for every confirm and go-further in the phone app: one shared frame (AskSheet: backdrop, rise, handle, amber chip, ऐका, swipe down) with five bodies - yes or no (हो / नाही, swipe), pick one (snapping list, nothing picked until touched), a number (ruler, minus, plus, quick numbers), say it (mic first, typing always open, the words shown for confirming), and a card stack with one continuous progress bar. Build only in the order of decision 5. Screens keep their logic, saving and tests; a screen is either old or new."},
+   {"k": "B", "t": "Approve B", "d": "Only yes or no and pick one for now (SMALL)",
+    "out": "DESIGN APPROVED IN PART, NOT BUILT YET: adopt only kinds 1 (yes or no) and 2 (pick one) of the ask-card family of DESIGN-ASK-CARDS-WHOLE-APP-2026-11-21.html, in the shared AskSheet frame. Number, say-it and the card stack stay as the screens have them today until I say."}
+  ]
+ },
+ {
+  "n": 2,
+  "title": "How firmly a question holds the screen",
+  "q": "When a question changes what is saved, should the screen hold until it is answered?",
+  "opts": [
+   {"k": "A", "t": "Approve A", "d": "Hold only when the answer changes what is saved (the Schedule Maker's rule)", "rec": 1,
+    "out": "HOLD RULE: a question holds the screen (shake, knock buzz, no leaving by the dark area) only when its answer changes what is saved; information cards and optional questions never hold and always offer 'नंतर'. The final save card always refuses until every required answer is given."},
+   {"k": "B", "t": "Approve B", "d": "Never hold: only an amber ring on what is unanswered",
+    "out": "HOLD RULE: no question ever holds the screen. An unanswered question shows an amber ring and the dark area or a swipe down puts it away for later; the final save card still refuses until every required answer is given."}
+  ]
+ },
+ {
+  "n": 3,
+  "title": "Buzz and sound",
+  "q": "Which buzz and sound set should the cards use?",
+  "opts": [
+   {"k": "A", "t": "Approve A", "d": "Buzz and soft sounds both on, each with a switch in Profile", "rec": 1,
+    "out": "FEEL: the small set of the page (tick 12 ms, ruler step 8, not-yet knock 45, yes 14-40-26, no 22, careful 40-60-40, mic on 18, saved 10-50-10-50-40) with its soft sounds made on the phone, both on by default, each with a switch in Profile (आवाज, कंपन). Never the only signal: a tick, colour and words always show too. Add the patterns to shared/utils/haptics.ts."},
+   {"k": "B", "t": "Approve B", "d": "Buzz on, sound off until switched on",
+    "out": "FEEL: the same buzz set, on by default; the sounds exist but are off until switched on in Profile (आवाज)."}
+  ]
+ },
+ {
+  "n": 4,
+  "title": "Voice on the cards",
+  "q": "Where should the mic appear on the cards?",
+  "opts": [
+   {"k": "A", "t": "Approve A", "d": "Mic first on say-it cards; a small say-it chip on pick and number cards", "rec": 1,
+    "out": "VOICE: say-it cards open with the big mic and a 'type instead' box always open; pick-one and number cards get a small बोला chip. Voice fills ONLY the one answer asked (a row of the list, or the number), never a new row; the person reads the words and confirms before anything is kept. Which mic piece to use (device recogniser first, planning mic as fallback) and its consent wording is for the CTO and me to confirm before any voice card ships."},
+   {"k": "B", "t": "Approve B", "d": "Mic only on say-it cards (smaller change)",
+    "out": "VOICE: the mic appears only on say-it cards and on the stack card that asks for something missing; pick-one and number cards have no mic. Typing is always one tap away. The same consent check applies before any voice card ships."}
+  ]
+ },
+ {
+  "n": 5,
+  "title": "Order of building: smallest first",
+  "q": "How much should be built first?",
+  "opts": [
+   {"k": "A", "t": "Approve A", "d": "A pilot: the frame, the buzz, yes or no and pick one, on 2 screens (SMALL)", "rec": 1,
+    "out": "BUILD ORDER (SMALL, on the test branch, after the CTO sizes it and within the scope freeze): the AskSheet frame, the buzz and sound file, the yes-or-no body and the pick-one body, adopted by exactly two screens: 'was the task done' (logs/shramsathi TaskCloseConfirm) and 'why was there no work today' (logs NoWorkReasonSheet). I try them on the test phone, then decide the rest. Nothing else is built."},
+   {"k": "B", "t": "Approve B", "d": "Phase 1 straight away: yes or no and pick one on all 12 S rows (BIGGER)",
+    "out": "BUILD ORDER (BIGGER, on the test branch, after the CTO sizes it and within the scope freeze): the AskSheet frame, the buzz and sound file, the yes-or-no body and the pick-one body, adopted by the 12 S rows of the page's map, one screen per commit. Number, say-it and the card stack wait until after the 3 Dec test APK."}
+  ]
+ }
+]

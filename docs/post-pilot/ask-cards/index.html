@@ -1,0 +1,527 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PARKED - Ask cards for the whole app</title><style>
+*{box-sizing:border-box}
+html{background:#f3f1ec}
+body{margin:0;color:#1c1917;font:16px/1.5 "Segoe UI",system-ui,-apple-system,"Noto Sans Devanagari","Nirmala UI",sans-serif}
+.page{max-width:1260px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:30px;line-height:1.2;margin:0 0 6px}
+h2{font-size:24px;line-height:1.25;margin:0 0 4px}
+h3{font-size:17px;margin:22px 0 4px}
+p{margin:6px 0}
+.lead{font-size:18px;color:#44403c;max-width:820px}
+.small{font-size:14px;color:#57534e}
+.sec,.blk{background:#fff;border-radius:18px;padding:22px 20px 26px;margin:26px 0;box-shadow:0 1px 0 #e7e5e4}
+.num{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#065f46;color:#fff;font-weight:800;margin-right:10px;vertical-align:2px}
+.wrong{border-left:5px solid #b91c1c;background:#fef2f2;padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+.fix{border-left:5px solid #065f46;background:#ecfdf5;padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+.warn{border-left:5px solid #b45309;background:#fffbeb;padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+.size{margin:16px 0 0;padding:9px 14px;border-radius:10px;background:#f5f5f4;font-size:14.5px;font-weight:600}
+.size b.s{color:#065f46}.size b.b{color:#9a3412}
+ol.rank{margin:8px 0 0;padding-left:22px}
+ol.rank li{margin:9px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid #e7e5e4;padding:7px 8px;text-align:left;vertical-align:top}
+th{font-size:12.5px;color:#57534e;position:sticky;top:0;background:#fff}
+tr.grp td{background:#f5f5f4;font-weight:800;font-size:13.5px;color:#292524}
+td.mr,.mr{font-family:"Noto Sans Devanagari","Nirmala UI","Mangal",sans-serif}
+.v{display:inline-block;border-radius:6px;padding:1px 8px;font-weight:800;font-size:12.5px;white-space:nowrap}
+.v.k1{background:#d1fae5;color:#065f46}.v.k2{background:#e0e7ff;color:#3730a3}.v.k3{background:#fef3c7;color:#92400e}.v.k4{background:#fce7f3;color:#9d174d}.v.k5{background:#e7e5e4;color:#292524}
+.v.s{background:#d1fae5;color:#065f46}.v.m{background:#fef3c7;color:#92400e}.v.l{background:#fde8e8;color:#8a1c1c}
+details{margin:10px 0;border:1px solid #e7e5e4;border-radius:10px;padding:8px 14px;background:#fafaf9}
+summary{cursor:pointer;font-weight:700}
+details ul{margin:8px 0 4px;padding-left:20px;font-size:14.5px}
+details li{margin:4px 0}
+code{font:12.5px/1.4 Consolas,monospace;background:#f1efe9;padding:1px 5px;border-radius:5px}
+button{font-family:inherit}
+:focus-visible{outline:3px solid #1448e6;outline-offset:2px}
+
+/* ---------- the demo: controls left, phone right ---------- */
+.demo{display:grid;grid-template-columns:minmax(0,1fr) 406px;gap:26px;align-items:start;margin-top:14px}
+@media (max-width:900px){.demo{grid-template-columns:minmax(0,1fr)}}
+.kinds{display:grid;gap:8px}
+.kbtn{display:flex;gap:12px;align-items:flex-start;text-align:left;border:2px solid #e7e5e4;background:#fff;border-radius:14px;padding:11px 13px;cursor:pointer;font-size:15px}
+.kbtn b{display:block;font-size:16px}
+.kbtn small{display:block;color:#57534e;font-size:13.5px;line-height:1.35;margin-top:2px}
+.kbtn[aria-pressed=true]{border-color:#065f46;background:#ecfdf5}
+.kbtn .v{margin-top:2px}
+.sw{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+.sw label{display:flex;align-items:center;gap:8px;border:1px solid #d6d3d1;border-radius:99px;padding:6px 14px;background:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.sw input{width:18px;height:18px}
+.fx{margin-top:12px;border-radius:12px;background:#1c1917;color:#f5f5f4;padding:9px 13px;font:600 13px/1.4 Consolas,monospace;min-height:42px}
+.fx b{color:#6ee7b7}
+.dwrap{position:sticky;top:12px}
+.dphone{width:100%;max-width:406px;height:724px;border:8px solid #1c1917;border-radius:38px;overflow:hidden;position:relative;background:#f5f5f0;font-family:"Noto Sans Devanagari","Nirmala UI","Mangal","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+.dphone.pulse{box-shadow:0 0 0 5px #6ee7b7}
+.bgapp{position:absolute;inset:0;padding:10px;pointer-events:none}
+.bgapp .row1{display:flex;gap:8px;align-items:center}
+.bgapp .gear{width:44px;height:44px;border-radius:50%;background:#ecfdf5}
+.bgapp .plaque{flex:1;height:46px;border-radius:12px;background:linear-gradient(135deg,#0b4a33,#14532d);border:2.5px solid #c9a13b;color:#f8e7b0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+.bgapp .wc{width:62px;height:36px;border-radius:99px;background:#eff6ff}
+.bgapp .big{margin-top:14px;border-radius:22px;padding:18px 16px;color:#fff;font-weight:900;font-size:21px}
+.bgapp .big small{display:block;font-weight:700;font-size:13px;opacity:.9;margin-top:3px}
+.bgapp .g{background:linear-gradient(135deg,#047857,#065f46)}
+.bgapp .b{background:linear-gradient(135deg,#1448e6,#1d3fb8)}
+.bgapp .line{margin-top:14px;height:64px;border-radius:18px;background:#fff;box-shadow:0 4px 18px -8px rgba(28,25,23,.18)}
+.scene{position:absolute;inset:0;overflow:hidden}
+.bd{position:absolute;inset:0;background:rgba(28,25,23,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;transition:opacity .3s}
+.scene.on .bd{opacity:1}
+.sh{position:absolute;left:8px;right:8px;bottom:10px;background:#fff;border-radius:30px;padding:16px 16px 16px;box-shadow:0 -10px 40px -10px rgba(0,0,0,.4);transform:translateY(118%);transition:transform .45s cubic-bezier(.2,1.25,.4,1);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.scene.on .sh{transform:none}
+.scene.out .sh{transform:translateY(122%);transition:transform .35s ease-in}
+.sh.tall{top:54px;display:flex;flex-direction:column}
+.grab{width:44px;height:5px;border-radius:3px;background:#d6d3d1;margin:0 auto 10px;flex:none}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex:none}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:800;background:#fef3c7;color:#92400e}
+.chip.n{background:#f5f5f4;color:#44403c}
+.chip.g{background:#ecfdf5;color:#065f46}
+.ear{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:99px;border:2px solid #d1fae5;background:#ecfdf5;color:#065f46;font-weight:800;font-size:15px;cursor:pointer}
+.ill{height:150px;border-radius:22px;background:#fde4e4;display:grid;place-items:center;flex:none}
+.q{margin:12px 0 0;text-align:center;font-size:29px;line-height:1.25;font-weight:900;color:#1c1917}
+.qs{margin:4px 0 0;text-align:center;font-size:15px;font-weight:800;color:#78716c}
+.abtns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.yes,.no{height:122px;border-radius:26px;font-size:34px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border:0}
+.yes{background:linear-gradient(160deg,#059669,#047857);color:#fff;animation:glow 1.8s ease-in-out infinite}
+.no{background:#fff;color:#44403c;border:3px solid #d6d3d1}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}50%{box-shadow:0 0 0 12px rgba(16,185,129,0)}}
+.swipe{display:flex;justify-content:space-between;margin-top:10px;font-size:13px;font-weight:800;color:#78716c}
+.stamp{position:absolute;top:26px;padding:6px 14px;border-radius:14px;font-size:26px;font-weight:900;opacity:0;border:4px solid;pointer-events:none}
+.stamp.y{right:18px;color:#047857;border-color:#047857;transform:rotate(12deg)}
+.stamp.n{left:18px;color:#57534e;border-color:#57534e;transform:rotate(-12deg)}
+.go{width:100%;min-height:66px;border-radius:22px;border:0;background:linear-gradient(160deg,#059669,#047857);color:#fff;font-size:22px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;flex:none}
+.go[disabled]{background:#e7e5e4;color:#a8a29e;cursor:default}
+.ghost{width:100%;min-height:52px;border-radius:18px;border:2px solid #d6d3d1;background:#fff;color:#292524;font-size:17px;font-weight:800;cursor:pointer;margin-top:8px;flex:none}
+.res{position:absolute;left:14px;right:14px;top:50%;transform:translateY(-50%);background:#fff;border-radius:26px;padding:22px 18px;text-align:center;box-shadow:0 18px 50px -12px rgba(0,0,0,.5)}
+.res b{display:block;font-size:24px;font-weight:900;color:#065f46}
+.res span{display:block;font-size:14px;color:#57534e;font-weight:700;margin-top:4px}
+.res button{margin-top:14px}
+.conf{position:absolute;left:0;top:0;width:10px;height:14px;border-radius:2px;pointer-events:none;opacity:0}
+/* k2 pick list */
+.pick{position:relative;flex:1;min-height:0;margin:6px -6px 0}
+.pscroll{overscroll-behavior:contain;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;padding:0 6px;scrollbar-width:none}
+.pscroll::-webkit-scrollbar{display:none}
+.prow{scroll-snap-align:center;height:72px;margin:8px 0;border-radius:20px;border:3px solid #e7e5e4;background:#fff;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:21px;font-weight:900;color:#44403c;cursor:pointer;transform:scale(.94);transition:transform .15s,background .15s,border-color .15s,color .15s}
+.prow i{flex:none;width:14px;height:14px;border-radius:50%;background:#d6d3d1}
+.prow.on{transform:scale(1);background:#065f46;border-color:#065f46;color:#fff}
+.prow.on i{background:#fff}
+.slot{position:absolute;left:6px;right:6px;top:50%;height:84px;margin-top:-42px;border-radius:24px;background:#ecfdf5;border:2px dashed #a7f3d0}
+.hint{position:absolute;left:0;right:0;top:14px;text-align:center;font-size:16px;font-weight:800;color:#78716c;z-index:1;pointer-events:none;line-height:1.2}
+.hint svg{display:inline-block;color:#a8a29e}
+.prow{position:relative;z-index:1}
+.fade{position:absolute;left:0;right:0;height:46px;pointer-events:none;z-index:2}
+.fade.t{top:0;background:linear-gradient(#fff,rgba(255,255,255,0))}
+.fade.b{bottom:0;background:linear-gradient(rgba(255,255,255,0),#fff)}
+.mic{display:inline-flex;align-items:center;gap:8px;min-height:46px;padding:0 16px;border-radius:99px;border:2px solid #fbcfe8;background:#fdf2f8;color:#9d174d;font-weight:800;font-size:15px;cursor:pointer}
+.mic.live{background:#be185d;border-color:#be185d;color:#fff}
+.heard{margin-top:8px;border-radius:14px;background:#ecfdf5;color:#065f46;padding:7px 12px;font-size:14px;font-weight:800}
+/* k3 number */
+.bignum{font-size:92px;line-height:1.05;font-weight:900;color:#065f46;text-align:center;margin:10px 0 0}
+.bignum.zero{color:#d6d3d1}
+.unit{text-align:center;font-size:18px;font-weight:800;color:#57534e;margin-top:2px}
+.ruler{position:relative;margin:14px -6px 0;height:92px;flex:none}
+.rscroll{overscroll-behavior:contain;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;display:flex;align-items:flex-end;padding:0 calc(50% - 11px)}
+.rscroll::-webkit-scrollbar{display:none}
+.tk{flex:none;width:22px;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.tk i{display:block;width:3px;height:22px;border-radius:2px;background:#d6d3d1}
+.tk.f i{height:44px;background:#78716c}
+.tk b{font-size:14px;font-weight:900;color:#57534e;height:22px;line-height:22px}
+.needle{position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;border-radius:2px;background:#059669;z-index:2;pointer-events:none}
+.pm{display:flex;gap:10px;margin-top:12px;flex:none}
+.pm button{flex:1;min-height:60px;border-radius:18px;border:2px solid #d6d3d1;background:#fff;font-size:30px;font-weight:900;color:#292524;cursor:pointer}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;justify-content:center;flex:none}
+.chips button{min-height:46px;min-width:56px;border-radius:99px;border:2px solid #e7e5e4;background:#fff;font-size:18px;font-weight:900;color:#292524;cursor:pointer;padding:0 14px}
+/* k4 say it */
+.micbig{position:relative;width:132px;height:132px;margin:14px auto 6px;flex:none}
+.micbig button{position:absolute;inset:0;border-radius:50%;border:0;background:linear-gradient(160deg,#db2777,#be185d);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:2}
+.micbig .ring{position:absolute;inset:0;border-radius:50%;border:3px solid #db2777;opacity:0}
+.micbig.live .ring{animation:ring 1.5s ease-out infinite}
+.micbig.live .ring:nth-child(2){animation-delay:.5s}
+.micbig.live .ring:nth-child(3){animation-delay:1s}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.9);opacity:0}}
+.bars{display:flex;gap:4px;justify-content:center;align-items:center;height:34px;margin-top:6px;flex:none}
+.bars i{width:6px;border-radius:3px;background:#db2777;height:8px}
+.live ~ .bars i,.bars.on i{animation:bar .9s ease-in-out infinite}
+.bars i:nth-child(2n){animation-delay:.15s!important}.bars i:nth-child(3n){animation-delay:.3s!important}
+@keyframes bar{0%,100%{height:8px}50%{height:30px}}
+.say{text-align:center;font-size:25px;font-weight:900;margin:8px 0 0;line-height:1.3}
+.hbox{margin-top:10px;border-radius:20px;background:#f5f5f4;border:2px solid #e7e5e4;padding:12px 14px;font-size:21px;font-weight:800;line-height:1.35;flex:none}
+.hbox small{display:block;font-size:12.5px;font-weight:800;color:#78716c;margin-bottom:2px}
+.tbox{width:100%;min-height:62px;margin-top:10px;border-radius:18px;border:3px solid #d6d3d1;padding:10px 14px;font:800 19px/1.3 inherit;font-family:inherit}
+/* k5 stack */
+.sbar{height:10px;border-radius:5px;background:#e7e5e4;overflow:hidden;flex:none;margin:2px 0 8px}
+.sbar b{display:block;height:100%;width:0;background:linear-gradient(90deg,#047857,#10b981);border-radius:5px;transition:width .4s}
+.stack{position:relative;flex:1;min-height:0;margin:0 -6px}
+.sscroll{overscroll-behavior:contain;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;padding:0 6px}
+.sscroll::-webkit-scrollbar{display:none}
+.sscroll.lockd{overflow-y:hidden;touch-action:none}
+.sc{scroll-snap-align:start;height:100%;padding:2px 0 8px}
+.cd{height:100%;border-radius:26px;background:linear-gradient(180deg,#ecfdf5,#fff 55%);border:2px solid #d1fae5;padding:16px 16px 14px;display:flex;flex-direction:column}
+.cd.ask{border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.18)}
+.cd.good{border-color:#10b981}
+.cd .h{font-size:30px;line-height:1.2;font-weight:900;color:#065f46;margin:10px 0 0}
+.cd .s{font-size:18px;font-weight:800;color:#44403c;margin:6px 0 0}
+.cd .push{margin-top:auto}
+.cd .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cd .two button{min-height:76px;border-radius:22px;font-size:24px;font-weight:900;cursor:pointer;border:3px solid #d6d3d1;background:#fff;color:#44403c}
+.cd .two .yy{background:linear-gradient(160deg,#059669,#047857);color:#fff;border:0}
+.cd .ctag{align-self:flex-start;background:#d1fae5;font-size:14px}
+.cd .tickd{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#10b981;color:#fff;margin-left:8px;vertical-align:middle}
+.downh{text-align:center;font-size:13px;font-weight:800;color:#78716c;margin-top:8px}
+.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.railv{position:absolute;right:2px;top:4px;bottom:12px;width:7px;border-radius:4px;background:#e7e5e4;overflow:hidden;z-index:3}
+.railv b{position:absolute;left:0;right:0;top:0;height:0;background:linear-gradient(180deg,#1448e6,#3b82f6);transition:height .35s}
+/* before pictures */
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:12px 0 6px}
+.cap{font:700 13px/1.3 "Segoe UI",system-ui,sans-serif;margin:0 0 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:340px}
+.tag{display:inline-block;border-radius:6px;padding:2px 8px;font-weight:800;font-size:12px}
+.tag.now{background:#fde8e8;color:#8a1c1c}.tag.a{background:#d1fae5;color:#065f46}
+.bf{width:320px;border:1px solid #b9b5ad;border-radius:18px;background:#f8f7f3;padding:12px;font-family:"Noto Sans Devanagari","Nirmala UI","Mangal","Segoe UI",sans-serif;overflow:hidden}
+.bf .bsec{background:#fff;border:1px solid #e7e5e4;border-radius:22px;padding:11px 12px;margin-top:9px}
+.bf .bt{font-size:15px;font-weight:800;color:#1c1917}
+.bf .bsm{font-size:13px;font-weight:700;color:#57534e;margin-top:2px}
+.bf .bch{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.bf .bch span{border-radius:99px;border:1px solid #d6d3d1;background:#fff;padding:7px 13px;font-size:14px;font-weight:800}
+.bf .bbtn{margin-top:10px;min-height:46px;border-radius:16px;background:#b45309;color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center}
+.bf .bin{margin-top:7px;min-height:46px;border-radius:14px;border:2px solid #d6d3d1;background:#fff;padding:10px 12px;font-size:15px;font-weight:700;color:#78716c}
+.bf .brow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fxtable td:first-child{font-weight:800;white-space:nowrap}
+.fxtable button{border:2px solid #065f46;background:#fff;color:#065f46;border-radius:99px;padding:5px 14px;font-weight:800;cursor:pointer;font-size:13.5px}
+@media (prefers-reduced-motion:reduce){.sh,.scene .bd,.yes,.micbig .ring,.bars i,.prow,.sbar b,.railv b{animation:none!important;transition:none!important}}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z M19 10v2a7 7 0 0 1-14 0v-2 M12 19v3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-spk" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z M15.5 8.5a5 5 0 0 1 0 7 M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-spray" viewBox="0 0 120 120"><rect x="38" y="46" width="34" height="56" rx="10" fill="#f9a8a8"/><rect x="44" y="30" width="22" height="20" rx="5" fill="#ef7f7f"/><path d="M66 36h22l8-6" fill="none" stroke="#ef7f7f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="104" cy="28" r="3.5" fill="#60a5fa"/><circle cx="110" cy="38" r="3" fill="#60a5fa"/><circle cx="100" cy="40" r="2.6" fill="#93c5fd"/><circle cx="108" cy="22" r="2.4" fill="#93c5fd"/></symbol>
+</defs></svg>
+<div class="page">
+<div class="wrong" style="font-size:17px"><b>PARKED by the founder on 21 Nov.</b> This is one variation we tried. It is not to be built and not to be included anywhere. It was the wrong direction: voice stays the way you talk to the app, and the "आज काय काम झालं" flow stays exactly as it is. It is kept here only for reference. Do not answer the five decisions below.</div>
+<h1>Ask cards: one look for every confirm and every "go further" in the app</h1>
+<p class="lead">You said: "check the schedule maker's design and make everything in that card design where a user either needs to confirm or go further: haptic scrolls, rich design, scrollable big interactive pop-out questions and voice inputs where needed, not for this bit but for the entire app, without costing too much or rework." This page does exactly that as a design reference. Nothing is built.</p>
+<p class="small"><b>What I took as "the schedule maker's design":</b> the newest tappable schedule (the v5/v6 page at localhost:3075/v5.html): full-screen cards that snap one at a time with a tick, the question that rises as a big sheet with a giant हो and नाही (tap, or swipe the sheet right or left), the screen that will not move on until you answer, one continuous progress bar, and read-aloud. If you meant a different page, tell me which and I will redo this. <b>Everything on this page works with your finger or mouse.</b> The sample words and numbers on the phones are samples. Marathi that is not copied from the app is marked draft and needs your review. On a computer the buzz shows as a green glow and a line under the phone; open this page on an Android phone to feel it.</p>
+
+<div class="blk" id="short"><h2>The short version</h2>
+<ol class="rank">
+<li><b>Five kinds of card cover every confirm in the app:</b> yes or no, pick one, a number, say it, and a stack of cards to go through. They all share one frame, so the look and the buzz are the same everywhere.</li>
+<li><b>It is cheap because the frame is one piece of code and the screens keep their logic.</b> The app already has a buzz helper (<code>shared/utils/haptics.ts</code>) and a mic component; a screen adopts a card by changing what wraps its question, not what it saves. I counted the screens from the code in the map under decision 4.</li>
+<li><b>It is a design reference only.</b> Your scope freeze (19 Nov) still stands; decision 5 says what could be built before 3 Dec and what should wait.</li>
+</ol></div>
+
+<div class="sec" id="s1"><h2><span class="num">1</span>One look, five kinds of ask card</h2>
+<p>Try every kind on the phone. The same frame holds all five: a handle to pull down, a pale card, huge answers, one big green button, a read-aloud button (ऐका) and the buzz and tick.</p>
+<div class="demo">
+<div>
+<div class="kinds" id="kinds">
+<button type="button" class="kbtn" data-k="1" aria-pressed="true"><span class="v k1">1</span><span><b>हो / नाही: yes or no</b><small>Confirm a line, a delete, a consent, "was it done?". Giant buttons, or swipe the sheet right for हो and left for नाही.</small></span></button>
+<button type="button" class="kbtn" data-k="2" aria-pressed="false"><span class="v k2">2</span><span><b>एक निवडा: pick one</b><small>Plot, schedule, day, reason, role. A list that snaps with a tick at every row; nothing is picked until you touch it.</small></span></button>
+<button type="button" class="kbtn" data-k="3" aria-pressed="false"><span class="v k3">3</span><span><b>आकडा: a number</b><small>People, hours, amount, days. A huge number and a ruler you slide, with minus, plus and quick numbers.</small></span></button>
+<button type="button" class="kbtn" data-k="4" aria-pressed="false"><span class="v k4">4</span><span><b>बोला: say it</b><small>Voice first. Shows the words it heard in a big box; right, say again, or type. Typing is always one tap away.</small></span></button>
+<button type="button" class="kbtn" data-k="5" aria-pressed="false"><span class="v k5">5</span><span><b>कार्डं: a stack to go through</b><small>Many things to check one by one (a voice result, a wizard, a bill). One progress bar; the last card saves.</small></span></button>
+</div>
+<div class="sw">
+<label><input type="checkbox" id="lock" checked> Hold the screen until a question is answered</label>
+<label><input type="checkbox" id="snd" checked> Sound</label>
+</div>
+<div class="fx" id="fx" aria-live="polite">Feel: tap anything on the phone.</div>
+<div class="fix"><b>What every kind keeps the same:</b> the handle on top; the amber chip that says what the screen wants ("प्रश्न: उत्तर द्या, मग पुढे"); ऐका on the top right; the answers at the thumb, at least 60 px tall; the single green action at the bottom; swipe down means "later" and never loses what you did.</div>
+<div class="warn"><b>Held screen:</b> with the switch on, a question holds the screen and shakes if you push past it (the Schedule Maker's rule). With it off, the amber chip only says "you can answer later". This is decision 2.</div>
+</div>
+<div class="dwrap"><p class="cap"><span class="tag a">AFTER (live)</span>try me</p>
+<div class="dphone" id="dphone">
+<div class="bgapp" aria-hidden="true"><div class="row1"><div class="gear"></div><div class="plaque">माझी शेती</div><div class="wc"></div></div><div class="big g">झालेलं काम सांगा<small>आवाजाने किंवा लिहून</small></div><div class="big b">नियोजन करा<small>पुढची कामं ठरवा</small></div><div class="line"></div><div class="line"></div></div>
+<div class="scene" id="scene"></div>
+</div></div>
+</div>
+
+<h3>BEFORE: how the same moments look in the app today</h3>
+<p class="small">Redrawn from the code (shape only, sizes as in the code): the "no work today" reason sheet and the Schedule Maker's own "one work" screen.</p>
+<div class="row">
+<div><p class="cap"><span class="tag now">BEFORE</span>the reason for a no-work day (NoWorkReasonSheet)</p>
+<div class="bf"><div class="bt">का? (ऐच्छिक)</div><div class="bch"><span>पाऊस / हवामान</span><span>वीज नव्हती</span><span>पाणी नव्हतं</span><span>यंत्र बिघडलं</span><span>माणसं नव्हती</span><span>दुसरं काही</span></div><div class="bbtn">दिवस नोंदवा</div></div></div>
+<div><p class="cap"><span class="tag now">BEFORE</span>the Schedule Maker, one work (OwnScheduleMaker)</p>
+<div class="bf"><div class="bsec"><div class="bt">काम</div><div class="bin">काम लिहा</div><div class="bch"><span>सिंचन</span><span>खत</span><span>फवारणी</span><span>काम</span></div></div><div class="bsec"><div class="bt">कधी</div><div class="brow"><div class="bin">दिवस ०</div><div class="bin">दिवस ०</div></div></div><div class="bbtn">हे काम जोडा</div></div></div>
+</div>
+<div class="wrong"><b>What is wrong with BEFORE:</b> small chips and small buttons that need a precise tap; no feel when you choose; every screen has its own look; the mic is a separate block, not part of the question; nothing says what the screen wants from you. All of that changes in the AFTER phone above.</div>
+</div>
+
+<div class="sec" id="s2"><h2><span class="num">2</span>How firmly a question holds the screen</h2>
+<p>In the Schedule Maker a question locks the scroll: you answer, then you go on. That is right when the answer changes what is saved (a dose, a "was it done"). It is wrong for a screen that only shows information, where a lock feels like a bug.</p>
+<p>Switch "Hold the screen" on and off in section 1 and try kinds 1 and 5 both ways. On: the sheet shakes and thuds if you push past or tap the dark area. Off: tapping the dark area or swiping down puts the question away "for later" and the screen shows an amber ring on whatever is unanswered; the final save card still refuses until everything is answered.</p>
+<div class="size"><b class="s">Recommended A</b>: hold only when the answer changes what is saved; information cards never hold. <b class="b">B</b>: never hold, only the amber ring.</div>
+</div>
+
+<div class="sec" id="s3"><h2><span class="num">3</span>Buzz and sound: one small set, used the same everywhere</h2>
+<p>Press "Feel it". On an Android phone each one buzzes with the pattern in the table; on a computer the phone glows and a sound plays. The set is small on purpose so a farmer learns it by body, not by reading: a short tick means "moved one step", a heavy knock means "not yet", two taps mean "yes", a long run means "saved".</p>
+<div class="tw"><table class="fxtable"><thead><tr><th>Name</th><th>When</th><th>Buzz (milliseconds)</th><th>Sound</th><th></th></tr></thead><tbody id="fxrows"></tbody></table></div>
+<p class="small">Facts from the code: the app already has a buzz helper with five patterns (<code>shared/utils/haptics.ts</code>: light 10, medium 40, heavy 70, success 30-50-30, error 50-30-50-30-50) and the Capacitor haptics plugin is installed in <code>package.json</code> but not used anywhere yet. Today the buzz fires on tab taps, swipes and toggles; no screen that confirms or chooses buzzes. The sound is made on the phone with Web Audio (no files), as in the Schedule Maker page. Rules: never the only signal (the card always also shows a tick, a colour and words); a Profile switch for sound and for buzz; nothing plays when the phone is on silent.</p>
+<div class="size"><b class="s">Recommended A</b>: buzz and sound both on by default, each with a switch in Profile. <b class="b">B</b>: buzz on, sound off until switched on.</div>
+</div>
+
+<div class="sec" id="s4"><h2><span class="num">4</span>Voice on the cards</h2>
+<p>Voice is the front door of the app, but never the only door (your TAP-1 rule: voice first, never voice only). On the cards:</p>
+<div class="tw"><table><thead><tr><th>Card</th><th>Where the mic is</th><th>What the voice may fill</th></tr></thead><tbody>
+<tr><td><span class="v k1">1</span> yes or no</td><td>No mic. The two big buttons are the voice of the hand; ऐका reads the question aloud.</td><td>Nothing.</td></tr>
+<tr><td><span class="v k2">2</span> pick one</td><td>A small बोला chip at the top of the list.</td><td>Only the pick, matched to a row in the list; never a new row.</td></tr>
+<tr><td><span class="v k3">3</span> a number</td><td>A small बोला chip under the ruler.</td><td>Only the number.</td></tr>
+<tr><td><span class="v k4">4</span> say it</td><td>The big mic is the first thing; a "type instead" box is always open below.</td><td>The words; the person reads them and confirms before anything is kept.</td></tr>
+<tr><td><span class="v k5">5</span> a stack</td><td>On the card that is asking for something missing.</td><td>That one missing thing only.</td></tr>
+</tbody></table></div>
+<p>This is the rule the Schedule Maker already follows (voice fills only the one box it was asked for). Try kind 4: tap the mic, then the states under it. The microphone in this demo is a drawing: the words it "hears" are a fixed sample sentence, not a real recording.</p>
+<div class="size"><b class="s">Recommended A</b>: mic first on say-it cards, a small say-it chip on pick and number cards. <b class="b">B</b>: mic only on say-it cards (smaller change).</div>
+</div>
+
+<div class="blk" id="map"><h2>The whole app, screen by screen</h2>
+<p>A code survey of the phone app found <b>32 places where the farmer confirms, chooses or goes further</b> (some are groups of screens). They are merged here into <b>29 rows</b>, plus about fifteen small sheets listed at the end. Three screens (PlanWorkPage with PlanForm, OwnScheduleMaker and the assignee choice) have their questions designed by the Schedule making session; this page counts them for size only. Each row says what kind of card it would become and how big the change is. The size is the change to that one screen, not a guess of hours:</p>
+<ul>
+<li><span class="v s">S</span> <b>skin</b>: the screen already asks one thing; its wrapper is swapped for the ask-card frame and the buttons get bigger. Its logic, its saving and its tests stay. <b>12 rows.</b></li>
+<li><span class="v m">M</span> <b>cards</b>: the screen asks several things on one page; they become a stack of cards. The saving stays, each card is a small new piece. <b>10 rows.</b></li>
+<li><span class="v l">L</span> <b>large</b>: its own long flow. Only the frame now, cards later. <b>1 row.</b></li>
+<li><span class="v k5">leave</span> / <span class="v k5">stays</span>: not touched this round (your rules on the mic and waiting screens, consent wording, erasure, correction). <b>6 rows.</b></li>
+</ul>
+<div class="tw"><table><thead><tr><th>Moment (files and size in lines)</th><th>Card kind</th><th>Size</th><th>What changes</th></tr></thead><tbody>
+<tr class="grp"><td colspan="4">Every day</td></tr>
+<tr><td><b>Speak into the mic</b><div class="small">core/speak SpeakHost, SpeakScreen (201, 76)</div></td><td>&ndash;</td><td><span class="v k5">stays</span></td><td>No card. The mic screen and the waiting screen stay exactly as they are (your rule).</td></tr>
+<tr><td><b>Sathi asks a question after a voice note</b><div class="small">logs/voiceResult SathiQuestionCard (68)</div></td><td><span class="v k1">1</span> <span class="v k2">2</span></td><td><span class="v s">S</span></td><td>Yes or no, or a pick, in the big sheet.</td></tr>
+<tr><td><b>Check the words it heard, set place and day, save</b><div class="small">logs/checkSave CheckSaveScreen (146)</div></td><td><span class="v k5">5</span></td><td><span class="v m">M</span></td><td>Words, place, day, save as four cards.</td></tr>
+<tr><td><b>Open a recording or a day and listen</b><div class="small">ClipGlance, TodayActivityFeed, DaySheets, ScheduleDaySheet (154, 119, 176, 144)</div></td><td>&ndash;</td><td><span class="v s">S</span></td><td>Frame only: same rise, handle and ऐका. No question.</td></tr>
+<tr><td><b>Approve or doubt a labour entry (money)</b><div class="small">labour ReviewSheet, ReviewCardParts (505, 158)</div></td><td><span class="v k1">1</span> <span class="v k5">5</span></td><td><span class="v m">M</span></td><td>One card per entry; swipe right to approve, left to doubt; the 3 second undo stays.</td></tr>
+<tr><td><b>Attention item: done, change the time, decide later</b><div class="small">attention AttentionItemRow (241)</div></td><td><span class="v k2">2</span> <span class="v k4">4</span></td><td><span class="v s">S</span></td><td>Three big options; the "why" can be spoken.</td></tr>
+<tr><td><b>Was the task done?</b><div class="small">logs/shramsathi TaskCloseConfirm (77)</div></td><td><span class="v k1">1</span></td><td><span class="v s">S</span></td><td>The smallest one: a pilot candidate.</td></tr>
+<tr class="grp"><td colspan="4">Every week</td></tr>
+<tr><td><b>Product by product: yes, no, photo</b><div class="small">voiceResult ProductCard (371)</div></td><td><span class="v k1">1</span> <span class="v k5">5</span></td><td><span class="v m">M</span></td><td>One card per product.</td></tr>
+<tr><td><b>Pick a past day; pick crop and plots</b><div class="small">logs/dayPick DayPickSheet (94), context PlacePickerSheet (99)</div></td><td><span class="v k2">2</span></td><td><span class="v s">S</span></td><td>Day as a snapping list; plots keep the shared plot selector.</td></tr>
+<tr><td><b>Edit one value, add a kind, type words</b><div class="small">logs/correction TapEditSheet (180), voice TypedEntry (96)</div></td><td><span class="v k2">2</span> <span class="v k3">3</span> <span class="v k4">4</span></td><td><span class="v m">M</span></td><td>Number ruler for numbers, say-it for words.</td></tr>
+<tr><td><b>Why was there no work today?</b><div class="small">logs NoWorkReasonSheet (119)</div></td><td><span class="v k2">2</span></td><td><span class="v s">S</span></td><td>Exactly the pick-one demo above: the same six reasons.</td></tr>
+<tr><td><b>Task done: which plots, done, some left, not now</b><div class="small">plannedWork TaskDoneSheet (137)</div></td><td><span class="v k2">2</span></td><td><span class="v s">S</span></td><td>Three big options plus the plot picker.</td></tr>
+<tr><td><b>Payout: change the amount, settle, confirm again (money)</b><div class="small">work PayoutConfirmationSheet (319)</div></td><td><span class="v k3">3</span> <span class="v k1">1</span></td><td><span class="v m">M</span></td><td>Number card, then a careful yes or no with the warn buzz.</td></tr>
+<tr><td><b>Bill: photo, check lines, pick farm and crop, save (money)</b><div class="small">procurement ReceiptCaptureSheet (555), ProcurementPage (183)</div></td><td><span class="v k5">5</span></td><td><span class="v l">L</span></td><td>Frame only now. Its flow is large; cards later.</td></tr>
+<tr><td><b>Plan a work: what, where, when, who</b><div class="small">plannedWork PlanForm (300)</div></td><td><span class="v k4">4</span> <span class="v k5">5</span></td><td><span class="v m">M</span></td><td>Question order and content are the Schedule making session's design (v5.html: नियोजन करा, काम सोपवा, who does it). Here it only counts for size and uses this frame, buzz set and hold rule.</td></tr>
+<tr><td><b>Compare drill-down and "why did you do this"</b><div class="small">compare CompareSheets (294), OwnWorkSheet (150)</div></td><td>&ndash;</td><td><span class="v s">S</span></td><td>Frame only.</td></tr>
+<tr><td><b>Remove a waiting voice note; discard a result</b><div class="small">voiceDiary WaitingVoiceNotes (291), pages AiDraftsPage (131)</div></td><td><span class="v k1">1</span></td><td><span class="v s">S</span></td><td>Both use a plain browser confirm box today; becomes a careful yes or no.</td></tr>
+<tr><td><b>Correct an entry by voice, typing or tapping (money)</b><div class="small">logs/correction CorrectionScreen (240), core/speak CorrectionHost (310)</div></td><td>&ndash;</td><td><span class="v k5">leave</span></td><td>Has its own flow and prices. Not this round.</td></tr>
+<tr class="grp"><td colspan="4">Once or rarely</td></tr>
+<tr><td><b>First farm: my farm or invited; farm code or QR</b><div class="small">onboarding FirstFarmDoors (130), JoinByCodeScreen (341)</div></td><td><span class="v k2">2</span> <span class="v k1">1</span></td><td><span class="v s">S</span></td><td>Two big doors.</td></tr>
+<tr><td><b>First farm wizard: name, village, confirm</b><div class="small">onboarding FirstFarmWizard (427)</div></td><td><span class="v k5">5</span></td><td><span class="v m">M</span></td><td>Cards with one bar instead of dots.</td></tr>
+<tr><td><b>Add a plot: name, area, variety; material; planting date</b><div class="small">profile AddPlotWizard (480)</div></td><td><span class="v k5">5</span></td><td><span class="v m">M</span></td><td>Three cards, one bar; the step counter becomes the bar.</td></tr>
+<tr><td><b>Invite someone: role, plots, money view, contact</b><div class="small">invitations InviteBuilderSheet (259), profile PlotScopePicker (181), AudienceRow (164)</div></td><td><span class="v k2">2</span> <span class="v k5">5</span></td><td><span class="v m">M</span></td><td>A stack: role, plots, who sees money, contact.</td></tr>
+<tr><td><b>Schedule: choose plot and schedule; make an own schedule</b><div class="small">scheduler ScheduleLibraryView (354), ScheduleMaker (174), ownSchedule/* (509 and others)</div></td><td><span class="v k2">2</span> <span class="v k3">3</span> <span class="v k5">5</span></td><td><span class="v m">M</span></td><td>OwnScheduleMaker (the start, made-for, stages and one-work screens): question order and content are the Schedule making session's design, counted here for size only. The library and the plot, schedule and day-0 editor: frame only.</td></tr>
+<tr><td><b>Leave a farm; remove a worker, plot or source; new QR</b><div class="small">people MembershipsList (215), FarmInviteQrSheet (301), FarmWorkersCard (237), StructureSection (255), UtilitiesSection (161)</div></td><td><span class="v k1">1</span></td><td><span class="v s">S</span></td><td>Five different confirms become one careful yes or no.</td></tr>
+<tr><td><b>Two English browser confirm boxes ("Delete this task?", "Start new shape?")</b><div class="small">scheduler PlannedTaskCard, mapping GooglePlotMap (not verified that PlannedTaskCard is reachable)</div></td><td><span class="v k1">1</span></td><td><span class="v s">S</span></td><td>Also fixes the English words.</td></tr>
+<tr><td><b>Lab test sheets</b><div class="small">tests RecordResultSheet (236), MarkCollectedSheet (91)</div></td><td>&ndash;</td><td><span class="v k5">leave</span></td><td>Rare and has its own frame.</td></tr>
+<tr class="grp"><td colspan="4">Legal: consent and erasure</td></tr>
+<tr><td><b>Consent: tick to agree, read the notice, changed notice, switches</b><div class="small">consent gate, reask, ConsentScreen (293), banners (103, 101)</div></td><td>&ndash;</td><td><span class="v k5">leave</span></td><td>Frame only, after your consent review. The wording and the single tick do not change.</td></tr>
+<tr><td><b>Location, mic, camera asks</b><div class="small">location LocationConsentPrompt (91), pages OnboardingPermissionsPage (223)</div></td><td>&ndash;</td><td><span class="v k5">leave</span></td><td>Frame only, same rule.</td></tr>
+<tr><td><b>Erase my data</b><div class="small">dataRights ErasureRequestScreen (192)</div></td><td>&ndash;</td><td><span class="v k5">leave</span></td><td>Deliberately slow. Not touched this round.</td></tr>
+</tbody></table></div>
+<details><summary>Also found, not in the table (headers only, not read in full)</summary><ul class="small"><li>FarmSwitcherSheet, OtherIncomeSheet, CostCorrectionSheet, MoneyLensDrawer (a "duplicate, sure?" confirm), QuickLogSheet, TaskCreationSheet, ObservationFormSheet, WeatherReactionPrompt, AddMemberWizard, the Link, Complete and WorkerCard sheets, CreateJobCard and AssignWorker sheets, SchedulePickerModal, MigrationSheet, Clone and EditTemplate sheets, PlannedActivityOverrideSheet. All are S or M once the frame exists.</li><li>Eight browser alert() boxes (error and info messages) become the toast, not a card.</li></ul></details>
+<div class="fix"><b>Why this is not a rebuild:</b> there is no shared sheet in the app today (79 files draw their own overlay, with layers anywhere from 50 to 200, and four feature-local frames). The ask-card frame is the first one. A screen is either old or new, so nothing breaks half-way, and screens move over one small commit at a time.</div>
+</div>
+
+<div class="sec" id="s5"><h2><span class="num">5</span>What it costs, what is reused, and in what order</h2>
+<h3>Reused (already in the app)</h3>
+<ul>
+<li>The buzz helper <code>shared/utils/haptics.ts</code> (five patterns). Today it fires on tab taps, swipes and toggles; <b>no screen that confirms or chooses buzzes</b>. Four new patterns are about ten lines.</li>
+<li>The mic piece <code>PlanMic</code> plus <code>understandPlanSpeech</code>: about ten lines to put a mic on a card. The big mic screen (<code>requestSpeak</code>) saves a whole farm log, so it is <b>not</b> reused for a card answer.</li>
+<li>The back-button helper <code>useBackDismiss</code> (32 files already use it), the plot selector from UI-9a, <code>Tap</code> and <code>BigButton</code>.</li>
+</ul>
+<h3>New (my estimate; the CTO sizes it before any build)</h3>
+<ul>
+<li>One frame (<code>AskSheet</code>): backdrop, rise, handle, the amber chip, ऐका, swipe down, the hold rule.</li>
+<li>Four bodies (yes or no, pick one, number, say it), one stack with its one bar, one file for buzz and sound, one switch in Profile. About eight small files, none long.</li>
+</ul>
+<h3>Honest risks</h3>
+<ul>
+<li><b>Marathi words</b> that are not copied from the app are drafts and need your review (हे निवडा, बोला, लिहून बदला, नंतर सांगतो, आजची नोंद तपासा).</li>
+<li><b>Voice and privacy:</b> the existing planning mic keeps the audio on the server for the AI job and a 30-day clip on the phone. There is also a device recogniser that keeps nothing but works only in the installed app (used on one screen today). A card mic should use the device recogniser first and fall back to the planning mic; that is a consent matter for you and the CTO to confirm before the voice cards ship.</li>
+<li><b>Buzz exists only on Android.</b> The app ships as an Android app (no iPhone plugin is installed), and a web page on an iPhone does not buzz. On a laptop you see a glow instead.</li>
+<li><b>Holding the screen can trap a farmer</b> if the question is unclear. So optional questions always have "नंतर", and only questions that change what is saved hold.</li>
+<li><b>Two screens are protected by your own rules:</b> the mic and waiting screens, and the voice result screen you chose on 21 Nov. They are not in this plan.</li>
+</ul>
+<p>Your scope freeze (19 Nov: small changes only, test APK with real data by 3 Dec) still stands. This page is a reference, nothing is built, and nothing would start until you say so.</p>
+<h3>Order, smallest first</h3>
+<ol class="rank">
+<li><b>Pilot:</b> the frame, the buzz, the yes or no and the pick-one, on two screens (was the task done, why no work today). You feel it on the test phone, then decide. If you dislike it, two screens go back.</li>
+<li><b>Phase 1:</b> the same two kinds on all 12 S rows.</li>
+<li><b>Phase 2, after 3 Dec:</b> number, say-it and the stack on the 10 M rows, one screen per commit, daily ones first (check and save, labour approve).</li>
+<li><b>Later:</b> the large bill flow, and the legal screens after your review.</li>
+</ol>
+<div class="size"><b class="s">Recommended A</b>: the pilot (2 screens). <b class="b">B</b>: phase 1 straight away (12 screens, K1 and K2 only). Anything bigger waits for the APK either way.</div>
+</div>
+
+</div>
+<script>
+(function(){
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return [].slice.call((r||document).querySelectorAll(s))};
+var DEV='०१२३४५६७८९';
+function dev(x){return String(x).replace(/[0-9]/g,function(c){return DEV[c]})}
+/* ---------- buzz + sound (made on the phone, no files) ---------- */
+var PAT={tick:[12],step:[8],thud:[45],yes:[14,40,26],no:[22],saved:[10,50,10,50,40],warn:[40,60,40],mic:[18],micoff:[10,30,10]};
+var DESC={tick:'tick',step:'ruler step',thud:'not yet',yes:'yes',no:'no',saved:'saved',warn:'careful',mic:'mic on',micoff:'mic off'};
+var AC=null;
+function snd(){return $('#snd').checked}
+function ac(){try{if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume()}catch(e){AC=null}return AC}
+function tone(f,dur,when,type,vol){var a=ac();if(!a||!snd())return;var t=a.currentTime+(when||0),o=a.createOscillator(),g=a.createGain();o.type=type||'sine';o.frequency.value=f;g.gain.setValueAtTime(vol||.12,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+dur+.02)}
+function click(){var a=ac();if(!a||!snd())return;var t=a.currentTime,len=Math.floor(a.sampleRate*.012),buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);for(var i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,6);var s=a.createBufferSource();s.buffer=buf;var f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=3200;f.Q.value=1.4;var g=a.createGain();g.gain.value=.9;s.connect(f);f.connect(g);g.connect(a.destination);s.start(t)}
+var SOUND={tick:function(){click()},step:function(){click()},thud:function(){tone(140,.12,0,'triangle',.25)},yes:function(){tone(880,.14,0);tone(1320,.22,.11)},no:function(){tone(300,.1,0,'triangle',.14)},saved:function(){tone(660,.12,0);tone(880,.12,.1);tone(1100,.12,.2);tone(1320,.35,.3)},warn:function(){tone(220,.18,0,'triangle',.2);tone(220,.18,.22,'triangle',.2)},mic:function(){tone(1000,.08,0)},micoff:function(){tone(700,.08,0)}};
+var fxEl=$('#fx'),ph=$('#dphone'),pt;
+function fx(name){
+  try{if(navigator.vibrate&&(!navigator.userActivation||navigator.userActivation.hasBeenActive))navigator.vibrate(PAT[name])}catch(e){}
+  try{SOUND[name]()}catch(e){}
+  fxEl.innerHTML='Feel: <b>'+DESC[name]+'</b> | buzz '+PAT[name].join('-')+' ms | sound '+(snd()?'on':'off');
+  ph.classList.add('pulse');clearTimeout(pt);pt=setTimeout(function(){ph.classList.remove('pulse')},220);
+}
+/* ---------- table of feels ---------- */
+var FEEL=[['tick','tick','Moving one step: a card, a row in a list'],['step','step','One tick on a ruler (lighter than a row)'],['thud','thud','Pushing past a question that is not answered'],['yes','yes','हो, बरोबर, a card confirmed'],['no','no','नाही, a card put aside'],['warn','warn','Before a delete or a change that cannot be undone'],['mic','mic','Mic starts listening'],['saved','saved','The whole thing was saved']];
+var fr='';FEEL.forEach(function(f){fr+='<tr><td>'+f[0]+'</td><td>'+f[2]+'</td><td>'+PAT[f[1]].join(' - ')+'</td><td>'+({tick:'dry click',step:'dry click',thud:'low knock',yes:'two rising notes',no:'one soft low note',warn:'two low notes',mic:'one short note',saved:'four rising notes'})[f[0]]+'</td><td><button type="button" data-fx="'+f[1]+'">Feel it</button></td></tr>'});
+$('#fxrows').innerHTML=fr;
+$$('[data-fx]').forEach(function(b){b.addEventListener('click',function(){fx(b.getAttribute('data-fx'))})});
+/* ---------- the phone ---------- */
+var scene=$('#scene'),kind=1,locked=function(){return $('#lock').checked};
+var timers=[];function later(f,ms){var t=setTimeout(f,ms);timers.push(t);return t}
+function clearAll(){timers.forEach(clearTimeout);timers=[];try{speechSynthesis.cancel()}catch(e){}}
+function reflow(el){void el.offsetWidth}
+function speak(text){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.lang='mr-IN';var v=speechSynthesis.getVoices();var m=v.find(function(x){return /^mr/i.test(x.lang)})||v.find(function(x){return /^hi/i.test(x.lang)});if(m)u.voice=m;u.rate=.92;speechSynthesis.speak(u)}catch(e){}}
+function earBtn(text){return '<button type="button" class="ear" data-ear aria-label="ऐका"><svg width="22" height="22"><use href="#i-spk"/></svg>ऐका</button>'}
+function openScene(html,cls){scene.className='scene';scene.innerHTML=html;reflow(scene);scene.classList.add('on')}
+function closeScene(then,dir){scene.classList.add('out');later(function(){scene.className='scene';scene.innerHTML='';if(then)then()},380)}
+function result(title,sub){
+  scene.className='scene on';scene.innerHTML='<div class="bd"></div><div class="res"><b>'+title+'</b><span>'+sub+'</span><button type="button" class="ghost" data-again>पुन्हा पाहा</button></div>';
+  $('[data-again]',scene).addEventListener('click',function(){fx('tick');show(kind)});
+}
+function confetti(){
+  var cols=['#10b981','#f59e0b','#3b82f6','#ec4899','#facc15'];
+  for(var i=0;i<22;i++){var c=document.createElement('i');c.className='conf';c.style.background=cols[i%5];c.style.left=(40+Math.random()*20)+'%';c.style.top='58%';scene.appendChild(c);
+    var dx=(Math.random()-.5)*340,dy=-(120+Math.random()*260);
+    c.animate([{transform:'translate(0,0) rotate(0)',opacity:1},{transform:'translate('+dx+'px,'+dy+'px) rotate('+(Math.random()*540)+'deg)',opacity:1,offset:.6},{transform:'translate('+dx*1.1+'px,'+(dy+330)+'px) rotate(700deg)',opacity:0}],{duration:1200+Math.random()*500,easing:'ease-out',fill:'forwards'});}
+  later(function(){$$('.conf',scene).forEach(function(c){c.remove()})},1900);
+}
+function wireEar(text){var b=$('[data-ear]',scene);if(b)b.addEventListener('click',function(){fx('tick');speak(text)})}
+function chipFor(){return locked()?'<span class="chip"><svg width="16" height="16"><use href="#i-lock"/></svg>प्रश्न: उत्तर द्या, मग पुढे</span>':'<span class="chip n">नंतर उत्तर देता येईल</span>'}
+function backdropTap(){$('.bd',scene).addEventListener('click',function(){if(locked()){var s=$('.sh',scene);s.classList.remove('shake');reflow(s);s.classList.add('shake');fx('thud')}else{fx('no');closeScene(function(){result('नंतर','प्रश्न बाजूला ठेवला. काही हरवलं नाही.')})}})}
+/* ---- kind 1: yes / no ---- */
+function k1(){
+  openScene('<div class="bd"></div><div class="sh" id="sh1"><span class="stamp y">हो</span><span class="stamp n">नाही</span><div class="grab"></div><div class="top">'+chipFor()+earBtn()+'</div><div class="ill"><svg width="118" height="118"><use href="#i-spray"/></svg></div><p class="q">आज G१ आणि G२ वर फवारणी केली, बरोबर?</p><p class="qs">तुम्ही सांगितलं तसं</p><div class="abtns"><button type="button" class="yes" data-a="y"><svg width="46" height="46"><use href="#i-check"/></svg>हो</button><button type="button" class="no" data-a="n"><svg width="40" height="40"><use href="#i-x"/></svg>नाही</button></div><div class="swipe"><span>&larr; नाही</span><span>हो &rarr;</span></div></div>');
+  var sh=$('#sh1'),sy=$('.stamp.y',sh),sn=$('.stamp.n',sh),x0=null,dx=0;
+  function answer(y){
+    fx(y?'yes':'no');if(y){confetti()}
+    sh.style.transition='transform .35s ease-in';sh.style.transform='translateX('+(y?'':'-')+'520px) rotate('+(y?18:-18)+'deg)';
+    later(function(){scene.className='scene';scene.innerHTML='';result(y?'हो':'नाही',y?'नोंद जतन झाली (नमुना).':'नोंद बदलायला उघडते (नमुना).');if(y)confetti()},330);
+  }
+  $$('[data-a]',sh).forEach(function(b){b.addEventListener('click',function(){answer(b.getAttribute('data-a')==='y')})});
+  sh.addEventListener('pointerdown',function(e){if(e.target.closest('button'))return;x0=e.clientX;dx=0;sh.setPointerCapture(e.pointerId);sh.style.transition='none'});
+  sh.addEventListener('pointermove',function(e){if(x0===null)return;dx=e.clientX-x0;sh.style.transform='translateX('+dx+'px) rotate('+dx/22+'deg)';sy.style.opacity=Math.max(0,Math.min(1,dx/90));sn.style.opacity=Math.max(0,Math.min(1,-dx/90))});
+  function up(){if(x0===null)return;x0=null;if(dx>90)return answer(true);if(dx<-90)return answer(false);sh.style.transition='transform .3s cubic-bezier(.2,1.25,.4,1)';sh.style.transform='';sy.style.opacity=0;sn.style.opacity=0}
+  sh.addEventListener('pointerup',up);sh.addEventListener('pointercancel',up);
+  backdropTap();wireEar('आज जी वन आणि जी टू वर फवारणी केली, बरोबर?');
+}
+/* ---- kind 2: pick one ---- */
+var REASONS=['पाऊस / हवामान','वीज नव्हती','पाणी नव्हतं','यंत्र बिघडलं','माणसं नव्हती','दुसरं काही'];
+function k2(){
+  var h='';REASONS.forEach(function(r,i){h+='<div class="prow" role="option" data-i="'+i+'"><i></i>'+r+'</div>'});
+  openScene('<div class="bd"></div><div class="sh tall" id="sh2"><div class="grab"></div><div class="top">'+chipFor()+earBtn()+'</div><p class="q" style="margin-top:2px">आज काम का झालं नाही?</p><div style="text-align:center;margin-top:8px;flex:none"><button type="button" class="mic" data-mic><svg width="22" height="22"><use href="#i-mic"/></svg>बोला</button><div class="heard" data-heard hidden></div></div><div class="pick"><div class="slot"></div><div class="hint" data-hint>वर-खाली सरकवा, किंवा दाबा<br><svg width="26" height="26" style="transform:rotate(180deg)"><use href="#i-down"/></svg><svg width="26" height="26"><use href="#i-down"/></svg></div><div class="fade t"></div><div class="pscroll" role="listbox" id="ps">'+h+'</div><div class="fade b"></div></div><button type="button" class="go" id="go2" disabled><svg width="28" height="28"><use href="#i-check"/></svg>हे निवडा</button></div>');
+  var ps=$('#ps'),opts=$$('.prow',ps),pitch=88,cur=-1,touched=false,user=false;
+  var pad=Math.max(0,(ps.clientHeight-72)/2);ps.style.paddingTop=pad+'px';ps.style.paddingBottom=pad+'px';ps.scrollTop=0;
+  function mark(i,quiet){if(i===cur)return;cur=i;opts.forEach(function(o,j){o.classList.toggle('on',touched&&j===i)});if(!quiet)fx('tick')}
+  function used(){touched=true;$('#go2').disabled=false;var hn=$('[data-hint]',scene);if(hn)hn.hidden=true}
+  ['pointerdown','wheel','touchstart','keydown'].forEach(function(ev){ps.addEventListener(ev,function(){user=true},{passive:true})});
+  ps.addEventListener('scroll',function(){if(!user)return;var i=Math.max(0,Math.min(opts.length-1,Math.round((ps.scrollTop-8)/pitch)));used();mark(i)},{passive:true});
+  opts.forEach(function(o,i){o.addEventListener('click',function(){user=true;used();cur=-1;mark(i);ps.scrollTo({top:8+i*pitch,behavior:'smooth'})})});
+  $('#go2').addEventListener('click',function(){fx('yes');var t=REASONS[cur];closeScene(function(){result(t,'कारण नोंदवलं (नमुना).')})});
+  $('[data-mic]',scene).addEventListener('click',function(){
+    var b=this,hd=$('[data-heard]',scene);fx('mic');b.classList.add('live');b.lastChild.textContent=' ऐकतोय…';
+    later(function(){fx('micoff');b.classList.remove('live');b.lastChild.textContent='बोला';user=true;used();hd.hidden=false;hd.textContent='ऐकलं: "पाणी नव्हतं" (नमुना)';cur=-1;mark(2);ps.scrollTo({top:8+2*pitch,behavior:'smooth'})},1500);
+  });
+  backdropTap();wireEar('आज काम का झालं नाही?');
+}
+/* ---- kind 3: a number ---- */
+function k3(){
+  var tk='';for(var n=0;n<=30;n++){tk+='<div class="tk'+(n%5===0?' f':'')+'" data-n="'+n+'"><i></i><b>'+(n%5===0?dev(n):'')+'</b></div>'}
+  openScene('<div class="bd"></div><div class="sh tall" id="sh3"><div class="grab"></div><div class="top">'+chipFor()+earBtn()+'</div><p class="q" style="margin-top:2px">आज किती माणसं कामाला आली?</p><div class="bignum zero" id="bn">&ndash;</div><div class="unit">माणसं</div><div class="ruler"><div class="needle"></div><div class="rscroll" id="rs">'+tk+'</div></div><div class="pm"><button type="button" data-d="-1" aria-label="एक कमी">&minus;</button><button type="button" data-d="1" aria-label="एक जास्त">+</button></div><div class="chips">'+[2,5,10].map(function(n){return '<button type="button" data-q="'+n+'">'+dev(n)+'</button>'}).join('')+'<button type="button" class="mic" data-mic style="min-height:46px"><svg width="22" height="22"><use href="#i-mic"/></svg>बोला</button></div><div class="heard" data-heard hidden style="flex:none"></div><div style="flex:1"></div><button type="button" class="go" id="go3" disabled><svg width="28" height="28"><use href="#i-check"/></svg>बरोबर</button></div>');
+  var rs=$('#rs'),bn=$('#bn'),cur=0,moved=false,P=22;
+  function setN(n,quiet){n=Math.max(0,Math.min(30,n));if(n!==cur||!moved){var ch=n!==cur;cur=n;moved=true;bn.textContent=dev(n);bn.classList.toggle('zero',false);$('#go3').disabled=false;if(ch&&!quiet)fx('step')}}
+  var user3=false;['pointerdown','wheel','touchstart'].forEach(function(ev){rs.addEventListener(ev,function(){user3=true},{passive:true})});
+  rs.addEventListener('scroll',function(){if(rs._prog||!user3)return;setN(Math.round(rs.scrollLeft/P))},{passive:true});
+  function to(n){rs._prog=true;rs.scrollTo({left:n*P,behavior:'smooth'});setN(n);later(function(){rs._prog=false},500)}
+  $$('[data-d]',scene).forEach(function(b){b.addEventListener('click',function(){to(cur+Number(b.getAttribute('data-d')))})});
+  $$('[data-q]',scene).forEach(function(b){b.addEventListener('click',function(){to(Number(b.getAttribute('data-q')))})});
+  $$('.tk',rs).forEach(function(t){t.addEventListener('click',function(){to(Number(t.getAttribute('data-n')))})});
+  $('#go3').addEventListener('click',function(){fx('yes');var n=cur;closeScene(function(){result(dev(n)+' माणसं','नोंदवलं (नमुना).')})});
+  $('[data-mic]',scene).addEventListener('click',function(){var b=this,hd=$('[data-heard]',scene);fx('mic');b.classList.add('live');b.lastChild.textContent=' ऐकतोय…';later(function(){fx('micoff');b.classList.remove('live');b.lastChild.textContent='बोला';hd.hidden=false;hd.textContent='ऐकलं: "सहा" (नमुना)';to(6)},1400)});
+  backdropTap();wireEar('आज किती माणसं कामाला आली?');
+}
+/* ---- kind 4: say it ---- */
+function k4(){
+  openScene('<div class="bd"></div><div class="sh tall" id="sh4"><div class="grab"></div><div class="top"><span class="chip n">आवाजाने सांगा, किंवा लिहा</span>'+earBtn()+'</div><div id="v4"></div></div>');
+  wireEar('आज काय काम केलं ते सांगा');
+  var st='idle';
+  function micBtn(live){return '<div class="micbig'+(live?' live':'')+'"><span class="ring"></span><span class="ring"></span><span class="ring"></span><button type="button" id="m4" aria-label="बोला"><svg width="58" height="58"><use href="#i-mic"/></svg></button></div><div class="bars'+(live?' on':'')+'">'+'<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>'+'</div>'}
+  function typebox(v){return '<label class="small" style="display:block;margin-top:8px;font-weight:800;color:#57534e" for="t4">बोलता येत नसेल तर इथे लिहा</label><textarea id="t4" class="tbox" rows="2" placeholder="काम लिहा">'+(v||'')+'</textarea>'}
+  function draw(s){
+    st=s;var v=$('#v4',scene);clearAll();
+    if(s==='idle'){v.innerHTML='<p class="say">आज काय काम केलं ते सांगा</p>'+micBtn(false)+'<p class="qs">मायक्रोफोन दाबा आणि बोला</p>'+typebox('')+'<div style="flex:1"></div>'+states();}
+    if(s==='listen'){v.innerHTML='<p class="say">ऐकतोय…</p>'+micBtn(true)+'<p class="qs" id="tm">०:०१</p><div style="height:10px"></div>'+'<button type="button" class="ghost" id="stop4">थांबवा</button>'+states();var n=1;var iv=setInterval(function(){n++;var t=$('#tm',scene);if(t)t.textContent='०:०'+dev(Math.min(n,9))},1000);timers.push(iv);fx('mic');later(function(){draw('work')},2600)}
+    if(s==='work'){fx('micoff');v.innerHTML='<p class="say">समजून घेत आहे…</p><div class="bars on" style="margin-top:34px"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>'+states();later(function(){draw('heard')},1200)}
+    if(s==='heard'){v.innerHTML='<p class="say" style="font-size:21px">मला असं ऐकू आलं</p><div class="hbox"><small>तुम्ही सांगितलं (नमुना शब्द)</small>आज पाच बायका तण काढायला होत्या.</div><div class="chip g" style="margin-top:10px"><svg width="16" height="16"><use href="#i-check"/></svg>नोंद अजून जतन झाली नाही</div><div style="flex:1"></div><button type="button" class="go" id="ok4"><svg width="28" height="28"><use href="#i-check"/></svg>बरोबर</button><button type="button" class="ghost" id="again4">पुन्हा बोला</button><button type="button" class="ghost" id="typ4" style="margin-top:6px">लिहून बदला</button>'+states();fx('yes');}
+    if(s==='nomic'){v.innerHTML='<p class="say" style="font-size:21px">मायक्रोफोन बंद आहे</p><p class="qs">परवानगी द्या, किंवा इथे लिहा. लिहिलेलंही चालेल.</p>'+typebox('')+'<div style="height:8px"></div><button type="button" class="go" id="ok4t"><svg width="28" height="28"><use href="#i-check"/></svg>पुढे</button><div style="flex:1"></div>'+states();fx('warn')}
+    wire();
+  }
+  function states(){return '<div class="small" style="margin-top:10px;flex:none;text-align:center"><b>Demo states:</b> <a href="#" data-s="idle">idle</a> | <a href="#" data-s="listen">listening</a> | <a href="#" data-s="heard">heard</a> | <a href="#" data-s="nomic">no mic</a></div>'}
+  function wire(){
+    $$('[data-s]',scene).forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();draw(a.getAttribute('data-s'))})});
+    var m=$('#m4',scene);if(m)m.addEventListener('click',function(){if(st==='idle')draw('listen');else if(st==='listen')draw('work')});
+    var s4=$('#stop4',scene);if(s4)s4.addEventListener('click',function(){draw('work')});
+    var ok=$('#ok4',scene);if(ok)ok.addEventListener('click',function(){fx('saved');closeScene(function(){result('जतन झालं','पाच बायका, तण काढणं (नमुना).')})});
+    var okt=$('#ok4t',scene);if(okt)okt.addEventListener('click',function(){fx('yes');draw('heard')});
+    var ag=$('#again4',scene);if(ag)ag.addEventListener('click',function(){fx('tick');draw('listen')});
+    var ty=$('#typ4',scene);if(ty)ty.addEventListener('click',function(){fx('tick');draw('nomic')});
+  }
+  draw('idle');backdropTap();
+}
+/* ---- kind 5: a stack of cards ---- */
+function k5(){
+  var answered=[false,false,false],idx=0;
+  function card(i,tag,h,s,body){return '<div class="sc"><div class="cd" data-c="'+i+'"><span class="chip g ctag">'+tag+'</span><p class="h">'+h+'</p><p class="s">'+s+'</p><div class="push">'+body+'</div></div></div>'}
+  var two=function(i){return '<div class="two"><button type="button" class="yy" data-yes="'+i+'">बरोबर</button><button type="button" data-chg="'+i+'">बदला</button></div>'};
+  var cards=card(0,'आजची नोंद','आजची नोंद तपासा','तुम्ही सांगितलेल्या ३ गोष्टी. एक एक पाहू.','<div class="downh"><svg width="22" height="22"><use href="#i-down"/></svg><br>खाली सरका</div>')
+   +card(1,'काम','फवारणी','G१, G२, G३',two(1))
+   +card(2,'माणसं','४ बायका','६ तास',two(2))
+   +card(3,'औषध','औषधाचं नाव सांगितलं नाही','नाव सांगा, किंवा नंतर सांगा. आम्ही स्वतः काही भरत नाही.','<div class="two"><button type="button" class="yy" data-say="3" style="background:linear-gradient(160deg,#db2777,#be185d)">बोला</button><button type="button" data-later="3">नंतर सांगतो</button></div>')
+   +card(4,'जतन','सगळं तपासलं','<span id="cnt5">०</span> पैकी ३ गोष्टी तपासल्या','<button type="button" class="go" id="save5" disabled><svg width="28" height="28"><use href="#i-check"/></svg>जतन करा</button>');
+  openScene('<div class="bd"></div><div class="sh tall" id="sh5"><div class="grab"></div><div class="top">'+chipFor()+earBtn()+'</div><div class="sbar"><b id="pb"></b></div><div class="stack"><div class="railv"><b id="rl"></b></div><div class="sscroll" id="ss">'+cards+'</div></div></div>');
+  wireEar('आजची नोंद तपासा');
+  var ss=$('#ss'),N=5;
+  function H(){return ss.clientHeight}
+  function prog(){var done=answered.filter(Boolean).length;$('#pb').style.width=((idx+ (idx===N-1?1:0))/N*100*0+ (done/3)*100)+'%';$('#rl').style.height=((idx+1)/N*100)+'%';$('#cnt5').textContent=dev(done);$('#save5').disabled=done<3}
+  function go(i){ss.scrollTo({top:i*H(),behavior:'smooth'})}
+  function blockedNow(){return locked()&&idx>=1&&idx<=3&&!answered[idx-1]}
+  function applyLock(){ss.classList.toggle('lockd',blockedNow());$$('.cd',ss).forEach(function(c){var i=Number(c.getAttribute('data-c'));c.classList.toggle('ask',i>=1&&i<=3&&!answered[i-1]);c.classList.toggle('good',i>=1&&i<=3&&answered[i-1])})}
+  ss.addEventListener('scroll',function(){var i=Math.round(ss.scrollTop/H());if(i!==idx){idx=i;fx('tick');prog();applyLock()}},{passive:true});
+  function shakeIt(){var c=$$('.cd',ss)[idx];c.classList.remove('shake');reflow(c);c.classList.add('shake');fx('thud')}
+  var lastShake=0;['wheel','touchmove'].forEach(function(ev){ss.addEventListener(ev,function(e){if(ss.classList.contains('lockd')){if(e.cancelable)e.preventDefault();var n=Date.now();if(n-lastShake>600){lastShake=n;shakeIt()}}},{passive:false})});
+  ss.addEventListener('keydown',function(e){if(ss.classList.contains('lockd')&&(e.key==='ArrowDown'||e.key==='PageDown')){e.preventDefault();shakeIt()}});
+  function done(i){answered[i-1]=true;fx('yes');applyLock();prog();setTimeout(function(){go(i+1)},250)}
+  $$('[data-yes]',ss).forEach(function(b){b.addEventListener('click',function(){done(Number(b.getAttribute('data-yes')))})});
+  $$('[data-chg]',ss).forEach(function(b){b.addEventListener('click',function(){fx('tick');b.textContent='बदलण्यासाठी उघडेल (नमुना)';setTimeout(function(){b.textContent='बदला'},1400)})});
+  $$('[data-later]',ss).forEach(function(b){b.addEventListener('click',function(){done(Number(b.getAttribute('data-later')))})});
+  $$('[data-say]',ss).forEach(function(b){b.addEventListener('click',function(){fx('mic');b.textContent='ऐकतोय…';later(function(){fx('micoff');b.textContent='ऐकलं: नाव नमुना';later(function(){done(3)},500)},1300)})});
+  $('#save5').addEventListener('click',function(){fx('saved');confetti();later(function(){closeScene(function(){result('जतन झालं','३ गोष्टी जतन झाल्या (नमुना).')})},900)});
+  prog();applyLock();
+  backdropTap();
+}
+function show(k){clearAll();kind=k;$$('.kbtn').forEach(function(b){b.setAttribute('aria-pressed',String(Number(b.getAttribute('data-k'))===k))});({1:k1,2:k2,3:k3,4:k4,5:k5})[k]()}
+$$('.kbtn').forEach(function(b){b.addEventListener('click',function(){fx('tick');show(Number(b.getAttribute('data-k')))})});
+$('#lock').addEventListener('change',function(){show(kind)});
+/* test hooks (harmless): #k=3 opens a kind, &s=heard sets a say-it state, &c=2 opens a stack card, &solo=1 shows only the phone, &nofx=1 stops animation */
+var H=location.hash||'',hk=(H.match(/k=(\d)/)||[])[1],hs=(H.match(/s=(\w+)/)||[])[1],hc=(H.match(/c=(\d)/)||[])[1];
+if(/nofx=1/.test(H)){var st=document.createElement('style');st.textContent='*{transition:none!important;animation:none!important}';document.head.appendChild(st)}
+if(/solo=1/.test(H)){var s2=document.createElement('style');s2.textContent='.page>:not(#s1){display:none!important}#s1>:not(.demo){display:none!important}.demo>div:first-child{display:none!important}.demo{grid-template-columns:406px!important}.page{padding:8px}.dwrap{position:static}';document.head.appendChild(s2)}
+show(hk?Number(hk):1);
+if(hs){var a=$('[data-s="'+hs+'"]',scene);if(a)a.click()}
+if(hc){var sc=$('#ss');if(sc)sc.scrollTop=Number(hc)*sc.clientHeight}
+})();
+</script>
+</body></html>

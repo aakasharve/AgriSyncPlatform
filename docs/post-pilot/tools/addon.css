@@ -1,0 +1,45 @@
+
+/* ================= answer boxes (added) ================= */
+html{color-scheme:light}
+body{padding-bottom:96px}
+.quick{margin:16px 0 0;padding:14px 16px;border:2px solid #065f46;border-radius:14px;background:#ecfdf5;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:16px}
+.quick b{font-weight:800}
+.ans{margin:24px 0 0;padding:16px 16px 18px;border:2px solid #065f46;border-radius:14px;background:#f0fdf4;scroll-margin-top:12px}
+.ans-h{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;font-weight:800;font-size:18px;color:#064e3b}
+.ans-q{margin:4px 0 0;font-size:16px;font-weight:700;color:#1c1917}
+.ans-status{font-size:15px;font-weight:700;color:#44403c}
+.ans-status.done{color:#065f46}
+.szt{font-size:13px;font-weight:800;border-radius:6px;padding:2px 8px;background:#fef3c7;color:#78350f}
+.opts{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 10px}
+.opt{display:flex;align-items:flex-start;gap:10px;min-height:48px;min-width:200px;max-width:100%;flex:1 1 220px;padding:10px 14px;border-radius:12px;border:2px solid #a8a29e;background:#fff;color:#1c1917;font:700 16px/1.25 "Segoe UI",system-ui,-apple-system,sans-serif;cursor:pointer;text-align:left}
+.opt:hover{border-color:#065f46}
+.opt:focus-visible,.btn:focus-visible,.lnk:focus-visible,.nl textarea:focus-visible,#out:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+.opt .ot{display:block}
+.opt .ot em{font-style:normal;font-weight:800}
+.opt small{display:block;margin-top:2px;font-weight:600;font-size:14px;line-height:1.35;color:#44403c}
+.opt .ok{display:none;flex:0 0 22px;width:22px;height:22px;margin-top:1px;border-radius:50%;background:#fff;color:#065f46;padding:3px}
+.opt .tx{display:block;min-width:0}
+.opt[aria-checked="true"]{background:#065f46;border-color:#065f46;color:#fff}
+.opt[aria-checked="true"] small{color:#d1fae5}
+.opt[aria-checked="true"] .ok{display:block}
+.nl{display:block;font-size:14px;font-weight:700;color:#44403c}
+.nl textarea{display:block;width:100%;min-height:68px;margin-top:6px;padding:10px 12px;border:2px solid #a8a29e;border-radius:10px;font:16px/1.4 "Segoe UI",system-ui,"Noto Sans Devanagari","Nirmala UI",sans-serif;color:#1c1917;background:#fff;resize:vertical}
+.lnk{margin-top:8px;padding:8px 0;min-height:44px;border:0;background:none;color:#44403c;font:700 14px "Segoe UI",system-ui,sans-serif;text-decoration:underline;cursor:pointer}
+.btn{min-height:48px;padding:10px 18px;border-radius:12px;border:2px solid #065f46;background:#fff;color:#065f46;font:800 16px "Segoe UI",system-ui,sans-serif;cursor:pointer}
+.btn.pri{background:#065f46;color:#fff}
+.btnrow{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+#sumtable td a{color:#065f46;font-weight:700}
+#sumtable .na{color:#8a1c1c;font-weight:700}
+#out{display:block;width:100%;min-height:300px;margin-top:8px;padding:12px 14px;border:2px solid #a8a29e;border-radius:12px;background:#fafaf9;color:#1c1917;font:14px/1.5 Consolas,"Segoe UI",monospace;resize:vertical}
+#copied{min-height:24px;margin:6px 0 0;font-weight:800;color:#065f46}
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#065f46;color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:center;box-shadow:0 -2px 12px rgba(0,0,0,.25)}
+.bar b{font-size:16px}
+.bar .btn{border-color:#fff;background:#fff;color:#065f46;min-height:44px;padding:8px 16px}
+.bar a{color:#d1fae5;font-weight:700;font-size:15px}
+@media (max-width:520px){.opt{min-width:0;flex-basis:100%}.page{padding-left:16px;padding-right:16px}}
+
+.disk{font-weight:800;color:#065f46}
+.disk[data-state="fail"]{color:#8a1c1c}
+.bar .disk{color:#d1fae5;font-size:14px}
+.bar .disk[data-state="fail"]{color:#fecaca}
+.tag.now,.tag.a,.tag.b{letter-spacing:.02em}

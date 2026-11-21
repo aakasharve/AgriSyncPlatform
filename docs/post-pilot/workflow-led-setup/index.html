@@ -1,0 +1,1550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>The app asks, the farmer answers</title>
+<style>
+:root{
+  --paper:#F1F4EC;--paper2:#E8EDE2;--ink:#15271F;--ink2:#44554C;--ink3:#6B7A72;--line:#D3DACF;
+  --em:#047857;--em-d:#065F46;--em-l:#34D399;--mint:#ECFDF5;--mint2:#D1FAE5;--cream:#FAF7F0;
+  --amber:#B45309;--amber-bg:#FEF3C7;
+  --s50:#FAFAF9;--s100:#F5F5F4;--s200:#E7E5E4;--s300:#D6D3D1;--s400:#A8A29E;--s500:#78716C;--s600:#57534E;--s700:#44403C;--s800:#292524;--s900:#1C1917;
+  --f-ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Noto Sans Devanagari","Nirmala UI",sans-serif;
+  --f-disp:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Noto Sans Devanagari","Nirmala UI",sans-serif;
+  --f-mr:"Noto Sans Devanagari","Nirmala UI","Mangal","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:17px;line-height:1.55}
+img{max-width:100%}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--em);outline-offset:3px;border-radius:6px}
+button{font:inherit;color:inherit;cursor:pointer}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+a{color:var(--em-d)}
+.mr{font-family:var(--f-mr)}
+
+/* ---------- hero ---------- */
+.hero{background:linear-gradient(180deg,#E3F1E8 0%,var(--paper) 100%);padding:56px 0 40px}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,480px);gap:56px;align-items:center}
+.hero h1{font-family:var(--f-disp);font-size:clamp(34px,5vw,56px);line-height:1.04;letter-spacing:-.025em;font-weight:760;margin:0 0 20px;color:var(--em-d);max-width:13ch}
+.hero .lead{margin:0 0 10px;max-width:46ch;color:var(--ink);font-size:19px;line-height:1.5}
+.hero .lead b{font-weight:650}
+.moment{background:var(--cream);border-radius:34px;padding:30px 28px 26px;box-shadow:0 1px 0 #fff inset,0 24px 60px -30px rgba(6,95,70,.45);font-family:var(--f-mr)}
+.moment .q{font-size:clamp(27px,3.6vw,38px);line-height:1.22;font-weight:800;color:var(--s900);margin:0 0 20px}
+.moment .row{display:flex;align-items:center;gap:20px}
+.moment .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.moment .chip{font-size:22px;font-weight:700;border:2px solid var(--s300);background:#fff;border-radius:18px;padding:12px 20px;min-height:64px}
+.moment .note{margin:14px 0 0;font-family:var(--f-ui);font-size:15px;color:var(--ink3)}
+.moment .heard-line{min-height:62px;font-size:22px;font-weight:700;color:var(--em-d)}
+
+/* ---------- sections ---------- */
+.sec,.blk{padding:64px 0 8px;border-top:1px solid var(--line);margin-top:56px}
+.hero+.blk{margin-top:0}
+.sec h2,.blk h2{font-family:var(--f-disp);font-size:clamp(26px,3.4vw,38px);line-height:1.1;letter-spacing:-.018em;font-weight:720;margin:0 0 18px;display:flex;align-items:center;gap:16px}
+.num{flex:none;width:46px;height:46px;border-radius:50%;background:var(--em);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:700;letter-spacing:0}
+.wrong{max-width:70ch;font-size:19px;line-height:1.5;margin:0 0 6px}
+.wrong b{font-weight:650}
+.blk p{max-width:70ch}
+
+/* idea block */
+.idea{display:grid;grid-template-columns:minmax(0,1fr) 72px minmax(0,1fr);gap:20px;align-items:stretch;margin:22px 0 30px}
+.idea .side{border-radius:28px;padding:22px 22px 24px;position:relative}
+.idea .today{background:var(--paper2)}
+.idea .new{background:var(--mint);outline:2px solid var(--mint2)}
+.idea h3{margin:0 0 8px;font-family:var(--f-disp);font-size:22px;font-weight:700}
+.idea .side>p{margin:0 0 14px;font-size:16.5px;color:var(--ink2)}
+.idea .arrow{display:grid;place-items:center;color:var(--em)}
+.idea svg.draw{width:min(100%,216px);height:auto;display:block;margin:6px auto 0}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 36px;margin:10px 0 28px;padding:0;list-style:none}
+.rules li{display:grid;grid-template-columns:44px 1fr;gap:14px;align-items:start}
+.rules .ico{width:44px;height:44px;border-radius:14px;background:var(--mint);color:var(--em-d);display:grid;place-items:center}
+.rules b{display:block;font-weight:680;font-size:18px;line-height:1.25;margin-bottom:3px}
+.rules span{font-size:16px;color:var(--ink2);line-height:1.45}
+.matrix{border-collapse:collapse;margin:8px 0 6px;font-size:15.5px}
+.matrix th,.matrix td{padding:7px 14px;border-bottom:1px solid var(--line);text-align:center}
+.matrix th:first-child,.matrix td:first-child{text-align:left}
+.matrix td svg{color:var(--em)}
+.fine{font-size:15.5px;color:var(--ink3);margin:6px 0 0;max-width:70ch}
+
+/* not changing */
+.keep{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 40px;padding:0;margin:14px 0 22px;list-style:none}
+.keep li{display:flex;gap:14px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.keep .ico{flex:none;width:34px;height:34px;border-radius:50%;background:var(--em);color:#fff;display:grid;place-items:center;margin-top:2px}
+.keep b{font-weight:680}
+
+/* feel panel */
+.feel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:22px 0 12px}
+.fx{position:relative;background:#fff;border-radius:24px;padding:18px 18px 16px;border:1px solid var(--line);display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.fx h3{margin:0;font-size:19px;font-weight:700;font-family:var(--f-disp)}
+.fx p{margin:0 0 8px;font-size:15.5px;color:var(--ink2);line-height:1.4;flex:1}
+.fx button{align-self:flex-start;min-height:48px;padding:0 22px;border-radius:24px;border:0;background:var(--em);color:#fff;font-weight:650;font-size:16px;display:inline-flex;align-items:center;gap:8px}
+.fx button:hover{background:var(--em-d)}
+.fx .dot{position:absolute;right:16px;top:16px;width:14px;height:14px;border-radius:50%;background:var(--mint2)}
+.fx.pulse{animation:soft 1s ease}
+.fx.glow{animation:glowbox 1.1s ease}
+@keyframes soft{0%{background:#fff}40%{background:var(--mint)}100%{background:#fff}}
+@keyframes glowbox{0%{box-shadow:0 0 0 0 rgba(52,211,153,0)}35%{box-shadow:0 0 0 7px rgba(52,211,153,.35),0 0 38px rgba(52,211,153,.35)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.switches{display:flex;gap:26px;flex-wrap:wrap;align-items:center;margin:8px 0 8px}
+.sw{display:inline-flex;align-items:center;gap:12px;min-height:48px;cursor:pointer;font-weight:600}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw i{width:54px;height:30px;border-radius:15px;background:var(--s300);position:relative;transition:background .3s ease;flex:none}
+.sw i::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .3s ease}
+.sw input:checked+i{background:var(--em)}
+.sw input:checked+i::after{transform:translateX(24px)}
+.sw input:focus-visible+i{outline:3px solid var(--em);outline-offset:3px}
+
+/* strips */
+.strip{margin:30px 0 8px;border-radius:26px;padding:20px 20px 18px}
+.strip.before{background:#E8E5DE}
+.strip.after{background:#D5EFDF}
+.strip h3{margin:0 0 14px;font-size:17px;font-weight:600;color:var(--ink2);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.tag{display:inline-block;font-weight:800;font-size:14px;letter-spacing:.07em;padding:5px 12px;border-radius:999px}
+.before .tag{background:var(--s700);color:#fff}
+.after .tag{background:var(--em-d);color:#fff}
+.frames{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:18px 14px}
+.fr{margin:0}
+.fr .pic{aspect-ratio:390/844;border-radius:20px;overflow:hidden;border:1px solid var(--s300);background:#fff;position:relative;cursor:zoom-in;padding:0;display:block;width:100%}
+.after .fr .pic{border:2px solid var(--em)}
+.fr img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.fr.missing .pic::after{content:"AFTER picture comes from the build step";position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:16px;font-size:14.5px;color:var(--ink3);background:repeating-linear-gradient(135deg,#F3FAF5,#F3FAF5 12px,#E6F4EC 12px,#E6F4EC 24px)}
+.fr.missing img{visibility:hidden}
+.fr figcaption{font-size:14.5px;line-height:1.38;color:var(--ink2);margin-top:9px}
+dialog.zoom{border:0;padding:0;background:transparent;max-width:96vw;max-height:96vh;overflow:visible}
+dialog.zoom::backdrop{background:rgba(20,35,28,.78)}
+dialog.zoom .in{background:#fff;border-radius:22px;padding:14px;max-width:min(560px,94vw)}
+dialog.zoom img{display:block;max-height:80vh;width:auto;max-width:100%;margin:0 auto;border-radius:14px}
+dialog.zoom p{margin:10px 4px 2px;font-size:15.5px;color:var(--ink2)}
+dialog.zoom button{margin-top:8px;min-height:48px;padding:0 22px;border:0;border-radius:24px;background:var(--em);color:#fff;font-weight:650}
+
+/* stage */
+.stage{display:grid;grid-template-columns:minmax(0,390px) minmax(0,1fr);gap:56px;align-items:start;margin:40px 0 10px}
+.stage-side h3{font-family:var(--f-disp);font-size:24px;margin:0 0 4px;font-weight:700}
+.stage-side .sub{margin:0 0 18px;color:var(--ink2);font-size:16px}
+ol.road{list-style:none;margin:0 0 16px;padding:0;position:relative}
+ol.road::before{content:"";position:absolute;left:13px;top:12px;bottom:12px;width:3px;background:var(--line);border-radius:2px}
+ol.road li{position:relative;padding:5px 0 5px 44px;min-height:34px;font-size:16px;color:var(--ink3);transition:color .6s ease}
+ol.road li::before{content:"";position:absolute;left:5px;top:10px;width:19px;height:19px;border-radius:50%;background:var(--paper);border:3px solid var(--s300);transition:all .6s ease}
+ol.road li.past{color:var(--ink2)}
+ol.road li.past::before{background:var(--em);border-color:var(--em)}
+ol.road li.here{color:var(--ink);font-weight:680}
+ol.road li.here::before{background:#fff;border-color:var(--em);box-shadow:0 0 0 6px rgba(4,120,87,.16)}
+.road-note{font-size:15px;color:var(--ink3);margin:0 0 16px}
+.again{display:inline-flex;align-items:center;gap:8px;min-height:48px;background:none;border:0;padding:0;color:var(--em-d);font-weight:650;text-decoration:underline;text-underline-offset:4px;font-size:16.5px}
+.demo-note{margin:14px 0 0;font-size:15px;color:var(--ink3);max-width:46ch}
+.taps{margin:26px 0 0;padding-top:16px;border-top:1px solid var(--line);font-size:16.5px;max-width:60ch}
+.taps b{font-weight:680}
+.taps .dots{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 10px}
+.taps .dots i{width:14px;height:14px;border-radius:50%;background:var(--s400)}
+.taps .dots i.f{border-radius:4px;background:var(--s500)}
+.taps .dots.now i{background:var(--em)}
+.list-sec{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 40px}
+.list-sec li{padding:10px 0;border-bottom:1px solid var(--line)}
+.list-sec b{font-weight:680}
+footer.end{margin:72px 0 56px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink3);font-size:15.5px}
+
+/* ======================= PHONE ======================= */
+.ph{width:390px;max-width:100%;height:720px;position:relative;display:flex;flex-direction:column;background:var(--cream);border:6px solid #1F2D27;border-radius:40px;overflow:hidden;font-family:var(--f-mr);color:var(--s900);box-shadow:0 30px 70px -34px rgba(6,40,30,.55);isolation:isolate}
+.ph-glow{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:5}
+.ph.glow .ph-glow{animation:phglow 1s ease}
+@keyframes phglow{0%{box-shadow:inset 0 0 0 0 rgba(52,211,153,0)}40%{box-shadow:inset 0 0 0 6px rgba(52,211,153,.4),inset 0 0 60px rgba(52,211,153,.35)}100%{box-shadow:inset 0 0 0 0 rgba(52,211,153,0)}}
+.ph-top{display:flex;align-items:center;gap:12px;padding:14px 16px 8px;flex:none}
+.ph-back,.ph-later{flex:none;width:48px;height:48px;border-radius:50%;border:2px solid var(--s300);background:#fff;display:grid;place-items:center;color:var(--s800);padding:0}
+.ph-back[aria-disabled=true]{opacity:.38}
+.ph-later{width:44px;height:44px}
+.ph-line{flex:1;height:6px;border-radius:3px;background:rgba(4,120,87,.16);overflow:hidden;min-width:30px}
+.ph-line i{display:block;height:100%;width:3%;background:linear-gradient(90deg,#34D399,#047857);border-radius:3px;transition:width .6s ease}
+.ph-av{flex:none;width:48px;height:48px;border-radius:50%;background:var(--mint2);overflow:hidden;position:relative;border:2px solid #fff;box-shadow:0 0 0 2px var(--mint2)}
+.ph-av img{position:absolute;left:50%;top:0;width:100%;height:100%;object-fit:cover;object-position:50% 0;transform:translateX(-50%) scale(2.15);transform-origin:50% 12%}
+.ph-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 20px 14px;display:flex;flex-direction:column;scrollbar-width:thin}
+.ph-body.enter>*{animation:enter .6s ease both}
+@keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.ph-foot{flex:none;padding:8px 20px 18px;display:flex;flex-direction:column;gap:6px}
+.ph-foot:empty{padding:0}
+.ph .q{font-size:30px;line-height:1.27;font-weight:800;margin:8px 0 8px;color:var(--s900);letter-spacing:0}
+.ph .q.sm{font-size:30px}
+.ph .sup{font-size:17px;color:var(--s600);margin:6px 0 0;font-weight:600}
+.ph .helper{font-size:17px;line-height:1.5;color:var(--s600);margin:0 0 10px}
+.ph .helper.k{color:var(--em-d)}
+.ph .warn{font-size:17px;line-height:1.45;color:var(--amber);background:var(--amber-bg);border-radius:16px;padding:10px 14px;margin:8px 0}
+.ph .b-prim{min-height:68px;border-radius:34px;border:0;background:var(--em);color:#fff;font-size:22px;font-weight:800;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .4s ease,transform .3s ease;font-family:var(--f-mr)}
+.ph .b-prim:hover{background:var(--em-d)}
+.ph .b-prim[disabled]{background:var(--s200);color:var(--s500);cursor:default}
+.ph .b-sec{min-height:64px;border-radius:32px;border:2px solid var(--em);background:#fff;color:var(--em-d);font-size:22px;font-weight:800;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-family:var(--f-mr)}
+.ph .b-quiet{min-height:48px;background:none;border:0;color:var(--s700);font-size:17px;font-weight:600;text-decoration:underline;text-underline-offset:4px;align-self:center;padding:0 14px;font-family:var(--f-mr)}
+.ph .b-quiet.fl{align-self:flex-start;padding:0}
+.ph .toast{position:absolute;left:20px;right:20px;bottom:96px;background:var(--s800);color:#fff;border-radius:20px;padding:14px 18px;font-size:17px;line-height:1.4;z-index:6;animation:enter .5s ease both}
+
+/* mic */
+.mic{display:flex;flex-direction:column;align-items:center;margin:6px 0 10px}
+.mic-btn{width:112px;height:112px;border-radius:50%;border:0;background:radial-gradient(circle at 35% 28%,#10B981,#047857 70%);color:#fff;display:grid;place-items:center;box-shadow:0 14px 30px -10px rgba(4,120,87,.55),0 0 0 8px rgba(16,185,129,.14);animation:breathe 5s ease-in-out infinite;transition:transform .5s ease,background .5s ease}
+.mic-btn svg{width:46px;height:46px}
+@keyframes breathe{0%,100%{transform:scale(1);box-shadow:0 14px 30px -10px rgba(4,120,87,.5),0 0 0 6px rgba(16,185,129,.12)}50%{transform:scale(1.055);box-shadow:0 18px 36px -10px rgba(4,120,87,.6),0 0 0 13px rgba(16,185,129,.2)}}
+.mic.on .mic-btn{animation:none;transform:scale(1.08);background:radial-gradient(circle at 35% 28%,#059669,#065F46 72%)}
+.mic-cap{margin:10px 0 0;font-size:17px;font-weight:700;color:var(--em-d);min-height:26px;display:flex;align-items:center;gap:8px}
+.bars{display:inline-flex;gap:4px;align-items:center;height:20px}
+.bars i{width:5px;height:8px;border-radius:3px;background:var(--em);animation:bar 1.5s ease-in-out infinite}
+.bars i:nth-child(2){animation-delay:.25s}.bars i:nth-child(3){animation-delay:.5s}.bars i:nth-child(4){animation-delay:.75s}
+@keyframes bar{0%,100%{height:6px;opacity:.55}50%{height:20px;opacity:1}}
+.mic.compact{flex-direction:row;gap:14px;justify-content:flex-start;margin:4px 0 10px}
+.mic.compact .mic-btn{width:64px;height:64px;box-shadow:0 8px 18px -8px rgba(4,120,87,.5)}
+.mic.compact .mic-btn svg{width:30px;height:30px}
+.mic.compact .mic-cap{margin:0}
+.heard{background:var(--mint);border:2px solid #A7F3D0;border-radius:26px;padding:16px 18px 14px;margin:6px 0 10px;display:flex;flex-direction:column;gap:10px}
+.heard .lab{font-size:17px;font-weight:700;color:var(--em-d);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.heard .chip{font-size:15px;font-weight:700;background:#fff;color:var(--s600);border-radius:999px;padding:2px 10px;border:1px solid var(--s300)}
+.heard .say{font-size:26px;line-height:1.3;font-weight:800;color:var(--s900)}
+.heard .b-prim{min-height:64px}
+
+/* tiles */
+.tiles{display:grid;gap:12px;margin:4px 0 8px}
+.tiles.c1{grid-template-columns:1fr}.tiles.c2{grid-template-columns:1fr 1fr}.tiles.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tile{position:relative;min-height:80px;border-radius:24px;border:2px solid var(--s300);background:#fff;padding:10px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;font-size:22px;font-weight:700;line-height:1.2;color:var(--s900);transition:background .4s ease,border-color .4s ease,color .4s ease,transform .4s ease;font-family:var(--f-mr);cursor:pointer}
+.tile:hover{border-color:var(--em)}
+.tile .t{display:block}
+.tile .s{display:block;font-size:17px;font-weight:500;line-height:1.38;color:var(--s600)}
+.tile.row{flex-direction:row;justify-content:flex-start;text-align:left;gap:14px;padding:12px 16px}
+.tile.row .tx{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.tile .art{display:block;width:100%;max-width:96px;height:auto}
+.tile.row .art{width:56px}
+.tile img.crop{width:100%;height:92px;object-fit:cover;border-radius:16px;display:block}
+.tile.on{background:var(--em-d);border-color:var(--em-d);color:#fff;transform:scale(1.015)}
+.tile.on .s{color:#D1FAE5}
+.tile .tick{position:absolute;right:10px;top:10px;width:24px;height:24px;border-radius:50%;background:#fff;color:var(--em-d);display:none;place-items:center}
+.tile.on .tick{display:grid}
+.tile[disabled]{opacity:.5}
+.ph :focus-visible{outline:3px solid var(--em);outline-offset:3px}
+.tile.on:focus-visible{outline:3px solid #fff;box-shadow:0 0 0 6px var(--em)}
+
+/* number */
+.numbox{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0 4px}
+.numbox .pm{flex:none;width:72px;height:72px;border-radius:50%;border:2px solid var(--s300);background:#fff;display:grid;place-items:center;color:var(--em-d);padding:0}
+.numbox .pm:hover{border-color:var(--em)}
+.numbox .val{flex:1;min-width:0;text-align:center;font-size:64px;line-height:1.05;font-weight:800;color:var(--s900)}
+.numbox .val small{display:block;font-size:22px;font-weight:700;color:var(--s600);margin-top:4px}
+.numbox .val.empty{color:var(--s400)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}
+.keypad button{min-height:64px;border-radius:20px;border:2px solid var(--s300);background:#fff;font-size:28px;font-weight:800;font-family:var(--f-mr);color:var(--s900);display:grid;place-items:center}
+.keypad button:hover{border-color:var(--em)}
+.keypad .ghost{border-color:transparent;background:transparent;pointer-events:none}
+.digits{display:flex;justify-content:center;gap:8px;margin:6px 0 4px;flex-wrap:wrap}
+.digits .d{min-width:42px;height:60px;border-radius:16px;border:2px solid var(--s300);background:#fff;display:grid;place-items:center;font-size:30px;font-weight:800;padding:0 4px}
+.digits .d.on{border-color:var(--em);background:var(--mint)}
+.digits.phone{font-size:34px;font-weight:800;gap:0;letter-spacing:.06em;justify-content:center;align-items:center;min-height:64px;border-radius:20px;background:#fff;border:2px solid var(--s300);padding:6px 14px;margin:6px 0 10px}
+.digits.phone .pre{color:var(--s600);font-size:26px;margin-right:14px;letter-spacing:0}
+
+.fld{width:100%;min-height:64px;border-radius:20px;border:2px solid var(--s300);background:#fff;font-size:24px;font-weight:700;padding:0 18px;font-family:var(--f-mr);color:var(--s900);margin:6px 0}
+.fld:focus{outline:3px solid var(--em);outline-offset:2px;border-color:var(--em)}
+
+/* dial */
+.dial{position:relative;width:min(100%,300px);aspect-ratio:1;margin:0 auto;touch-action:none}
+.dial svg{width:100%;height:100%;display:block;overflow:visible}
+.dial .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}
+.dial .mid b{display:block;font-size:38px;line-height:1.05;font-weight:800;color:var(--s900)}
+.dial .mid span{display:block;font-size:17px;font-weight:600;color:var(--s600)}
+.dial .lbl{position:absolute;font-size:15px;font-weight:700;color:var(--s600);pointer-events:none;white-space:nowrap}
+.dial .hd{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:transparent;border:0;display:grid;place-items:center;cursor:grab;padding:0;color:var(--em-d);touch-action:none}
+.dial .hd::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff;border:4px solid var(--em);box-shadow:0 4px 14px -4px rgba(0,0,0,.35)}
+.dial .hd svg{position:relative}
+.dial .hd.off{color:var(--s600)}
+.dial .hd.off::before{border-color:var(--s500)}
+.dial .hd:focus-visible{outline:3px solid var(--em);outline-offset:4px}
+.dial-txt{text-align:center;font-size:19px;line-height:1.45;font-weight:600;margin:10px 0 6px;color:var(--s800)}
+.dial-txt b{font-weight:800}
+
+/* date */
+.dstep{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}
+.dstep .c{display:flex;flex-direction:column;align-items:center;gap:6px}
+.dstep .c>span{font-size:17px;font-weight:700;color:var(--s600)}
+.dstep .c button{width:100%;min-height:64px;border-radius:18px;border:2px solid var(--s300);background:#fff;color:var(--em-d);display:grid;place-items:center;padding:0}
+.dstep .c output{display:grid;place-items:center;min-height:56px;font-size:26px;font-weight:800;text-align:center;line-height:1.1}
+
+/* pick (plots) */
+.grp{margin:10px 0 4px}
+.grp .gh{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+.grp .gh img{width:52px;height:52px;border-radius:14px;object-fit:cover}
+.grp .gh b{font-size:22px;font-weight:800}
+.grp .gh span{font-size:17px;color:var(--s600)}
+.chips5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.chips5 button{min-height:64px;border-radius:18px;border:2px solid var(--s400);background:#fff;font-size:20px;font-weight:800;position:relative;display:grid;place-items:center;font-family:var(--f-mr);padding:0}
+.chips5 button.on{background:var(--em-d);border-color:var(--em-d);color:#fff;box-shadow:inset 0 0 0 3px #fff,0 0 0 2px var(--em-d)}
+.chips5 button .k{position:absolute;right:5px;top:4px;display:none}
+.chips5 button.on .k{display:none}
+.allbtn{margin:10px 0 0;min-height:64px;width:100%;border-radius:28px;border:2px dashed var(--em);background:#fff;color:var(--em-d);font-size:20px;font-weight:800;font-family:var(--f-mr)}
+.cnt{font-size:19px;font-weight:700;color:var(--em-d);margin:0 0 4px;text-align:center}
+
+/* read */
+.rcard{background:#fff;border:2px solid var(--s200);border-radius:26px;padding:18px 18px 20px;margin:8px 0 10px;position:relative;overflow:hidden;transition:background .5s ease,border-color .5s ease}
+.rcard.playing{background:var(--mint);border-color:#A7F3D0}
+.rcard p{font-size:20px;line-height:1.55;margin:0 0 12px;font-weight:500;color:var(--s900)}
+.rcard p:last-child{margin-bottom:0}
+.rcard ul{margin:0;padding:0 0 0 22px}
+.rcard li{font-size:20px;line-height:1.5;margin:0 0 12px;font-weight:500}
+.rcard .wflnk{display:block;margin-top:10px;font-size:20px;font-weight:700;color:var(--em-d);text-decoration:underline;text-underline-offset:4px;background:none;border:0;padding:6px 0;min-height:48px;text-align:left;font-family:var(--f-mr)}
+.sweep{height:6px;border-radius:3px;background:rgba(4,120,87,.16);margin:0 0 6px;overflow:hidden;display:none}
+.sweep.on{display:block}
+.sweep i{display:block;height:100%;width:0;background:var(--em);border-radius:3px}
+.hear{display:flex;align-items:center;justify-content:center;gap:12px;min-height:64px;border-radius:32px;border:2px solid var(--em);background:#fff;color:var(--em-d);font-size:22px;font-weight:800;width:100%;margin:6px 0;font-family:var(--f-mr)}
+.hear.on{background:var(--mint)}
+.hear .eq{display:none}
+.hear.on .eq{display:inline-flex}
+.hear.on .ic{display:none}
+
+/* tick */
+.tickrow{display:flex;gap:16px;align-items:flex-start;background:#fff;border:2px solid var(--s300);border-radius:26px;padding:18px;margin:8px 0 10px;width:100%;text-align:left;font-family:var(--f-mr);transition:border-color .4s ease,background .4s ease}
+.tickrow .box{flex:none;width:60px;height:60px;border-radius:18px;border:3px solid var(--s400);background:#fff;display:grid;place-items:center;color:#fff;transition:background .4s ease,border-color .4s ease}
+.tickrow.on{border-color:var(--em);background:var(--mint)}
+.tickrow.on .box{background:var(--em);border-color:var(--em)}
+.tickrow .tx{font-size:22px;line-height:1.5;font-weight:700;color:var(--s900)}
+.tickrow .box svg{opacity:0;transition:opacity .4s ease}
+.tickrow.on .box svg{opacity:1}
+
+/* perm / arrive / done / summary */
+.pic-big{display:grid;place-items:center;margin:6px 0 10px}
+.pic-big .disc{width:132px;height:132px;border-radius:50%;background:var(--mint);display:grid;place-items:center;color:var(--em-d);box-shadow:0 0 0 10px rgba(167,243,208,.35)}
+.pic-big .disc svg{width:64px;height:64px}
+.pair{display:flex;flex-direction:column;gap:8px}
+.sathi-big{display:block;margin:0 auto -6px;height:196px;width:auto;object-fit:contain}
+.arrive-img{display:block;margin:4px auto 0;height:240px;width:auto;object-fit:contain}
+.sum{background:#fff;border:2px solid var(--s200);border-radius:26px;padding:18px;margin:8px 0 10px}
+.sum .sent{font-size:26px;line-height:1.35;font-weight:800;margin:0 0 12px;color:var(--s900)}
+.sum ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--s200)}
+.sum li{padding:9px 0;border-bottom:1px solid var(--s200);font-size:19px;line-height:1.4;font-weight:600}
+.sum li:last-child{border-bottom:0}
+.sum li span{display:block;font-size:17px;color:var(--s600);font-weight:500}
+.donebox{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin:8px 0}
+.donebox .ring{width:96px;height:96px;border-radius:50%;background:var(--mint);display:grid;place-items:center;color:var(--em);box-shadow:0 0 0 10px rgba(167,243,208,.35)}
+.donebox .ring svg{width:52px;height:52px}
+.donebox .ring path{stroke-dasharray:30;stroke-dashoffset:0;animation:draw 1.1s ease both}
+@keyframes draw{from{stroke-dashoffset:30}to{stroke-dashoffset:0}}
+.donebox .lines{font-size:22px;line-height:1.5;font-weight:600;margin:0}
+.nextcard{background:#fff;border:2px solid var(--em);border-radius:26px;padding:16px 18px;margin:12px 0 6px;text-align:left}
+.nextcard b{display:block;font-size:22px;font-weight:800;margin-bottom:2px}
+.nextcard span{font-size:17px;color:var(--s600);line-height:1.45}
+.codebox{text-align:center;background:#fff;border:2px solid var(--s200);border-radius:26px;padding:18px 14px;margin:8px 0}
+.codebox .code{font-size:40px;font-weight:800;letter-spacing:.12em;margin:0;font-family:var(--f-mr)}
+.codebox .once{font-size:17px;color:var(--s600);margin:4px 0 0}
+.qr{width:200px;height:200px;margin:12px auto 0;display:block}
+
+/* road */
+.road-wrap{position:relative;padding-left:0;margin:6px 0}
+.stop{position:relative;padding:0 0 14px 52px;min-height:52px}
+.stop::before{content:"";position:absolute;left:17px;top:30px;bottom:-4px;width:4px;border-radius:2px;background:repeating-linear-gradient(180deg,var(--s300) 0 8px,transparent 8px 14px)}
+.stop.done::before{background:var(--em)}
+.stop:last-child::before{display:none}
+.stop .nd{position:absolute;left:4px;top:2px;width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid var(--s300);display:grid;place-items:center;color:#fff}
+.stop.done .nd{background:var(--em);border-color:var(--em)}
+.stop.next .nd{border-color:var(--em);box-shadow:0 0 0 7px rgba(4,120,87,.16)}
+.stop .st{display:flex;align-items:flex-start;gap:8px}
+.stop .st .tx{flex:1;min-width:0}
+.stop .st b{display:block;font-size:22px;font-weight:800;line-height:1.3}
+.stop .st .tx>span{display:block;font-size:17px;color:var(--s600);line-height:1.4}
+.stop.wait b{color:var(--s500)}
+.stop .spk{flex:none;width:48px;height:48px;border-radius:50%;border:2px solid var(--s300);background:#fff;display:grid;place-items:center;color:var(--em-d);padding:0}
+.stop .spk.on{background:var(--mint);border-color:#A7F3D0}
+.stop .st b .chipx{display:inline-block;font-size:15px;font-weight:700;background:var(--s200);color:var(--s600);border-radius:999px;padding:1px 10px;margin-left:6px;vertical-align:2px}
+.bigcard{background:#fff;border:2px solid var(--em);border-radius:28px;padding:16px 16px 16px;margin:-2px 0 4px;box-shadow:0 14px 30px -20px rgba(4,120,87,.6)}
+.bigcard .h{font-size:30px;line-height:1.22;font-weight:800;margin:0 0 4px}
+.bigcard .u{font-size:17px;color:var(--s600);margin:0 0 12px;line-height:1.45}
+.bigcard .acts{display:flex;gap:10px;align-items:center}
+.bigcard .acts .b-prim{flex:1}
+.bigcard .acts .spk{flex:none;width:64px;height:64px;border-radius:50%;border:2px solid var(--em);background:#fff;display:grid;place-items:center;color:var(--em-d);padding:0}
+.bigcard .acts .spk.on{background:var(--mint)}
+.left-words{font-size:17px;color:var(--s600);margin:6px 0 0}
+
+/* solo mode (test hooks): only the phone, top left, 390 wide */
+html.solo,html.solo body{background:#fff}
+html.solo body>*:not(#solo-host){display:none!important}
+#solo-host{position:absolute;left:0;top:0;width:390px}
+html.solo .ph{border:0;border-radius:0;box-shadow:none;width:390px;height:100vh;min-height:640px}
+
+/* no motion */
+html.nofx *,html.nofx *::before,html.nofx *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+@media (max-width:980px){
+  .hero .wrap{grid-template-columns:1fr;gap:34px}
+  .idea{grid-template-columns:1fr}
+  .idea .arrow{transform:rotate(90deg);height:36px}
+  .rules{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .feel{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stage{grid-template-columns:minmax(0,1fr);gap:30px;justify-items:center}
+  .stage-side{width:100%;max-width:560px}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .rules,.feel,.keep,.list-sec{grid-template-columns:1fr}
+  .strip{padding:16px 12px 14px;border-radius:20px}
+  .frames{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sec,.blk{padding-top:44px;margin-top:40px}
+  .moment{padding:22px 18px}
+  .matrix{display:block;overflow-x:auto;max-width:100%}
+}
+
+/* layout of a block: question on top, the mic in the middle of what is left, the answers at thumb height */
+.ph-body>*{flex-shrink:0}
+.ph-body>.mic:not(.compact){flex:0 0 auto}
+.ph-body>.mic:not(.compact)+*,.ph-body>.heard+*{margin-top:auto}
+.ph-body>.rcard{flex:0 1 auto;min-height:150px;overflow-y:auto;scrollbar-width:thin}
+.ph .lead{font-size:22px;line-height:1.45;font-weight:600;color:var(--s800);margin:2px 0 10px}
+.ph .lead.k{color:var(--em-d);font-weight:800}
+.ph .helper.mid{font-size:19px}
+.digits.phone .ph-empty{color:var(--s300);letter-spacing:.14em;margin-left:4px}
+
+</style>
+</head>
+<body>
+<div hidden aria-hidden="true" id="assets"><img id="asset-sathi-point" src="img/a-sathi-point.png" alt=""><img id="asset-sathi-welcome" src="img/a-sathi-welcome.png" alt=""><img id="asset-logo" src="img/a-logo-mark.png" alt=""><img id="asset-grapes" src="img/a-grapes.jpg" alt=""><img id="asset-sugarcane" src="img/a-sugarcane.jpg" alt=""><img id="asset-onion" src="img/a-onion.jpg" alt=""><img id="asset-pomegranate" src="img/a-pomegranate.jpg" alt=""><img id="asset-tomato" src="img/a-tomato.jpg" alt=""><img id="asset-wheat" src="img/a-wheat.jpg" alt=""></div>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <h1>The app asks. The farmer answers.</h1>
+    <p class="lead">This page proposes a new way for the ShramSafal setup screens to work. It is design only: <b>nothing here is built</b> in the app.</p>
+    <p class="lead">The BEFORE pictures are real screens from the test app, taken today. The AFTER phones are drawings that really work: touch them, tap the mic, drag the dial.</p>
+    <p class="lead">Voice stays the way the farmer talks. The Home voice flow is not touched. Only screens that need long reading or many taps turn into a conversation.</p>
+  </div>
+  <div class="moment" id="moment">
+    <p class="q">रामू, तुमच्या शेताला पाणी कुठून येतं?</p>
+    <div class="row"><div class="mic"><button class="mic-btn" type="button" aria-label="बोला"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><p class="mic-cap">बोला</p></div><p class="heard-line" aria-live="polite"><span style="color:var(--s400)">तुमचं उत्तर इथे दिसेल</span></p></div>
+    <div class="chips" aria-hidden="true"><span class="chip">विहीर</span><span class="chip">बोअरवेल</span><span class="chip">कालवा</span><span class="chip">शेततळं</span><span class="chip">टँकर</span></div>
+    <p class="note">Tap the mic. Demo voice, sample words: the mic is a drawing.</p>
+  </div>
+</div></header>
+
+<main class="wrap">
+<div class="blk" id="idea"><h2>The idea in one minute</h2>
+  <div class="idea">
+    <div class="side today"><h3>Today</h3><p>The farmer meets a form. He reads the labels, finds the field, types, scrolls and taps save. Tabs and lists decide the order.</p><svg class="draw" viewBox="0 0 216 330" role="img" aria-label="A long form with many fields and tabs"><g transform="translate(10,6)"><rect x="0" y="0" width="196" height="318" rx="22" fill="#fff" stroke="#C9C5BD" stroke-width="2"/>
+<rect x="14" y="16" width="90" height="10" rx="5" fill="#A8A29E"/><rect x="14" y="40" width="168" height="26" rx="8" fill="#F1EFEA" stroke="#D6D3D1"/><rect x="14" y="76" width="120" height="8" rx="4" fill="#C9C5BD"/><rect x="14" y="90" width="168" height="26" rx="8" fill="#F1EFEA" stroke="#D6D3D1"/>
+<rect x="14" y="128" width="46" height="22" rx="11" fill="#E7E5E4"/><rect x="66" y="128" width="46" height="22" rx="11" fill="#E7E5E4"/><rect x="118" y="128" width="46" height="22" rx="11" fill="#E7E5E4"/>
+<rect x="14" y="162" width="100" height="8" rx="4" fill="#C9C5BD"/><rect x="14" y="176" width="80" height="26" rx="8" fill="#F1EFEA" stroke="#D6D3D1"/><rect x="102" y="176" width="80" height="26" rx="8" fill="#F1EFEA" stroke="#D6D3D1"/>
+<rect x="14" y="214" width="140" height="8" rx="4" fill="#C9C5BD"/><rect x="14" y="228" width="168" height="26" rx="8" fill="#F1EFEA" stroke="#D6D3D1"/>
+<rect x="14" y="262" width="168" height="14" rx="7" fill="#D6D3D1"/>
+<g fill="#A8A29E"><circle cx="30" cy="298" r="6"/><circle cx="64" cy="298" r="6"/><circle cx="98" cy="298" r="6"/><circle cx="132" cy="298" r="6"/><circle cx="166" cy="298" r="6"/></g></g>
+</svg></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg></div>
+    <div class="side new"><h3>New</h3><p>The app leads. It asks one plain question, he answers by voice or one tap, the app says what it understood, he confirms.</p><svg class="draw" viewBox="0 0 216 330" role="img" aria-label="One big question, a breathing mic and big answer tiles"><g transform="translate(10,6)"><rect x="0" y="0" width="196" height="318" rx="22" fill="#FAF7F0" stroke="#047857" stroke-width="3"/>
+<rect x="16" y="20" width="118" height="6" rx="3" fill="#CFE9DC"/><rect x="16" y="20" width="62" height="6" rx="3" fill="#047857"/><circle cx="162" cy="23" r="12" fill="#D1FAE5"/>
+<rect x="16" y="50" width="150" height="14" rx="7" fill="#1C1917"/><rect x="16" y="72" width="104" height="14" rx="7" fill="#1C1917"/>
+<circle cx="98" cy="136" r="38" fill="#047857" opacity=".14"/><circle cx="98" cy="136" r="30" fill="#047857"/><rect x="92" y="122" width="12" height="20" rx="6" fill="#fff"/><path d="M86 136a12 12 0 0 0 24 0M98 148v7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+<rect x="16" y="190" width="78" height="46" rx="14" fill="#fff" stroke="#D6D3D1" stroke-width="2"/><rect x="102" y="190" width="78" height="46" rx="14" fill="#065F46"/><rect x="16" y="244" width="78" height="46" rx="14" fill="#fff" stroke="#D6D3D1" stroke-width="2"/><rect x="102" y="244" width="78" height="46" rx="14" fill="#fff" stroke="#D6D3D1" stroke-width="2"/>
+<rect x="38" y="209" width="34" height="8" rx="4" fill="#78716C"/><rect x="124" y="209" width="34" height="8" rx="4" fill="#fff"/><rect x="38" y="263" width="34" height="8" rx="4" fill="#78716C"/><rect x="124" y="263" width="34" height="8" rx="4" fill="#78716C"/></g></svg></div>
+  </div>
+  <ul class="rules"><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M10 9l2-1.5V16"/></svg></span><div><b>One question at a time</b><span>In his own words: his name, his crop and his plot are inside the sentence.</span></div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><div><b>Voice first, never voice only</b><span>A big mic leads. Big one-tap answers and a typed way are always there too.</span></div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The app fills, he confirms</b><span>It shows what it understood in plain words ("मला असं ऐकू आलं") and he taps one big "बरोबर".</span></div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 21L10 3M17 21L14 3M12 7v2M12 13v2"/></svg></span><div><b>A road, not tabs</b><span>One thin line shows the way and there is one big next. He can leave and come back to the same place.</span></div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14c3-6 6-6 9 0s6 6 9 0"/></svg></span><div><b>Soft, never loud</b><span>A slowly breathing mic, low sounds, a gentle buzz. No shake, no knock, no confetti, no red alarm.</span></div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><div><b>Few blocks, reused</b><span>The same <strong id="block-count">?</strong> blocks build all four conversations, and <strong id="shared-count">?</strong> of them are used by more than one. A new screen costs a list of questions, not new design work.</span></div></li></ul>
+  <table class="matrix" id="matrix" aria-label="Which blocks each flow uses"></table>
+  <p class="fine">The table is read from the working phones on this page, not typed by hand.</p>
+</div>
+
+<div class="blk" id="keep"><h2>What does not change</h2><ul class="keep"><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The Home voice flow</b><br>The "आज काय काम झालं" flow stays exactly as it is. It does not appear on this page.</div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The waiting screen and the result screen</b><br>Not touched.</div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The schedule cards</b><br>Another designer owns them.</div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The consent wording</b><br>The notice and the tick sentence are the app's own words. Here they are only split into pages and read aloud.</div></li><li><span class="ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><div><b>The fields</b><br>Every flow asks the same things today's forms ask. No field is added. Anything new is marked "new behaviour" next to the phone.</div></li></ul></div>
+
+<div class="sec" id="item-1"><h2><span class="num">1</span>How it should feel</h2>
+  <p class="wrong">Six small effects carry the whole feeling. Press each one. The sounds are low sine tones (gain 0.05 to 0.08, fading in 300 to 700 ms); the buzz patterns are very short. Buzz works on Android only, because the app ships as an Android app; on a computer you see a soft glow instead.</p>
+  <div class="feel" id="feel"></div>
+  <div class="switches"><label class="sw"><input type="checkbox" id="sw-sound" checked><i></i>Sound</label><label class="sw"><input type="checkbox" id="sw-buzz" checked><i></i>Buzz</label></div>
+  <p class="fine" id="buzz-where"></p>
+</div>
+
+<div class="sec" id="item-2"><h2><span class="num">2</span>The setup path: a road, not a list</h2><p class="wrong"><b>What is wrong today.</b> The setup hub is one long list: five setup rows over 3 phone screens that all look the same, each with a "पूर्ण" chip and a "?" button, and a counter that says "4 पैकी 4 पूर्ण". Nothing leads the farmer to the next job.</p><div class="strip before"><h3><span class="tag">BEFORE</span> Real screens from the test app, taken today</h3><div class="frames"><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Setup hub, top: the profile card, &quot;शेत तयार करणं 4 पैकी 4 पूर्ण&quot;, then the first two rows, each with &quot;पूर्ण&quot; and a &quot;?&quot; button."><img src="img/b-hub-1.jpg" alt="Setup hub, top: the profile card, &quot;शेत तयार करणं 4 पैकी 4 पूर्ण&quot;, then the first two rows, each with &quot;पूर्ण&quot; and a &quot;?&quot; button."></button><figcaption>Setup hub, top: the profile card, &quot;शेत तयार करणं 4 पैकी 4 पूर्ण&quot;, then the first two rows, each with &quot;पूर्ण&quot; and a &quot;?&quot; button.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Scrolled: water and power, machines, and the soil report marked &quot;लवकरच&quot;, then the money and people groups."><img src="img/b-hub-2.jpg" alt="Scrolled: water and power, machines, and the soil report marked &quot;लवकरच&quot;, then the money and people groups."></button><figcaption>Scrolled: water and power, machines, and the soil report marked &quot;लवकरच&quot;, then the money and people groups.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Bottom of the hub: the app group (language, voice records, privacy, billing, version) and sign out."><img src="img/b-hub-3.jpg" alt="Bottom of the hub: the app group (language, voice records, privacy, billing, version) and sign out."></button><figcaption>Bottom of the hub: the app group (language, voice records, privacy, billing, version) and sign out.</figcaption></figure></div></div><div class="strip after"><h3><span class="tag">AFTER</span> The new phone, 4 key steps</h3><div class="frames"><figure class="fr" data-hook="#f=path&amp;s=1&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The road: two stops done, the next stop as one big card and one big &quot;चला&quot;."><img src="img/after-path-1.png" alt="The road: two stops done, the next stop as one big card and one big &quot;चला&quot;."></button><figcaption>The road: two stops done, the next stop as one big card and one big &quot;चला&quot;.</figcaption></figure><figure class="fr" data-hook="#f=path&amp;s=2&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: He left halfway. The road remembers and says where it will start again."><img src="img/after-path-2.png" alt="He left halfway. The road remembers and says where it will start again."></button><figcaption>He left halfway. The road remembers and says where it will start again.</figcaption></figure><figure class="fr" data-hook="#f=path&amp;s=3&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Water is done and ticked; the next stop is next."><img src="img/after-path-3.png" alt="Water is done and ticked; the next stop is next."></button><figcaption>Water is done and ticked; the next stop is next.</figcaption></figure><figure class="fr" data-hook="#f=path&amp;s=4&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: All done: a calm &quot;छान&quot; and the way back to speaking."><img src="img/after-path-4.png" alt="All done: a calm &quot;छान&quot; and the way back to speaking."></button><figcaption>All done: a calm &quot;छान&quot; and the way back to speaking.</figcaption></figure></div></div><div class="stage" data-flow="path"><div class="phone-col"><div class="ph"></div></div><div class="stage-side"><h3>Try it</h3><p class="sub">A farm with two stops done. Tap "चला" to open a stop, pause with the button at the top, come back, finish.</p><ol class="road"></ol><p class="road-note"></p><button class="again" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg> Start again</button><p class="demo-note">The mic is a drawing: it plays one fixed sample sentence (demo voice, sample words). Names and numbers on the phone are sample. </p><div class="taps"><b>Taps and typing: today vs now.</b><br>Today: five equal rows in a long scroll, and a "?" on each; he must decide the order himself.<br>Now: one big card and one tap ("चला") per stop; the ticks and the summaries tell him the rest.</div></div></div></div>
+<div class="sec" id="item-3"><h2><span class="num">3</span>Sign-in, notice and permissions: said, heard, ticked</h2><p class="wrong"><b>What is wrong today.</b> Before the app opens he meets a first-run screen, a login screen with seven controls (OTP switch, number, password, device tick, consent tick, login button and join-with-code), a notice sheet of over 400 words in dense small type behind a link, and a permissions page.</p><div class="strip before"><h3><span class="tag">BEFORE</span> Real screens from the test app, taken today</h3><div class="frames"><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: First run: Sathi greets, two language buttons, &quot;सुरू करूया&quot;."><img src="img/b-in-1.jpg" alt="First run: Sathi greets, two language buttons, &quot;सुरू करूया&quot;."></button><figcaption>First run: Sathi greets, two language buttons, &quot;सुरू करूया&quot;.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Login screen, empty: number, password, device tick, the consent tick, a grey button, two other doors."><img src="img/b-in-2.jpg" alt="Login screen, empty: number, password, device tick, the consent tick, a grey button, two other doors."></button><figcaption>Login screen, empty: number, password, device tick, the consent tick, a grey button, two other doors.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Login screen, filled and ticked: still one screen with seven controls."><img src="img/b-in-3.jpg" alt="Login screen, filled and ticked: still one screen with seven controls."></button><figcaption>Login screen, filled and ticked: still one screen with seven controls.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The notice sheet, first screen: intro and the five &quot;कोणती माहिती, कशासाठी&quot; blocks in dense text."><img src="img/b-in-4.jpg" alt="The notice sheet, first screen: intro and the five &quot;कोणती माहिती, कशासाठी&quot; blocks in dense text."></button><figcaption>The notice sheet, first screen: intro and the five &quot;कोणती माहिती, कशासाठी&quot; blocks in dense text.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The same sheet scrolled: what we will not do, service providers, &quot;तुमचे हक्क&quot; in small grey type."><img src="img/b-in-5.jpg" alt="The same sheet scrolled: what we will not do, service providers, &quot;तुमचे हक्क&quot; in small grey type."></button><figcaption>The same sheet scrolled: what we will not do, service providers, &quot;तुमचे हक्क&quot; in small grey type.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The permissions page: microphone, location and camera, only explained."><img src="img/b-in-6.jpg" alt="The permissions page: microphone, location and camera, only explained."></button><figcaption>The permissions page: microphone, location and camera, only explained.</figcaption></figure></div></div><div class="strip after"><h3><span class="tag">AFTER</span> The new phone, 6 key steps</h3><div class="frames"><figure class="fr" data-hook="#f=signin&amp;s=1&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Language: Sathi greets in his own words, two big tiles."><img src="img/after-signin-1.png" alt="Language: Sathi greets in his own words, two big tiles."></button><figcaption>Language: Sathi greets in his own words, two big tiles.</figcaption></figure><figure class="fr" data-hook="#f=signin&amp;s=2&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Mobile number: say it, or type on a big keypad."><img src="img/after-signin-2.png" alt="Mobile number: say it, or type on a big keypad."></button><figcaption>Mobile number: say it, or type on a big keypad.</figcaption></figure><figure class="fr" data-hook="#f=signin&amp;s=3&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The notice, first page. It is read aloud (ऐका); the words are the app&#x27;s own."><img src="img/after-signin-3.png" alt="The notice, first page. It is read aloud (ऐका); the words are the app&#x27;s own."></button><figcaption>The notice, first page. It is read aloud (ऐका); the words are the app&#x27;s own.</figcaption></figure><figure class="fr" data-hook="#f=signin&amp;s=14&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The one big tick, with the app&#x27;s own tick sentence."><img src="img/after-signin-4.png" alt="The one big tick, with the app&#x27;s own tick sentence."></button><figcaption>The one big tick, with the app&#x27;s own tick sentence.</figcaption></figure><figure class="fr" data-hook="#f=signin&amp;s=16&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Permissions, one screen each, with a picture."><img src="img/after-signin-5.png" alt="Permissions, one screen each, with a picture."></button><figcaption>Permissions, one screen each, with a picture.</figcaption></figure><figure class="fr" data-hook="#f=signin&amp;s=19&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The arrival."><img src="img/after-signin-6.png" alt="The arrival."></button><figcaption>The arrival.</figcaption></figure></div></div><div class="stage" data-flow="signin"><div class="phone-col"><div class="ph"></div></div><div class="stage-side"><h3>Try it</h3><p class="sub">From the first greeting to the arrival, in the order the farmer meets them. The notice has a "सगळं ऐका" button that plays all pages by itself (shortened for the demo).</p><ol class="road"></ol><p class="road-note"></p><button class="again" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg> Start again</button><p class="demo-note">The mic is a drawing: it plays one fixed sample sentence (demo voice, sample words). Names and numbers on the phone are sample. The notice is the app's own text, split into pages and never reworded. NEW BEHAVIOUR, not in the app today: the permission questions are asked here, one per screen. Today this page only explains and the phone asks at first use.</p><div class="taps"><b>Taps and typing: today vs now.</b><br>Today: 3 separate screens, a typed number plus a password or a code, one tick, and a notice of over 400 words behind a link that he is never required to open.<br>Now: 13 touches with the mic and nothing typed (the notice is 11 short pages: one "सगळं ऐका" tap plays them all, or he reads and taps पुढे).</div></div></div></div>
+<div class="sec" id="item-4"><h2><span class="num">4</span>Water and power: one question at a time</h2><p class="wrong"><b>What is wrong today.</b> Adding a well is a two-step form, and the motor step alone puts name, HP, phase, power source and drip details on one screen. The power timetable is a separate card further down the page, with a 24-hour strip drawn in 11 px type.</p><div class="strip before"><h3><span class="tag">BEFORE</span> Real screens from the test app, taken today</h3><div class="frames"><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Water and power page: the source list, &quot;+ पाण्याचा स्रोत जोडा&quot;, then the timetable &quot;वीज कधी असते?&quot; below."><img src="img/b-water-1.jpg" alt="Water and power page: the source list, &quot;+ पाण्याचा स्रोत जोडा&quot;, then the timetable &quot;वीज कधी असते?&quot; below."></button><figcaption>Water and power page: the source list, &quot;+ पाण्याचा स्रोत जोडा&quot;, then the timetable &quot;वीज कधी असते?&quot; below.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Add a source, step 1 of 2: a typed name and the type chips."><img src="img/b-water-2.jpg" alt="Add a source, step 1 of 2: a typed name and the type chips."></button><figcaption>Add a source, step 1 of 2: a typed name and the type chips.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Step 2 of 2: the motor, with name, HP, phase and power source on one screen."><img src="img/b-water-3.jpg" alt="Step 2 of 2: the motor, with name, HP, phase and power source on one screen."></button><figcaption>Step 2 of 2: the motor, with name, HP, phase and power source on one screen.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The three-phase timetable: a 24-hour strip with 11 px labels, two time boxes and two switches."><img src="img/b-water-4.jpg" alt="The three-phase timetable: a 24-hour strip with 11 px labels, two time boxes and two switches."></button><figcaption>The three-phase timetable: a 24-hour strip with 11 px labels, two time boxes and two switches.</figcaption></figure></div></div><div class="strip after"><h3><span class="tag">AFTER</span> The new phone, 6 key steps</h3><div class="frames"><figure class="fr" data-hook="#f=water&amp;s=1&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Where the water comes from: five drawn tiles and a mic."><img src="img/after-water-1.png" alt="Where the water comes from: five drawn tiles and a mic."></button><figcaption>Where the water comes from: five drawn tiles and a mic.</figcaption></figure><figure class="fr" data-hook="#f=water&amp;s=2&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: A suggested name, or say it."><img src="img/after-water-2.png" alt="A suggested name, or say it."></button><figcaption>A suggested name, or say it.</figcaption></figure><figure class="fr" data-hook="#f=water&amp;s=4&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: HP as one big number."><img src="img/after-water-3.png" alt="HP as one big number."></button><figcaption>HP as one big number.</figcaption></figure><figure class="fr" data-hook="#f=water&amp;s=6&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Single or three phase, with the app&#x27;s own helper lines."><img src="img/after-water-4.png" alt="Single or three phase, with the app&#x27;s own helper lines."></button><figcaption>Single or three phase, with the app&#x27;s own helper lines.</figcaption></figure><figure class="fr" data-hook="#f=water&amp;s=9&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The 24-hour ring: drag two handles, or say it."><img src="img/after-water-5.png" alt="The 24-hour ring: drag two handles, or say it."></button><figcaption>The 24-hour ring: drag two handles, or say it.</figcaption></figure><figure class="fr" data-hook="#f=water&amp;s=10&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: What I understood, in one sentence."><img src="img/after-water-6.png" alt="What I understood, in one sentence."></button><figcaption>What I understood, in one sentence.</figcaption></figure></div></div><div class="stage" data-flow="water"><div class="phone-col"><div class="ph"></div></div><div class="stage-side"><h3>Try it</h3><p class="sub">Try the well. Pick a different type, or add a second motor, to see the questions repeat. Pick हो on the drip question to see the drip questions.</p><ol class="road"></ol><p class="road-note"></p><button class="again" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg> Start again</button><p class="demo-note">The mic is a drawing: it plays one fixed sample sentence (demo voice, sample words). Names and numbers on the phone are sample. The timetable asks for the phase the motor uses; if motors use both phases the question comes once for each. The alternate-week timetable stays in today's screen.</p><div class="taps"><b>Taps and typing: today vs now.</b><br>Today: 4 taps from Home to the motor step, then at least 6 more fields, and the timetable on another card. <span class="dots"><i></i><i></i><i></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span><br>Now: 10 one-tap answers, nothing typed, and the timetable is included (the count above leaves it out). Each answer can be spoken instead.<span class="dots now"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></div></div></div>
+<div class="sec" id="item-5"><h2><span class="num">5</span>Crops and plots: the plot gets built by talking</h2><p class="wrong"><b>What is wrong today.</b> The crop picker is a long searchable photo grid, and adding a plot is a 3-step form whose first step holds the name, area, unit and the variety chips together. The step counter ("पायरी १/३") is small grey type that is easy to miss.</p><div class="strip before"><h3><span class="tag">BEFORE</span> Real screens from the test app, taken today</h3><div class="frames"><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Crops and plots: the grape plots as a grid, and &quot;+ या पिकात प्लॉट जोडा&quot;."><img src="img/b-plot-1.jpg" alt="Crops and plots: the grape plots as a grid, and &quot;+ या पिकात प्लॉट जोडा&quot;."></button><figcaption>Crops and plots: the grape plots as a grid, and &quot;+ या पिकात प्लॉट जोडा&quot;.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Adding a crop: a search box over a long photo grid."><img src="img/b-plot-2.jpg" alt="Adding a crop: a search box over a long photo grid."></button><figcaption>Adding a crop: a search box over a long photo grid.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Add plot, step 1 of 3: name, area, unit and the variety chips together; the step counter is small grey type."><img src="img/b-plot-3.jpg" alt="Add plot, step 1 of 3: name, area, unit and the variety chips together; the step counter is small grey type."></button><figcaption>Add plot, step 1 of 3: name, area, unit and the variety chips together; the step counter is small grey type.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: Step 2 of 3: seed or saplings, company name, quantity and unit."><img src="img/b-plot-4.jpg" alt="Step 2 of 3: seed or saplings, company name, quantity and unit."></button><figcaption>Step 2 of 3: seed or saplings, company name, quantity and unit.</figcaption></figure></div></div><div class="strip after"><h3><span class="tag">AFTER</span> The new phone, 6 key steps</h3><div class="frames"><figure class="fr" data-hook="#f=plots&amp;s=1&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Which crop: photo tiles and a mic."><img src="img/after-plots-1.png" alt="Which crop: photo tiles and a mic."></button><figcaption>Which crop: photo tiles and a mic.</figcaption></figure><figure class="fr" data-hook="#f=plots&amp;s=2&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Variety: the app&#x27;s own list as big tiles."><img src="img/after-plots-2.png" alt="Variety: the app&#x27;s own list as big tiles."></button><figcaption>Variety: the app&#x27;s own list as big tiles.</figcaption></figure><figure class="fr" data-hook="#f=plots&amp;s=3&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Plot name: only a suggestion (variety plus number)."><img src="img/after-plots-3.png" alt="Plot name: only a suggestion (variety plus number)."></button><figcaption>Plot name: only a suggestion (variety plus number).</figcaption></figure><figure class="fr" data-hook="#f=plots&amp;s=4&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Area as a big number, with एकर and गुंठा."><img src="img/after-plots-4.png" alt="Area as a big number, with एकर and गुंठा."></button><figcaption>Area as a big number, with एकर and गुंठा.</figcaption></figure><figure class="fr" data-hook="#f=plots&amp;s=8&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The date: the app&#x27;s own two choices."><img src="img/after-plots-5.png" alt="The date: the app&#x27;s own two choices."></button><figcaption>The date: the app&#x27;s own two choices.</figcaption></figure><figure class="fr" data-hook="#f=plots&amp;s=9&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: What I understood, and one save."><img src="img/after-plots-6.png" alt="What I understood, and one save."></button><figcaption>What I understood, and one save.</figcaption></figure></div></div><div class="stage" data-flow="plots"><div class="phone-col"><div class="ph"></div></div><div class="stage-side"><h3>Try it</h3><p class="sub">Try the grape plot. Choose बियाणं instead of रोपं to see the seed questions. The new idea of adding several plots in one go is NOT shown.</p><ol class="road"></ol><p class="road-note"></p><button class="again" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg> Start again</button><p class="demo-note">The mic is a drawing: it plays one fixed sample sentence (demo voice, sample words). Names and numbers on the phone are sample. The plot name is the farmer's own. The app only suggests "variety plus number", and if his plot names already end in a number it keeps suggesting the next one in his own pattern, as today. In the demo the date also shows "आज दिवस N", the same count today's step 3 shows.</p><div class="taps"><b>Taps and typing: today vs now.</b><br>Today: 6 taps from Home to step 3 and 5 typed or filled fields. <span class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span><br>Now: 12 touches (taps, or a spoken answer and one tap), nothing typed.<span class="dots now"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></div></div></div>
+<div class="sec" id="item-6"><h2><span class="num">6</span>Inviting someone: who, which plots, then the code</h2><p class="wrong"><b>What is wrong today.</b> The invite is one sheet that scrolls over two screens: role chips, a plots row, responsibility chips, the money question, then three optional fields and the make button.</p><div class="strip before"><h3><span class="tag">BEFORE</span> Real screens from the test app, taken today</h3><div class="frames"><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: My team: each person with a role chip, what they can do, and a &quot;बदला&quot; button."><img src="img/b-team-1.jpg" alt="My team: each person with a role chip, what they can do, and a &quot;बदला&quot; button."></button><figcaption>My team: each person with a role chip, what they can do, and a &quot;बदला&quot; button.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The invite sheet, top: four role chips, the plots row, responsibility and the money question."><img src="img/b-team-2.jpg" alt="The invite sheet, top: four role chips, the plots row, responsibility and the money question."></button><figcaption>The invite sheet, top: four role chips, the plots row, responsibility and the money question.</figcaption></figure><figure class="fr"><button class="pic" type="button" aria-label="Enlarge: The sheet, end: optional name, number and attendance-list worker, then &quot;आमंत्रण तयार करा&quot;."><img src="img/b-team-3.jpg" alt="The sheet, end: optional name, number and attendance-list worker, then &quot;आमंत्रण तयार करा&quot;."></button><figcaption>The sheet, end: optional name, number and attendance-list worker, then &quot;आमंत्रण तयार करा&quot;.</figcaption></figure></div></div><div class="strip after"><h3><span class="tag">AFTER</span> The new phone, 6 key steps</h3><div class="frames"><figure class="fr" data-hook="#f=invite&amp;s=1&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Four people, each with what they can do (the app&#x27;s own words)."><img src="img/after-invite-1.png" alt="Four people, each with what they can do (the app&#x27;s own words)."></button><figcaption>Four people, each with what they can do (the app&#x27;s own words).</figcaption></figure><figure class="fr" data-hook="#f=invite&amp;s=2&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Which plots they see: the app&#x27;s own choices."><img src="img/after-invite-2.png" alt="Which plots they see: the app&#x27;s own choices."></button><figcaption>Which plots they see: the app&#x27;s own choices.</figcaption></figure><figure class="fr" data-hook="#f=invite&amp;s=3&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Picking plots, crop by crop."><img src="img/after-invite-3.png" alt="Picking plots, crop by crop."></button><figcaption>Picking plots, crop by crop.</figcaption></figure><figure class="fr" data-hook="#f=invite&amp;s=4&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: Can they see money: yes or no. A permission, no amounts."><img src="img/after-invite-4.png" alt="Can they see money: yes or no. A permission, no amounts."></button><figcaption>Can they see money: yes or no. A permission, no amounts.</figcaption></figure><figure class="fr" data-hook="#f=invite&amp;s=8&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: What I understood, in the card&#x27;s own words."><img src="img/after-invite-5.png" alt="What I understood, in the card&#x27;s own words."></button><figcaption>What I understood, in the card&#x27;s own words.</figcaption></figure><figure class="fr" data-hook="#f=invite&amp;s=9&amp;nofx=1&amp;solo=1"><button class="pic" type="button" aria-label="Enlarge: The code, the QR or the link."><img src="img/after-invite-6.png" alt="The code, the QR or the link."></button><figcaption>The code, the QR or the link.</figcaption></figure></div></div><div class="stage" data-flow="invite"><div class="phone-col"><div class="ph"></div></div><div class="stage-side"><h3>Try it</h3><p class="sub">Try inviting a मुकादम. Pick कामगार to see the money question disappear: the server does not allow it for that choice.</p><ol class="road"></ol><p class="road-note"></p><button class="again" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg> Start again</button><p class="demo-note">The mic is a drawing: it plays one fixed sample sentence (demo voice, sample words). Names and numbers on the phone are sample. The money question is a permission (can they see money), never an amount. The sample plots, names and the code are sample; the QR is a drawing, not a real code.</p><div class="taps"><b>Taps and typing: today vs now.</b><br>Today: at least 4 taps (role, money, make, then QR or link) plus the plots sheet, and up to 3 typed fields (name, number, worker). <span class="dots"><i></i><i></i><i></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i></span><br>Now: 11 touches by tap, nothing typed; every answer can be spoken.<span class="dots now"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></div></div></div>
+
+<div class="blk" id="others"><h2>Other screens with the same problem, not shown</h2>
+  <p>The same blocks would carry these too. They are listed so the idea is clear; there is no decision on them here.</p>
+  <ul class="list-sec"><li><b>Machines</b><br>adding a tractor, sprayer or other machine</li><li><b>Soil and water report</b><br>the report that is still marked "लवकरच"</li><li><b>Money pages</b><br>long pages of rows and totals</li><li><b>Bill review</b><br>reading a bill and fixing its lines</li><li><b>Compare (तुलना)</b><br>long comparison pages</li></ul>
+</div>
+<footer class="end">Design only. Nothing on this page is built in the app. BEFORE: real screens from the test app, taken today. AFTER: recorded from the working phones above.</footer>
+</main>
+
+<dialog class="zoom" id="zoom"><div class="in"><img alt=""><p></p><button type="button">Close</button></div></dialog>
+<script>
+const NOTICE = {
+ "title": "सुरू करण्याआधी",
+ "intro": "श्रम सफल चालण्यासाठी खालची माहिती वापरली जाते.",
+ "brandLine": "श्रम सफल — Agriryot Value Enterprises Private Limited यांची सेवा. ती AgriSync वर चालते.",
+ "purposeCardsHeading": "कोणती माहिती, कशासाठी",
+ "cards": [
+  {
+   "id": "account",
+   "title": "तुमचं खातं",
+   "data": "मोबाईल नंबर, नाव, खात्याची माहिती",
+   "purpose": "लॉगिन, OTP आणि सुरक्षिततेसाठी"
+  },
+  {
+   "id": "farmWork",
+   "title": "शेतातलं काम",
+   "data": "शेत, प्लॉट, पीक, कामं, हजेरी, खर्च, उत्पन्न, टीम",
+   "purpose": "रोजचं काम समजून हिशोब स्पष्ट दाखवण्यासाठी"
+  },
+  {
+   "id": "voiceUploads",
+   "title": "आवाज आणि जोडलेली माहिती",
+   "data": "तुम्ही बोललेलं, लिहिलेलं, फोटो, कागदपत्रं",
+   "purpose": "काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. श्रमसफल तुमचा प्रत्येक मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते. हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही."
+  },
+  {
+   "id": "farmLocation",
+   "title": "शेताची जागा",
+   "data": "शेताची जागा किंवा हद्द",
+   "purpose": "त्या शेतापुरतं हवामान दाखवण्यासाठी. फोनचा सतत मागोवा घेतला जात नाही"
+  },
+  {
+   "id": "technical",
+   "title": "तांत्रिक माहिती",
+   "data": "फोन, वापर, माहिती पाठवणं आणि सुरक्षा — यांची मर्यादित माहिती",
+   "purpose": "नेटवर्क नसताना काम सुरक्षित ठेवून नंतर सिंक करण्यासाठी आणि गैरवापर शोधण्यासाठी"
+  }
+ ],
+ "willNotDo": {
+  "heading": "आम्ही काय करणार नाही",
+  "items": [
+   "तुमची वैयक्तिक माहिती विकणार नाही.",
+   "परवानगीशिवाय जाहिरातींसाठी वापरणार नाही.",
+   "तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता सुधारण्यासाठी वापरल्या जाणार नाहीत.",
+   "तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू."
+  ]
+ },
+ "processors": "OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.",
+ "rights": {
+  "heading": "तुमचे हक्क",
+  "where": "ॲपमधील \"गोपनीयता व संमती\" मध्ये, किंवा arvesystems@gmail.com वर लिहून:",
+  "items": [
+   "दिलेली परवानगी पाहा किंवा मागे घ्या.",
+   "तुमची माहिती पाहण्याची, दुरुस्त करण्याची किंवा तिची प्रत मिळण्याची विनंती करा.",
+   "खातं आणि माहिती मिटवायची विनंती करा. विनंतीनंतर ३० दिवस काहीही मिटवलं जात नाही आणि तोपर्यंत ती रद्द करता येते.",
+   "तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा."
+  ],
+  "withdrawal": "मुख्य परवानगी मागे घेतल्यास काही किंवा सर्व सुविधा बंद होऊ शकतात. आधी कायदेशीररीत्या झालेली प्रक्रिया रद्द होत नाही; कायद्याने आवश्यक तेवढी माहिती ठरावीक काळ ठेवावी लागू शकते.",
+  "boardComplaint": "आमच्याकडे तक्रार करूनही समाधान न झाल्यास, Data Protection Board of India कडे तक्रार करण्याचा तुम्हाला हक्क आहे."
+ },
+ "entity": {
+  "heading": "ही सेवा कोण चालवतं",
+  "contactLabel": "संपर्क"
+ },
+ "acceptanceMeaning": "खूण केल्यावर (१) वापराच्या अटी मान्य होतात, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला तुम्ही स्वतंत्र संमती देता. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.",
+ "tick": {
+  "lead": "माहितीचा वापर कसा होतो हे मला समजले असून, मला सूचना व अटी मान्य आहेत. माझे वय १८ वर्षे किंवा त्याहून अधिक आहे. ",
+  "link": "माहिती वापराची सूचना व अटी",
+  "tail": ""
+ },
+ "ctaDisabledHint": "पुढे जाण्यासाठी खूण करा. खूण केल्याशिवाय श्रम सफल वापरता येत नाही; तोपर्यंत तुमची कोणतीही माहिती साठवली जात नाही.",
+ "links": {
+  "terms": "वापराच्या अटी",
+  "privacy": "गोपनीयता धोरण"
+ },
+ "legalName": "Agriryot Value Enterprises Private Limited",
+ "contact": "arvesystems@gmail.com"
+};
+/* ===== small helpers, icons, drawn pictures (inline SVG only, no emoji) ===== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const DIG = '०१२३४५६७८९';
+const dv = (x) => String(x).replace(/\d/g, d => DIG[d]);
+const MONTHS = ['जानेवारी','फेब्रुवारी','मार्च','एप्रिल','मे','जून','जुलै','ऑगस्ट','सप्टेंबर','ऑक्टोबर','नोव्हेंबर','डिसेंबर'];
+const ART = (name) => { const a = document.getElementById('asset-' + name); return a ? a.getAttribute('src') : ''; };
+const NUMW = ['शून्य','एक','दोन','तीन','चार','पाच','सहा','सात'];
+
+const P = {
+  mic: '<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  bksp: '<path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/><path d="M12 9.5l5 5M17 9.5l-5 5"/>',
+  spk: '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2v2M18 18h2v2"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  pin: '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  cam: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  person: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+  sprout: '<path d="M12 21v-9"/><path d="M12 12C12 8 9 6 5 6c0 4 3 6 7 6zM12 14c0-3 2.5-5 6-5 0 3-2.5 5-6 5z"/>',
+  drop: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  cut: '<path d="M7 7l10 10M17 7L7 17"/>',
+  tractor: '<circle cx="7" cy="16.5" r="3.5"/><circle cx="18" cy="17.5" r="2.5"/><path d="M3 16.5V8h8l2 4h6v5.5M11 8V5h3"/>',
+  flask: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  book: '<path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/>',
+  money: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+  calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M12 12h2M16 12h0M8 16h2M12 16h2"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 5a3.5 3.5 0 0 1 0 6.5M18 14.8c2 .6 3.2 2.3 3.5 5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  hand: '<path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10M12 10V4.5a1.5 1.5 0 0 1 3 0V10M15 10V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 7-6.5 7S6 18.5 5 15l-1.4-3a1.5 1.5 0 0 1 2.6-1.4L9 14"/>'
+};
+const ic = (n, s = 24, sw = 2.2) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]}</svg>`;
+
+/* calm line pictures, 96 x 72 */
+const SK = 'stroke="#065F46" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
+const scene = (inner) => `<svg class="art" viewBox="0 0 96 72" aria-hidden="true"><rect width="96" height="72" rx="14" fill="#ECFDF5"/><path d="M0 50q24-9 48-3t48-2v27H0z" fill="#D1FAE5"/>${inner}</svg>`;
+const WATERART = {
+  Well: scene(`<ellipse cx="48" cy="46" rx="22" ry="7" fill="#fff" ${SK}/><path d="M26 46v7c0 4 10 7 22 7s22-3 22-7v-7" fill="#fff" ${SK}/><path d="M30 43V20M66 43V20M27 20h42" fill="none" ${SK}/><path d="M48 20v11" ${SK} fill="none"/><rect x="43.5" y="31" width="9" height="8" rx="2" fill="#A7F3D0" ${SK}/>`),
+  Borewell: scene(`<rect x="44" y="18" width="8" height="40" rx="1" fill="#fff" ${SK}/><rect x="40" y="13" width="16" height="7" rx="2" fill="#fff" ${SK}/><path d="M52 25h16v8" fill="none" ${SK}/><path d="M68 38c-3.5 4.5-3.5 7 0 7s3.5-2.5 0-7z" fill="#A7F3D0" ${SK}/><path d="M16 64q6-4 12 0t12 0 12 0 12 0 12 0" fill="none" ${SK} opacity=".7"/>`),
+  Canal: scene(`<path d="M0 40L32 29H64L96 40V72H0z" fill="#D1FAE5"/><path d="M18 46L35 37H61L78 46V56H18z" fill="#A7F3D0" ${SK}/><path d="M28 47q5-3 10 0t10 0 10 0 10 0" fill="none" ${SK} opacity=".7"/><path d="M0 40L32 29H64L96 40" fill="none" ${SK}/>`),
+  'Farm Pond': scene(`<path d="M8 43q0-14 17-17h46q17 3 17 17" fill="none" ${SK} opacity=".55"/><path d="M14 44q0-10 12-12h44q12 2 12 12t-12 12H26q-12-2-12-12z" fill="#A7F3D0" ${SK}/><path d="M32 44q4-3 8 0t8 0 8 0 8 0" fill="none" ${SK} opacity=".7"/>`),
+  Tanker: scene(`<rect x="10" y="26" width="50" height="26" rx="13" fill="#A7F3D0" ${SK}/><path d="M62 33h13l9 10v9H62z" fill="#fff" ${SK}/><path d="M35 33c-3 4-3 6 0 6s3-2 0-6z" fill="#fff" ${SK}/><circle cx="26" cy="56" r="5.5" fill="#065F46"/><circle cx="46" cy="56" r="5.5" fill="#065F46"/><circle cx="76" cy="56" r="5.5" fill="#065F46"/>`)
+};
+const POWERART = {
+  MSEB: scene(`<path d="M40 60V16M58 60V16M32 24h34M34 34h30" fill="none" ${SK}/><path d="M12 30q12 8 22 4M66 34q12-4 20 4" fill="none" ${SK} opacity=".6"/><path d="M40 60L58 16M58 60L40 16" fill="none" ${SK} opacity=".5"/>`),
+  Solar: scene(`<circle cx="30" cy="24" r="8" fill="#FDE68A" stroke="#B45309" stroke-width="2"/><path d="M30 8v5M30 35v5M14 24h5M41 24h5M19 13l3 3M38 32l3 3M41 13l-3 3M19 35l3-3" stroke="#B45309" stroke-width="2" stroke-linecap="round"/><path d="M40 56l6-18h36l-6 18z" fill="#A7F3D0" ${SK}/><path d="M52 38l-3 18M66 38l-3 18M43 47h38" fill="none" ${SK} opacity=".6"/>`),
+  Generator: scene(`<rect x="26" y="26" width="44" height="28" rx="6" fill="#fff" ${SK}/><path d="M38 26v-6h20v6" fill="none" ${SK}/><path d="M34 40h28" ${SK} fill="none"/><circle cx="36" cy="58" r="4" fill="#065F46"/><circle cx="60" cy="58" r="4" fill="#065F46"/><path d="M48 31l-4 7h8l-4 7" fill="none" ${SK}/>`)
+};
+const PHASEART = {
+  1: scene(`<path d="M14 40q8.5-20 17 0t17 0 17 0 17 0" fill="none" stroke="#065F46" stroke-width="3" stroke-linecap="round"/>`),
+  3: scene(`<path d="M14 30q8.5-14 17 0t17 0 17 0 17 0" fill="none" stroke="#065F46" stroke-width="2.6" stroke-linecap="round"/><path d="M14 40q8.5-14 17 0t17 0 17 0 17 0" fill="none" stroke="#10B981" stroke-width="2.6" stroke-linecap="round"/><path d="M14 50q8.5-14 17 0t17 0 17 0 17 0" fill="none" stroke="#6EE7B7" stroke-width="2.6" stroke-linecap="round"/>`)
+};
+const QRART = (() => {
+  /* a DRAWING that looks like a code but is not one: three corner marks and a pseudo-random pattern */
+  let s = '<svg class="qr" viewBox="0 0 21 21" aria-label="नमुना QR" role="img"><rect width="21" height="21" rx="2" fill="#fff"/>';
+  const mark = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="#1C1917"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="#fff"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="#1C1917"/>`;
+  s += mark(0, 0) + mark(14, 0) + mark(0, 14);
+  let seed = 7;
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
+    if ((x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12)) continue;
+    seed = (seed * 9301 + 49297) % 233280;
+    if (seed / 233280 > 0.52) s += `<rect x="${x}" y="${y}" width="1" height="1" fill="#1C1917"/>`;
+  }
+  return s + '</svg>';
+})();
+
+/* ===== hooks: #f=<flow>&s=<step>&nofx=1&solo=1  (+ alt=1 picks the other branch of a flow) ===== */
+const HASH = (() => { const o = {}; (location.hash || '').replace(/^#/, '').split('&').forEach(p => { if (!p) return; const i = p.indexOf('='); const k = i < 0 ? p : p.slice(0, i); try { o[decodeURIComponent(k)] = i < 0 ? '' : decodeURIComponent(p.slice(i + 1)); } catch (e) { /* ignore a broken hash */ } }); return o; })();
+const NOFX = HASH.nofx === '1';
+let ALT = HASH.alt === '1';
+if (NOFX) document.documentElement.classList.add('nofx');
+
+/* ===== the feel: soft sine tones (gain 0.05 to 0.08, 300 to 700 ms decay) and short buzz patterns ===== */
+const FX = { sound: true, buzz: true, ctx: null };
+const CAN_BUZZ = typeof navigator.vibrate === 'function' && /Android/i.test(navigator.userAgent || '');
+const EFFECTS = {
+  arrive:  { tones: [[293.66, 0, .65, .05], [392, .2, .6, .04]], vib: null },
+  choose:  { tones: [[392, 0, .32, .06]], vib: [6] },
+  mic:     { tones: [[329.63, 0, .4, .06], [440, .17, .45, .05]], vib: [10] },
+  heard:   { tones: [[440, 0, .4, .05], [554.37, .13, .5, .05]], vib: null },
+  confirm: { tones: [[392, 0, .32, .07], [523.25, .15, .55, .07]], vib: [8, 70, 12] },
+  done:    { tones: [[329.63, 0, .5, .06], [392, .2, .55, .07], [493.88, .4, .7, .08]], vib: [10, 90, 12, 90, 16] }
+};
+function audioCtx() {
+  if (FX.ctx) return FX.ctx;
+  try { FX.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { FX.ctx = null; }
+  return FX.ctx;
+}
+function tone(freq, start, dur, gain) {
+  const c = audioCtx(); if (!c) return;
+  try {
+    if (c.state === 'suspended') c.resume();
+    const t = c.currentTime + start, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.045);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) { /* no audio here: nothing to do */ }
+}
+function glowOn(node) {
+  if (!node) return;
+  node.classList.remove('glow'); void node.offsetWidth; node.classList.add('glow');
+  setTimeout(() => node.classList.remove('glow'), 1200);
+}
+function fx(name, node) {
+  if (NOFX) return;
+  const e = EFFECTS[name]; if (!e) return;
+  if (FX.sound) e.tones.forEach(t => tone(t[0], t[1], t[2], t[3]));
+  if (FX.buzz && e.vib) {
+    if (CAN_BUZZ) { try { navigator.vibrate(e.vib); } catch (x) { /* ignore */ } } else glowOn(node);
+  }
+}
+
+/* ===== the shell of every phone ===== */
+const SHELL = () => `<div class="ph-glow"></div>
+<div class="ph-top"><button type="button" class="ph-back" aria-label="मागे">${ic('back', 24, 2.6)}</button><div class="ph-line" role="progressbar" aria-label="प्रगती" aria-valuemin="0" aria-valuemax="100"><i></i></div><button type="button" class="ph-later" aria-label="नंतर करू" hidden>${ic('pause', 22, 2.6)}</button><div class="ph-av"><img alt="" src="${ART('sathi-point')}"></div></div>
+<div class="ph-body"></div><div class="ph-foot"></div>`;
+
+const clockText = (m) => {
+  const h = Math.floor(m / 60), mm = m % 60;
+  const p = (h >= 4 && h < 6) ? 'पहाटे' : (h >= 6 && h < 12) ? 'सकाळी' : (h >= 12 && h < 16) ? 'दुपारी' : (h >= 16 && h < 20) ? 'संध्याकाळी' : 'रात्री';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${p} ${dv(h12)}:${dv(String(mm).padStart(2, '0'))}`;
+};
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const hoursText = (min) => { const h = min / 60; return dv(Number.isInteger(h) ? h : h.toFixed(1)) + ' तास'; };
+const todayParts = () => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }; };
+const dayDiff = (p, q) => Math.round((Date.UTC(q.y, q.m - 1, q.d) - Date.UTC(p.y, p.m - 1, p.d)) / 86400000);
+const dim = (y, m) => new Date(y, m, 0).getDate();
+const isoOf = (p) => `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }; };
+const dateWords = (p) => `${dv(p.d)} ${MONTHS[p.m - 1]} ${dv(p.y)}`;
+
+class Phone {
+  constructor(root, def) {
+    this.root = root; root.classList.add('ph'); root.innerHTML = SHELL();
+    this.body = $('.ph-body', root); this.foot = $('.ph-foot', root);
+    this.back = $('.ph-back', root); this.laterBtn = $('.ph-later', root);
+    this.line = $('.ph-line', root); this.bar = $('i', this.line);
+    this.stack = []; this.listeners = []; this.timers = []; this.reading = false; this.autoRead = false;
+    this.back.onclick = () => this.goBack();
+    this.laterBtn.onclick = () => this.leave('later');
+    this.enter(def, {});
+  }
+  on(fn) { this.listeners.push(fn); }
+  emit() { this.listeners.forEach(f => f(this)); }
+  get f() { return this.stack[this.stack.length - 1]; }
+  get steps() { return this.f.def.steps(this.f.ans, this); }
+  after(fn, ms) { const id = setTimeout(fn, ms); this.timers.push(id); return id; }
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; }
+  enter(def, o) { this.stack.push({ def, ans: o.ans || {}, i: o.i || 0, embedded: !!o.embedded, onExit: o.onExit }); this.render(); }
+  render() {
+    this.clearTimers();
+    const f = this.f, steps = f.def.steps(f.ans, this);
+    f.i = Math.max(0, Math.min(f.i, steps.length - 1));
+    const st = steps[f.i]; this.st = st; this.locked = false;
+    this.body.innerHTML = ''; this.foot.innerHTML = '';
+    const em = f.embedded;
+    this.laterBtn.hidden = !(em && st.kind !== 'road');
+    this.back.setAttribute('aria-disabled', (f.i === 0 && !em) ? 'true' : 'false');
+    const prog = f.def.progress ? f.def.progress(this) : f.i / Math.max(1, steps.length - 1);
+    this.bar.style.width = Math.max(3, Math.round(prog * 100)) + '%';
+    this.line.setAttribute('aria-valuenow', String(Math.round(prog * 100)));
+    if (st.kind !== 'read') this.autoRead = false;
+    KINDS[st.kind].call(this, st);
+    if (!NOFX) { this.body.classList.remove('enter'); void this.body.offsetWidth; this.body.classList.add('enter'); }
+    this.body.scrollTop = 0;
+    this.emit();
+  }
+  next() { const n = this.steps.length; if (this.f.i < n - 1) { this.f.i++; this.render(); } else this.complete(); }
+  goBack() { const f = this.f; if (f.i > 0) { f.i--; this.render(); } else if (f.embedded) this.leave('back'); }
+  complete() { if (this.f.embedded) this.leave('done'); else this.restart(); }
+  leave(reason) { const fr = this.stack.pop(); if (fr && fr.onExit) fr.onExit(reason, fr); this.render(); }
+  restart() { this.stack.length = 1; const b = this.stack[0]; b.ans = {}; b.i = 0; if (b.def.reset) b.def.reset(this); this.render(); }
+  toast(msg) { const t = el('div', 'toast', msg); t.setAttribute('role', 'status'); this.root.append(t); setTimeout(() => t.remove(), 2600); }
+
+  /* ---- pieces used by several blocks ---- */
+  ask(st) {
+    const w = document.createDocumentFragment();
+    if (st.sup) w.append(el('p', 'sup', st.sup));
+    if (st.q) w.append(el('h2', 'q', st.q));
+    if (st.helper) w.append(el('p', 'helper' + (st.hk ? ' k' : ''), st.helper));
+    return w;
+  }
+  mic(st, o = {}) {
+    const w = el('div', 'mic' + (o.compact ? ' compact' : ''));
+    const b = el('button', 'mic-btn', ic('mic', 46, 2.4)); b.type = 'button'; b.setAttribute('aria-label', 'बोला');
+    const cap = el('p', 'mic-cap', 'बोला'); cap.setAttribute('aria-live', 'polite');
+    b.onclick = () => {
+      if (this.locked || w.classList.contains('on')) return;
+      w.classList.add('on'); cap.innerHTML = '<span class="bars"><i></i><i></i><i></i><i></i></span>ऐकत आहे';
+      fx('mic', this.root);
+      this.after(() => this.heard(st, w), NOFX ? 0 : 1900);
+    };
+    w.append(b, cap); return w;
+  }
+  heard(st, w) {
+    const v = typeof st.voice === 'function' ? st.voice(this.f.ans) : st.voice;
+    const card = el('div', 'heard');
+    card.innerHTML = `<div class="lab"><span>मला असं ऐकू आलं:</span><span class="chip">नमुना आवाज</span></div><div class="say">${v.say}</div>`;
+    const ok = el('button', 'b-prim', 'बरोबर'); ok.type = 'button';
+    const again = el('button', 'b-quiet', 'पुन्हा बोला'); again.type = 'button';
+    ok.onclick = () => { if (this.locked) return; this.locked = true; Object.assign(this.f.ans, v.set); fx('confirm', this.root); this.after(() => this.next(), NOFX ? 0 : 300); };
+    again.onclick = () => card.replaceWith(this.mic(st, { compact: w.classList.contains('compact') }));
+    card.append(ok, again); w.replaceWith(card); fx('heard', this.root);
+  }
+  primary(label, onclick, disabled) {
+    const b = el('button', 'b-prim', label); b.type = 'button'; b.disabled = !!disabled; b.onclick = () => { if (!b.disabled) onclick(); };
+    this.foot.append(b); return b;
+  }
+  quiet(label, onclick, where) {
+    const b = el('button', 'b-quiet', label); b.type = 'button'; b.onclick = onclick; (where || this.foot).append(b); return b;
+  }
+  keypad(onKey, dec) {
+    const pad = el('div', 'keypad'); pad.hidden = true;
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', dec ? '.' : '', '0', 'bk'].forEach(k => {
+      const b = el('button', k === '' ? 'ghost' : '', k === 'bk' ? ic('bksp', 28, 2.2) : (k === '.' ? '.' : (k === '' ? '' : dv(k)))); b.type = 'button';
+      if (k === 'bk') b.setAttribute('aria-label', 'पुसा'); else if (k === '') b.tabIndex = -1;
+      b.onclick = () => { onKey(k); fx('choose', this.root); }; pad.append(b);
+    });
+    return pad;
+  }
+}
+
+/* ===== the blocks: every flow is a list of these ===== */
+const KINDS = {
+  /* choose one: big tiles, a mic above them */
+  tiles(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    if (!st.nomic) b.append(this.mic(st, { compact: !!st.micCompact }));
+    const cur = a[st.key];
+    const list = typeof st.tiles === 'function' ? st.tiles(a) : st.tiles;
+    const g = el('div', 'tiles c' + (st.cols || 2));
+    list.forEach(t => {
+      const x = el('button', 'tile' + (st.row ? ' row' : '') + (cur === t.k ? ' on' : '')); x.type = 'button'; x.setAttribute('aria-pressed', String(cur === t.k));
+      const pic = (t.art || '') + (t.img ? `<img class="crop" alt="" src="${t.img}">` : '');
+      const txt = `<span class="t">${t.t}</span>${t.s ? `<span class="s">${t.s}</span>` : ''}`;
+      x.innerHTML = pic + (st.row ? `<span class="tx">${txt}</span>` : txt) + `<span class="tick">${ic('check', 16, 3.2)}</span>`;
+      x.onclick = () => {
+        if (this.locked) return; this.locked = true;
+        $$('.tile', g).forEach(y => { y.classList.remove('on'); y.setAttribute('aria-pressed', 'false'); });
+        x.classList.add('on'); x.setAttribute('aria-pressed', 'true');
+        a[st.key] = t.k; if (st.onPick) st.onPick(t, a);
+        fx('choose', this.root); this.after(() => this.next(), NOFX ? 0 : 420);
+      };
+      g.append(x);
+    });
+    b.append(g);
+    if (st.note) b.append(el('p', 'helper', st.note));
+    if (cur !== undefined) this.primary('पुढे', () => this.next());
+  },
+
+  /* a number: big steppers, a keypad for the typed way */
+  number(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    const micw = this.mic(st); b.append(micw);
+    let v = a[st.key] !== undefined ? a[st.key] : (st.def !== undefined ? st.def : null);
+    if (st.units && a[st.unitKey] === undefined) a[st.unitKey] = st.units[0].k;
+    let buf = v == null ? '' : String(v);
+    const out = el('div', 'val'), minus = el('button', 'pm', ic('minus', 30, 2.8)), plus = el('button', 'pm', ic('plus', 30, 2.8));
+    minus.type = plus.type = 'button'; minus.setAttribute('aria-label', 'कमी करा'); plus.setAttribute('aria-label', 'वाढवा');
+    const nb = el('div', 'numbox'); nb.append(minus, out, plus); b.append(nb);
+    let utiles = null;
+    if (st.units) {
+      utiles = el('div', 'tiles c' + st.units.length);
+      st.units.forEach(u => {
+        const x = el('button', 'tile'); x.type = 'button'; x.innerHTML = `<span class="t">${u.t}</span><span class="tick">${ic('check', 16, 3.2)}</span>`;
+        x.onclick = () => { a[st.unitKey] = u.k; fx('choose', this.root); paint(); };
+        x.dataset.k = u.k; utiles.append(x);
+      });
+      b.append(utiles);
+    }
+    const pad = this.keypad(k => {
+      if (k === 'bk') buf = buf.slice(0, -1);
+      else if (k === '.') { if (st.dec && !buf.includes('.') && buf !== '') buf += '.'; }
+      else if (buf.length < 6) buf = (buf === '0' ? '' : buf) + k;
+      v = buf === '' || buf === '.' ? null : parseFloat(buf); paint();
+    }, st.dec);
+    b.append(pad);
+    const ok = this.primary('पुढे', () => { a[st.key] = v; fx('confirm', this.root); this.next(); }, true);
+    const paint = () => {
+      const u = st.units ? st.units.find(x => x.k === a[st.unitKey]) : null;
+      const unitTxt = u ? u.t : (st.unit || '');
+      out.className = 'val' + (v == null ? ' empty' : '');
+      out.innerHTML = (v == null ? '—' : dv(v)) + (unitTxt ? `<small>${unitTxt}</small>` : '');
+      if (utiles) $$('.tile', utiles).forEach(x => { const on = x.dataset.k === a[st.unitKey]; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+      const mx = typeof st.max === 'function' ? st.max(a) : st.max;
+      ok.disabled = !(v != null && v >= (st.min != null ? st.min : 0) && (mx == null || v <= mx));
+    };
+    const step = (dir) => {
+      const base = v == null ? 0 : v; let n = Math.round((base + dir * (st.step || 1)) * 100) / 100;
+      n = Math.max(st.min != null ? st.min : 0, Math.min(typeof st.max === 'function' ? st.max(a) : (st.max != null ? st.max : 999999), n));
+      v = n; buf = String(n); paint(); fx('choose', this.root);
+    };
+    minus.onclick = () => step(-1); plus.onclick = () => step(1);
+    const tg = this.quiet('लिहा', () => { pad.hidden = !pad.hidden; tg.textContent = pad.hidden ? 'लिहा' : 'लपवा'; micw.classList.toggle('compact', !pad.hidden); }, b);
+    if (st.skip) this.quiet(st.skip, () => { a[st.key] = null; this.next(); }, this.foot);
+    paint();
+  },
+
+  /* a short name: suggestion first, mic, typed way */
+  text(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    const micw = this.mic(st); b.append(micw);
+    const sug = st.suggest ? st.suggest(a) : null;
+    if (sug) {
+      const x = el('button', 'tile row' + (a[st.key] === sug ? ' on' : '')); x.type = 'button';
+      x.innerHTML = `<span class="tx"><span class="s">सुचवलेलं — फक्त सुचवलेलं, नाव तुमचंच</span><span class="t">${sug}</span></span><span class="tick">${ic('check', 16, 3.2)}</span>`;
+      x.onclick = () => { if (this.locked) return; this.locked = true; a[st.key] = sug; x.classList.add('on'); fx('choose', this.root); this.after(() => this.next(), NOFX ? 0 : 420); };
+      b.append(x);
+    }
+    if (st.note) b.append(el('p', 'helper', st.note));
+    const wrap = el('div'); b.append(wrap);
+    const showField = () => {
+      wrap.innerHTML = '';
+      const inp = el('input', 'fld'); inp.type = 'text'; inp.lang = 'mr'; inp.value = a[st.key] || ''; inp.placeholder = st.ph || ''; inp.setAttribute('aria-label', st.q);
+      wrap.append(inp);
+      this.foot.innerHTML = '';
+      const ok = this.primary('पुढे', () => { a[st.key] = inp.value.trim(); fx('confirm', this.root); this.next(); }, !inp.value.trim());
+      inp.oninput = () => { ok.disabled = !inp.value.trim(); };
+      inp.onkeydown = (e) => { if (e.key === 'Enter' && !ok.disabled) ok.click(); };
+      if (st.skip) this.quiet(st.skip, () => { a[st.key] = ''; this.next(); });
+      if (!NOFX) setTimeout(() => inp.focus(), 50);
+    };
+    if (a[st.key]) showField(); else {
+      this.quiet('लिहा', showField, b);
+      if (st.skip) this.quiet(st.skip, () => { a[st.key] = ''; this.next(); });
+    }
+  },
+
+  /* digits: a phone number or a code */
+  digits(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    const micw = this.mic(st); b.append(micw);
+    let buf = a[st.key] || '';
+    const disp = el('div'); b.append(disp);
+    const warn = el('p', 'warn', 'दहा अंकी मोबाईल नंबर टाका.'); warn.hidden = true; b.append(warn);
+    const pad = this.keypad(k => { if (k === 'bk') buf = buf.slice(0, -1); else if (buf.length < st.len) buf += k; paint(); });
+    b.append(pad);
+    const ok = this.primary('पुढे', () => { a[st.key] = buf; fx('confirm', this.root); this.next(); }, true);
+    const paint = () => {
+      if (st.boxes) {
+        disp.className = 'digits'; disp.innerHTML = '';
+        for (let i = 0; i < st.len; i++) disp.append(el('span', 'd' + (i === buf.length ? ' on' : ''), buf[i] ? dv(buf[i]) : ''));
+      } else {
+        disp.className = 'digits phone'; disp.innerHTML = `<span class="pre">+९१</span><span>${dv(buf)}</span><span class="ph-empty">${'•'.repeat(st.len - buf.length)}</span>`;
+      }
+      ok.disabled = buf.length !== st.len;
+      warn.hidden = !(st.warnShort && buf.length > 0 && buf.length < st.len);
+    };
+    const tg = this.quiet('लिहा', () => { pad.hidden = !pad.hidden; tg.textContent = pad.hidden ? 'लिहा' : 'लपवा'; micw.classList.toggle('compact', !pad.hidden); }, b);
+    if (st.skip) this.quiet(st.skip, () => { a[st.key] = ''; this.next(); });
+    paint();
+  },
+
+  /* the 24-hour ring */
+  dial(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    b.append(this.mic(st, { compact: true }));
+    const cur = a[st.key] && !a[st.key].none ? a[st.key] : { off: 720, on: 1080 };
+    let off = cur.off, on = cur.on;
+    const C = 142, R = 104, SW = 30;
+    const pt = (m) => { const g = (m / 1440) * 2 * Math.PI - Math.PI / 2; return [C + R * Math.cos(g), C + R * Math.sin(g)]; };
+    const arc = () => { let d = (on - off + 1440) % 1440; if (d === 0) return ''; const [x1, y1] = pt(off), [x2, y2] = pt(off + d); return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${d > 720 ? 1 : 0} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`; };
+    const box = el('div', 'dial'); b.append(box);
+    box.innerHTML = `<svg viewBox="0 0 284 284" aria-hidden="true"><circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#6EE7B7" stroke-width="${SW}"/><path class="off" d="" fill="none" stroke="#D6D3D1" stroke-width="${SW}"/></svg>
+<div class="mid"><b></b><span>वीज असते</span></div>`;
+    [['रात्री १२', 0], ['सकाळी ६', 360], ['दुपारी १२', 720], ['संध्या ६', 1080]].forEach(([t, m]) => {
+      const [x, y] = pt(m); const l = el('span', 'lbl', t);
+      l.style.left = (x / 284 * 100) + '%'; l.style.top = (y / 284 * 100) + '%'; l.style.transform = 'translate(-50%,-50%)'; l.style.background = 'rgba(255,255,255,.85)'; l.style.borderRadius = '9px'; l.style.padding = '1px 6px';
+      box.append(l);
+    });
+    const mk = (cls, label) => { const h = el('button', 'hd ' + cls, ic(cls === 'off' ? 'cut' : 'bolt', 22, 2.6)); h.type = 'button'; h.setAttribute('role', 'slider'); h.setAttribute('aria-label', label); h.setAttribute('aria-valuemin', '0'); h.setAttribute('aria-valuemax', '1410'); box.append(h); return h; };
+    const hOff = mk('off', 'वीज जाण्याची वेळ'), hOn = mk('on', 'वीज येण्याची वेळ');
+    const txt = el('p', 'dial-txt'); b.append(txt);
+    const warn = el('p', 'warn', 'वीज जाण्याची आणि येण्याची वेळ एकच असू शकत नाही'); warn.hidden = true; b.append(warn);
+    const ok = this.primary('पुढे', () => { a[st.key] = { off, on }; fx('confirm', this.root); this.next(); });
+    const paint = () => {
+      const offMin = (on - off + 1440) % 1440;
+      $('.off', box).setAttribute('d', arc());
+      $('.mid b', box).textContent = offMin === 0 ? '—' : hoursText(1440 - offMin);
+      [[hOff, off], [hOn, on]].forEach(([h, m]) => { const [x, y] = pt(m); h.style.left = (x / 284 * 100) + '%'; h.style.top = (y / 284 * 100) + '%'; h.setAttribute('aria-valuenow', String(m)); h.setAttribute('aria-valuetext', clockText(m)); });
+      txt.innerHTML = `वीज जाते: <b>${clockText(off)}</b><br>वीज येते: <b>${clockText(on)}</b>`;
+      warn.hidden = offMin !== 0; ok.disabled = offMin === 0;
+    };
+    const fromEvent = (e) => { const r = box.getBoundingClientRect(); const g = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) + Math.PI / 2; let m = Math.round(((g / (2 * Math.PI) * 1440) + 1440) % 1440 / 30) * 30; return m % 1440; };
+    let drag = null;
+    [[hOff, 'off'], [hOn, 'on']].forEach(([h, which]) => {
+      h.addEventListener('pointerdown', e => { drag = which; try { h.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } e.preventDefault(); });
+      h.addEventListener('pointermove', e => { if (drag !== which) return; const m = fromEvent(e); if (which === 'off') off = m; else on = m; paint(); });
+      h.addEventListener('pointerup', () => { if (drag === which) { drag = null; fx('choose', this.root); } });
+      h.addEventListener('keydown', e => { const d = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 30 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -30 : 0; if (!d) return; e.preventDefault(); if (which === 'off') off = (off + d + 1440) % 1440; else on = (on + d + 1440) % 1440; paint(); });
+    });
+    box.addEventListener('pointerdown', e => { if (e.target.closest('.hd')) return; const m = fromEvent(e); const dOff = Math.min(Math.abs(m - off), 1440 - Math.abs(m - off)), dOn = Math.min(Math.abs(m - on), 1440 - Math.abs(m - on)); if (dOff <= dOn) off = m; else on = m; paint(); fx('choose', this.root); });
+    this.quiet('रोज वीज जात नाही (२४ तास)', () => { a[st.key] = { none: true }; fx('confirm', this.root); this.next(); }, this.foot);
+    paint();
+  },
+
+  /* a date: the app's own two choices, then a big day-month-year picker */
+  date(st) {
+    const a = this.f.ans, b = this.body, today = todayParts();
+    b.append(this.ask(st));
+    let cur = a[st.key] || {}; let mode = cur.mode || null; let p = cur.date ? { ...cur.date } : { ...today };
+    const micHost = el('div'); b.append(micHost);
+    const g = el('div', 'tiles c2'); b.append(g);
+    const steps = el('div', 'dstep'); b.append(steps);
+    const info = el('p', 'helper k'); b.append(info);
+    const warn = el('p', 'warn'); warn.hidden = true; b.append(warn);
+    const ok = this.primary('पुढे', () => { a[st.key] = { mode, date: mode === 'today' ? today : { ...p } }; fx('confirm', this.root); this.next(); }, true);
+    const tiles = [['today', 'आज'], ['earlier', 'आधी केली']].map(([k, t]) => {
+      const x = el('button', 'tile'); x.type = 'button'; x.innerHTML = `<span class="t">${t}</span><span class="tick">${ic('check', 16, 3.2)}</span>`;
+      x.onclick = () => { const was = mode; mode = k; fx('choose', this.root); if (was !== k) micMount(); paint(); }; g.append(x); return [k, x];
+    });
+    const col = (label, key) => {
+      const c = el('div', 'c'), up = el('button', '', ic('plus', 26, 2.8)), out = el('output'), dn = el('button', '', ic('minus', 26, 2.8));
+      up.type = dn.type = 'button'; up.setAttribute('aria-label', label + ' वाढवा'); dn.setAttribute('aria-label', label + ' कमी करा');
+      c.append(el('span', '', label), up, out, dn); steps.append(c);
+      const bump = (d) => {
+        if (key === 'd') p.d = ((p.d - 1 + d + dim(p.y, p.m)) % dim(p.y, p.m)) + 1;
+        else if (key === 'm') { p.m = ((p.m - 1 + d + 12) % 12) + 1; p.d = Math.min(p.d, dim(p.y, p.m)); }
+        else { p.y += d; p.d = Math.min(p.d, dim(p.y, p.m)); }
+        fx('choose', this.root); paint();
+      };
+      up.onclick = () => bump(1); dn.onclick = () => bump(-1);
+      return out;
+    };
+    const oD = col('दिवस', 'd'), oM = col('महिना', 'm'), oY = col('वर्ष', 'y');
+    const micMount = () => { micHost.innerHTML = ''; micHost.append(this.mic(st, { compact: mode === 'earlier' })); };
+    const paint = () => {
+      tiles.forEach(([k, x]) => { x.classList.toggle('on', mode === k); x.setAttribute('aria-pressed', String(mode === k)); });
+      steps.hidden = mode !== 'earlier';
+      oD.textContent = dv(p.d); oM.textContent = MONTHS[p.m - 1]; oY.textContent = dv(p.y);
+      const chosen = mode === 'today' ? today : (mode === 'earlier' ? p : null);
+      let problem = null;
+      if (mode === 'earlier') { const n = dayDiff(p, today); if (n < 0) problem = 'आजपर्यंतची तारीख निवडा'; else if (n > 365 * 3) problem = '३ वर्षांपेक्षा जुनी तारीख चालत नाही'; }
+      warn.hidden = !problem; warn.textContent = problem || '';
+      info.textContent = chosen && !problem ? `आज दिवस ${dv(dayDiff(chosen, today))}` : '';
+      info.hidden = !info.textContent;
+      ok.disabled = !(mode && !problem);
+    };
+    micMount(); paint();
+  },
+
+  /* pick several (the plots) */
+  pick(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    b.append(this.mic(st, { compact: true }));
+    let chosen = new Set(a[st.key] || []);
+    const groups = st.groups(a);
+    const total = groups.reduce((n, g) => n + g.plots.length, 0);
+    const cnt = el('p', 'cnt'); this.foot.append(cnt);
+    const ok = this.primary('पुढे', () => { a[st.key] = [...chosen]; fx('confirm', this.root); this.next(); }, true);
+    const paint = () => {
+      $$('.chips5 button', b).forEach(x => { const on = chosen.has(x.dataset.id); x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+      cnt.textContent = `${dv(total)} पैकी ${dv(chosen.size)} निवडले`; ok.disabled = chosen.size === 0;
+    };
+    groups.forEach(gr => {
+      const s = el('section', 'grp');
+      s.innerHTML = `<div class="gh"><img alt="" src="${gr.img}"><div><b>${gr.name}</b><br><span>${dv(gr.plots.length)} प्लॉट</span></div></div>`;
+      const grid = el('div', 'chips5');
+      gr.plots.forEach(p => { const x = el('button', '', `<span>${p.name}</span><span class="k">${ic('check', 14, 3.4)}</span>`); x.type = 'button'; x.dataset.id = p.id; x.onclick = () => { if (chosen.has(p.id)) chosen.delete(p.id); else chosen.add(p.id); fx('choose', this.root); paint(); }; grid.append(x); });
+      s.append(grid);
+      if (gr.plots.length >= 7) { const all = el('button', 'allbtn', `सगळे निवडा ${dv(gr.plots.length)}`); all.type = 'button'; all.onclick = () => { gr.plots.forEach(p => chosen.add(p.id)); fx('choose', this.root); paint(); }; s.append(all); }
+      b.append(s);
+    });
+    paint();
+  },
+
+  /* a page that is read aloud */
+  read(st) {
+    const b = this.body;
+    if (st.sup) b.append(el('p', 'sup', st.sup));
+    if (st.head) b.append(el('h2', 'q', st.head));
+    const hear = el('button', 'hear'); hear.type = 'button';
+    const label = () => this.reading ? 'थांबवा' : (st.first ? 'सगळं ऐका' : 'ऐका');
+    hear.innerHTML = `<span class="ic">${ic('spk', 26, 2.4)}</span><span class="eq"><span class="bars"><i></i><i></i><i></i><i></i></span></span><span class="lb">${label()}</span>`;
+    const sweep = el('div', 'sweep', '<i></i>');
+    const card = el('div', 'rcard'); card.tabIndex = 0; card.setAttribute('role', 'region'); card.setAttribute('aria-label', st.head || 'सूचना'); st.body(card, this);
+    b.append(hear, sweep, card);
+    const len = (card.textContent || '').length;
+    const dur = Math.max(2000, Math.min(6500, len * 18));
+    const stop = () => { this.reading = false; this.autoRead = false; this.clearTimers(); hear.classList.remove('on'); card.classList.remove('playing'); sweep.classList.remove('on'); $('.lb', hear).textContent = label(); };
+    const go = () => {
+      this.reading = true; hear.classList.add('on'); card.classList.add('playing'); sweep.classList.add('on'); $('.lb', hear).textContent = 'थांबवा';
+      const bar = $('i', sweep); bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth;
+      if (!NOFX) { bar.style.transition = `width ${dur}ms linear`; bar.style.width = '100%'; }
+      this.after(() => { const more = this.autoRead && this.f.i < this.steps.length - 1 && this.steps[this.f.i + 1].kind === 'read'; this.reading = false; if (more) this.next(); else { stop(); } }, NOFX ? 40 : dur + 200);
+    };
+    hear.onclick = () => { if (this.reading) { stop(); return; } this.autoRead = !!st.first; fx('arrive', this.root); go(); };
+    if (this.autoRead) { this.reading = false; go(); }
+    this.primary('पुढे', () => { this.autoRead = false; this.next(); });
+    this.quiet('थेट खुणेकडे', () => { const idx = this.steps.findIndex(s => s.kind === 'tick'); this.autoRead = false; if (idx > 0) { this.f.i = idx; this.render(); } });
+  },
+
+  /* the one big tick */
+  tick(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    const hear = el('button', 'hear'); hear.type = 'button';
+    hear.innerHTML = `<span class="ic">${ic('spk', 26, 2.4)}</span><span class="eq"><span class="bars"><i></i><i></i><i></i><i></i></span></span><span class="lb">ऐका</span>`;
+    hear.onclick = () => { hear.classList.add('on'); fx('arrive', this.root); this.after(() => hear.classList.remove('on'), NOFX ? 40 : 3200); };
+    b.append(hear);
+    const row = el('button', 'tickrow' + (a.ticked ? ' on' : '')); row.type = 'button'; row.setAttribute('role', 'checkbox'); row.setAttribute('aria-checked', String(!!a.ticked));
+    row.innerHTML = `<span class="box">${ic('check', 38, 3.4)}</span><span class="tx">${st.sentence}</span>`;
+    const hint = el('p', 'helper', st.hint); hint.hidden = !!a.ticked;
+    b.append(row, hint, el('p', 'helper', st.meaning));
+    const ok = this.primary('पुढे', () => { fx('confirm', this.root); this.next(); }, !a.ticked);
+    row.onclick = () => { a.ticked = !a.ticked; row.classList.toggle('on', a.ticked); row.setAttribute('aria-checked', String(!!a.ticked)); hint.hidden = !!a.ticked; ok.disabled = !a.ticked; fx('choose', this.root); };
+  },
+
+  /* a phone permission: one per screen */
+  perm(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    b.append(el('div', 'pic-big', `<div class="disc">${ic(st.icon, 64, 1.9)}</div>`));
+    b.append(el('p', 'lead', st.line));
+    if (st.extra) b.append(el('p', 'helper k', st.extra));
+    this.primary(st.yes, () => { a[st.key] = true; fx('confirm', this.root); this.next(); });
+    this.quiet(st.no, () => { a[st.key] = false; this.next(); });
+  },
+
+  /* "this is what I understood": one sentence and one big yes */
+  summary(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(this.ask(st));
+    const s = el('div', 'sum'); s.append(el('p', 'sent', st.sent(a)));
+    const ul = el('ul'); st.lines(a).forEach(l => ul.append(el('li', '', l))); s.append(ul); b.append(s);
+    this.primary(st.ok, () => { fx('confirm', this.root); this.next(); });
+    this.quiet('बदला', () => this.goBack());
+  },
+
+  /* the invitation is made: code, QR, link */
+  delivery(st) {
+    const b = this.body;
+    b.append(this.ask(st));
+    const box = el('div', 'codebox', `<p class="code">${st.code}</p><p class="once">${st.once}</p>`); b.append(box);
+    let qrOn = false;
+    const bq = el('button', 'b-prim', ic('qr', 26, 2.2) + 'समोर आहेत — QR दाखवा'); bq.type = 'button';
+    const bl = el('button', 'b-sec', ic('link', 26, 2.2) + 'दूर आहेत — लिंक पाठवा'); bl.type = 'button';
+    bq.onclick = () => { qrOn = !qrOn; fx('confirm', this.root); let q = $('.qr', box); if (qrOn && !q) { box.insertAdjacentHTML('beforeend', QRART); box.insertAdjacentHTML('beforeend', '<p class="once">नमुना चित्र — खरा QR नाही</p>'); } else if (!qrOn) { $$('.qr, .qr~p', box).forEach(n => n.remove()); } };
+    bl.onclick = () => { fx('confirm', this.root); this.toast('लिंक कॉपी केली'); };
+    b.append(el('div', 'pair')); $('.pair', b).append(bq, bl);
+    this.primary('झालं', () => this.next());
+  },
+
+  /* the end of a flow */
+  done(st) {
+    const b = this.body, a = this.f.ans;
+    const d = el('div', 'donebox', `<div class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><h2 class="q">${st.head}</h2>`);
+    st.lines(a).forEach(l => d.append(el('p', 'lines', l)));
+    b.append(d);
+    if (st.next) b.append(el('div', 'nextcard', `<b>${st.next.t}</b><span>${st.next.s}</span>`));
+    if (this.f.embedded) this.primary('चला', () => this.complete()); else this.primary('पुन्हा करून बघा', () => this.restart());
+    fx('done', this.root);
+  },
+
+  /* first screen of the sign-in */
+  welcome(st) {
+    const a = this.f.ans, b = this.body;
+    b.append(el('img', 'sathi-big')); $('.sathi-big', b).src = ART('sathi-welcome'); $('.sathi-big', b).alt = '';
+    b.append(el('h2', 'q', 'नमस्कार!'));
+    b.append(el('p', 'lead k', 'तुमचं शेत, तुमच्या आवाजात'));
+    b.append(el('p', 'helper mid', 'मी श्रम साथी. रोज शेतात काय झालं ते मला बोलून सांगा — बाकी हिशोब मी ठेवतो.'));
+    const g = el('div', 'tiles c2');
+    ['मराठी', 'English'].forEach(t => {
+      const x = el('button', 'tile' + ((a.lang || 'मराठी') === t ? ' on' : '')); x.type = 'button'; x.setAttribute('aria-pressed', String((a.lang || 'मराठी') === t));
+      x.innerHTML = `<span class="t">${t}</span><span class="tick">${ic('check', 16, 3.2)}</span>`;
+      x.onclick = () => { a.lang = t; $$('.tile', g).forEach(y => { const on = y === x; y.classList.toggle('on', on); y.setAttribute('aria-pressed', String(on)); }); note.hidden = t === 'मराठी'; fx('choose', this.root); };
+      g.append(x);
+    });
+    b.append(g);
+    const note = el('p', 'helper', 'या नमुन्यात पुढची पानं मराठीतच दिसतील.'); note.hidden = (a.lang || 'मराठी') === 'मराठी'; b.append(note);
+    this.primary('सुरू करूया', () => { a.lang = a.lang || 'मराठी'; fx('confirm', this.root); this.next(); });
+  },
+
+  /* last screen of the sign-in */
+  arrive(st) {
+    const b = this.body;
+    b.append(el('h2', 'q', 'अभिनंदन!'));
+    b.append(el('img', 'arrive-img')); $('.arrive-img', b).src = ART('sathi-welcome'); $('.arrive-img', b).alt = '';
+    b.append(el('p', 'lead', 'तुमचं खातं तयार आहे. आता रोज बोलून सांगा — बाकी हिशोब मी ठेवतो.'));
+    this.primary('चला, सुरुवात करूया', () => { this.complete(); });
+    fx('done', this.root);
+  },
+
+  /* stand-in for a screen this page does not draw */
+  stub(st) {
+    const b = this.body;
+    b.append(el('h2', 'q', st.q));
+    b.append(el('p', 'helper', st.line));
+    this.primary('पुढे चला', () => this.complete());
+  },
+
+  /* the road of the setup path */
+  road() {
+    const R = this.road || (this.road = ROAD.fresh()), b = this.body;
+    const stops = ROAD.stops, counted = stops.filter(s => s.counted);
+    const nextStop = counted.find(s => !R.done[s.id]);
+    const left = counted.filter(s => !R.done[s.id]).length;
+    b.append(el('h2', 'q', 'शेत तयार करणं'));
+    b.append(el('p', 'left-words', left === 0 ? 'सगळं झालं.' : `आणखी ${NUMW[left]} ${left === 1 ? 'टप्पा' : 'टप्पे'} राहिले.`));
+    const wrap = el('div', 'road-wrap'); b.append(wrap);
+    let allDone = left === 0;
+    stops.forEach(s => {
+      const done = !!R.done[s.id], isNext = nextStop && nextStop.id === s.id;
+      const row = el('div', 'stop ' + (done ? 'done' : isNext ? 'next' : 'wait'));
+      row.append(el('span', 'nd', done ? ic('check', 18, 3.4) : ''));
+      if (isNext) {
+        const paused = R.paused[s.id];
+        const card = el('div', 'bigcard');
+        card.append(el('p', 'h', paused ? `इथून पुढे: ${s.title}` : `पुढचं: ${s.title}`));
+        card.append(el('p', 'u', paused ? s.resume : s.ask));
+        const acts = el('div', 'acts');
+        const go = el('button', 'b-prim', paused ? 'पुन्हा सुरू करा' : 'चला'); go.type = 'button'; go.onclick = () => { fx('confirm', this.root); ROAD.open(this, s.id); };
+        const spk = el('button', 'spk', ic('spk', 28, 2.2)); spk.type = 'button'; spk.setAttribute('aria-label', 'ऐका');
+        spk.onclick = () => { spk.classList.add('on'); fx('arrive', this.root); this.after(() => spk.classList.remove('on'), NOFX ? 40 : 2600); };
+        acts.append(go, spk); card.append(acts); row.append(card);
+      } else {
+        const st = el('div', 'st');
+        const tx = el(done ? 'button' : 'div', 'tx'); if (done) { tx.type = 'button'; tx.setAttribute('aria-label', s.title + ' पुन्हा उघडा'); tx.style.cssText = 'text-align:left;background:none;border:0;padding:0;font-family:inherit;cursor:pointer;color:inherit'; tx.onclick = () => ROAD.open(this, s.id, true); }
+        tx.innerHTML = `<b>${s.title}${s.soon ? '<span class="chipx">लवकरच</span>' : ''}</b><span>${done ? ROAD.summary(R, s) : (s.soon ? s.line : '')}</span>`;
+        st.append(tx);
+        if (done) { const spk = el('button', 'spk', ic('spk', 24, 2.2)); spk.type = 'button'; spk.setAttribute('aria-label', 'ऐका'); spk.onclick = () => { spk.classList.add('on'); fx('arrive', this.root); this.after(() => spk.classList.remove('on'), NOFX ? 40 : 2200); }; st.append(spk); }
+        row.append(st);
+      }
+      wrap.append(row);
+    });
+    if (allDone) { b.append(el('p', 'helper k', 'छान. शेत तयार आहे. आता रोज बोलून सांगा — बाकी हिशोब मी ठेवतो.')); if (!R.fxDone) { R.fxDone = true; fx('done', this.root); } }
+  }
+};
+
+/* ===== the five flows. R('...') marks a string that is copied word for word from the app's own source
+   (the file _work/check-real.js proves each one exists in the repo). Everything else is new draft Marathi. ===== */
+const R = (s) => s;
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const FARMER = 'रामू';                      /* sample name */
+
+/* ---------- 3. sign-in, consent, permissions ---------- */
+const readPage = (o) => ({ kind: 'read', en: o.en, sup: o.sup, head: o.head, first: o.first, body(card, P) {
+  (o.paras || []).forEach(t => { const p = document.createElement('p'); p.textContent = t; card.append(p); });
+  if (o.items) { const ul = document.createElement('ul'); o.items.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.append(li); }); card.append(ul); }
+  (o.links || []).forEach(t => { const b = el('button', 'wflnk'); b.type = 'button'; b.textContent = t; b.onclick = () => P.toast('हे कागद इथे उघडतात — या नमुन्यात उघडत नाहीत.'); card.append(b); });
+} });
+const NOTICE_PAGES = () => {
+  const N = NOTICE;
+  return [
+    readPage({ en: 'Notice: before you begin', head: N.title, paras: [N.intro, N.brandLine], first: true }),
+    ...N.cards.map(c => readPage({ en: 'Notice: ' + c.id, sup: N.purposeCardsHeading, head: c.title, paras: [c.data + ' — ' + c.purpose] })),
+    readPage({ en: 'Notice: what we will not do', head: N.willNotDo.heading, items: N.willNotDo.items }),
+    readPage({ en: 'Notice: service providers', paras: [N.processors] }),
+    readPage({ en: 'Notice: your rights (1)', head: N.rights.heading, paras: [N.rights.where], items: N.rights.items }),
+    readPage({ en: 'Notice: your rights (2)', head: N.rights.heading, paras: [N.rights.withdrawal, N.rights.boardComplaint] }),
+    readPage({ en: 'Notice: who runs this service', head: N.entity.heading, paras: [N.legalName, N.entity.contactLabel + ': ' + N.contact], links: [N.links.terms, N.links.privacy] })
+  ];
+};
+const SIGNIN = {
+  id: 'signin',
+  steps: () => [
+    { kind: 'welcome', en: 'Language and welcome', sample: { lang: 'मराठी' } },
+    { kind: 'digits', key: 'phone', len: 10, en: 'Mobile number (voice, or keypad)', q: 'तुमचा मोबाईल नंबर सांगा', helper: R('दहा अंकी मोबाईल नंबर'),
+      voice: { say: '९८७६५४३२१०', set: { phone: '9876543210' } }, sample: { phone: '9876543210' } },
+    ...NOTICE_PAGES(),
+    { kind: 'tick', en: 'The one big tick', q: NOTICE.tick.link, sentence: NOTICE.tick.lead.trim(), hint: NOTICE.ctaDisabledHint, meaning: NOTICE.acceptanceMeaning, sample: { ticked: true } },
+    { kind: 'digits', key: 'otp', len: 6, boxes: true, en: 'Code sent to the phone', q: 'तुमच्या नंबरवर आलेला कोड सांगा', helper: 'सहा अंकी कोड.',
+      voice: { say: '४ ५ ६ ७ ८ ९', set: { otp: '456789' } }, sample: { otp: '456789' } },
+    { kind: 'perm', key: 'pm', icon: 'mic', en: 'Permission: microphone', q: 'मायक्रोफोन चालू करू का?', line: R('बोलून काम सांगण्यासाठी — सगळ्यात महत्त्वाचं'), extra: R('मायक्रोफोन नको असेल तरी हाताने लिहून सगळं करता येतं'), yes: 'हो, चालू करा', no: 'आत्ता नको', sample: { pm: true } },
+    { kind: 'perm', key: 'pl', icon: 'pin', en: 'Permission: location', q: 'स्थान चालू करू का?', line: R('तुमच्या गावाचं हवामान दाखवण्यासाठी'), yes: 'हो, चालू करा', no: 'आत्ता नको', sample: { pl: true } },
+    { kind: 'perm', key: 'pc', icon: 'cam', en: 'Permission: camera', q: 'कॅमेरा चालू करू का?', line: R('बिल, पिकाचे फोटो आणि QR साठी'), extra: R('तुमची माहिती सुरक्षित आहे — फक्त गरजेपुरतीच वापरतो.'), yes: 'हो, चालू करा', no: 'आत्ता नको', sample: { pc: true } },
+    { kind: 'arrive', en: 'Welcome in (the arrival)' }
+  ]
+};
+
+/* ---------- 4. water and power ---------- */
+const W_TYPES = [['Well', R('विहीर')], ['Borewell', R('बोअरवेल')], ['Canal', R('कालवा')], ['Farm Pond', R('शेततळं')], ['Tanker', R('टँकर')]];
+const W_NAME = Object.fromEntries(W_TYPES);
+const W_OF = { Well: 'विहिरीचं', Borewell: 'बोअरवेलचं', Canal: 'कालव्याचं', 'Farm Pond': 'शेततळ्याचं', Tanker: 'टँकरचं' };
+const W_ON = { Well: 'विहिरीवर', Borewell: 'बोअरवेलवर', Canal: 'कालव्यावर', 'Farm Pond': 'शेततळ्यावर', Tanker: 'टँकरवर' };
+const PHASE_T = { 1: R('सिंगल फेज'), 3: R('थ्री फेज') };
+const POWER_T = { MSEB: R('महावितरण वीज'), Solar: R('सोलर'), Generator: R('डिझेल') };
+const hoursOn = (t) => (!t || t.none) ? 24 : (24 - ((t.on - t.off + 1440) % 1440) / 60);
+const WATER = {
+  id: 'water',
+  steps(a) {
+    const n = a.motors || 1, S = [];
+    S.push({ kind: 'tiles', key: 'type', cols: 3, en: 'Where the water comes from', q: `${FARMER}, तुमच्या शेताला पाणी कुठून येतं?`,
+      tiles: W_TYPES.map(([k, t]) => ({ k, t, art: WATERART[k] })), voice: { say: 'विहीर', set: { type: 'Well' } }, sample: { type: 'Well' } });
+    const ty = a.type || 'Well';
+    S.push({ kind: 'text', key: 'sname', en: 'Name of the source', q: `या ${W_OF[ty]} नाव काय ठेवायचं?`,
+      suggest: () => ty === 'Well' ? R('मोठी विहीर') : `${W_NAME[ty]} १`, ph: R('उदा. मोठी विहीर'),
+      voice: { say: ty === 'Well' ? 'मोठी विहीर' : `${W_NAME[ty]} १`, set: { sname: ty === 'Well' ? 'मोठी विहीर' : `${W_NAME[ty]} १` } }, sample: { sname: 'मोठी विहीर' } });
+    S.push({ kind: 'number', key: 'motors', en: 'How many motors', q: `‘${a.sname || 'मोठी विहीर'}’वर किती मोटर आहेत?`,
+      helper: ty === 'Farm Pond' ? R('शेततळ्यावर कितीही मोटर जोडता येतात.') : undefined, def: 1, min: 1, max: (x) => (x.type === 'Farm Pond' ? 12 : 4), step: 1, unit: 'मोटर',
+      voice: { say: 'एक मोटर', set: { motors: 1 } }, sample: { motors: 1 } });
+    for (let i = 1; i <= n; i++) {
+      const lead = n > 1 ? `मोटर ${dv(i)}: ` : '';
+      S.push({ kind: 'number', key: 'hp' + i, en: `Motor ${i}: HP`, q: n > 1 ? `मोटर ${dv(i)} किती HP ची आहे?` : 'ही मोटर किती HP ची आहे?', def: 5, min: 0.5, max: 200, step: 0.5, dec: true, unit: 'HP',
+        voice: { say: 'पाच HP', set: { ['hp' + i]: 5 } }, sample: { ['hp' + i]: 5 } });
+      S.push({ kind: 'text', key: 'mname' + i, en: `Motor ${i}: name`, q: `${lead}या मोटरचं नाव काय ठेवायचं?`, suggest: (x) => `${dv(x['hp' + i] || 5)} HP मोटर`, ph: R('मोटरचं नाव'),
+        voice: { say: `${dv(a['hp' + i] || 5)} HP मोटर`, set: { ['mname' + i]: `${dv(a['hp' + i] || 5)} HP मोटर` } }, sample: { ['mname' + i]: `${dv(a['hp' + i] || 5)} HP मोटर` } });
+      S.push({ kind: 'tiles', key: 'phase' + i, cols: 2, en: `Motor ${i}: single or three phase`, q: `${lead}ही मोटर सिंगल फेज आहे की थ्री फेज?`,
+        tiles: [{ k: 1, t: PHASE_T[1], s: R('घर आणि लहान पंपासाठी'), art: PHASEART[1] }, { k: 3, t: PHASE_T[3], s: R('मोठ्या मोटरसाठी'), art: PHASEART[3] }],
+        voice: { say: 'थ्री फेज', set: { ['phase' + i]: 3 } }, sample: { ['phase' + i]: 3 } });
+      S.push({ kind: 'tiles', key: 'power' + i, cols: 3, en: `Motor ${i}: where the power comes from`, q: `${lead}ही मोटर कुठल्या विजेवर चालते?`,
+        tiles: ['MSEB', 'Solar', 'Generator'].map(k => ({ k, t: POWER_T[k], art: POWERART[k] })),
+        voice: { say: 'महावितरण वीज', set: { ['power' + i]: 'MSEB' } }, sample: { ['power' + i]: 'MSEB' } });
+      S.push({ kind: 'tiles', key: 'drip' + i, cols: 2, en: `Motor ${i}: drip attached?`, q: `${lead}या मोटरला ठिबक जोडलं आहे का?`,
+        tiles: [{ k: 'yes', t: R('हो') }, { k: 'no', t: R('नाही') }], voice: { say: 'नाही', set: { ['drip' + i]: 'no' } }, sample: { ['drip' + i]: 'no' }, sampleAlt: { ['drip' + i]: 'yes' } });
+      if (a['drip' + i] === 'yes') {
+        S.push({ kind: 'tiles', key: 'pipe' + i, cols: 3, en: `Motor ${i}: pipe size`, q: 'ठिबकच्या नळीचा आकार किती?', helper: R('नळीचा आकार'),
+          tiles: ['12mm', '16mm', '20mm'].map(k => ({ k, t: `${dv(k.replace('mm', ''))} मिमी` })), voice: { say: '१६ मिमी', set: { ['pipe' + i]: '16mm' } }, sample: { ['pipe' + i]: '16mm' } });
+        S.push({ kind: 'tiles', key: 'filt' + i, cols: 2, en: `Motor ${i}: filter`, q: 'फिल्टर आहे का?', tiles: [{ k: 'yes', t: R('फिल्टर आहे') }, { k: 'no', t: R('फिल्टर नाही') }],
+          voice: { say: 'फिल्टर आहे', set: { ['filt' + i]: 'yes' } }, sample: { ['filt' + i]: 'yes' } });
+        S.push({ kind: 'number', key: 'flow' + i, en: `Motor ${i}: water per hour`, q: 'ठिबकमधून तासाला किती लिटर पाणी जातं?', helper: R('पाणी (लिटर / तास)'), def: null, min: 1, max: 999999, step: 500, unit: 'लिटर / तास', skip: 'माहीत नाही — पुढे',
+          voice: { say: 'आठ हजार लिटर', set: { ['flow' + i]: 8000 } }, sample: { ['flow' + i]: 8000 } });
+      }
+    }
+    const phases = [];
+    for (let i = 1; i <= n; i++) { const p = a['phase' + i]; if (p && !phases.includes(p)) phases.push(p); }
+    (phases.length ? phases : [3]).forEach(p => S.push({ kind: 'dial', key: 't_' + p, en: `Power timetable: ${PHASE_T[p]}`, q: `${PHASE_T[p]} ${R('वीज रोज कधी जाते?')}`,
+      voice: { say: 'दुपारी बारा ते तीन वीज जाते', set: { ['t_' + p]: { off: 720, on: 900 } } }, sample: { ['t_' + p]: { off: 720, on: 900 } } }));
+    const when = (x) => { const ps = []; for (let i = 1; i <= (x.motors || 1); i++) { const p = x['phase' + i]; if (p && !ps.includes(p)) ps.push(p); } return (ps.length ? ps : [3]).map(p => ({ p, h: hoursOn(x['t_' + p]) })); };
+    S.push({ kind: 'summary', en: 'What I understood', q: 'हे बरोबर आहे का?', ok: 'बरोबर',
+      sent: (x) => { const w = when(x); return `${x.sname}, ${W_NAME[x.type || 'Well']}, ${dv(x.motors || 1)} मोटर, ` + (w.length === 1 ? `वीज रोज ${dv(w[0].h)} तास` : w.map(y => `${PHASE_T[y.p]} वीज रोज ${dv(y.h)} तास`).join(', ')); },
+      lines: (x) => { const L = []; for (let i = 1; i <= (x.motors || 1); i++) L.push(`${x['mname' + i]} — ${dv(x['hp' + i])} HP · ${PHASE_T[x['phase' + i]]} · ${POWER_T[x['power' + i]]}${x['drip' + i] === 'yes' ? ' · ठिबक' : ''}`); return L; } });
+    S.push({ kind: 'done', en: 'Done', head: 'छान.', lines: (x) => [`पाण्याचा स्रोत तयार आहे: ${x.sname}.`, `${dv(x.motors || 1)} मोटर, वीज रोज ${dv(when(x)[0].h)} तास.`], next: { t: 'पुढचं: यंत्रं', s: 'तुमची यंत्रं — एक एक करून विचारतो.' } });
+    return S;
+  }
+};
+
+/* ---------- 5. crops and plots ---------- */
+const CROPS = [['Grapes', R('द्राक्ष'), 'grapes', 'द्राक्षाचं', 'छाटणी'], ['Sugarcane', R('ऊस'), 'sugarcane', 'उसाचं', 'लागवड'], ['Onion', R('कांदा'), 'onion', 'कांद्याचं', 'लागवड'],
+  ['Pomegranate', R('डाळिंब'), 'pomegranate', 'डाळिंबाचं', 'लागवड'], ['Tomato', R('टोमॅटो'), 'tomato', 'टोमॅटोचं', 'लागवड'], ['Wheat', R('गहू'), 'wheat', 'गव्हाचं', 'पेरणी']];
+const VARIETIES = { Grapes: ['Super Sonaka', 'Sharad Seedless', 'Thompson Seedless', 'Crimson Seedless', 'Flame Seedless', 'Manik Chaman', 'Other'], Pomegranate: ['Bhagwa', 'Ganesh', 'Mridula', 'Arakta', 'Other'], Tomato: ['Abhinav', 'Shivam', 'Arka Rakshak', 'Other'], Onion: ['Nashik Red', 'Puna Fursungi', 'N-53', 'Other'] };
+const varietiesOf = (crop) => VARIETIES[crop] || ['Local', 'Hybrid', 'Other'];
+const SAMPLE_START = shiftDays(-32);
+const PLOTS = {
+  id: 'plots',
+  steps(a) {
+    const S = [], cr = CROPS.find(c => c[0] === (a.crop || 'Grapes')), vs = varietiesOf(cr[0]);
+    S.push({ kind: 'tiles', key: 'crop', cols: 3, en: 'Which crop', q: `${FARMER}, कोणतं पीक लावलं?`, tiles: CROPS.map(c => ({ k: c[0], t: c[1], img: ART(c[2]) })), voice: { say: 'द्राक्ष', set: { crop: 'Grapes' } }, sample: { crop: 'Grapes' } });
+    S.push({ kind: 'tiles', key: 'variety', cols: 2, en: 'Variety', q: `${cr[3]} वाण कोणतं?`, tiles: vs.map(v => ({ k: v, t: v === 'Other' ? R('अन्य') : v })),
+      voice: { say: vs[0], set: { variety: vs[0] } }, sample: { variety: vs[0] } });
+    if (a.variety === 'Other') S.push({ kind: 'text', key: 'ownvar', en: 'Variety, in his own words', q: R('वाणाचं नाव लिहा'), ph: R('वाणाचं नाव लिहा'), voice: { say: 'सोनाका', set: { ownvar: 'सोनाका' } }, sample: { ownvar: 'सोनाका' } });
+    const vname = a.variety === 'Other' ? (a.ownvar || '') : (a.variety || vs[0]);
+    const sug = `${vname} ${dv(1)}`.trim();
+    S.push({ kind: 'text', key: 'pname', en: 'Name of the plot (his own)', q: 'या प्लॉटचं नाव काय ठेवायचं?', suggest: () => sug, note: 'प्लॉटचं नाव तुमचंच असतं. हवं ते ठेवा.', ph: R('प्लॉटचं नाव लिहा'),
+      voice: { say: sug, set: { pname: sug } }, sample: { pname: sug } });
+    const pn = a.pname || sug;
+    S.push({ kind: 'number', key: 'area', en: 'Area', q: `${pn} चं क्षेत्र किती?`, def: null, min: 0.01, max: 9999, step: 0.25, dec: true,
+      units: [{ k: 'Acre', t: R('एकर') }, { k: 'Guntha', t: R('गुंठा') }], unitKey: 'unit', voice: { say: 'दीड एकर', set: { area: 1.5, unit: 'Acre' } }, sample: { area: 1.5, unit: 'Acre' } });
+    S.push({ kind: 'tiles', key: 'material', cols: 2, en: 'Seed or saplings', q: R('तुम्ही काय लावलं?'), tiles: [{ k: 'Seed', t: R('बियाणं') }, { k: 'Nursery', t: R('रोपं') }],
+      voice: { say: 'रोपं', set: { material: 'Nursery' } }, sample: { material: 'Nursery' }, sampleAlt: { material: 'Seed' } });
+    const seed = a.material === 'Seed' || (ALT && !a.material);
+    const canSkip = vname.trim().length > 0;
+    if (seed) {
+      S.push({ kind: 'text', key: 'company', en: 'Seed company', q: 'बियाणं कोणत्या कंपनीचं?', ph: R('उदा. महाबीज'), skip: canSkip ? 'नाव माहीत नाही — पुढे' : undefined, voice: { say: 'महाबीज', set: { company: 'महाबीज' } }, sample: { company: 'महाबीज' } });
+      S.push({ kind: 'number', key: 'qty', en: 'Seed per acre', q: 'एकरी किती बियाणं लावलं?', def: null, min: 0.01, max: 99999, step: 0.5, dec: true,
+        units: [{ k: 'kg', t: R('किलो') }, { k: 'gm', t: R('ग्रॅम') }, { k: 'Packets', t: R('पाकीट') }], unitKey: 'qunit', voice: { say: 'दोन किलो', set: { qty: 2, qunit: 'kg' } }, sample: { qty: 2, qunit: 'kg' } });
+    } else {
+      S.push({ kind: 'text', key: 'nursery', en: 'Nursery name', q: 'रोपं कोणत्या रोपवाटिकेतून आणली?', ph: R('उदा. नाशिक रोपवाटिका'), skip: canSkip ? 'नाव माहीत नाही — पुढे' : undefined, voice: { say: 'नाशिक रोपवाटिका', set: { nursery: 'नाशिक रोपवाटिका' } }, sample: { nursery: 'नाशिक रोपवाटिका' } });
+      S.push({ kind: 'number', key: 'age', en: 'Age of the plants', q: R('रोप किती दिवसांचं होतं'), helper: undefined, def: null, min: 1, max: 9999, step: 1, unit: 'दिवस', voice: { say: 'पंचेचाळीस दिवस', set: { age: 45 } }, sample: { age: 45 } });
+    }
+    S.push({ kind: 'date', key: 'start', en: 'The date it was done', q: `${pn} ची ${cr[4]} केव्हा केली?`, voice: { say: dateWords(SAMPLE_START), set: { start: { mode: 'earlier', date: SAMPLE_START } } }, sample: { start: { mode: 'earlier', date: SAMPLE_START } } });
+    const mat = (x) => (x.material === 'Seed' || (ALT && !x.material)) ? `बियाणं${x.company ? ' · ' + x.company : ''} · एकरी ${dv(x.qty)} ${x.qunit === 'gm' ? 'ग्रॅम' : x.qunit === 'Packets' ? 'पाकीट' : 'किलो'}` : `रोपं${x.nursery ? ' · ' + x.nursery : ''} · ${dv(x.age)} दिवसांचं`;
+    S.push({ kind: 'summary', en: 'What I understood', q: 'हे बरोबर आहे का?', ok: 'जतन करा',
+      sent: (x) => `${x.pname || pn}, ${cr[1]}, ${dv(x.area)} ${x.unit === 'Guntha' ? 'गुंठा' : 'एकर'}`,
+      lines: (x) => { const d = x.start && x.start.date; return [`पीक: ${cr[1]} · ${x.variety === 'Other' ? x.ownvar : x.variety}`, `लावलं: ${mat(x)}`, `${cr[4]}: ${dateWords(d)} (आज दिवस ${dv(dayDiff(d, todayParts()))})`]; } });
+    S.push({ kind: 'done', en: 'Done', head: 'छान.', lines: (x) => [`${x.pname || pn} तयार आहे.`, `${cr[1]} · ${dv(x.area)} ${x.unit === 'Guntha' ? 'गुंठा' : 'एकर'}`], next: { t: 'पुढचं: पाणी आणि वीज', s: 'तुमच्या पाण्याचे स्रोत आणि मोटर — एक एक करून विचारतो.' } });
+    return S;
+  }
+};
+
+/* ---------- 6. inviting someone ---------- */
+const ROLES = [
+  ['CoOwner', R('सहमालक'), ['शेताची रचना बदलू शकतात', 'हजेरी घेऊ शकतात', 'नोंदी पक्क्या करू शकतात', 'पैसे दिसतात'], 'AllPlots'],
+  ['Family', R('कुटुंब'), ['हजेरी घेऊ शकतात', 'नोंदी पक्क्या करू शकतात'], 'AllPlots'],
+  ['Mukadam', R('मुकादम'), ['हजेरी घेऊ शकतात'], 'AllPlots'],
+  ['Worker', R('कामगार'), [], 'OwnWork']
+];
+const SCOPE_T = { AllPlots: [R('सर्व प्लॉट'), R('शेतातल्या सगळ्या प्लॉटचं काम दिसेल.')], ChosenPlots: [R('निवडलेले प्लॉट'), R('फक्त निवडलेल्या प्लॉटचं काम दिसेल व नोंदवता येईल.')], OwnWork: [R('स्वतःचं काम'), R('कोणत्याही प्लॉटवर स्वतःचं काम नोंदवतील; इतरांचं काम दिसणार नाही.')] };
+const GROUPS = () => [
+  { name: R('द्राक्ष'), img: ART('grapes'), plots: Array.from({ length: 15 }, (_, i) => ({ id: 'g' + (i + 1), name: 'G' + (i + 1) })) },
+  { name: R('ऊस'), img: ART('sugarcane'), plots: Array.from({ length: 3 }, (_, i) => ({ id: 's' + (i + 1), name: 'S' + (i + 1) })) }
+];
+const inviteLines = (a) => {
+  const role = ROLES.find(r => r[0] === (a.who || 'Mukadam')), scope = a.scope || role[3], own = role[0] === 'Worker' || scope === 'OwnWork';
+  const names = (a.plots || []).map(id => { const p = GROUPS().flatMap(g => g.plots).find(x => x.id === id); return p ? p.name : id; });
+  const plots = scope === 'AllPlots' ? R('सर्व प्लॉट') : scope === 'OwnWork' ? R('स्वतःचं काम') : (names.length >= 4 ? `${dv(names.length)} प्लॉट` : names.join(', '));
+  const can = role[2].filter(c => !(scope !== 'AllPlots' && c === 'शेताची रचना बदलू शकतात') && !(own && c === 'पैसे दिसतात'));
+  const sees = !own && (a.money ? a.money === 'yes' : role[0] === 'CoOwner');
+  if (sees && !can.includes('पैसे दिसतात')) can.push('पैसे दिसतात');
+  const parts = [`जबाबदारी: ${role[1]}`, scope === 'OwnWork' ? plots : `प्लॉट: ${plots}`, ...can];
+  if (!sees) parts.push(R('पैसे दिसत नाहीत'));
+  return { parts, can, sees };
+};
+const INVITE = {
+  id: 'invite',
+  steps(a) {
+    const S = [], role = ROLES.find(r => r[0] === (a.who || 'Mukadam')), worker = a.who === 'Worker';
+    S.push({ kind: 'tiles', key: 'who', cols: 1, row: true, micCompact: true, en: 'Who is being invited', q: `${FARMER}, कोणाला बोलवायचं?`,
+      tiles: ROLES.map(r => ({ k: r[0], t: r[1], s: r[2].concat(r[0] === 'Worker' ? [R('स्वतःचं काम')] : []).concat(r[2].includes('पैसे दिसतात') ? [] : [R('पैसे दिसत नाहीत')]).join(' · ') })),
+      onPick: (t, x) => { const r = ROLES.find(y => y[0] === t.k); x.scope = r[3]; x.money = t.k === 'CoOwner' ? 'yes' : 'no'; x.plots = []; },
+      voice: { say: 'मुकादम', set: { who: 'Mukadam', scope: 'AllPlots', money: 'no', plots: [] } }, sample: { who: 'Mukadam', scope: 'AllPlots', money: 'no', plots: [] } });
+    S.push({ kind: 'tiles', key: 'scope', cols: 1, row: true, en: 'Which plots they see', q: 'कोणते प्लॉट दिसावेत?', note: worker ? R('कामगार म्हणून फक्त स्वतःचं काम दिसतं. प्लॉट निवडले तर फक्त त्या प्लॉटवर नोंद करता येईल.') : undefined,
+      tiles: (worker ? ['ChosenPlots', 'OwnWork'] : ['AllPlots', 'ChosenPlots', 'OwnWork']).map(k => ({ k, t: SCOPE_T[k][0], s: SCOPE_T[k][1] })),
+      voice: { say: 'निवडलेले प्लॉट', set: { scope: 'ChosenPlots' } }, sample: { scope: 'ChosenPlots' } });
+    if (a.scope === 'ChosenPlots') S.push({ kind: 'pick', key: 'plots', en: 'Pick the plots', q: R('कोणते प्लॉट?'), groups: GROUPS, voice: { say: 'द्राक्ष: G1, G2, G3', set: { plots: ['g1', 'g2', 'g3'] } }, sample: { plots: ['g1', 'g2', 'g3'] } });
+    if (!(worker || a.scope === 'OwnWork')) S.push({ kind: 'tiles', key: 'money', cols: 2, en: 'Can they see money (a permission)', q: 'त्यांना पैसे दिसावेत का?', tiles: [{ k: 'yes', t: R('हो') }, { k: 'no', t: R('नाही') }], voice: { say: 'नाही', set: { money: 'no' } }, sample: { money: 'no' } });
+    S.push({ kind: 'text', key: 'iname', en: 'Name (optional)', q: 'त्यांचं नाव काय?', helper: R('नाव (हवं तर)'), ph: R('नाव (हवं तर)'), skip: 'नाव नको — पुढे', voice: { say: 'सुरेश', set: { iname: 'सुरेश' } }, sample: { iname: 'सुरेश' } });
+    S.push({ kind: 'digits', key: 'imobile', len: 10, warnShort: true, en: 'Mobile number (optional)', q: 'त्यांचा मोबाईल नंबर?', helper: R('नंबर दिला तर तोच माणूस स्वीकारताच आत येईल. नंबर नसेल तर तो स्वीकारल्यावर तुम्ही मंजूर करा.'), skip: 'नंबर नको — पुढे',
+      voice: { say: '९८७६५४३२१०', set: { imobile: '9876543210' } }, sample: { imobile: '9876543210' } });
+    S.push({ kind: 'tiles', key: 'worker', cols: 1, row: true, micCompact: true, en: 'Worker from the attendance list (optional)', q: 'हे हजेरी यादीतले कोण आहेत का?', helper: R('हजेरी यादीतले कामगार (हवं तर)'),
+      tiles: [{ k: 'ramesh', t: 'रमेश' }, { k: 'ganesh', t: 'गणेश' }, { k: 'datta', t: 'दत्ता' }, { k: 'none', t: R('कोणी नाही') }],
+      voice: { say: 'कोणी नाही', set: { worker: 'none' } }, sample: { worker: 'none' } });
+    S.push({ kind: 'summary', en: 'What I understood', q: 'हे बरोबर आहे का?', ok: R('आमंत्रण तयार करा'),
+      sent: (x) => inviteLines(x).parts.join(' · '),
+      lines: (x) => { const L = []; if (x.iname) L.push(`नाव: ${x.iname}`); if (x.imobile) L.push(`मोबाईल नंबर: ${dv(x.imobile)}`); const w = { ramesh: 'रमेश', ganesh: 'गणेश', datta: 'दत्ता' }[x.worker]; if (w) L.push(`हजेरी यादीतले कामगार: ${w}`); return L.length ? L : ['नाव आणि नंबर दिलेला नाही']; } });
+    const exp = shiftDays(7);
+    S.push({ kind: 'delivery', en: 'The invitation: QR or link', q: 'आमंत्रण तयार आहे', code: '१२३४-५६७८', once: `एकदाच वापरता येईल · ${dv(exp.d)} ${MONTHS[exp.m - 1]}पर्यंत` });
+    S.push({ kind: 'done', en: 'Done', head: 'छान.', lines: (x) => [`${x.iname || 'ही व्यक्ती'}: ${R('वाट पाहत आहे')}.`],
+      next: { t: 'पुढचं: ते स्वीकारण्याची वाट', s: (a.imobile ? R('नंबर दिला तर तोच माणूस स्वीकारताच आत येईल.') : R('नंबर नसेल तर तो स्वीकारल्यावर तुम्ही मंजूर करा.')) } });
+    return S;
+  }
+};
+
+/* ---------- 2. the setup path (the hub as a road) ---------- */
+const STUB = (id) => ({ id: 'stub-' + id, steps: () => [{ kind: 'stub', q: 'यंत्रं', line: 'हे पान या नमुन्यात दाखवलेलं नाही. इथेही असेच प्रश्न एक एक करून येतील.' }] });
+const ROAD = {
+  stops: [
+    { id: 'id', title: R('माझी ओळख'), sum: R('नाव आणि गाव भरलं'), counted: true },
+    { id: 'plots', title: R('पिकं आणि प्लॉट'), sum: '२ पिकं · १८ प्लॉट', ask: 'तुमचं पीक आणि प्लॉट — एक एक करून विचारतो.', resume: 'तुम्ही मध्येच थांबला होतात. तिथूनच पुढे सुरू करूया.', counted: true },
+    { id: 'water', title: R('पाणी आणि वीज'), sum: '४ स्रोत · ४ मोटर · विजेच्या वेळा', ask: 'तुमच्या पाण्याचे स्रोत आणि मोटर — एक एक करून विचारतो.', resume: 'तुम्ही मोटरपर्यंत आला होतात. तिथूनच पुढे सुरू करूया.', counted: true },
+    { id: 'machines', title: R('यंत्रं'), sum: '४ यंत्रं', ask: 'तुमची यंत्रं — एक एक करून विचारतो.', resume: 'तुम्ही मध्येच थांबला होतात. तिथूनच पुढे सुरू करूया.', counted: true },
+    { id: 'soil', title: R('माती व पाणी अहवाल'), soon: true, line: R('अहवाल जोडण्याची सोय अजून नाही') }
+  ],
+  fresh() { return { done: { id: 1, plots: 1 }, paused: {} }; },
+  sample(s) {
+    const r = ROAD.fresh();
+    if (s >= 2 && s < 3) { const f = sampleTo(WATER, 5); r.paused.water = { def: WATER, ans: f.ans, i: f.i, embedded: true }; }
+    if (s >= 3) r.done.water = 1, r.waterN = 1;
+    if (s >= 4) r.done.machines = 1, r.fxDone = true;
+    return r;
+  },
+  summary(r, s) { return s.id === 'water' && r.waterN ? `${dv(1)} स्रोत · ${dv(r.waterN)} मोटर · विजेच्या वेळा` : s.sum; },
+  open(P, id, again) {
+    const r = P.road;
+    const onExit = (reason, fr) => {
+      if (reason === 'done') { r.done[id] = 1; delete r.paused[id]; if (id === 'water') r.waterN = fr.ans.motors || 1; }
+      else if (!r.done[id] && fr.i > 0) r.paused[id] = fr;
+    };
+    if (r.paused[id] && !again) { const fr = r.paused[id]; delete r.paused[id]; fr.onExit = onExit; P.stack.push(fr); P.render(); return; }
+    const def = id === 'water' ? WATER : id === 'plots' ? PLOTS : STUB(id);
+    P.enter(def, { embedded: true, onExit });
+  }
+};
+const PATH = {
+  id: 'path', N: 4,
+  steps: () => [{ kind: 'road', en: 'The road' }],
+  reset(P) { P.road = ROAD.fresh(); },
+  progress(P) { const r = P.road || ROAD.fresh(); return ROAD.stops.filter(s => s.counted && r.done[s.id]).length / 4; },
+  listing(P) {
+    const r = P.road || ROAD.fresh(); const idx = (r.done.machines) ? 3 : (r.done.water ? 2 : (r.paused.water ? 1 : 0));
+    return { names: ['The road, two stops done', 'Left halfway, ready to resume', 'Three stops done', 'All done'], idx, mode: 'state' };
+  }
+};
+
+const FLOWS = { path: PATH, signin: SIGNIN, water: WATER, plots: PLOTS, invite: INVITE };
+
+/* the same sample answers every hook uses */
+function sampleTo(def, s) {
+  const ans = {}; let i = 0;
+  while (i < s - 1) { const st = def.steps(ans)[i]; if (!st) break; Object.assign(ans, (ALT && st.sampleAlt) ? st.sampleAlt : (st.sample || {})); i++; }
+  return { ans, i: Math.min(i, def.steps(ans).length - 1) };
+}
+function countSteps(def) {
+  if (def.N) return def.N;
+  const ans = {}; let i = 0;
+  for (;;) { const st = def.steps(ans)[i]; if (!st) break; Object.assign(ans, (ALT && st.sampleAlt) ? st.sampleAlt : (st.sample || {})); i++; }
+  return i;
+}
+
+/* ===== the page around the phones ===== */
+(function () {
+  const AFTER = { path: [1, 2, 3, 4], signin: [1, 2, 3, 14, 16, 19], water: [1, 2, 4, 6, 9, 10], plots: [1, 2, 3, 4, 8, 9], invite: [1, 2, 3, 4, 8, 9] };
+  const phones = {};
+
+  /* --- pictures that are not there yet show a calm placeholder --- */
+  const markMissing = (img) => { const f = img.closest('.fr'); if (f) f.classList.add('missing'); };
+  $$('.fr img').forEach(img => { if (img.complete && img.naturalWidth === 0) markMissing(img); img.addEventListener('error', () => markMissing(img)); });
+
+  /* --- zoom a picture --- */
+  const dlg = $('#zoom');
+  if (dlg && dlg.showModal) {
+    $$('.fr .pic').forEach(b => b.addEventListener('click', () => {
+      const f = b.closest('.fr'); if (f.classList.contains('missing')) return;
+      $('img', dlg).src = $('img', b).src; $('p', dlg).textContent = $('figcaption', f).textContent; dlg.showModal();
+    }));
+    $('button', dlg).addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  }
+
+  /* --- the hero moment --- */
+  (function () {
+    const m = $('#moment'); if (!m) return;
+    const btn = $('.mic-btn', m), cap = $('.mic-cap', m), out = $('.heard-line', m);
+    btn.addEventListener('click', () => {
+      if (m.classList.contains('on')) return;
+      m.classList.add('on'); cap.innerHTML = '<span class="bars"><i></i><i></i><i></i><i></i></span>ऐकत आहे'; fx('mic', m);
+      setTimeout(() => { out.textContent = 'मला असं ऐकू आलं: विहीर'; cap.textContent = 'बोला'; m.classList.remove('on'); fx('heard', m); }, NOFX ? 0 : 1800);
+    });
+  })();
+
+  /* --- how it should feel --- */
+  const FEEL = [
+    ['arrive', 'Arrive', 'A question appears, or a flow is entered. Only a low tone.'],
+    ['choose', 'Choose', 'A tile or a plot is tapped. One soft tone and a tiny tick.'],
+    ['mic', 'Mic on', 'The farmer taps the breathing mic. Two soft rising tones.'],
+    ['heard', 'Heard', 'The card "मला असं ऐकू आलं" appears. A quiet two-note chord, no buzz.'],
+    ['confirm', 'Confirm', 'He taps बरोबर. A short rising pair and a small double pulse.'],
+    ['done', 'Done', 'A flow ends with "छान". Three slow rising notes and the longest pulse.']
+  ];
+  const feel = $('#feel');
+  if (feel) {
+    FEEL.forEach(([k, t, d]) => {
+      const e = EFFECTS[k], c = el('div', 'fx');
+      const tones = e.tones.map(x => `${Math.round(x[0])} Hz`).join(', ');
+      const buzz = e.vib ? `buzz ${e.vib.join(', ')} ms` : 'no buzz';
+      c.innerHTML = `<span class="dot"></span><h3>${t}</h3><p>${d}<br><span style="color:var(--ink3);font-size:14.5px">${tones} · ${buzz}</span></p>`;
+      const b = el('button', '', ic('spk', 20, 2.4) + 'Feel it'); b.type = 'button';
+      b.addEventListener('click', () => { c.classList.remove('pulse'); void c.offsetWidth; c.classList.add('pulse'); if (!FX.sound && !FX.buzz) return; const n = NOFX; fx(k, c); });
+      c.append(b); feel.append(c);
+    });
+    $('#sw-sound').addEventListener('change', e => { FX.sound = e.target.checked; });
+    $('#sw-buzz').addEventListener('change', e => { FX.buzz = e.target.checked; });
+    const bz = $('#buzz-where');
+    if (bz) bz.textContent = CAN_BUZZ ? 'This device can buzz: you will feel the patterns.' : 'This computer cannot buzz, so you see a soft glow instead. On an Android phone the same buttons buzz.';
+  }
+
+  /* --- the phones --- */
+  const itemName = { path: 'item-2', signin: 'item-3', water: 'item-4', plots: 'item-5', invite: 'item-6' };
+  Object.keys(FLOWS).forEach(id => {
+    const stage = $(`.stage[data-flow="${id}"]`); if (!stage) return;
+    const root = $('.ph', stage); root.id = 'phone-' + id;
+    const P = new Phone(root, FLOWS[id]); phones[id] = P;
+    const s = HASH.f === id && HASH.s ? parseInt(HASH.s, 10) : 1;
+    if (id === 'path') { P.road = ROAD.sample(s); P.stack[0].i = 0; P.render(); }
+    else if (s > 1) { const f = sampleTo(FLOWS[id], s); P.stack[0].ans = f.ans; P.stack[0].i = f.i; P.render(); }
+    const list = $('ol.road', stage), note = $('.road-note', stage);
+    const paintList = () => {
+      const root0 = P.stack[0], def = root0.def;
+      let names, idx;
+      if (def.listing) { const L = def.listing(P); names = L.names; idx = L.idx; list.innerHTML = names.map((n, i) => `<li class="${i < idx ? 'past' : i === idx ? 'here' : ''}">${n}</li>`).join(''); note.textContent = 'This road shows the state of the phone. Tap चला to open a stop, tap the pause button inside it to leave, then come back.'; return; }
+      const steps = def.steps(root0.ans, P); const cur = root0.i;
+      const items = []; steps.forEach((st, i) => { const lab = st.en || st.kind; if (lab.startsWith('Notice:')) { const last = items[items.length - 1]; if (last && last.group) { last.to = i; return; } items.push({ group: true, from: i, to: i, label: 'The notice, read page by page (' + steps.filter(x => (x.en || '').startsWith('Notice:')).length + ' pages)' }); return; } items.push({ from: i, to: i, label: lab }); });
+      list.innerHTML = items.map(it => `<li class="${cur > it.to ? 'past' : (cur >= it.from && cur <= it.to) ? 'here' : ''}">${it.label}</li>`).join('');
+      note.textContent = '';
+    };
+    P.on(paintList); paintList();
+    $('.again', stage).addEventListener('click', () => { P.restart(); });
+  });
+  window.__phones = phones; window.__fx = FX;
+
+  /* --- the block matrix, computed from the real flow definitions --- */
+  (function () {
+    const tbl = $('#matrix'); if (!tbl) return;
+    const BL = [['tiles', 'Choose one (tiles)'], ['number', 'A number'], ['text', 'A short name'], ['digits', 'Digits (phone, code)'], ['dial', 'The 24-hour ring'], ['date', 'A date'], ['pick', 'Pick several'], ['read', 'A page read aloud'], ['tick', 'The one tick'], ['perm', 'A permission'], ['summary', 'What I understood'], ['done', 'The ending']];
+    const flows = ['signin', 'water', 'plots', 'invite'];
+    const used = {}; const saved = ALT;
+    flows.forEach(f => { used[f] = new Set(); [false, true].forEach(alt => { ALT = alt; const def = FLOWS[f]; const ans = {}; for (let i = 0; ; i++) { const st = def.steps(ans)[i]; if (!st) break; used[f].add(st.kind); Object.assign(ans, (alt && st.sampleAlt) ? st.sampleAlt : (st.sample || {})); } }); });
+    ALT = saved;
+    const tick = ic('check', 18, 3);
+    tbl.innerHTML = `<thead><tr><th>Block</th>${flows.map(f => `<th>${{ signin: 'Sign-in', water: 'Water', plots: 'Plots', invite: 'Invite' }[f]}</th>`).join('')}</tr></thead><tbody>` +
+      BL.map(([k, t]) => `<tr><td>${t}</td>${flows.map(f => `<td>${used[f].has(k) ? tick : ''}</td>`).join('')}</tr>`).join('') + '</tbody>';
+    const kinds = new Set(); flows.forEach(f => used[f].forEach(k => kinds.add(k)));
+    const n = $('#block-count'); if (n) n.textContent = String(BL.filter(([k]) => kinds.has(k)).length);
+    const sh = $('#shared-count'); if (sh) sh.textContent = String(BL.filter(([k]) => flows.filter(f => used[f].has(k)).length > 1).length);
+  })();
+
+  /* --- hooks: window.__flows, window.__after, solo mode --- */
+  window.__flows = {}; Object.keys(FLOWS).forEach(id => { window.__flows[id] = countSteps(FLOWS[id]); });
+  window.__after = AFTER;
+  if (HASH.solo === '1') {
+    const id = FLOWS[HASH.f] ? HASH.f : 'path';
+    document.documentElement.classList.add('solo');
+    const host = el('div'); host.id = 'solo-host'; document.body.append(host);
+    const root = phones[id].root; host.append(root); root.id = 'phone';
+  }
+  document.documentElement.setAttribute('data-ready', '1');
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+[
+ {
+  "n": 1,
+  "title": "How it should feel",
+  "q": "Should every new setup conversation feel like the six effects on the page?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "Soft, as shown",
+    "rec": 1,
+    "out": "APPROVED: the feel of the new setup conversations is the six effects on the page (arrive, choose, mic on, heard, confirm, done): low sine tones at gain 0.05 to 0.08 fading over 300 to 700 ms; buzz patterns choose [6], mic [10], confirm [8,70,12], done [10,90,12,90,16], Android only; a slowly breathing mic (5 s, no rings); soft 600 ms transitions; a sound switch and a buzz switch; no shake, no knock, no confetti, no red alarms. What stays as it is today: the Home voice flow (आज काय काम झालं), the waiting screen and the result screen are not touched, and no field or word of consent changes. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ },
+ {
+  "n": 2,
+  "title": "The setup path: a road, not a list",
+  "q": "Should the setup hub become a road with one big next stop?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "A road with one big next",
+    "rec": 1,
+    "out": "BUILD the setup hub (flow: path) as a vertical road: the five rows (माझी ओळख, पिकं आणि प्लॉट, पाणी आणि वीज, यंत्रं, माती व पाणी अहवाल) become five stops; finished stops show a tick and a one-line summary in words (for example \"२ पिकं · १८ प्लॉट\"); the next stop is one big card \"पुढचं: ...\" with one big \"चला\"; leaving halfway is remembered and resumed (\"पुन्हा सुरू करा\"); the \"?\" buttons become \"ऐका\" (read aloud); one thin progress line, no \"1/7\" counters; माती व पाणी अहवाल stays marked \"लवकरच\". What stays as it is today: every row and every screen behind it, the money, people-and-farms and app groups, the Home voice flow, waiting screen, result screen and the schedule cards. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ },
+ {
+  "n": 3,
+  "title": "Sign-in, notice and permissions: said, heard, ticked",
+  "q": "Should sign-in become a conversation with the notice read aloud?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "Spoken sign-in, notice read aloud",
+    "rec": 1,
+    "out": "BUILD sign-in (flow: signin) as a conversation: greeting and language, mobile number by voice or a big keypad, the consent notice read aloud page by page (each real heading is one page with ऐका and पुढे, and \"सगळं ऐका\" plays all pages), the app's own tick sentence with ONE big tick BEFORE the code is sent (exactly as today: nothing about the farmer is saved until the tick), the code, the phone permissions one per screen, and the arrival screen. What stays as it is today: the consent wording is used word for word from consentNotice.ts and is not reworded, the stored consent record and its versions, password sign-in, the new-phone check and \"कोड किंवा QR ने सामील व्हा\" (not redrawn here), the Home voice flow, waiting screen and result screen. NEW BEHAVIOUR to confirm before building: the permission questions are asked on these screens, one at a time, instead of only at first use. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ },
+ {
+  "n": 4,
+  "title": "Water and power: one question at a time",
+  "q": "Should adding water and power be asked one question at a time?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "Water as a conversation",
+    "rec": 1,
+    "out": "BUILD \"पाणी आणि वीज\" adding (flow: water) as a conversation: type of source (five drawn tiles), name with a suggestion, how many motors, then per motor HP, name, single or three phase, power source, drip yes or no (and, only on yes, pipe size, filter and litres per hour, which can be skipped), then the daily electricity cut window per phase used on a 24-hour ring (or \"रोज वीज जात नाही\"), a one-sentence summary, and one confirm. What stays as it is today: exactly the same fields and stored values (names, types, phases, power sources, drip details, the cut window), the limit of 4 motors except on a शेततळं, the alternate-week timetable and the existing water page, the Home voice flow, waiting screen, result screen and schedule cards. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ },
+ {
+  "n": 5,
+  "title": "Crops and plots: the plot gets built by talking",
+  "q": "Should adding a crop plot be asked one question at a time?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "Plots as a conversation",
+    "rec": 1,
+    "out": "BUILD adding a plot (flow: plots) as a conversation: crop on photo tiles (a search stays available), variety as big tiles (\"अन्य\" opens the typing box), plot name (the app only SUGGESTS \"variety plus number\"; the name is the farmer's own; today's suggestion in his own number pattern stays), area with एकर or गुंठा, बियाणं or रोपं with company or nursery name (skippable only when a variety is chosen, as today) and quantity per acre with unit or plant age, then the date as \"आज\" or \"आधी केली\" with a big day-month-year picker and the \"आज दिवस N\" count, a summary, and one save. What stays as it is today: the same fields and stored values, the crop's own date word (छाटणी, लागवड, पेरणी), the checked schedule that follows by itself, and the Home voice flow, waiting screen, result screen and schedule cards. NOT included, not decided: adding several plots in one go. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ },
+ {
+  "n": 6,
+  "title": "Inviting someone: who, which plots, then the code",
+  "q": "Should inviting someone be asked one question at a time?",
+  "opts": [
+   {
+    "k": "A",
+    "t": "Approve A",
+    "d": "Invite as a conversation",
+    "rec": 1,
+    "out": "BUILD \"नवीन व्यक्तीला बोलवा\" (flow: invite) as a conversation: who (सहमालक, कुटुंब, मुकादम, कामगार, each with the app's own words for what they can do), which plots (all, chosen, own work; plots picked crop by crop), can they see money (a permission only, never an amount; not asked for a कामगार or own work, because the server refuses it), optional name, optional mobile number, optional worker from the attendance list, a summary in the card's own words, then \"आमंत्रण तयार करा\", then QR or link. What stays as it is today: the same fields, the same grant sent to the server, \"एक एक परवानगी बदला\" and the team card, the Home voice flow, waiting screen, result screen and schedule cards. Nothing is built yet: this is a design decision only."
+   }
+  ]
+ }
+]
