@@ -12,6 +12,7 @@ import {
 } from '@/hooks/useControlRoomPeople';
 import { DOWNLOADS_START_NOTE, roleLabel } from '@/lib/controlRoomTicks';
 import { DATE_FORMATS, fmt } from '@/lib/format';
+import { fmtIndiaDate } from '@/lib/indiaTime';
 
 /**
  * THE WEEKLY TRUST REPORT (CR-3, D-155 / R1).
@@ -72,6 +73,56 @@ function Block({ title, sub, note, children }: { title: string; sub?: string; no
 }
 
 const HISTORY = '/people/history';
+const DAY_MS = 86_400_000;
+
+/**
+ * W-3: the link for the phone-look count opens exactly the lines that were counted: the server's
+ * own window, and only the looks it counts. An older server sends no window; then the link falls
+ * back to the 7-day lines it always opened.
+ */
+function phoneLooksLink(r: TrustReportData): string {
+  if (r.phoneLooksFromUtc && r.phoneLooksToUtc) {
+    const sp = new URLSearchParams({
+      action: 'phones_shown',
+      fromUtc: r.phoneLooksFromUtc,
+      toUtc: r.phoneLooksToUtc,
+      countedLooksOnly: 'true',
+    });
+    return `${HISTORY}?${sp.toString()}`;
+  }
+  return `${HISTORY}?action=phones_shown&days=7`;
+}
+
+function PersonList({
+  people,
+  keepPending,
+  onKeep,
+}: {
+  people: TrustReportData['notSignedIn30Days'];
+  keepPending: boolean;
+  onKeep: (personId: string) => void;
+}) {
+  return (
+    <ul className="flex flex-col divide-y divide-border">
+      {people.map((p) => {
+        const added = fmtIndiaDate(p.addedAtUtc);
+        return (
+          <li key={p.personId ?? p.phone} className="flex flex-wrap items-center justify-between gap-3 py-2">
+            <span className="text-body text-text-1">
+              <PersonName name={p.displayName} fallback="Unnamed" /> · {roleLabel(p.startingRole)}
+              {added && <span className="text-text-2"> · added {added}</span>}
+            </span>
+            {p.personId && (
+              <Button size="sm" variant="outline" disabled={keepPending} onClick={() => onKeep(p.personId as string)}>
+                Keep
+              </Button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function TrustReport() {
   const q = useTrustReport();
@@ -83,6 +134,15 @@ export function TrustReport() {
   }
   const r: TrustReportData = q.data;
   const countedAt = fmt.dateTime(r.countedAtUtc, DATE_FORMATS.usersLastLogin) ?? 'a time the server did not give';
+  /* W-4: History only holds lines from the day it began. While that is under 7 days ago, a "last 7
+     days" number would claim a look-back that was never recorded, so the words say "since". */
+  const startedMs = r.historyStartedAtUtc ? Date.parse(r.historyStartedAtUtc) : Number.NaN;
+  const countedMs = Date.parse(r.countedAtUtc);
+  const startedDate = fmtIndiaDate(r.historyStartedAtUtc);
+  const shortHistory =
+    startedDate !== null && Number.isFinite(startedMs) && Number.isFinite(countedMs) && countedMs - startedMs < 7 * DAY_MS;
+  const sevenDayWords = shortHistory ? `since ${startedDate}` : 'for the last 7 days';
+  const leftOutTestOnly = r.phoneLooksLeftOutTestFarmsOnly?.value;
 
   return (
     <section aria-labelledby="trust-report-heading" className="flex flex-col gap-4">
@@ -90,7 +150,14 @@ export function TrustReport() {
         <h2 id="trust-report-heading" className="text-h2 font-bold text-text-1">
           This week's trust report
         </h2>
-        <p className="text-caption text-text-2">Counted {countedAt}. Phone and door numbers are for the last 7 days.</p>
+        <p data-testid="history-began" className="text-caption text-text-2">
+          {r.historyStartedAtUtc === null || r.historyStartedAtUtc === undefined
+            ? 'History has no line yet.'
+            : startedDate
+              ? `History began on ${startedDate}.`
+              : 'History began at a time the server did not give.'}
+        </p>
+        <p className="text-caption text-text-2">Counted {countedAt}. Phone and door numbers are {sevenDayWords}.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -108,10 +175,19 @@ export function TrustReport() {
           ))}
         </Block>
 
-        <Block title="Farmers' phone numbers looked at" note="Test accounts and their farms are left out.">
-          <Row label="Times looked at">
-            <Count value={r.phoneLooks} to={`${HISTORY}?action=phones_shown&days=7`} />
+        <Block
+          title="Farmers' phone numbers looked at"
+          note="Looks by anyone are counted, staff included. Only looks at test farms are left out."
+        >
+          <Row label="Times phone numbers were shown">
+            <Count value={r.phoneLooks} to={phoneLooksLink(r)} />
           </Row>
+          {typeof leftOutTestOnly === 'number' && leftOutTestOnly > 0 && (
+            <p data-testid="phone-looks-test-only" className="py-1 text-caption text-text-2">
+              {fmt.num(leftOutTestOnly) ?? leftOutTestOnly} more {leftOutTestOnly === 1 ? 'was' : 'were'} on test farms
+              only and {leftOutTestOnly === 1 ? 'is' : 'are'} not counted.
+            </p>
+          )}
           <Row label="Farms">
             <Count value={r.phoneFarms} />
           </Row>
@@ -139,44 +215,45 @@ export function TrustReport() {
         </Block>
       </div>
 
-      <section className="glass-panel rounded-panel p-5">
-        <h3 className="text-h3 font-semibold text-text-1">Not signed in for 30 days</h3>
+      <section className="glass-panel rounded-panel p-5" data-testid="not-signed-in">
         {r.notSignedInNotMeasuredReason ? (
-          <p data-not-measured={r.notSignedInNotMeasuredReason} className="mt-1 text-body text-text-2">
-            {notMeasuredWords(r.notSignedInNotMeasuredReason)}
-          </p>
-        ) : r.notSignedIn30Days.length === 0 ? (
-          <p className="mt-1 text-body text-text-2">Everyone with access has signed in within 30 days, or was kept.</p>
-        ) : (
           <>
-            <p className="mb-2 text-caption text-text-2">
+            <h3 className="text-h3 font-semibold text-text-1">Not signed in</h3>
+            <p data-not-measured={r.notSignedInNotMeasuredReason} className="mt-1 text-body text-text-2">
+              {notMeasuredWords(r.notSignedInNotMeasuredReason)}
+            </p>
+          </>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <div>
+              <h3 className="text-h3 font-semibold text-text-1">
+                Added 30 or more days ago, no sign-in in the last 30 days
+              </h3>
+              {r.notSignedIn30Days.length === 0 ? (
+                <p className="mt-1 text-body text-text-2">No one is in this group, or they were kept.</p>
+              ) : (
+                <PersonList people={r.notSignedIn30Days} keepPending={keep.isPending} onKeep={(id) => keep.mutate(id)} />
+              )}
+            </div>
+            {r.neverSignedIn && (
+              <div>
+                <h3 className="text-h3 font-semibold text-text-1">Added, never signed in</h3>
+                {r.neverSignedIn.length === 0 ? (
+                  <p className="mt-1 text-body text-text-2">No one is in this group, or they were kept.</p>
+                ) : (
+                  <PersonList people={r.neverSignedIn} keepPending={keep.isPending} onKeep={(id) => keep.mutate(id)} />
+                )}
+              </div>
+            )}
+            <p className="text-caption text-text-2">
               Keep a person to leave them on the list; remove them from the list above if they no longer need access.
             </p>
-            <ul className="flex flex-col divide-y divide-border">
-              {r.notSignedIn30Days.map((p) => (
-                <li key={p.personId ?? p.phone} className="flex flex-wrap items-center justify-between gap-3 py-2">
-                  <span className="text-body text-text-1">
-                    <PersonName name={p.displayName} fallback="Unnamed" /> · {roleLabel(p.startingRole)}
-                  </span>
-                  {p.personId && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={keep.isPending}
-                      onClick={() => keep.mutate(p.personId as string)}
-                    >
-                      Keep
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
             {keep.isError && (
-              <p role="alert" className="mt-2 text-body text-text-1">
+              <p role="alert" className="text-body text-text-1">
                 {peopleErrorText(keep.error)}
               </p>
             )}
-          </>
+          </div>
         )}
       </section>
     </section>

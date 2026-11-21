@@ -438,7 +438,9 @@ describe('People and access: the weekly trust report', () => {
       }),
     });
     renderPeople();
-    const block = (await screen.findByRole('heading', { name: 'Not signed in for 30 days' }, WAIT)).closest('section')!;
+    const block = (
+      await screen.findByRole('heading', { name: 'Added 30 or more days ago, no sign-in in the last 30 days' }, WAIT)
+    ).closest('section')!;
     await userEvent.click(within(block).getByRole('button', { name: 'Keep' }));
     await waitFor(() => expect(writes(s)).toHaveLength(1), WAIT);
     expect(writes(s)[0].url).toContain(`/shramsafal/admin/people/${F1}/keep`);
@@ -458,9 +460,142 @@ describe('People and access: the weekly trust report', () => {
     serve();
     renderPeople();
     const block = (await screen.findByRole('heading', { name: "Farmers' phone numbers looked at" }, WAIT)).closest('section')!;
-    expect(within(block).getByText('Test accounts and their farms are left out.')).toBeInTheDocument();
+    const note = 'Looks by anyone are counted, staff included. Only looks at test farms are left out.';
+    expect(within(block).getByText(note)).toBeInTheDocument();
     const other = screen.getByRole('heading', { name: 'Downloads' }).closest('section')!;
-    expect(within(other).queryByText('Test accounts and their farms are left out.')).not.toBeInTheDocument();
+    expect(within(other).queryByText(note)).not.toBeInTheDocument();
+  });
+
+  it('W-3: the phone-look number is labelled as times shown and opens exactly the counted lines', async () => {
+    const s = serve({
+      trust: report({
+        phoneLooksFromUtc: '2026-11-15T10:00:00Z',
+        phoneLooksToUtc: '2026-11-22T10:01:00Z',
+        phoneLooksLeftOutTestFarmsOnly: measured(4),
+      }),
+      history: {
+        lines: [
+          {
+            atUtc: '2026-11-19T05:00:00Z',
+            action: 'phones_shown',
+            actorName: 'Example: Field Person',
+            subjectName: null,
+            details: { page: 'farms', farms: 'Example Farm A' },
+          },
+        ],
+        hitLimit: false,
+        limit: 500,
+      },
+    });
+    renderWithProviders(
+      <>
+        <Where />
+        <Routes>
+          <Route path="/people" element={<PeoplePage />} />
+          <Route path="/people/history" element={<HistoryPage />} />
+        </Routes>
+      </>,
+      { route: '/people' },
+    );
+    const block = (await screen.findByRole('heading', { name: "Farmers' phone numbers looked at" }, WAIT)).closest('section')!;
+    expect(within(block).getByText('Times phone numbers were shown')).toBeInTheDocument();
+    expect(within(block).queryByText('Times looked at')).not.toBeInTheDocument();
+    expect(within(block).getByTestId('phone-looks-test-only').textContent).toBe(
+      '4 more were on test farms only and are not counted.',
+    );
+
+    await userEvent.click(within(block).getByRole('link', { name: '12' }));
+    await screen.findByRole('heading', { name: 'History' }, WAIT);
+    const where = screen.getByTestId('where').textContent!;
+    expect(where).toContain('fromUtc=2026-11-15T10%3A00%3A00Z');
+    expect(where).toContain('toUtc=2026-11-22T10%3A01%3A00Z');
+    expect(where).toContain('countedLooksOnly=true');
+    await waitFor(
+      () =>
+        expect(
+          s.requests.some(
+            (r) =>
+              r.url.includes('/people/history?')
+              && r.url.includes('fromUtc=2026-11-15T10%3A00%3A00Z')
+              && r.url.includes('toUtc=2026-11-22T10%3A01%3A00Z')
+              && r.url.includes('countedLooksOnly=true')
+              && r.url.includes('action=phones_shown')
+              && !r.url.includes('days='),
+          ),
+        ).toBe(true),
+      WAIT,
+    );
+  });
+
+  it('W-3: History sends days when no exact window is in the address, and ignores a lone end', async () => {
+    const s = serve();
+    renderWithProviders(<HistoryPage />, { route: '/people/history?fromUtc=2026-11-15T10:00:00Z' });
+    await waitFor(() => expect(s.requests.some((r) => r.url.includes('/people/history?days=7'))).toBe(true), WAIT);
+    expect(s.requests.every((r) => !r.url.includes('fromUtc'))).toBe(true);
+  });
+
+  it('W-3: no test-farms line when none were left out, and no such line when it is not measured', async () => {
+    serve({ trust: report({ phoneLooksLeftOutTestFarmsOnly: measured(0) }) });
+    const first = renderPeople();
+    await screen.findByText('Times phone numbers were shown', undefined, WAIT);
+    expect(screen.queryByTestId('phone-looks-test-only')).not.toBeInTheDocument();
+    first.unmount();
+    stub?.restore();
+    serve({ trust: report({ phoneLooksLeftOutTestFarmsOnly: notMeasured('history_read_limit') }) });
+    renderPeople();
+    await screen.findByText('Times phone numbers were shown', undefined, WAIT);
+    expect(screen.queryByTestId('phone-looks-test-only')).not.toBeInTheDocument();
+  });
+
+  it('W-4: the report says when History began, and says "since" while it is under 7 days old', async () => {
+    serve({ trust: report({ historyStartedAtUtc: '2026-11-18T10:00:00Z' }) });
+    renderPeople();
+    expect((await screen.findByTestId('history-began', undefined, WAIT)).textContent).toBe('History began on 18 Nov 2026.');
+    expect(screen.getByText(/Phone and door numbers are since 18 Nov 2026\./)).toBeInTheDocument();
+    expect(screen.queryByText(/for the last 7 days/)).not.toBeInTheDocument();
+  });
+
+  it('W-4: History older than 7 days keeps "the last 7 days"; History with no line says so', async () => {
+    serve({ trust: report({ historyStartedAtUtc: '2026-10-01T10:00:00Z' }) });
+    const first = renderPeople();
+    expect((await screen.findByTestId('history-began', undefined, WAIT)).textContent).toBe('History began on 1 Oct 2026.');
+    expect(screen.getByText(/Phone and door numbers are for the last 7 days\./)).toBeInTheDocument();
+    first.unmount();
+    stub?.restore();
+    serve({ trust: report({ historyStartedAtUtc: null }) });
+    renderPeople();
+    expect((await screen.findByTestId('history-began', undefined, WAIT)).textContent).toBe('History has no line yet.');
+  });
+
+  it('W-4: not signed in is two true groups, each with Keep, and the reason shows when not measured', async () => {
+    const everyone = peopleAnswer().people;
+    const s = serve({
+      trust: report({
+        notSignedIn30Days: [everyone[1]],
+        neverSignedIn: [{ ...everyone[1], personId: 'f2222222-0000-0000-0000-000000000002', displayName: 'Example: New Person', addedAtUtc: '2026-11-21T05:00:00Z' }],
+      }),
+    });
+    const first = renderPeople();
+    const older = (
+      await screen.findByRole('heading', { name: 'Added 30 or more days ago, no sign-in in the last 30 days' }, WAIT)
+    ).closest('div')!;
+    const never = screen.getByRole('heading', { name: 'Added, never signed in' }).closest('div')!;
+    expect(within(older).getByRole('button', { name: 'Keep' })).toBeInTheDocument();
+    expect(within(never).getByText('Example: New Person')).toBeInTheDocument();
+    expect(within(never).getByText(/added 21 Nov 2026/)).toBeInTheDocument();
+    expect(screen.queryByText('Not signed in for 30 days')).not.toBeInTheDocument();
+    await userEvent.click(within(never).getByRole('button', { name: 'Keep' }));
+    await waitFor(() => expect(writes(s)).toHaveLength(1), WAIT);
+    expect(writes(s)[0].url).toContain('/people/f2222222-0000-0000-0000-000000000002/keep');
+    first.unmount();
+    stub?.restore();
+
+    serve({ trust: report({ notSignedInNotMeasuredReason: 'history_read_limit' }) });
+    renderPeople();
+    const block = (await screen.findByTestId('not-signed-in', undefined, WAIT));
+    expect(within(block).getByText('Not counted: there were too many lines to count exactly.')).toBeInTheDocument();
+    expect(within(block).queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument();
+    expect(within(block).queryByText(/no one is in this group/i)).not.toBeInTheDocument();
   });
 
   it('says the people-with-access number is the current list', async () => {

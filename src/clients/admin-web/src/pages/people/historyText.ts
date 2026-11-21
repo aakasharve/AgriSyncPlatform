@@ -94,8 +94,12 @@ export function historyText(line: HistoryLine): string {
         : `${actor} signed in.`;
     case 'phones_shown':
       if (d.page === 'users') {
-        const n = Number(d.personCount);
-        const people = n === 1 ? '1 person' : `${Number.isFinite(n) ? n : 0} people`;
+        /* W-11: a missing or unreadable count is never "0 people". Number(null) and Number('') are 0,
+           so absence is checked before the number is read. */
+        const raw = d.personCount;
+        const n = raw === null || raw === undefined || String(raw).trim() === '' ? Number.NaN : Number(raw);
+        if (!Number.isFinite(n)) return `${actor} looked at some people's phone numbers on the Users page.`;
+        const people = n === 1 ? '1 person' : `${n} people`;
         return `${actor} looked at the phone numbers of ${people} on the Users page.`;
       }
       return d.farms
