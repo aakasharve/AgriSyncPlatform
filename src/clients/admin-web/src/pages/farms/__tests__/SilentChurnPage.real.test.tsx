@@ -4,6 +4,7 @@ import raw from '@/__tests__/fixtures/b24-metric-lines.json?raw';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installContactsStub } from '@/test/contactsStub';
 import type { ContactsStub } from '@/test/contactsStub';
+import { FRESHNESS_TICK_MS } from '@/components/ui/FreshnessChip';
 import SilentChurnPage from '../SilentChurnPage';
 
 /**
@@ -189,7 +190,10 @@ describe('Silent Churn is real (S1, S2, S3)', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
       await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
       expect(silentCalls(), 'time passing made another silent-farms request: the page polls').toHaveLength(1);
-      expect(intervalSpy, 'the page set an interval').not.toHaveBeenCalled();
+      /* W-9: the freshness chip re-renders every 30 s so its age stays true; that tick fetches nothing.
+         Any OTHER interval would be the page polling, and is still refused. */
+      const others = intervalSpy.mock.calls.filter(([, ms]) => ms !== FRESHNESS_TICK_MS);
+      expect(others, 'the page set an interval other than the chip tick').toHaveLength(0);
     } finally {
       intervalSpy.mockRestore();
     }
