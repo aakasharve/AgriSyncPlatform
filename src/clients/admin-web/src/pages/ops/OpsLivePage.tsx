@@ -8,11 +8,13 @@ import {
   FeedDown,
   LoadFailed,
   NotMeasured,
+  NotMeasuredPanel,
   MetricLines,
   StandingNote,
 } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt, type AdminResponse } from '@/lib/api';
+import { analyticsFlagFromTop, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { PersonName } from '@/components/ui/PersonName';
@@ -510,11 +512,15 @@ interface CheckCardProps {
   missing?: string | null;
   loading?: boolean;
   action?: React.ReactNode;
+  /** W-1: the sentence for a check the server could not judge because app events are not recorded. */
+  reasonText?: string | null;
+  /** W-8: a short note under the rule, e.g. that test phones are counted. */
+  note?: string | null;
 }
 
-function CheckCard({ title, rule, check, figure, missing, loading, action }: CheckCardProps) {
+function CheckCard({ title, rule, check, figure, missing, loading, action, reasonText, note }: CheckCardProps) {
   const span = check ? windowInIndiaTime(check.windowStartUtc, check.windowEndUtc) : null;
-  const why = check && check.state === 'not_judged' ? reasonWords(check.reason) : null;
+  const why = check && check.state === 'not_judged' ? (reasonText ?? reasonWords(check.reason)) : null;
   return (
     <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -531,6 +537,7 @@ function CheckCard({ title, rule, check, figure, missing, loading, action }: Che
         )}
       </div>
       <p className="text-caption text-text-3">{rule}</p>
+      {note && <p className="text-caption text-text-3">{note}</p>}
       {loading && <p className="text-body text-text-2">Checking now.</p>}
       {missing && <p className="text-body text-text-2">{missing}</p>}
       {figure && <p className="text-body text-text-1">{figure}</p>}
@@ -549,7 +556,15 @@ export default function OpsLivePage() {
   const nightly = useNightlyFeeds();
   const voiceCheck = useOpsVoiceCheck();
   const voiceForbidden = voiceCheck.isError && isVoiceCheckForbidden(voiceCheck.error);
-  const r9: AlertCheck | null = data?.alertR9 ?? null;
+  /* W-1: while app events are not being recorded R9 is not judged and both lists are not measured.
+     The flag decides, whatever else the answer carries. */
+  const analyticsFlag = analyticsFlagFromTop(data);
+  const analyticsSentence = analyticsFlag ? analyticsNotMeasuredSentence(analyticsFlag) : null;
+  const r9Raw: AlertCheck | null = data?.alertR9 ?? null;
+  const r9: AlertCheck | null =
+    analyticsFlag && r9Raw
+      ? { ...r9Raw, state: 'not_judged', counted: null, reason: 'analytics_not_recording' }
+      : r9Raw;
   /* After a failed "Check again" the earlier answer may still be in hand; it
      is shown only as the earlier check, with its time, never as a verdict. */
   const earlierAt = voiceCheck.dataUpdatedAt
@@ -770,7 +785,16 @@ export default function OpsLivePage() {
                 rule={R9.rule}
                 check={r9}
                 figure={r9 ? r9Figure(r9) : null}
-                missing={r9 ? null : 'The server did not send this check, so no verdict is shown.'}
+                loading={isLoading}
+                reasonText={analyticsSentence}
+                note="Test phones included: errors from test phones count, because this check measures the server."
+                missing={
+                  analyticsSentence && !r9
+                    ? analyticsSentence
+                    : r9 || isLoading
+                      ? null
+                      : 'The server did not send this check, so no verdict is shown.'
+                }
               />
               <CheckCard
                 title={`${R10.id} ${R10.name}`}
@@ -822,6 +846,15 @@ export default function OpsLivePage() {
               two seconds, and <b>client.error</b> is the farmer&rsquo;s own device reporting a
               problem. A 200 in this table is a warning, not a failure.
             </p>
+            <p data-testid="events-test-phones" className="text-caption text-text-3">
+              Test phones included: events from test phones are listed, because this list measures the server.
+            </p>
+            {analyticsSentence ? (
+              <NotMeasuredPanel
+                title="Recent events are not measured"
+                why={<span data-testid="analytics-not-measured">{analyticsSentence}</span>}
+              />
+            ) : (
             <DataList<OpsErrorEvent>
               id="ops-live-events"
               /* THE COLLISION, HANDLED. Three lists, three namespaces —
@@ -846,7 +879,8 @@ export default function OpsLivePage() {
                 },
               }}
             />
-            {eventsCapped && (
+            )}
+            {!analyticsSentence && eventsCapped && (
               <p className="text-caption text-text-3">
                 The server returns at most fifty rows and sent fifty, so this is the newest fifty
                 and not the whole window. API Errors pages through the wider window.
@@ -860,7 +894,12 @@ export default function OpsLivePage() {
               Farms with repeated problems &mdash; last 24 hours
             </h2>
             <MetricLines metric="live-suffering-24h" />
-            {sufferingFarms ? (
+            {analyticsSentence ? (
+              <NotMeasuredPanel
+                title="Farms with repeated problems are not measured"
+                why={<span data-testid="analytics-not-measured-farms">{analyticsSentence}</span>}
+              />
+            ) : sufferingFarms ? (
               <DataList<OpsFarmError>
                 id="ops-live-suffering"
                 urlNamespace="suffering"
@@ -883,6 +922,8 @@ export default function OpsLivePage() {
                 }}
                 skeleton={{ rows: 4, cells: 7 }}
               />
+            ) : isLoading ? (
+              <p role="status" className="text-body text-text-2">Checking now.</p>
             ) : (
               <NotMeasured why="The server did not send this list, so nothing can be said about repeated problems." />
             )}

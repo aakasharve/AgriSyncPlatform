@@ -51,7 +51,9 @@ export type CheckState = 'breach' | 'clear' | 'not_judged';
 export type VoiceCheckReason =
   | 'too_few_recordings'
   | 'too_many_farms_for_live_count'
-  | 'farm_list_unreadable';
+  | 'farm_list_unreadable'
+  /** R9 only (fix wave S-N9): the server found app events are not being recorded, so it cannot judge. */
+  | 'analytics_not_recording';
 
 export interface AlertCheck {
   rule: string;
@@ -98,6 +100,8 @@ export function reasonWords(reason: VoiceCheckReason | null): string | null {
       return 'Too many farms for a live count, so no verdict was drawn.';
     case 'farm_list_unreadable':
       return 'The list of farms could not be read, so no verdict was drawn.';
+    case 'analytics_not_recording':
+      return 'Not measured: the server stopped recording app events.';
     default:
       return null;
   }

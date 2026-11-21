@@ -17,7 +17,7 @@ import { itemsOf, type MisItem, type MisSectionKey } from './misItems';
 import { fmtDec, fmtInt, fmtPctPoints } from './misFormat';
 import { fmtIndiaTime } from './misPeriod';
 import {
-  SYNC_TEST_PHONES, TODAY_SO_FAR, testAccountsLine,
+  FPO_TODAYS_LINKS, SYNC_TEST_PHONES, TODAY_SO_FAR, testAccountsLine,
   acquisitionView, engagementView, farmsView, headlineFor, noun, overviewView, qualityView, retentionView,
   shownOf, type MisChart, type MisLineModel, type MisShown, type MisTileModel,
 } from './misView';
@@ -178,10 +178,13 @@ function farmsValues(d: CompanyMis): Record<string, () => Resolved> {
     'farms.activeFarms': tile('farms.activeFarms'),
     'farms.registered': tile('farms.registered'),
     'farms.acres': tile('farms.acres'),
-    'farms.inFpo': tile('farms.inFpo'),
+    'farms.inFpo': () => {
+      const r = tile('farms.inFpo')();
+      return r.shown !== null ? { ...r, shown: `${r.shown} (${FPO_TODAYS_LINKS})` } : r;
+    },
     'farms.crops': () => fromChart(v.crops, (c) => joined(c.rows.map((r) =>
       `${r.label} ${fmtInt(r.farms)} ${noun(r.farms, 'farm', 'farms')}, ${fmtDec(r.acres, 1)} acres`))),
-    'farms.perFpo': () => fromChart(v.perFpo, (c) => joined(c.rows.map((r) => `${r.label} ${fmtInt(r.farms)} ${noun(r.farms, 'farm', 'farms')}`))),
+    'farms.perFpo': () => fromChart(v.perFpo, (c) => `${joined(c.rows.map((r) => `${r.label} ${fmtInt(r.farms)} ${noun(r.farms, 'farm', 'farms')}`))} (${FPO_TODAYS_LINKS})`),
     'farms.acresChart': () => fromChart(v.acres, (c) => joined(c.labels.map((l, i) => `${l} ${fmtDec(c.values[i], 1)} acres`))),
   };
 }

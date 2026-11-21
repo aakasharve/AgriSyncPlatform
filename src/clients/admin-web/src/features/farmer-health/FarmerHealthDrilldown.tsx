@@ -11,6 +11,7 @@ import {
 import { describeAdminDenial } from '@/lib/adminErrors';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { FarmerTimeline } from './components/FarmerTimeline';
+import { analyticsFlagFromTop, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { FarmerIdentity } from './components/FarmerIdentity';
 import { FarmWorkers } from './components/FarmWorkers';
 import { ReadingBlock } from './components/ReadingBlock';
@@ -145,7 +146,13 @@ export default function FarmerHealthDrilldown() {
             phone={farmer.phone}
           />
           <NotBuiltYet metric="fh-score" />
-          <FarmerTimeline timeline={farmer.timeline ?? []} />
+          <FarmerTimeline
+            timeline={farmer.timeline ?? []}
+            analyticsNotMeasured={(() => {
+              const flag = analyticsFlagFromTop(farmer);
+              return flag ? analyticsNotMeasuredSentence(flag) : null;
+            })()}
+          />
           <LastEntry state={farmer.syncState} />
 
           <div className="grid gap-4 md:grid-cols-2">

@@ -137,6 +137,9 @@ export function DataList<T>(config: DataListConfig<T>) {
      scope. See `facets.ts` for the decision and the two rejected options. */
   const serverPaged = pagination.mode === 'server';
   const totalCount = serverPaged ? pagination.totalCount : rows.length;
+  /* W-5: the number the headline states. Test farms the list shows are paged over but not counted. */
+  const shownNotCounted = serverPaged ? Math.max(0, pagination.shownNotCounted ?? 0) : 0;
+  const headlineTotal = Math.max(0, totalCount - shownNotCounted);
   const pageScoped = serverPaged && pagination.totalCount > rows.length;
   const totalPages = serverPaged
     ? Math.max(1, Math.ceil(pagination.totalCount / Math.max(1, pagination.pageSize)))
@@ -358,7 +361,7 @@ export function DataList<T>(config: DataListConfig<T>) {
   const headline: ReactNode = pageScoped ? (
     <>
       <span>
-        {count(totalCount)} {nounFor(totalCount, noun)}
+        {count(headlineTotal)} {nounFor(headlineTotal, noun)}
       </span>
       <span className="font-normal text-text-3">·</span>
       <span>{count(rows.length)} on this page</span>
@@ -381,6 +384,15 @@ export function DataList<T>(config: DataListConfig<T>) {
         <span>
           Showing <b>{count(sorted.length)}</b> of <b>{count(rows.length)}</b>{' '}
           {nounFor(rows.length, noun)} matching &ldquo;{query.trim()}&rdquo;
+        </span>
+      );
+    }
+    if (pageScoped && shownNotCounted > 0) {
+      /* W-5: the list pages over every row it shows, test farms included; the count says which rows are counted. */
+      return (
+        <span>
+          <b>{count(rows.length)}</b> of <b>{count(totalCount)}</b> listed &middot;{' '}
+          <b>{count(headlineTotal)}</b> {nounFor(headlineTotal, noun)} counted
         </span>
       );
     }

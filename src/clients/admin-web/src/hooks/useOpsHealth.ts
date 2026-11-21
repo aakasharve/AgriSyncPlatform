@@ -37,6 +37,9 @@ export interface OpsHealthData {
   apiErrorSpike?: boolean | null;
   voiceDegraded?: boolean | null;
   computedAtUtc: string;
+  /** CR-3 fix wave W-1: `analytics_not_recording` means R9, the events and the repeated-problem farms are not measured. */
+  analyticsNotMeasuredReason?: string | null;
+  analyticsStoppedAtUtc?: string | null;
 }
 
 /**

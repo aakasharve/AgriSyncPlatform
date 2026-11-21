@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ModuleKeys } from '@/lib/moduleKeys';
+import { analyticsFlagFromMeta, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import { isForbiddenError } from '@/lib/silentFarms';
 import { useAdminScope } from './useAdminScope';
 import { useFarmContactsState } from './useFarmContacts';
@@ -130,6 +131,10 @@ export function useShouldCallToday() {
   const churn = useSilentChurn({ enabled: mayReadChurn });
 
   const notMeasuredReason = churn.data?.data.notMeasuredReason ?? null;
+  /* W-1: while the server says app events are not being recorded, the Suffering answer is not a
+     list of farms with no problems; it is not measured, and the problems half says so. */
+  const problemsFlag = analyticsFlagFromMeta(suffering.data?.meta);
+  const problemsNotMeasuredText = problemsFlag ? analyticsNotMeasuredSentence(problemsFlag) : null;
 
   const silentFarms = useMemo(() => churn.data?.data.farms ?? [], [churn.data]);
   const sufferingItems = useMemo(() => suffering.data?.data ?? [], [suffering.data]);
@@ -159,7 +164,9 @@ export function useShouldCallToday() {
         : 'failed'
       : suffering.isLoading
         ? 'loading'
-        : 'ready';
+        : problemsFlag
+          ? 'not-measured'
+          : 'ready';
 
   const rows = useMemo(
     () =>
@@ -176,6 +183,7 @@ export function useShouldCallToday() {
     silentState,
     problemsState,
     notMeasuredReason,
+    problemsNotMeasuredText,
     contactsFailed,
     churn,
     suffering,

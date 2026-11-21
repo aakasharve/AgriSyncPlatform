@@ -597,7 +597,7 @@
     "key": "live-recent-events",
     "label": "Recent events",
     "status": "real",
-    "what": "Every server error, slow save and phone-reported problem in the last two hours.",
+    "what": "Every server error, slow save and phone-reported problem in the last two hours, test phones included.",
     "why": "Shows what is breaking right now, before farmers call to complain.",
     "buildId": "L6"
   },
@@ -624,7 +624,7 @@
     "key": "errors-total",
     "label": "Errors in the chosen window",
     "status": "real",
-    "what": "Number of errors, slow saves and phone-reported problems in the chosen time window.",
+    "what": "Number of errors, slow saves and phone-reported problems in the chosen time window, test phones included.",
     "why": "Shows whether problems are rising or falling across hours and days.",
     "buildId": "E2"
   },

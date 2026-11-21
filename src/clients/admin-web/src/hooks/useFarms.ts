@@ -29,7 +29,15 @@ export function isTierFilterNotMeasured(error: unknown): boolean {
   const b = errorBody(error);
   return b.status === 409 && b.code === 'tier_filter_not_measured';
 }
-export interface FarmsList { items: FarmSummary[]; totalCount: number; page: number; pageSize: number; }
+export interface FarmsList {
+  items: FarmSummary[];
+  /** Farms matching, with farms owned by test accounts left out (the server's count). */
+  totalCount: number;
+  /** Test-owned farms matching that the list still shows; the list holds `totalCount + testFarmsShown` rows. Absent from an older server. */
+  testFarmsShown?: number;
+  page: number;
+  pageSize: number;
+}
 export type SilentBand = '7-13' | '14-29' | '30+' | 'never';
 export type SilentNotMeasuredReason = 'farm_list_unreadable' | 'too_many_farms_for_live_count';
 /** One silent farm, as the server counts it (CR-2e C26). */

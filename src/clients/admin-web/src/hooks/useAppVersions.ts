@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi, metaRefreshedAt, type AdminResponse } from '@/lib/api';
+import { analyticsFlagFromMeta, type AnalyticsFlag } from '@/lib/analyticsNotMeasured';
 
 // spec: control-room-app-versions-2026-11-12 (CR-1c Tasks V3 and V4).
 
@@ -53,6 +54,11 @@ export interface AppVersions {
  */
 export interface AppVersionsAnswer extends AppVersions {
   checkedAtUtc: string | null;
+  /**
+   * CR-3 fix wave W-1: set while the server says app events are not being recorded. Every count on
+   * the answer is then not measured; the page says so and shows no number.
+   */
+  analyticsFlag: AnalyticsFlag | null;
 }
 
 /**
@@ -76,7 +82,11 @@ export function useAppVersions(days: AppVersionsDays) {
       if (!answer || !Array.isArray(answer.versions) || !Array.isArray(answer.onOlderVersions)) {
         throw new Error('app-versions: the answer is not in the expected shape');
       }
-      return { ...answer, checkedAtUtc: metaRefreshedAt(data.meta) ?? null };
+      return {
+        ...answer,
+        checkedAtUtc: metaRefreshedAt(data.meta) ?? null,
+        analyticsFlag: analyticsFlagFromMeta(data.meta),
+      };
     },
     staleTime: 0,
     gcTime: 0,

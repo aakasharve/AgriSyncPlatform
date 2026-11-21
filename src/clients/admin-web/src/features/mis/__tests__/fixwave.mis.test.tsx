@@ -255,3 +255,19 @@ describe('W-14 MIS: entries are counted on the day they reached the server', () 
     expect(text).not.toMatch(/who saved an entry on/);
   });
 });
+
+describe('W-14 MIS: FPO history uses the links as they are today', () => {
+  it('W14_the_farms_page_says_it_uses_todays_fpo_links', async () => {
+    serve({});
+    renderMis('farms');
+    await countedShown();
+    const text = screen.getByTestId('mis-dashboard').textContent ?? '';
+    expect(text).toContain("Uses today's FPO links, also for earlier days and the period before.");
+    expect(text).toContain("today's FPO links, not as they were on earlier days");
+  });
+
+  it('W14_copy_for_ai_says_it_too', () => {
+    const text = misToAiText(misFixture(), 'farms');
+    expect(text.match(/today's FPO links/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});

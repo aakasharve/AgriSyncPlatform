@@ -830,6 +830,8 @@ export interface QualityView {
 }
 
 /** Global Constraints: sync failures measure the server, so every upload counts (stated on screen). */
+/** W-14 (check1 M6): farm-to-FPO links are read as they are today, also for earlier days and the period before. */
+export const FPO_TODAYS_LINKS = "Uses today's FPO links, also for earlier days and the period before.";
 export const SYNC_EVERY_UPLOAD = 'Every upload counts, test accounts included.';
 /**
  * W-6: the server says accepted changes cannot be tied to a person, so they include test phones,
@@ -997,6 +999,7 @@ export function farmsView(d: CompanyMis): FarmsView {
     : { kind: 'notMeasured', why: notMeasuredWhy(f.acresCovered.current.notMeasuredReason) };
   const inFpo = asOfTile(tileFrom('farms.inFpo', f.activeFarmsInFpoPct, 'pct', true), d.lastDayComplete === false);
   const count = shownOf(f.farmsInFpo.current, 'count');
+  inFpo.note = FPO_TODAYS_LINKS;
   inFpo.hint = count.kind === 'value'
     ? `Of active farms; ${count.text} registered ${noun(count.value, 'farm is', 'farms are')} in one`
     : 'Of active farms';

@@ -35,7 +35,8 @@ export default function SettingsAdminsPage() {
 
   const founder = isPlatformAdmin || controlRoom?.isFounder === true;
   const ticks = controlRoom?.ticks ?? [];
-  const readable = scope?.modules.filter((m) => m.canRead).length ?? 0;
+  /* W-13: a scope that did not resolve is not "0 parts": the parts could not be read. */
+  const readable = scope ? scope.modules.filter((m) => m.canRead).length : null;
 
   return (
     <div className="flex max-w-[var(--text-measure)] flex-col gap-5">
@@ -88,9 +89,10 @@ export default function SettingsAdminsPage() {
         </section>
       ) : (
         <section className="glass-panel rounded-panel p-5">
-          <p className="text-body text-text-1">
-            Your access comes from your organisation. {readable} {readable === 1 ? 'part is' : 'parts are'} open to
-            you.
+          <p data-testid="settings-parts-open" className="text-body text-text-1">
+            {readable === null
+              ? 'Your access comes from your organisation. The parts open to you could not be read.'
+              : `Your access comes from your organisation. ${readable} ${readable === 1 ? 'part is' : 'parts are'} open to you.`}
           </p>
         </section>
       )}

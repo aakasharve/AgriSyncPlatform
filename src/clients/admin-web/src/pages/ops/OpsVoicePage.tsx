@@ -321,6 +321,16 @@ export default function OpsVoicePage() {
   const measuredCount = measured.length;
   const nothingMeasured = measuredCount === 0;
 
+  /* W-12: the four tiles follow the same states as the chart below them. While the first load is in
+     flight they say so, and after a failed load (a first one, or a 5-minute re-poll that kept the
+     earlier rows) they show no number: an old figure is not shown as current. */
+  const tilesLoading = isLoading;
+  const tilesFailed = isError && !isLoading;
+  const tilesDown = tilesLoading || tilesFailed;
+  const downCaption = tilesLoading
+    ? 'Loading the voice numbers.'
+    : 'Could not load these numbers just now. Nothing here is shown as current.';
+
   /* The server echoes the window it actually used — `last {days} days`
      (`GetOpsVoiceHandler.cs:19`) — after its own clamp. Comparing the two is
      free, and it is the only way this screen can notice that it was answered
@@ -413,23 +423,23 @@ export default function OpsVoicePage() {
         <KpiCard
           label="Calls"
           value={fmt.num(invocations)}
-          state={nothingMeasured ? 'unmeasured' : 'ok'}
+          state={tilesDown || nothingMeasured ? 'unmeasured' : 'ok'}
           tone="blue"
-          caption={`${windowWords} · read at ${checkedAt}`}
-          note="Voice parses, receipt extractions and patti extractions together. The feed does not separate them."
+          caption={tilesDown ? downCaption : `${windowWords} · read at ${checkedAt}`}
+          note="Test phones included: this feed measures the server, so test calls are counted. Voice parses, receipt extractions and patti extractions together. The feed does not separate them."
         />
         <KpiCard
           label="Failed calls"
           value={fmt.num(failures)}
-          state={nothingMeasured ? 'unmeasured' : 'ok'}
+          state={tilesDown || nothingMeasured ? 'unmeasured' : 'ok'}
           tone={failures > 0 ? 'red' : 'blue'}
-          caption={windowWords}
-          note="A failure is a call that did not complete. Nothing on this screen measures whether a call that DID complete understood the farmer correctly."
+          caption={tilesDown ? downCaption : windowWords}
+          note="Test phones included: failed test calls are counted. A failure is a call that did not complete. Nothing on this screen measures whether a call that DID complete understood the farmer correctly."
         />
         <KpiCard
           label="Success rate"
           value={fmt.pct(successRate)}
-          state={successRate === null ? 'unmeasured' : 'ok'}
+          state={tilesDown || successRate === null ? 'unmeasured' : 'ok'}
           /* Property (5). Blue is the neutral-informational colour: no rule
              names a line for this window, so there is no verdict to paint. */
           tone="blue"
@@ -437,21 +447,25 @@ export default function OpsVoicePage() {
             /* Never "0 of 0 calls completed" under an em dash: with nothing
                measured there is no denominator, and printing one would be a
                fabricated zero wearing a caption. */
-            nothingMeasured
-              ? windowWords
-              : `${fmt.num(invocations - failures)} of ${fmt.num(invocations)} calls completed`
+            tilesDown
+              ? downCaption
+              : nothingMeasured
+                ? windowWords
+                : `${fmt.num(invocations - failures)} of ${fmt.num(invocations)} calls completed`
           }
           note="No rule sets a success line for this window. The one rule that exists, R10, watches a 20% failure rate over 6 hours — a different threshold over a different window."
         />
         <KpiCard
           label="Avg latency"
           value={fmt.ms(avgLatency)}
-          state={avgLatency === null ? 'unmeasured' : 'ok'}
+          state={tilesDown || avgLatency === null ? 'unmeasured' : 'ok'}
           tone="blue"
           caption={
-            latencies.length > 0
-              ? `mean of ${latencies.length} daily averages, not of the calls themselves`
-              : 'no date in this window reported a duration'
+            tilesDown
+              ? downCaption
+              : latencies.length > 0
+                ? `mean of ${latencies.length} daily averages, not of the calls themselves`
+                : 'no date in this window reported a duration'
           }
           note="No rule sets a latency line either. A date whose calls recorded no duration is left out rather than counted as 0ms."
         />
