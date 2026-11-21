@@ -350,7 +350,8 @@
 //     asked_user_id (who the question was put to) as an OPAQUE user id ONLY, kept on erasure exactly as
 //     ssf.log_practice_reasons keeps its author id (P6: anonymise the person, never the work; the phone names a person
 //     only through the operator directory, which erasure anonymises), and three more free-text columns that KEEP for
-//     the response reason above: prompt_text (Sathi's words shown, not his), deviation_challenge (his "अडचण", an answer
+//     the response reason above: prompt_text (Sathi's words shown; a follow-up quotes his own earlier observation, which
+//     ssf.observation_events already keeps), deviation_challenge (his "अडचण", an answer
 //     like response) and source_refs / schedule_card_ref / deviation_reason_code / question_kind / prompt_origin
 //     (fixed values and ids, no person). photo_attachment_id points at an attachment whose own disposition governs the
 //     file. The "NO user_id column" sentence above is the history of this table before that migration.

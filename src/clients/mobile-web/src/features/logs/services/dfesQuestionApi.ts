@@ -51,6 +51,11 @@ export interface QuestionOutcome {
     skipped?: boolean | null;
     answerObservationId?: string | null;
     dailyLogId?: string | null;
+    /** Lane DFES-Q - a why-not answer: one of the eight reason codes, and his "अडचण" (verbatim). */
+    deviationReasonCode?: string | null;
+    deviationChallenge?: string | null;
+    /** Lane DFES-Q - the photo he gave as proof of an observation. */
+    photoAttachmentId?: string | null;
 }
 
 export async function recordQuestionEvent(
@@ -71,6 +76,12 @@ export async function recordQuestionEvent(
         triggerReason: selected.triggerReason, weatherContext: selected.weatherContext,
         response: outcome.response ?? null, stageConfirmed: outcome.stageConfirmed ?? null,
         photoSubmitted: outcome.photoSubmitted ?? null, skipped: outcome.skipped ?? null,
+        // Lane DFES-Q - the words shown and where they came from, the look lines a stage question used (the server resolves their
+        // sources; the phone never names a source), and a why-not or photo answer. An older server ignores fields it does not know.
+        promptText: selected.resolvedPromptMr, promptOrigin: selected.promptOrigin ?? 'bank',
+        lookLineIds: selected.lookLineIds ?? [], scheduleCardRef: selected.scheduleCardRef ?? null,
+        deviationReasonCode: outcome.deviationReasonCode ?? null, deviationChallenge: outcome.deviationChallenge ?? null,
+        photoAttachmentId: outcome.photoAttachmentId ?? null,
     };
     const res = await fetch(`${resolveBaseUrl()}/shramsafal/question-events`, {
         method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
