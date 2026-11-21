@@ -81,6 +81,18 @@ public sealed class PeopleHandlersTests
             Task.FromResult(ByPhone.Values.FirstOrDefault(a => a.UserId == userId));
     }
 
+    private sealed class FakeHistory : IControlRoomHistory
+    {
+        public Task RecordNowAsync(ControlRoomHistoryEntry entry, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<HistoryRead> ReadAsync(Guid readerUserId, DateTime fromUtc, DateTime toUtc, string? action, int limit, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, DateTime>> LastSignedInAsync(
+            Guid readerUserId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, DateTime>>(new Dictionary<Guid, DateTime>());
+    }
+
     private static OrganizationMembership Seat(Guid user, OrganizationRole role) =>
         OrganizationMembership.Create(Guid.NewGuid(), PlatformOrg, new UserId(user), role, new UserId(FounderUser), Now.AddDays(-30));
 
@@ -96,6 +108,21 @@ public sealed class PeopleHandlersTests
 
     private static T Payload<T>(ControlRoomHistoryEntry e, string name) =>
         JsonSerializer.Deserialize<T>(JsonDocument.Parse(JsonSerializer.Serialize(e.Payload)).RootElement.GetProperty(name).GetRawText())!;
+
+    [Fact]
+    public async Task List_founder_row_names_the_founders_own_account()
+    {
+        var (store, directory, _) = Make();
+        var founder = Guid.Parse("00000000-0000-0000-0000-0000000000f2");
+        directory.ByPhone["9000000099"] = new ControlRoomAccount(founder, "9000000099", "Example: Founder");
+        store.Seats[founder] = Seat(founder, OrganizationRole.Owner);
+
+        var list = await new ListPeopleHandler(store, directory, new FakeHistory()).HandleAsync(FounderUser);
+
+        var row = list.People.Single();
+        row.IsFounder.Should().BeTrue();
+        row.BoundAccountName.Should().Be("Example: Founder", "the founder's account exists: never a false \"No account yet\"");
+    }
 
     [Fact]
     public async Task Add_refuses_the_founders_number()

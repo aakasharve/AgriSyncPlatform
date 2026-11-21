@@ -29,7 +29,7 @@ public sealed class ListPeopleHandler(
             var account = await directory.FindByUserAsync(founderId, ct);
             rows.Add(new PersonDto(
                 null, true, account?.DisplayName ?? "Founder", account?.TenDigitPhone ?? string.Empty, "founder", allTicks,
-                null, lastSignedIn.TryGetValue(founderId, out var at) ? at : null, null));
+                account?.DisplayName, lastSignedIn.TryGetValue(founderId, out var at) ? at : null, null));
         }
 
         foreach (var person in people)

@@ -176,6 +176,7 @@ public sealed class ControlRoomPeopleFlowRealPostgresTests(Xunit.Abstractions.IT
         first.IsFounder.Should().BeTrue("the founder is listed first");
         first.PersonId.Should().BeNull();
         first.DisplayName.Should().Be("Example: Founder");
+        first.BoundAccountName.Should().Be("Example: Founder", "the founder's account exists, so the row names it, never \"No account yet\"");
         first.Phone.Should().Be(FounderPhone);
         first.Ticks.Should().Equal(ControlRoomTicks.All.Select(t => t.Key));
         first.LastSignedInUtc.Should().BeNull("the founder has no signed_in row here: never a made-up date");
