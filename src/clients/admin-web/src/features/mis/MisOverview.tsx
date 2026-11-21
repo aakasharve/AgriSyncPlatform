@@ -24,7 +24,7 @@ export const OverviewSection: React.FC<MisSectionProps<OverviewView>> = ({ view,
                 <div className="grid gap-8 lg:grid-cols-[250px_minmax(0,1fr)]">
                     <div className="flex flex-col">
                         <h3 id="mis-hero-label" className="text-[15px] font-medium text-stone-900">Active farms</h3>
-                        <p className="mt-0.5 text-[13px] text-stone-500">As of {hero.asOf}</p>
+                        <p className="mt-0.5 text-[13px] text-stone-500" data-testid="mis-hero-as-of">As of {hero.asOf}</p>
                         <ItemLines item={hero.item} className="mt-1.5" />
                         <div className="mt-5 text-[56px] font-medium leading-none tracking-[-0.025em] text-stone-900" data-testid="kpi-activeFarms-value">
                             <Shown shown={hero.current} />
@@ -33,12 +33,12 @@ export const OverviewSection: React.FC<MisSectionProps<OverviewView>> = ({ view,
                         {compare && hero.current.kind === 'value' && (
                             <p className="mt-3 flex flex-wrap items-center gap-x-1.5 text-[13px] text-stone-500">
                                 <Delta delta={hero.delta} className="text-[13px]" />
-                                {hero.previous.kind === 'value' && <span>from {hero.previous.text} on {hero.previousTo}</span>}
+                                {hero.previous.kind === 'value' && !hero.todaySoFar && <span>from {hero.previous.text} on {hero.previousTo}</span>}
                             </p>
                         )}
                         <dl className="mt-auto grid grid-cols-1 gap-2.5 border-t border-stone-100 pt-4 text-[13px] max-lg:mt-6">
                             <div className="flex justify-between gap-3"><dt className="text-stone-500">Farms registered</dt><dd className="tabular-nums text-stone-900"><Shown shown={hero.registered} /></dd></div>
-                            <div className="flex justify-between gap-3"><dt className="text-stone-500">New farms in this range</dt><dd className="tabular-nums text-stone-900"><Shown shown={hero.newFarms} /></dd></div>
+                            <div className="flex justify-between gap-3"><dt className="text-stone-500">Change in farms registered</dt><dd className="tabular-nums text-stone-900"><Shown shown={hero.newFarms} /></dd></div>
                             <div className="flex justify-between gap-3"><dt className="text-stone-500">Acres under active farms</dt><dd className="tabular-nums text-stone-900"><Shown shown={hero.acres} /></dd></div>
                         </dl>
                     </div>

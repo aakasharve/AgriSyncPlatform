@@ -55,7 +55,7 @@ export const AcquisitionSection: React.FC<MisSectionProps<AcquisitionView>> = ({
                 item="acquisition.channelVerify"
                 className="col-span-12 xl:col-span-6"
                 title="Which channels bring farmers who stay"
-                subtitle="Habit = saved entries on 3 of their first 7 days"
+                subtitle="Habit = entries that reached the server on 3 of their first 7 days"
             >
                 <NotMeasuredYet why={why('acquisition.channelVerify')} />
                 <div className="mt-3 text-[12px] text-stone-500" data-mis-item="acquisition.channelHabit" data-mis-fields="">

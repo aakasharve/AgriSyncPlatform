@@ -612,6 +612,14 @@ export interface AdminResponse<T> {
     /** Legacy alias. No endpoint is known to send this; kept so a stub cannot lie. */
     lastRefreshed?: string;
     ttlSeconds: number;
+    /**
+     * CR-3 fix wave W-1: `analytics_not_recording` means every analytics-backed number on this
+     * answer is not measured. Null or absent: recording (or an older server). Read it through
+     * `lib/analyticsNotMeasured.ts`.
+     */
+    analyticsNotMeasuredReason?: string | null;
+    /** When recording stopped, when the server knows. */
+    analyticsStoppedAtUtc?: string | null;
   };
 }
 

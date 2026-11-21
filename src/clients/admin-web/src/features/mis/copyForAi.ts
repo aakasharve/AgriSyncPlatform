@@ -17,6 +17,7 @@ import { itemsOf, type MisItem, type MisSectionKey } from './misItems';
 import { fmtDec, fmtInt, fmtPctPoints } from './misFormat';
 import { fmtIndiaTime } from './misPeriod';
 import {
+  SYNC_TEST_PHONES, TODAY_SO_FAR, testAccountsLine,
   acquisitionView, engagementView, farmsView, headlineFor, noun, overviewView, qualityView, retentionView,
   shownOf, type MisChart, type MisLineModel, type MisShown, type MisTileModel,
 } from './misView';
@@ -63,14 +64,20 @@ function fromLine(m: MisLineModel, fmt: (v: number) => string): string {
 
 function tileOf(tiles: MisTileModel[], key: string): Resolved {
   const t = tiles.find((x) => x.item === key);
-  return t ? fromShown(t.current) : missing(NOT_MEASURED_YET);
+  if (!t) return missing(NOT_MEASURED_YET);
+  const r = fromShown(t.current);
+  /* W-2: an "as of the last day" number whose last day is today says so, as the page does. */
+  return t.todaySoFar && r.shown !== null ? { ...r, shown: `${r.shown} (${TODAY_SO_FAR}, not compared)` } : r;
 }
 
 function overviewValues(d: CompanyMis, headline: string): Record<string, () => Resolved> {
   const v = overviewView(d);
   const tile = (key: string) => () => tileOf(v.tiles, key);
   return {
-    'overview.activeFarms': () => fromShown(v.hero.current),
+    'overview.activeFarms': () => {
+      const r = fromShown(v.hero.current);
+      return v.hero.todaySoFar && r.shown !== null ? { ...r, shown: `${r.shown} (${TODAY_SO_FAR}, not compared)` } : r;
+    },
     'overview.signUps': tile('overview.signUps'),
     'overview.dau': tile('overview.dau'),
     'overview.wau': tile('overview.wau'),
@@ -212,12 +219,34 @@ function itemsOfPack(d: CompanyMis, section: MisSectionKey): PackItem[] {
   });
 }
 
+/** What the pack says about test accounts: the count, or that none are set up so test phones are counted (W-7). */
+function testAccountsSentence(n: number): string {
+  return n === 0 ? `${testAccountsLine(0)}.` : `Test accounts left out: ${n}.`;
+}
+
+/** Extra facts about the answer that change how the numbers are read; the page prints the same ones. */
+export interface PackOptions {
+  /** W-1: the sentence for "app events are not being recorded", or null when they are. */
+  analyticsSentence?: string | null;
+}
+
+function caveatsOf(answer: CompanyMis, section: MisSectionKey, opts: PackOptions | undefined): string[] {
+  const out: string[] = [];
+  if (answer.lastDayComplete === false) {
+    out.push('The last day of the range is today and is not over; numbers "as of the last day" are today so far and are not compared.');
+  }
+  if (opts?.analyticsSentence) out.push(`${opts.analyticsSentence} App version adoption and refused sync changes are not measured.`);
+  if (section === 'quality' && answer.quality.syncAcceptedIncludesTestPhones === true) out.push(SYNC_TEST_PHONES);
+  return out;
+}
+
 /** "ShramSafal Company MIS — {Page}", the range line, then one line per item of the page. */
-export function misToAiText(answer: CompanyMis, section: MisSectionKey): string {
+export function misToAiText(answer: CompanyMis, section: MisSectionKey, opts?: PackOptions): string {
   const { range } = answer;
   const lines = [
     `ShramSafal Company MIS — ${MIS_PAGE_NAMES[section]}`,
-    `Range ${range.from}..${range.to} (${range.days} days). Counted at ${fmtIndiaTime(answer.countedAtUtc)}. Test accounts left out: ${answer.excludedTestAccounts}.`,
+    `Range ${range.from}..${range.to} (${range.days} days). Counted at ${fmtIndiaTime(answer.countedAtUtc)}. ${testAccountsSentence(answer.excludedTestAccounts)}`,
+    ...caveatsOf(answer, section, opts),
     ...itemsOfPack(answer, section).map((i) =>
       (i.notMeasured !== null ? `${i.label}: not measured — ${i.notMeasured}` : `${i.label}: ${i.shown} — ${i.meaning}`)),
   ];
@@ -225,13 +254,16 @@ export function misToAiText(answer: CompanyMis, section: MisSectionKey): string 
 }
 
 /** The same content as `misToAiText`, as JSON. */
-export function misToAiJson(answer: CompanyMis, section: MisSectionKey): string {
+export function misToAiJson(answer: CompanyMis, section: MisSectionKey, opts?: PackOptions): string {
   const { range } = answer;
+  const caveats = caveatsOf(answer, section, opts);
   return JSON.stringify({
     page: MIS_PAGE_NAMES[section],
     range: { from: range.from, to: range.to, days: range.days },
     countedAt: fmtIndiaTime(answer.countedAtUtc),
     testAccountsLeftOut: answer.excludedTestAccounts,
+    ...(answer.excludedTestAccounts === 0 ? { testAccountsNote: testAccountsSentence(0) } : {}),
+    ...(caveats.length > 0 ? { caveats } : {}),
     items: itemsOfPack(answer, section),
   }, null, 2);
 }

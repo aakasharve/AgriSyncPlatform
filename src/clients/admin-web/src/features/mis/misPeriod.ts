@@ -8,9 +8,9 @@
  *
  * Days are India days (UTC + 05:30), the same days the server counts in.
  */
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
-export type MisPreset = '7d' | '30d' | '90d' | 'custom';
+export type MisPreset = '7d' | '30d' | '90d' | 'today' | 'custom';
 
 export interface MisPeriod {
   preset: MisPreset;
@@ -24,7 +24,7 @@ const DAY_MS = 86_400_000;
 const IST_OFFSET_MS = 330 * 60_000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const PRESET_DAYS: Record<Exclude<MisPreset, 'custom'>, number> = { '7d': 7, '30d': 30, '90d': 90 };
+const PRESET_DAYS: Record<Exclude<MisPreset, 'custom'>, number> = { '7d': 7, '30d': 30, '90d': 90, today: 30 };
 
 function isoToMs(iso: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -45,9 +45,15 @@ export function istToday(now: Date = new Date()): string {
   return msToIso(now.getTime() + IST_OFFSET_MS);
 }
 
-/** A preset ending today: 7, 30 or 90 days including today. */
+/**
+ * A preset: 7, 30 or 90 days ending YESTERDAY (India time), so its last day is a whole day. Today
+ * is not over, and a count of it set beside a whole day reads as a fall (fix wave W-2). Today is
+ * still available as an explicit choice: the `today` preset is 30 days ending today, and its
+ * last day is today so far.
+ */
 export function presetPeriod(preset: Exclude<MisPreset, 'custom'>, today: string): MisPeriod {
-  return { preset, from: addDays(today, -(PRESET_DAYS[preset] - 1)), to: today };
+  const to = preset === 'today' ? today : addDays(today, -1);
+  return { preset, from: addDays(to, -(PRESET_DAYS[preset] - 1)), to };
 }
 
 /**
@@ -83,22 +89,37 @@ export function fmtIndiaTime(utcIso: string): string {
 interface MisState {
   period: MisPeriod;
   compare: boolean;
+  /** The India date the period was worked out on; a preset is worked out again when that date moves on. */
+  computedOn: string;
 }
 
 let state: MisState | null = null;
 const listeners = new Set<() => void>();
 
 function initial(): MisState {
-  return { period: presetPeriod('30d', istToday()), compare: true };
+  const today = istToday();
+  return { period: presetPeriod('30d', today), compare: true, computedOn: today };
+}
+
+/**
+ * The range is worked out when the page opens and again when the India date changes, never kept
+ * from the day the tab first loaded (fix wave W-2). A custom range is the reader's own dates and
+ * is left alone. Nothing is announced from here: this runs while React reads the store.
+ */
+function rollIfDateMoved(current: MisState): MisState {
+  const today = istToday();
+  if (current.computedOn === today) return current;
+  const period = current.period.preset === 'custom' ? current.period : presetPeriod(current.period.preset, today);
+  return { ...current, period, computedOn: today };
 }
 
 function read(): MisState {
-  if (state === null) state = initial();
+  state = state === null ? initial() : rollIfDateMoved(state);
   return state;
 }
 
 function write(next: MisState): void {
-  state = next;
+  state = { ...next, computedOn: istToday() };
   listeners.forEach((l) => l());
 }
 
@@ -114,6 +135,20 @@ const getCompare = () => read().compare;
 
 export function useMisPeriod(): [MisPeriod, (next: MisPeriod) => void] {
   const period = useSyncExternalStore(subscribe, getPeriod, getPeriod);
+  /* A tab left open over midnight: when it comes back into view, the range is worked out again. */
+  useEffect(() => {
+    const check = () => {
+      const before = state;
+      const after = read();
+      if (before !== after) listeners.forEach((l) => l());
+    };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
   return [period, (next) => write({ ...read(), period: next })];
 }
 
@@ -123,7 +158,7 @@ export function useMisCompare(): [boolean, (on: boolean) => void] {
   return [compare, (on) => write({ ...read(), compare: on })];
 }
 
-/** Back to the last 30 days, compare on. */
+/** Back to the last 30 days ending yesterday, compare on. */
 export function resetMisPeriod(): void {
   write(initial());
 }

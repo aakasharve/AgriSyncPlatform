@@ -31,7 +31,7 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                     item="retention.cohorts"
                     className="col-span-12 xl:col-span-7"
                     title="Return by sign-up week"
-                    subtitle="Share of new people who saved an entry on day 1, 7, 14 and 30, by sign-up week (phone verified), not install"
+                    subtitle="Share of new people with an entry that reached the server on day 1, 7, 14 and 30, by sign-up week (phone verified), not install"
                     action={view.cohorts.kind === 'chart'
                         ? <span className="hidden md:block"><ScaleLegend low="0%" high={`${view.cohorts.data.scaleTop}%`} /></span>
                         : undefined}
@@ -45,7 +45,7 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                     item="retention.curve"
                     className="col-span-12 xl:col-span-5"
                     title="Return curve"
-                    subtitle="Share of new people who saved an entry on each day after signing up, by sign-up week (phone verified), not install"
+                    subtitle="Share of new people with an entry that reached the server on each day after signing up, by sign-up week (phone verified), not install"
                     legend={compareLegend(SERIES.s1, 'Signed up this period', curvePrev)}
                     table={curve.kind === 'chart'
                         ? seriesTable('Day after signing up', curve.data.labels, [

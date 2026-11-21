@@ -38,6 +38,12 @@ import {
   fromIsoDate,
 } from './misFormat';
 
+/** W-7: with no test account on the list, the page says test phones are counted, never a plain "0 left out". */
+export function testAccountsLine(n: number): string {
+  if (n === 0) return 'No test accounts are set up to be left out, so test phones are counted';
+  return `${n} ${n === 1 ? 'test account' : 'test accounts'} left out`;
+}
+
 /* ── single values ─────────────────────────────────────────────────────── */
 
 export type MisShown =
@@ -77,7 +83,14 @@ export type MisDelta =
   /** `up` is set only where the text carries no sign ("less than 0.1%"), so the arrow can still point. */
   | { text: string; good: boolean | null; up?: boolean }
   | { previousNotMeasured: string }
+  /** W-2: the last day is today so far, so there is no fair comparison with the period before. */
+  | { notCompared: string }
   | null;
+
+/** The words where a compare change would be, when the last day chosen is not over (W-2). */
+export const NOT_COMPARED_TODAY = 'not compared: today is not over';
+/** The tag on an "as of the last day" number when that day is today (W-2). */
+export const TODAY_SO_FAR = 'today so far';
 
 /**
  * The change against the period before.
@@ -116,6 +129,14 @@ export interface MisTileModel {
   spark: (number | null)[] | null;
   /** A caveat that changes how the number is read; shown under the hint. */
   note?: string;
+  /** W-2: this is an "as of the last day" number and that day is today, so it is today so far and is not compared. */
+  todaySoFar?: boolean;
+}
+
+/** W-2: mark an "as of the last day" tile as today so far, with no compare change, when the answer's last day is not over. */
+export function asOfTile(tile: MisTileModel, partial: boolean): MisTileModel {
+  if (!partial) return tile;
+  return { ...tile, todaySoFar: true, delta: { notCompared: NOT_COMPARED_TODAY } };
 }
 
 /**
@@ -181,13 +202,15 @@ export const DAY_LINE_NOT_COUNTED = 'A day-by-day line is not counted yet. The f
 const DAY_MS = 86_400_000;
 
 /** One label per day of a range, "24 Oct", and the tooltip title "Fri 24 Oct". */
-export function dayAxis(range: MisRange): { labels: string[]; titles: string[] } {
+export function dayAxis(range: MisRange, partialLast = false): { labels: string[]; titles: string[] } {
   const start = fromIsoDate(range.from);
   const labels: string[] = [];
   const titles: string[] = [];
   for (let i = 0; i < range.days; i += 1) {
-    labels.push(fmtDay(start + i * DAY_MS));
-    titles.push(fmtWeekdayDay(start + i * DAY_MS));
+    /* W-2: the last point of a range that ends today is today so far, and says so. */
+    const so = partialLast && i === range.days - 1 ? ` (${TODAY_SO_FAR})` : '';
+    labels.push(`${fmtDay(start + i * DAY_MS)}${so}`);
+    titles.push(`${fmtWeekdayDay(start + i * DAY_MS)}${so}`);
   }
   return { labels, titles };
 }
@@ -211,7 +234,7 @@ function previousLine(values: (number | null)[] | null | undefined, length: numb
  * The day-by-day line of one number, or why there is none. B12: a line with
  * no measured day (all null, or no list) is a reason, never empty axes.
  */
-export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChart<MisLineModel> {
+export function dayLineOf(n: MisNumber, range: MisRange, item?: string, partialLast = false): MisChart<MisLineModel> {
   if (!Array.isArray(n.currentByDay)) {
     /* No day list at all: the number has no day-by-day form (or it was not counted). */
     if (n.current.value === null) return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason, item) };
@@ -221,7 +244,7 @@ export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChar
     /* A day list with no measured day: the number's own reason (B18 V3). */
     return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason ?? 'denominator_zero', item) };
   }
-  const axis = dayAxis(range);
+  const axis = dayAxis(range, partialLast);
   return {
     kind: 'chart',
     data: {
@@ -286,6 +309,8 @@ export interface OverviewView {
     previous: MisShown;
     delta: MisDelta;
     asOf: string;
+    /** W-2: the last day chosen is today, so the number is today so far and is not compared. */
+    todaySoFar: boolean;
     previousTo: string;
     registered: MisShown;
     newFarms: MisShown;
@@ -297,7 +322,11 @@ export interface OverviewView {
   logsByWeek: MisChart<{ labels: string[]; titles: string[]; voice: number[]; typed: number[] }>;
 }
 
-/** New farms in the range = registered by `to` minus registered by the day before the range. */
+/**
+ * The change in farms registered over the range = registered by `to` minus registered by the day
+ * before the range. It is a NET change (a farm removed or erased lowers it), so the page names it
+ * "Change in farms registered", never "new farms" (fix wave W-13).
+ */
 export function newFarmsOf(registered: MisNumber): MisShown {
   const cur = registered.current.value;
   const prev = registered.previous.value;
@@ -314,13 +343,14 @@ function weekLabel(weekStart: string, isPartial: boolean): { label: string; titl
 
 export function overviewView(d: CompanyMis): OverviewView {
   const o = d.overview;
+  const partial = d.lastDayComplete === false;
   const hero = o.activeFarms;
   const signUpsChart: OverviewView['signUps'] = o.signUpsByDay.length > 0
     ? {
       kind: 'chart',
       data: {
-        labels: o.signUpsByDay.map((p) => fmtDay(fromIsoDate(p.day))),
-        titles: o.signUpsByDay.map((p) => fmtWeekdayDay(fromIsoDate(p.day))),
+        labels: o.signUpsByDay.map((p) => `${fmtDay(fromIsoDate(p.day))}${partial && p.day === d.range.to ? ` (${TODAY_SO_FAR})` : ''}`),
+        titles: o.signUpsByDay.map((p) => `${fmtWeekdayDay(fromIsoDate(p.day))}${partial && p.day === d.range.to ? ` (${TODAY_SO_FAR})` : ''}`),
         values: o.signUpsByDay.map((p) => p.value),
       },
     }
@@ -344,21 +374,22 @@ export function overviewView(d: CompanyMis): OverviewView {
       fields: itemByKey('overview.activeFarms').fields,
       current: shownOf(hero.current, 'count'),
       previous: shownOf(hero.previous, 'count'),
-      delta: deltaOf(hero, 'count', true),
-      asOf: asOfText(d),
+      delta: partial ? { notCompared: NOT_COMPARED_TODAY } : deltaOf(hero, 'count', true),
+      asOf: partial ? `${TODAY_SO_FAR}, ${asOfText(d)}` : asOfText(d),
+      todaySoFar: partial,
       previousTo: fmtDay(fromIsoDate(d.previousRange.to)),
       registered: shownOf(d.farms.farmsRegistered.current, 'count'),
       newFarms: newFarmsOf(d.farms.farmsRegistered),
       acres: shownOf(d.farms.acresCovered.current, 'acres'),
-      line: dayLineOf(hero, d.range, 'overview.activeFarms'),
+      line: dayLineOf(hero, d.range, 'overview.activeFarms', partial),
     },
     tiles: [
       tileNotMeasured('overview.installs'),
       tileFrom('overview.signUps', o.signUps, 'count', true),
-      tileFrom('overview.dau', o.dau, 'count', true),
-      tileFrom('overview.wau', o.wau, 'count', true),
-      tileFrom('overview.mau', o.mau, 'count', true),
-      tileFrom('overview.stickiness', o.stickinessPct, 'pct', true),
+      asOfTile(tileFrom('overview.dau', o.dau, 'count', true), partial),
+      asOfTile(tileFrom('overview.wau', o.wau, 'count', true), partial),
+      asOfTile(tileFrom('overview.mau', o.mau, 'count', true), partial),
+      asOfTile(tileFrom('overview.stickiness', o.stickinessPct, 'pct', true), partial),
       tileFrom('overview.logsRecorded', o.logsRecorded, 'count', true),
       (() => {
         const voice = countOf(o.voiceLogs.current);
@@ -606,7 +637,7 @@ export function engagementView(d: CompanyMis): EngagementView {
         },
       };
   return {
-    perFarm: dayLineOf(e.logsPerActiveFarmPerWeek, d.range, 'engagement.logsPerFarm'),
+    perFarm: dayLineOf(e.logsPerActiveFarmPerWeek, d.range, 'engagement.logsPerFarm', d.lastDayComplete === false),
     heat: e.whenLogged.length > 0
       ? { kind: 'chart', data: heatGrid(e.whenLogged) }
       : { kind: 'notMeasured', why: notMeasuredWhy(d.overview.logsRecorded.current.notMeasuredReason) },
@@ -794,10 +825,17 @@ export interface QualityView {
   versions: MisChart<{ rows: VersionRowModel[] }>;
   /** Said when the first app-seen record is later than the period's first day; null otherwise. */
   versionsKnownSince: string | null;
+  /** W-6: set when the server says accepted changes include test phones. */
+  syncTestPhones: boolean;
 }
 
 /** Global Constraints: sync failures measure the server, so every upload counts (stated on screen). */
 export const SYNC_EVERY_UPLOAD = 'Every upload counts, test accounts included.';
+/**
+ * W-6: the server says accepted changes cannot be tied to a person, so they include test phones,
+ * while refused changes leave test accounts out. That replaces the older blanket line.
+ */
+export const SYNC_TEST_PHONES = 'Accepted changes include test phones; refused changes leave test accounts out.';
 /** CR-2c E2: the phone resends a refused change, and each refusal is counted. */
 export const SYNC_REFUSED_AGAIN = 'A change refused again counts each time.';
 
@@ -836,7 +874,7 @@ export function spreadOf(list: MisList<{ score: number; farmDays: number }>): Qu
 }
 
 /** #50 (CR-2c E8): refused and accepted changes per day, from the two numbers' own day lists. */
-export function syncDaysOf(refused: MisNumber, accepted: MisNumber, range: MisRange): MisChart<SyncDaysModel> {
+export function syncDaysOf(refused: MisNumber, accepted: MisNumber, range: MisRange, partialLast = false): MisChart<SyncDaysModel> {
   const item = 'quality.syncFailChart';
   const refusedDays = Array.isArray(refused.currentByDay) ? refused.currentByDay : null;
   const acceptedDays = Array.isArray(accepted.currentByDay) ? accepted.currentByDay : null;
@@ -845,7 +883,7 @@ export function syncDaysOf(refused: MisNumber, accepted: MisNumber, range: MisRa
     return { kind: 'notMeasured', why: blocked ? notMeasuredWhy(blocked.current.notMeasuredReason, item) : DAY_LINE_NOT_COUNTED };
   }
   if (refused.current.value === 0 && accepted.current.value === 0) return { kind: 'none', what: NO_CHANGE_SENT_WHAT };
-  const axis = dayAxis(range);
+  const axis = dayAxis(range, partialLast);
   const n = axis.labels.length;
   return {
     kind: 'chart',
@@ -862,7 +900,8 @@ export function qualityView(d: CompanyMis): QualityView {
   const q = d.quality;
   /* The average is the main line: with no measured day it is a reason (B12). The slowest-5% line
      is drawn beside it from its own served days, or left out when it has none. */
-  const avg = dayLineOf(q.transcriptionAvgMs, d.range, 'quality.transcriptionAvg');
+  const partial = d.lastDayComplete === false;
+  const avg = dayLineOf(q.transcriptionAvgMs, d.range, 'quality.transcriptionAvg', partial);
   const p95Days = Array.isArray(q.transcriptionP95Ms.currentByDay) ? q.transcriptionP95Ms.currentByDay : null;
   const latency: QualityView['latency'] = avg.kind === 'chart'
     ? {
@@ -896,15 +935,15 @@ export function qualityView(d: CompanyMis): QualityView {
           accepted === null ? null : `${fmtInt(accepted)} ${noun(accepted, 'change', 'changes')} accepted`,
         ].filter((x): x is string => x !== null);
         const hint = parts.length > 0 ? parts.join(', ') : null;
-        return withCountHint(tileFrom('quality.syncFailTile', q.syncRefusedPct, 'pct', false), hint, SYNC_EVERY_UPLOAD);
+        return withCountHint(tileFrom('quality.syncFailTile', q.syncRefusedPct, 'pct', false), hint, q.syncAcceptedIncludesTestPhones === true ? SYNC_TEST_PHONES : SYNC_EVERY_UPLOAD);
       })(),
       tileNotMeasured('quality.crashFree'),
     ],
-    saved: dayLineOf(q.voiceRecordingsSavedPct, d.range, 'quality.voiceSaved'),
+    saved: dayLineOf(q.voiceRecordingsSavedPct, d.range, 'quality.voiceSaved', partial),
     latency,
-    corrected: dayLineOf(q.logsCorrectedPct, d.range, 'quality.corrected'),
+    corrected: dayLineOf(q.logsCorrectedPct, d.range, 'quality.corrected', partial),
     spread: spreadOf(q.understandingSpread),
-    sync: syncDaysOf(q.syncRefusedChanges, q.syncAcceptedChanges, d.range),
+    sync: syncDaysOf(q.syncRefusedChanges, q.syncAcceptedChanges, d.range, partial),
     /* The server orders versions by their numbers; that order is kept. */
     versions: listChart(q.appVersions, 'quality.versionAdoption', (items) => ({
       rows: items.map((r, k) => ({
@@ -916,6 +955,7 @@ export function qualityView(d: CompanyMis): QualityView {
         shareText: fmtPctPoints(r.sharePct),
       })),
     })),
+    syncTestPhones: q.syncAcceptedIncludesTestPhones === true,
     versionsKnownSince: typeof q.appVersionsSeenSince === 'string' && q.appVersionsSeenSince > d.range.from
       ? `Known since ${fmtDayYear(fromIsoDate(q.appVersionsSeenSince))}: app versions were not recorded before that day.`
       : null,
@@ -955,14 +995,14 @@ export function farmsView(d: CompanyMis): FarmsView {
       },
     }
     : { kind: 'notMeasured', why: notMeasuredWhy(f.acresCovered.current.notMeasuredReason) };
-  const inFpo = tileFrom('farms.inFpo', f.activeFarmsInFpoPct, 'pct', true);
+  const inFpo = asOfTile(tileFrom('farms.inFpo', f.activeFarmsInFpoPct, 'pct', true), d.lastDayComplete === false);
   const count = shownOf(f.farmsInFpo.current, 'count');
   inFpo.hint = count.kind === 'value'
     ? `Of active farms; ${count.text} registered ${noun(count.value, 'farm is', 'farms are')} in one`
     : 'Of active farms';
   return {
     tiles: [
-      tileFrom('farms.activeFarms', f.activeFarms, 'count', true),
+      asOfTile(tileFrom('farms.activeFarms', f.activeFarms, 'count', true), d.lastDayComplete === false),
       tileFrom('farms.registered', f.farmsRegistered, 'count', true),
       tileFrom('farms.acres', f.acresCovered, 'acres', true),
       inFpo,
@@ -1029,8 +1069,9 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
   switch (section) {
     case 'overview': {
       const o = d.overview;
+      const partial = d.lastDayComplete === false;
       const first = o.activeFarms.current.value !== null
-        ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} saved an entry in the 7 days to ${asOfText(d)}${changeClause(o.activeFarms, 'count', true, compare)}.`
+        ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} saved an entry in the 7 days to ${asOfText(d)}${partial ? ' (today so far, not compared)' : changeClause(o.activeFarms, 'count', true, compare)}.`
         : notMeasuredClause('Active farms', o.activeFarms.current, 'overview.activeFarms');
       const second = o.voiceSharePct.current.value === null
         ? notMeasuredClause('The share saved by voice', o.voiceSharePct.current, 'overview.voiceShare')
@@ -1048,7 +1089,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       if (a.habit.current.value === null) second = notMeasuredClause('The habit', a.habit.current, 'acquisition.habit');
       else if (a.habitEligible.current.value === null) second = notMeasuredClause('The habit', a.habitEligible.current, 'acquisition.habit');
       else if (a.habitEligible.current.value === 0) second = 'Nobody who signed up in this range is 7 days in yet, so no habit is judged.';
-      else second = `${txt(a.habit.current, 'count')} of ${txt(a.habitEligible.current, 'count')} old enough to judge saved entries on 3 of their first 7 days.`;
+      else second = `${txt(a.habit.current, 'count')} of ${txt(a.habitEligible.current, 'count')} old enough to judge had entries reach the server on 3 of their first 7 days.`;
       return `${first} ${second} Installs and channels are not measured yet.`;
     }
     case 'engagement': {

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { LoadFailed, LoadingState, NotMeasuredPanel } from '@/components/state';
 import { classifyMisError, useCompanyMis, type CompanyMis } from '@/hooks/useCompanyMis';
+import { analyticsFlagFromMeta, analyticsNotMeasuredSentence } from '@/lib/analyticsNotMeasured';
 import {
   MIS_MAX_DAYS, clampCustom, fmtIndiaTime, istToday, presetPeriod, resetMisPeriod, useMisCompare, useMisPeriod,
   type MisPreset,
@@ -23,6 +24,7 @@ import {
 import type { MisSectionKey } from './misItems';
 import {
   acquisitionView, engagementView, farmsView, headlineFor, operationsView, overviewView, qualityView, rangeText, retentionView,
+  testAccountsLine,
 } from './misView';
 import { cx, itemAttrs } from './MisUi';
 import { OverviewSection } from './MisOverview';
@@ -45,10 +47,12 @@ const SECTIONS: Record<MisSectionKey, { label: string; icon: LucideIcon }> = {
   operations: { label: MIS_PAGE_NAMES.operations, icon: LifeBuoy },
 };
 
+/* W-2: 7, 30 and 90 days end yesterday (a whole day). "To today (so far)" is the explicit way to include today. */
 const PRESETS: { key: MisPreset; label: string }[] = [
   { key: '7d', label: '7 days' },
   { key: '30d', label: '30 days' },
   { key: '90d', label: '90 days' },
+  { key: 'today', label: 'To today (so far)' },
   { key: 'custom', label: 'Custom' },
 ];
 
@@ -78,6 +82,10 @@ export default function MisPage({ section }: { section: MisSectionKey }) {
   const query = useCompanyMis(period);
   const data = query.data?.data ?? null;
   const today = istToday();
+  /* W-1: while the server says app events are not being recorded, version adoption and the refused
+     side of sync are not measured; the page says why once, in words. */
+  const analyticsFlag = query.data ? analyticsFlagFromMeta(query.data.meta) : null;
+  const analyticsSentence = analyticsFlag ? analyticsNotMeasuredSentence(analyticsFlag) : null;
 
   const sentence = useMemo(() => headlineFor(section, data, compare), [section, data, compare]);
   const problem = query.isError ? classifyMisError(query.error) : null;
@@ -175,7 +183,7 @@ export default function MisPage({ section }: { section: MisSectionKey }) {
         {data && (
           <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-stone-500">
             <span data-testid="mis-counted-at">Counted at {fmtIndiaTime(data.countedAtUtc)}</span>
-            <span data-testid="mis-test-accounts">{data.excludedTestAccounts} {data.excludedTestAccounts === 1 ? 'test account' : 'test accounts'} left out</span>
+            <span data-testid="mis-test-accounts">{testAccountsLine(data.excludedTestAccounts)}</span>
           </div>
         )}
       </div>
@@ -193,11 +201,19 @@ export default function MisPage({ section }: { section: MisSectionKey }) {
         <p className="mt-2 flex items-center gap-1.5 text-[13px] text-stone-500">
           <CalendarRange size={14} aria-hidden />
           <span data-testid="mis-range-label">{shownRange}</span>
+          {data && data.lastDayComplete === false && (
+            <span className="text-stone-400" data-testid="mis-last-day-partial">The last day is today and is not over yet.</span>
+          )}
           {period.preset === 'custom' && <span className="text-stone-400">(custom ranges can span up to {MIS_MAX_DAYS} days)</span>}
         </p>
+        {analyticsSentence && data && !problem && (
+          <p className="mt-2 max-w-[72ch] rounded-lg bg-stone-100 px-3 py-2 text-[13px] text-stone-700" data-testid="mis-analytics-not-recording">
+            {analyticsSentence} App version adoption and refused sync changes are not measured.
+          </p>
+        )}
         {data && !problem && (
           <div className="mt-3">
-            <CopyForAiButtons answer={data} section={section} />
+            <CopyForAiButtons answer={data} section={section} analyticsSentence={analyticsSentence} />
           </div>
         )}
       </header>

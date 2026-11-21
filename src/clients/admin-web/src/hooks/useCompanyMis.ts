@@ -160,6 +160,11 @@ export interface CompanyMis {
   range: MisRange;
   previousRange: MisRange;
   excludedTestAccounts: number;
+  /**
+   * CR-3 fix wave W-2: false when the range ends today (India time), so its last day is today so
+   * far. Absent from an older server; only an explicit `false` marks the last day as partial.
+   */
+  lastDayComplete?: boolean;
   farmsListed: number;
   farmsNotReadable: number;
   overview: {
@@ -224,6 +229,11 @@ export interface CompanyMis {
     appVersions: MisList<MisVersionShare>;
     /** yyyy-MM-dd India day of the first app-seen record; null = none yet. */
     appVersionsSeenSince: string | null;
+    /**
+     * CR-3 fix wave W-6: always true. Accepted changes cannot be tied to a person, so they include
+     * test phones; refused changes leave test accounts out.
+     */
+    syncAcceptedIncludesTestPhones?: boolean;
   };
   farms: {
     activeFarms: MisNumber;

@@ -99,11 +99,11 @@ describe('the seven pages read one answer (CR-2b Task 4)', () => {
     stub = serveMis();
     renderMis('engagement');
     await countedShown();
-    expect(misCalls(stub)[0].url).toBe(`${COMPANY_MIS_PATH}?from=2026-10-17&to=2026-11-15`);
+    expect(misCalls(stub)[0].url).toBe(`${COMPANY_MIS_PATH}?from=2026-10-16&to=2026-11-14`);
 
     fireEvent.click(screen.getByRole('button', { name: '7 days' }));
     await waitFor(() => expect(misCalls(stub!)).toHaveLength(2));
-    expect(misCalls(stub)[1].url).toBe(`${COMPANY_MIS_PATH}?from=2026-11-09&to=2026-11-15`);
+    expect(misCalls(stub)[1].url).toBe(`${COMPANY_MIS_PATH}?from=2026-11-08&to=2026-11-14`);
     fireEvent.click(screen.getByRole('button', { name: 'open farms' }));
     await new Promise((r) => setTimeout(r, 30));
     expect(misCalls(stub)).toHaveLength(2);
@@ -111,7 +111,7 @@ describe('the seven pages read one answer (CR-2b Task 4)', () => {
 
   it('Test_accounts_left_out_agree_with_their_number', async () => {
     // B18 V5: "1 test account left out" / "2 test accounts left out".
-    for (const [n, words] of [[1, '1 test account left out'], [2, '2 test accounts left out'], [0, '0 test accounts left out']] as const) {
+    for (const [n, words] of [[1, '1 test account left out'], [2, '2 test accounts left out'], [0, 'No test accounts are set up to be left out, so test phones are counted']] as const) {
       stub = serveMis(async () => ({ status: 200, data: misEnvelope(misFixture({ excludedTestAccounts: n })) }));
       const v = renderMis('overview');
       await countedShown();
@@ -163,7 +163,7 @@ describe('states that show no number (CR-2b Task 4)', () => {
 
   it('A_bad_range_offers_the_30_day_reset', async () => {
     stub = serveMis(async (req) =>
-      req.url.includes('from=2026-11-09')
+      req.url.includes('from=2026-11-08')
         ? { status: 400, data: { code: 'mis_range_invalid', message: 'bad' } }
         : { status: 200, data: misEnvelope() });
     const { container } = renderMis('overview');
@@ -226,7 +226,9 @@ describe('words on the pages (CR-2b Task 4)', () => {
     // MAU each say it through that line ("People who saved at least one entry ...").
     fireEvent.click(screen.getByRole('button', { name: 'open overview' }));
     for (const k of ['dau', 'wau', 'mau']) {
-      expect([k, screen.getByTestId(`kpi-overview.${k}`).textContent?.includes('saved at least one entry')]).toEqual([k, true]);
+      /* W-14: DAU says the entry reached the server; WAU and MAU keep their older words. */
+      const words = k === 'dau' ? 'at least one entry that reached the server' : 'saved at least one entry';
+      expect([k, screen.getByTestId(`kpi-overview.${k}`).textContent?.includes(words)]).toEqual([k, true]);
     }
     // Retention: both the cohort grid and the curve carry the sign-up-week note.
     fireEvent.click(screen.getByRole('button', { name: 'open retention' }));
