@@ -185,14 +185,20 @@ describe('useHapticsPref: the stored per-user off switch', () => {
 });
 
 describe('useFeelRoot: the press listener is installed once and removed', () => {
-    it('adds one click listener on mount and removes it on unmount, and a render alone buzzes nothing', () => {
+    it('adds one capture + one bubble click listener on mount and removes both on unmount, and a render alone buzzes nothing', () => {
         const add = vi.spyOn(document, 'addEventListener');
         const remove = vi.spyOn(document, 'removeEventListener');
+        const isCapture = (c: unknown[]) => c[2] === true;
         const { unmount } = renderHook(() => feel.useFeelRoot());
-        expect(add.mock.calls.filter((c) => c[0] === 'click')).toHaveLength(1);
+        const added = add.mock.calls.filter((c) => c[0] === 'click');
+        expect(added).toHaveLength(2);
+        expect(added.filter(isCapture)).toHaveLength(1); // decides the press before any handler runs
+        expect(added.filter((c) => !isCapture(c))).toHaveLength(1); // fires it after
         expect(vib).not.toHaveBeenCalled();
         unmount();
-        expect(remove.mock.calls.filter((c) => c[0] === 'click')).toHaveLength(1);
+        const removed = remove.mock.calls.filter((c) => c[0] === 'click');
+        expect(removed).toHaveLength(2);
+        expect(removed.filter(isCapture)).toHaveLength(1);
         add.mockRestore();
         remove.mockRestore();
     });

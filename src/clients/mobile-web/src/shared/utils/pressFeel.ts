@@ -23,6 +23,16 @@
  * control, a non-control, and anything inside `data-feel="off"` buzz nothing. `click` and not `pointerdown` is deliberate: a
  * finger that lands on a button and then scrolls the page is not a press.
  *
+ * DECIDED IN THE CAPTURE PHASE, FIRED IN THE BUBBLE PHASE (FEEL-1b)
+ * ------------------------------------------------------------------
+ * React flushes a click handler's state update BEFORE the event bubbles up to `document`. A bubble-phase listener that
+ * looked at the tapped element then saw the page AFTER the tap: the header's Setup hub re-keys its icon on every tap (the
+ * tapped svg is detached, so `closest(button)` found nothing), and a button that disables itself in its own handler
+ * ("saving") looked disabled. Real taps buzzed nothing. So the press kind is decided by a capture-phase listener, which runs
+ * before any handler, and remembered for that one event; the buzz itself is still fired in the bubble phase so the dedupe
+ * against a control's own haptic (below) keeps working. A handler that calls stopPropagation keeps the bubble listener from
+ * running at all: such a tap is not buzzed by this listener (a control that wants a buzz there calls hapticFeedback itself).
+ *
  * ONE BUZZ PER TAP
  * ----------------
  * Several controls already fire their own haptic (the bottom bar, the page toggle). If some OTHER haptic call fired within
@@ -92,12 +102,24 @@ export function installPressFeel(options: InstallOptions = {}): () => void {
     const trustedOnly = options.trustedOnly !== false;
     // The last buzz THIS listener caused. A buzz newer than that came from somebody else's own haptic call.
     let mine = 0;
+    // What each click was, decided BEFORE any handler ran. Keyed by the event itself, so a decision can never outlive its click.
+    const decided = new WeakMap<Event, PressKind>();
 
-    const onClick = (event: Event) => {
+    // CAPTURE phase: runs before every handler, so the page is still exactly as the farmer saw it when they tapped.
+    const decide = (event: Event) => {
         try {
             if (trustedOnly && !event.isTrusted) return;
             const kind = classifyPress(event.target);
+            if (kind) decided.set(event, kind);
+        } catch { /* never break a tap */ }
+    };
+
+    // BUBBLE phase: fire, so a control that also fires its own haptic has already done so and the dedupe below can see it.
+    const fire = (event: Event) => {
+        try {
+            const kind = decided.get(event);
             if (!kind) return;
+            decided.delete(event);
             const last = lastHapticAt();
             if (last !== mine && Date.now() - last < PRESS_DEDUPE_MS) return;
             hapticFeedback[kind]();
@@ -105,6 +127,10 @@ export function installPressFeel(options: InstallOptions = {}): () => void {
         } catch { /* a missed buzz must never break a tap */ }
     };
 
-    root.addEventListener('click', onClick);
-    return () => root.removeEventListener('click', onClick);
+    root.addEventListener('click', decide, true);
+    root.addEventListener('click', fire);
+    return () => {
+        root.removeEventListener('click', decide, true);
+        root.removeEventListener('click', fire);
+    };
 }

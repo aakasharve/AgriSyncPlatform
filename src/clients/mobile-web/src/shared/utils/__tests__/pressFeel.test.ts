@@ -191,6 +191,100 @@ describe('one buzz per tap', () => {
     });
 });
 
+/**
+ * FEEL-1b — the DOM can change DURING the click.
+ *
+ * React flushes a click handler's state update before the event bubbles up to `document`. So by the time a bubble-phase
+ * listener runs, the element the finger landed on may be gone (the header's Setup hub re-keys its icon on every tap, so the
+ * tapped svg is detached), or the control may have disabled itself ("saving"). Asking `closest(button)` THEN finds nothing
+ * or finds a disabled button, and a real tap buzzed nothing (3 of 3 tries on the header Setup hub). The press kind must be
+ * decided in the CAPTURE phase, before any handler has touched the page, and only FIRED in the bubble phase.
+ *
+ * `handler` below is a listener ON the button: it runs before the document's bubble listener, like React's flushed update.
+ */
+describe('the page may change during the click', () => {
+    it('a handler that replaces the tapped child still buzzes once', () => {
+        mount('<button id="b"><span id="icon"><i id="svg">icon</i></span></button>');
+        const b = q<HTMLElement>('#b');
+        b.addEventListener('click', () => { q('#icon').replaceWith(document.createElement('span')); }); // the icon is re-keyed
+        tap(q('#svg'));
+        expect(q('#svg')).toBeNull();                 // the tapped node really is gone by the time the document hears it
+        expect(vib).toHaveBeenCalledTimes(1);
+        expect(vib).toHaveBeenCalledWith(LIGHT);
+    });
+
+    it('a handler that removes the whole button still buzzes once', () => {
+        mount('<div id="host"><button id="b"><i id="svg">x</i></button></div>');
+        q<HTMLElement>('#b').addEventListener('click', () => { q('#host').replaceChildren(); });
+        tap(q('#svg'));
+        expect(vib).toHaveBeenCalledTimes(1);
+    });
+
+    it('a choice that is replaced by its own handler is still a selection, not a press', () => {
+        mount('<button id="b" aria-pressed="false"><i id="svg">x</i></button>');
+        q<HTMLElement>('#b').addEventListener('click', () => { q('#svg').remove(); q('#b').setAttribute('aria-pressed', 'true'); });
+        tap(q('#svg'));
+        expect(vib).toHaveBeenCalledTimes(1);
+        expect(vib).toHaveBeenCalledWith(SELECTION);
+    });
+
+    it('a button that disables itself in its own handler (saving) still buzzes once', () => {
+        mount('<button id="b">Save</button>');
+        const b = q<HTMLButtonElement>('#b');
+        b.addEventListener('click', () => { b.disabled = true; b.textContent = 'Saving'; });
+        tap(b);
+        expect(vib).toHaveBeenCalledTimes(1);
+        expect(vib).toHaveBeenCalledWith(LIGHT);
+    });
+
+    it('a button that was ALREADY disabled before the tap still buzzes nothing', () => {
+        mount('<button id="b" disabled><i id="svg">x</i></button><button id="c" aria-disabled="true"><i id="svg2">x</i></button>');
+        tap(q('#svg'));
+        tap(q('#svg2'));
+        tap(q('#b'));
+        expect(vib).not.toHaveBeenCalled();
+    });
+
+    it('a control that was not a control when pressed is not turned into one by its own handler', () => {
+        mount('<div id="d"><i id="svg">x</i></div>');
+        q<HTMLElement>('#d').addEventListener('click', () => { q('#d').setAttribute('role', 'button'); });
+        tap(q('#svg'));
+        expect(vib).not.toHaveBeenCalled();
+    });
+
+    it('an untrusted click still buzzes nothing, even when the child was replaced', () => {
+        off();
+        off = press.installPressFeel(); // trustedOnly defaults to true
+        mount('<button id="b"><i id="svg">x</i></button>');
+        q<HTMLElement>('#b').addEventListener('click', () => { q('#svg').remove(); });
+        tap(q('#svg'));
+        expect(vib).not.toHaveBeenCalled();
+    });
+
+    it('data-feel="off" still wins when the child is replaced', () => {
+        mount('<div data-feel="off"><button id="b"><i id="svg">x</i></button></div>');
+        q<HTMLElement>('#b').addEventListener('click', () => { q('#svg').remove(); });
+        tap(q('#svg'));
+        expect(vib).not.toHaveBeenCalled();
+    });
+
+    it('one buzz per tap when the control fires its own haptic in the same click, even with the child replaced', () => {
+        mount('<button id="b"><i id="svg">x</i></button>');
+        q<HTMLElement>('#b').addEventListener('click', () => { haptics.hapticFeedback.medium(); q('#svg').remove(); });
+        tap(q('#svg'));
+        expect(vib).toHaveBeenCalledTimes(1);
+        expect(vib).toHaveBeenCalledWith(40); // the control's own medium, not a second light on top
+    });
+
+    it('the decision belongs to one click: the next tap is judged on its own', () => {
+        mount('<button id="a" disabled>no</button><button id="b">yes</button>');
+        tap(q('#a'));
+        vi.advanceTimersByTime(500);
+        tap(q('#b'));
+        expect(vib).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('install and remove', () => {
     it('removing the listener stops all buzzing', () => {
         mount('<button id="b">x</button>');
