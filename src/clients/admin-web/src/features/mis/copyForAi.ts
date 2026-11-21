@@ -115,7 +115,10 @@ function engagementValues(d: CompanyMis, headline: string): Record<string, () =>
   const e = d.engagement;
   return {
     'engagement.logsByType': () => fromChart(v.kinds, (c) => joined(c.rows.map((r) => `${r.label} ${fmtInt(r.entries)}`))),
-    'engagement.logsPerFarm': () => fromShown(shownOf(e.logsPerActiveFarmPerWeek.current, 'decimal', 'engagement.logsPerFarm')),
+    'engagement.logsPerFarm': () => {
+      const r = fromShown(shownOf(e.logsPerActiveFarmPerWeek.current, 'decimal', 'engagement.logsPerFarm'));
+      return d.lastDayComplete === false && r.shown !== null ? { ...r, shown: `${r.shown} (${TODAY_SO_FAR}, not compared)` } : r;
+    },
     'engagement.whenLogged': () => fromChart(v.heat, (c) => {
       const total = c.grid.flat().reduce((a, b) => a + b, 0);
       return `${fmtInt(total)} entries by hour and weekday, India time; the busiest cell holds ${fmtInt(c.max)}`;
@@ -143,7 +146,7 @@ function retentionValues(d: CompanyMis, headline: string): Record<string, () => 
       `Week of ${r.label} (${fmtInt(r.people)} ${noun(r.people, 'person', 'people')}): ${['day 1', 'day 7', 'day 14', 'day 30']
         .map((name, k) => `${name} ${r.cells[k] === null ? 'not yet' : fmtPctPoints(r.cells[k] as number)}`).join(', ')}`))),
     'retention.curve': () => fromChart(v.curve, (c) => fromLine(c, (x) => fmtPctPoints(x))),
-    'retention.bands': () => fromChart(v.bands, (c) => joined(c.parts.map((p) => `${p.label} ${p.text}`))),
+    'retention.bands': () => fromChart(v.bands, (c) => `${joined(c.parts.map((p) => `${p.label} ${p.text}`))}${c.asOf.includes(TODAY_SO_FAR) ? ` (${TODAY_SO_FAR}, not compared)` : ''}`),
     'retention.winBack': () => fromChart(v.winBack, (c) => fromLine(c, fmtInt)),
     'retention.headline': () => text(headline),
   };

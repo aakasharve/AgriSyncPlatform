@@ -33,7 +33,7 @@ describe('Copy for AI packs (CR-3 A8)', () => {
     const overview = misToAiText(d, 'overview');
     expect(overview.split('\n')[0]).toBe('ShramSafal Company MIS — Overview');
     expect(overview).toContain('Range 2026-10-17..2026-11-15 (30 days). Counted at 15 Nov 2026, 2:32 pm India time. Test accounts left out: 3.');
-    expect(overview).toContain('Active farms: 412 — Farms that saved at least one entry in the 7 days ending on the last day chosen.');
+    expect(overview).toContain('Active farms: 412 — Farms with an entry that reached the server in the 7 days to the last day chosen.');
     expect(overview).toContain('Sign-ups: 268 — ');
     expect(overview).toContain('Stickiness: 24.4% — ');
     expect(overview).toContain('Saved by voice: 42.5% — ');

@@ -4,7 +4,7 @@
     "key": "overview.activeFarms",
     "label": "Active farms",
     "status": "real",
-    "what": "Farms that saved at least one entry in the 7 days ending on the last day chosen.",
+    "what": "Farms with an entry that reached the server in the 7 days to the last day chosen.",
     "why": "Shows how many farms really use the app each week, not just how many signed up."
   },
   {
@@ -20,7 +20,7 @@
     "key": "overview.signUps",
     "label": "Sign-ups",
     "status": "real",
-    "what": "People who verified their phone number with the SMS code in the chosen days.",
+    "what": "Accounts made in the chosen days, among accounts with a verified phone.",
     "why": "Shows how many new people actually start using the app, day by day."
   },
   {
@@ -36,7 +36,7 @@
     "key": "overview.wau",
     "label": "Weekly active people",
     "status": "real",
-    "what": "People who saved at least one entry in the last 7 days.",
+    "what": "People with at least one entry that reached the server in the last 7 days.",
     "why": "Shows the steady base of people using the app every week."
   },
   {
@@ -44,7 +44,7 @@
     "key": "overview.mau",
     "label": "Monthly active people",
     "status": "real",
-    "what": "People who saved at least one entry in the last 30 days.",
+    "what": "People with at least one entry that reached the server in the last 30 days.",
     "why": "Shows the widest group still using the app, the base for every habit figure."
   },
   {
@@ -122,9 +122,9 @@
   {
     "page": "MIS Acquisition",
     "key": "acquisition.verified",
-    "label": "Verified phone by OTP",
+    "label": "Signed up, phone verified",
     "status": "real",
-    "what": "People who verified their phone with the SMS code in the chosen days.",
+    "what": "Accounts made in the chosen days, among accounts with a verified phone.",
     "why": "Second step: shows how many people who arrive actually sign up."
   },
   {
@@ -428,7 +428,7 @@
     "key": "farms.activeFarms",
     "label": "Active farms",
     "status": "real",
-    "what": "Farms that saved at least one entry in the last 7 days.",
+    "what": "Farms with an entry that reached the server in the last 7 days.",
     "why": "Shows the real size of the business: the farms that use it weekly."
   },
   {

@@ -226,8 +226,8 @@ describe('words on the pages (CR-2b Task 4)', () => {
     // MAU each say it through that line ("People who saved at least one entry ...").
     fireEvent.click(screen.getByRole('button', { name: 'open overview' }));
     for (const k of ['dau', 'wau', 'mau']) {
-      /* W-14: DAU says the entry reached the server; WAU and MAU keep their older words. */
-      const words = k === 'dau' ? 'at least one entry that reached the server' : 'saved at least one entry';
+      /* W-14 and m6: DAU, WAU and MAU say the entry reached the server. */
+      const words = 'at least one entry that reached the server'; // m6: DAU, WAU and MAU all say it
       expect([k, screen.getByTestId(`kpi-overview.${k}`).textContent?.includes(words)]).toEqual([k, true]);
     }
     // Retention: both the cohort grid and the curve carry the sign-up-week note.

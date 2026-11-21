@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetMisPeriod } from '@/features/mis/misPeriod';
 import { misToAiJson, misToAiText } from '@/features/mis/copyForAi';
 import { fmtDec } from '@/features/mis/misFormat';
-import { overviewView } from '@/features/mis/misView';
+import { engagementView, farmsView, headlineFor, overviewView, retentionView } from '@/features/mis/misView';
 import type { StubbedAdapter } from '@/test/stubAdapter';
 import { misEnvelope, misFixture, notMeasured } from '@/test/misFixture';
 import { MIS_NOW, countedShown, misCalls, renderMis, serveMis } from '@/test/misPage';
@@ -269,5 +269,78 @@ describe('W-14 MIS: FPO history uses the links as they are today', () => {
   it('W14_copy_for_ai_says_it_too', () => {
     const text = misToAiText(misFixture(), 'farms');
     expect(text.match(/today's FPO links/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('round 1 I4: every as-of-last-day number follows the W-2 rule', () => {
+  const partial = () => misFixture({ lastDayComplete: false });
+
+  it('I4_retention_bands_quiet_and_silent_tiles_are_today_so_far_and_not_compared', async () => {
+    serve({ lastDayComplete: false });
+    renderMis('retention');
+    await countedShown();
+    for (const k of ['retention.quiet', 'retention.silent30']) {
+      const tile = screen.getByTestId(`kpi-${k}`);
+      expect(within(tile).getByText('Today so far')).toBeInTheDocument();
+      expect(within(tile).getByTestId('mis-not-compared').textContent).toBe('not compared: today is not over');
+    }
+    const bands = screen.getByTestId('mis-dashboard').querySelector('section[data-mis-item="retention.bands"]')!;
+    expect(bands.textContent).toContain('(today so far)');
+    expect(bands.textContent).toContain('not compared: today is not over');
+    expect(bands.textContent).not.toMatch(/\(better\)|\(worse\)/);
+    // d1 and d30 are cohort shares, not as-of numbers: they keep their compare change.
+    expect(within(screen.getByTestId('kpi-retention.d1')).queryByText('Today so far')).toBeNull();
+  });
+
+  it('I4_the_win_back_line_marks_its_last_point', () => {
+    const v = retentionView(partial());
+    if (v.winBack.kind !== 'chart') throw new Error('expected a chart');
+    const { titles, labels } = v.winBack.data;
+    expect(titles[titles.length - 1]).toMatch(/\(today so far\)$/);
+    expect(labels[labels.length - 1]).toMatch(/\(today so far\)$/);
+    expect(titles[0]).not.toContain('today so far');
+  });
+
+  it('I4_engagement_headline_and_farms_acres_tile', () => {
+    expect(headlineFor('engagement', partial(), true)).toContain('(7 days to today so far, not compared)');
+    expect(headlineFor('engagement', misFixture(), true)).not.toContain('today so far');
+    const acres = farmsView(partial()).tiles.find((t) => t.item === 'farms.acres')!;
+    expect(acres.todaySoFar).toBe(true);
+    expect(acres.delta).toEqual({ notCompared: 'not compared: today is not over' });
+    expect(engagementView(partial()).perFarm.kind).toBe('chart');
+  });
+
+  it('I4_copy_for_ai_agrees', () => {
+    const r = misToAiText(partial(), 'retention');
+    expect(r).toContain('Silent 30 days or more');
+    expect(r).toMatch(/Where every registered farm stands: .*\(today so far, not compared\)/);
+    expect(misToAiText(partial(), 'engagement')).toMatch(/Entries per active farm, per week: .*\(today so far, not compared\)/);
+    expect(misToAiText(partial(), 'farms')).toMatch(/Acres covered: .*\(today so far, not compared\)/);
+    expect(misToAiText(misFixture(), 'retention')).not.toContain('today so far');
+  });
+});
+
+describe('round 1 m4 and m6: what is counted, in words', () => {
+  it('m4_sign_ups_and_verified_describe_accounts_made_with_a_verified_phone', async () => {
+    serve({});
+    renderMis('overview');
+    await countedShown();
+    const tile = screen.getByTestId('kpi-overview.signUps').textContent ?? '';
+    expect(tile).toContain('Accounts made in the chosen days, among accounts with a verified phone.');
+    expect(tile).not.toContain('SMS code');
+    expect(screen.getByTestId('mis-dashboard').textContent).toContain('Sign-ups are accounts made on that day, among accounts with a verified phone');
+    expect(headlineFor('acquisition', misFixture(), false)).toMatch(/^271 people signed up with a verified phone/);
+  });
+
+  it('m6_wau_mau_and_active_farms_say_reached_the_server', async () => {
+    serve({});
+    renderMis('overview');
+    await countedShown();
+    for (const k of ['wau', 'mau']) {
+      expect(screen.getByTestId(`kpi-overview.${k}`).textContent).toContain('at least one entry that reached the server');
+    }
+    const text = screen.getByTestId('mis-dashboard').textContent ?? '';
+    expect(text).toContain('Farms with an entry that reached the server in the 7 days to the last day chosen.');
+    expect(headlineFor('overview', misFixture(), false)).toMatch(/^412 farms had an entry reach the server in the 7 days to/);
   });
 });

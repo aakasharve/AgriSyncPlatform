@@ -587,7 +587,10 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
       'farms',
       canReadFarms || canReadHealth,
       farmIndex.length,
-      farms.data?.data?.totalCount,
+      /* m5: the list holds `totalCount` counted farms plus the test farms it still shows; paging uses the sum. */
+      farms.data?.data?.totalCount === undefined
+        ? undefined
+        : farms.data.data.totalCount + (farms.data.data.testFarmsShown ?? 0),
       !farms.isLoading && !farms.isError,
     ),
     heldLine(

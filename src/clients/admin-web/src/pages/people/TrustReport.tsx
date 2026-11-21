@@ -12,7 +12,7 @@ import {
 } from '@/hooks/useControlRoomPeople';
 import { DOWNLOADS_START_NOTE, roleLabel } from '@/lib/controlRoomTicks';
 import { DATE_FORMATS, fmt } from '@/lib/format';
-import { fmtIndiaDate } from '@/lib/indiaTime';
+import { fmtIndiaDate, parseInstantMs } from '@/lib/indiaTime';
 
 /**
  * THE WEEKLY TRUST REPORT (CR-3, D-155 / R1).
@@ -136,8 +136,8 @@ export function TrustReport() {
   const countedAt = fmt.dateTime(r.countedAtUtc, DATE_FORMATS.usersLastLogin) ?? 'a time the server did not give';
   /* W-4: History only holds lines from the day it began. While that is under 7 days ago, a "last 7
      days" number would claim a look-back that was never recorded, so the words say "since". */
-  const startedMs = r.historyStartedAtUtc ? Date.parse(r.historyStartedAtUtc) : Number.NaN;
-  const countedMs = Date.parse(r.countedAtUtc);
+  const startedMs = parseInstantMs(r.historyStartedAtUtc);
+  const countedMs = parseInstantMs(r.countedAtUtc);
   const startedDate = fmtIndiaDate(r.historyStartedAtUtc);
   const shortHistory =
     startedDate !== null && Number.isFinite(startedMs) && Number.isFinite(countedMs) && countedMs - startedMs < 7 * DAY_MS;

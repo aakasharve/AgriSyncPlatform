@@ -421,11 +421,12 @@ export default function OpsErrorsPage() {
       : `a start time this console cannot read (${since})`;
 
   /** True when the client is holding one page of a larger set. A failed load shows no list, so no scope line (W-12). */
-  const pageScoped = !isError && totalCount > rows.length;
 
   /* W-1: while app events are not being recorded, the total and the list are not measured. The
      server still sends a number (`totalCount` is an int on the wire), so the flag decides. */
   const analyticsFlag = isError ? null : analyticsFlagFromMeta(data?.meta);
+  /* I2: while not measured, no total and no sort line (a window total is not the count). */
+  const pageScoped = !isError && !analyticsFlag && totalCount > rows.length;
 
   return (
     <div className="flex flex-col gap-6">

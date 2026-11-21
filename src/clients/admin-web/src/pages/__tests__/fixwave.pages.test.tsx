@@ -17,6 +17,8 @@ import SufferingPage from '../farms/SufferingPage';
 import SettingsAdminsPage from '../settings/SettingsAdminsPage';
 import UsersPage from '../users/UsersPage';
 import HomePage from '../HomePage';
+import HistoryPage from '../people/HistoryPage';
+import { parseInstantMs } from '@/lib/indiaTime';
 
 /**
  * CR-3 deploy-readiness fix wave, console half: the page items (W-1, W-5, W-8, W-12, W-13).
@@ -454,5 +456,159 @@ describe('W-12 Users', () => {
     await act(async () => { await qc.refetchQueries({ queryKey: ['users'] }); });
     await waitFor(() => expect(body()).toMatch(/Couldn.t load/), WAIT);
     expect(body()).not.toContain('Sorting a column orders');
+  });
+});
+
+/* ═════════════════════════════════════════════════════════════ fix round 1 */
+
+describe('round 1 I1: Live Health service row under the flag', () => {
+  const r9flag = { rule: 'R9', state: 'not_judged', counted: null, outOf: null, windowStartUtc: null, windowEndUtc: null, reason: 'analytics_not_recording' };
+  const health = (over: Record<string, unknown> = {}) => ({
+    voiceInvocations24h: 0, voiceFailures24h: 0, voiceFailureRatePct: 0, voiceAvgLatencyMs: 0, voiceP95LatencyMs: 0,
+    recentErrors: [], topSufferingFarms: [], apiErrorSpike: null, voiceDegraded: false,
+    computedAtUtc: '2026-11-22T06:00:00Z', alertR9: r9flag, ...FLAG, ...over,
+  });
+  const serve = (qc: ReturnType<typeof makeTestQueryClient>, fail: () => boolean) => {
+    stub = installAdapter(async (req) => {
+      if (req.url.includes('/admin/ops/voice-check')) return neverSettles();
+      if (req.url.includes('/admin/ops/health')) return fail() ? { status: 500, data: { message: 'x' } } : { status: 200, data: health() };
+      return { status: 200, data: null };
+    });
+    renderWithProviders(<OpsLivePage />, { route: `/ops/live?org=${ORG}`, queryClient: qc });
+  };
+
+  it('I1_the_analytics_events_row_is_not_reporting_and_has_no_zero_rows', async () => {
+    serve(makeTestQueryClient(), () => false);
+    const table = await screen.findByRole('table', { name: 'Feeds this console depends on' }, WAIT);
+    const row = [...table.querySelectorAll('tbody > tr')].find((tr) => (tr.textContent ?? '').includes('analytics.events · errors'))!;
+    expect(row.textContent).toContain('Not recording');
+    expect(row.textContent).not.toContain('Reporting');
+    expect(table.textContent).not.toContain('an empty table means no events in the last two hours');
+    expect(table.textContent).toContain(SENTENCE);
+    expect(table.textContent).toContain('not measured');
+    expect(table.textContent).not.toMatch(/Rows\s*0/);
+  });
+
+  it('I1_feed_down_does_not_offer_0_events_as_the_last_good_reading', async () => {
+    const qc = makeTestQueryClient();
+    let fail = false;
+    serve(qc, () => fail);
+    await screen.findByRole('table', { name: 'Feeds this console depends on' }, WAIT);
+    fail = true;
+    await act(async () => { await qc.refetchQueries({ queryKey: ['ops', 'health'] }); });
+    await waitFor(() => expect(body()).toContain('Feed down since'), WAIT);
+    expect(body()).toContain('events not measured at');
+    expect(body()).not.toMatch(/\b0 events at/);
+  });
+});
+
+describe('round 1 I2: API Errors shows no total while not measured', () => {
+  it('I2_no_sort_line_and_no_window_total_under_the_flag_with_a_non_zero_total', async () => {
+    const ev = { eventType: 'api.error', endpoint: 'POST /x', statusCode: 500, latencyMs: 9, farmId: null, occurredAtUtc: '2026-11-22T05:00:00Z' };
+    const items = Array.from({ length: 50 }, (_, i) => ({ ...ev, occurredAtUtc: `2026-11-22T05:${String(i).padStart(2, '0')}:00Z` }));
+    stub = installAdapter(async () => ({ status: 200, data: { data: { items, totalCount: 312, page: 1, pageSize: 50 }, meta: { ...META, ...FLAG } } }));
+    renderWithProviders(<OpsErrorsPage />, { route: `/ops/errors?org=${ORG}` });
+    await screen.findByTestId('analytics-not-measured', undefined, WAIT);
+    expect(body()).not.toContain('Sorting a column orders');
+    expect(body()).not.toContain('312');
+  });
+});
+
+describe('round 1 I3: All Farms counted number on a single page', () => {
+  it('I3_a_one_page_list_states_the_counted_farms_and_the_test_farms_apart', async () => {
+    const items = Array.from({ length: 12 }, (_, i) => farm(i + 1));
+    stub = installAdapter(async () => ({ status: 200, data: { data: { items, totalCount: 9, testFarmsShown: 3, page: 1, pageSize: 40 }, meta: META } }));
+    renderWithProviders(<FarmsListPage />, { route: `/farms?org=${ORG}` });
+    await screen.findByRole('table', { name: 'All farms' }, WAIT);
+    expect(body()).toContain('12 listed');
+    expect(body()).toContain('9 farms counted');
+    expect(screen.getByTestId('test-farms-not-counted').textContent).toBe('3 test farms are in the list but not counted.');
+    expect(body()).not.toMatch(/(^|\D)12 farms(\D|$)/);
+  });
+
+  it('I3_without_test_farms_the_one_page_count_is_unchanged', async () => {
+    stub = installAdapter(async () => ({ status: 200, data: { data: { items: [farm(1), farm(2)], totalCount: 2, testFarmsShown: 0, page: 1, pageSize: 40 }, meta: META } }));
+    renderWithProviders(<FarmsListPage />, { route: `/farms?org=${ORG}` });
+    await screen.findByRole('table', { name: 'All farms' }, WAIT);
+    expect(body()).not.toContain('counted');
+  });
+});
+
+describe('round 1 m1 and parse: History window', () => {
+  it('m1_when_the_read_limit_cuts_the_lines_it_does_not_say_exactly', async () => {
+    stub = installAdapter(async () => ({ status: 200, data: { lines: [], hitLimit: true, limit: 500 } }));
+    renderWithProviders(<HistoryPage />, { route: '/people/history?action=phones_shown&fromUtc=2026-11-15T10:00:00Z&toUtc=2026-11-22T10:01:00Z&countedLooksOnly=true' });
+    const note = await screen.findByTestId('history-exact-window', undefined, WAIT);
+    await waitFor(() => expect(note.textContent).toContain('Showing only the newest lines of the lines the trust report counted'), WAIT);
+    expect(note.textContent).toContain('at most 500');
+    expect(note.textContent).not.toContain('Showing exactly');
+  });
+
+  it('parse_seven_fractional_digits_pass_through_to_the_request_unchanged', async () => {
+    const from = '2026-11-15T10:00:00.1234567Z';
+    const to = '2026-11-22T10:01:00.7654321Z';
+    const s = installAdapter(async () => ({ status: 200, data: { lines: [], hitLimit: false, limit: 500 } }));
+    stub = s;
+    renderWithProviders(<HistoryPage />, { route: `/people/history?fromUtc=${from}&toUtc=${to}&countedLooksOnly=true` });
+    await waitFor(() => expect(s.requests.length).toBeGreaterThan(0), WAIT);
+    const url = s.requests[0].url;
+    expect(url).toContain(`fromUtc=${encodeURIComponent(from)}`);
+    expect(url).toContain(`toUtc=${encodeURIComponent(to)}`);
+    expect(url).not.toContain('days=');
+    // Reading for display never turns the fraction into NaN, even for an engine that refuses 7 digits.
+    expect(parseInstantMs(from)).toBe(Date.parse('2026-11-15T10:00:00.123Z'));
+    expect(parseInstantMs('nonsense')).toBeNaN();
+  });
+});
+
+describe('round 1 m3: drilldown with no last entry', () => {
+  it('m3_the_sentence_is_true_for_a_farm_whose_only_entries_are_by_test_accounts', async () => {
+    const FARM = '22222222-2222-2222-2222-222222222222';
+    const timeline = Array.from({ length: 14 }, (_, i) => ({
+      date: new Date(Date.UTC(2026, 10, 9 + i)).toISOString().slice(0, 10),
+      closuresStarted: 0, closuresSubmitted: 0, proofAttached: 0, summariesViewed: 0, verifications: 1, errors: 0,
+    }));
+    const dto = {
+      farmId: FARM, farmerName: 'Example Farmer', farmName: 'Example Mala', phone: '9000000012', score: null, timeline,
+      syncState: { lastSyncAt: null }, aiHealth: null, verifications: null, workerSummary: [],
+    };
+    const scope = {
+      outcome: 'Resolved',
+      scope: { userId: 'u1', orgId: ORG, orgType: 'FPO', orgRole: 'Owner', isPlatformAdmin: false, modules: ['farmer.health', 'ops.errors', 'ops.voice'].map((key) => ({ key, canRead: true, canWrite: false, canExport: false })) },
+      memberships: [{ orgId: ORG, orgName: 'Example FPO', orgType: 'FPO', orgRole: 'Owner' }],
+    };
+    stub = installAdapter(async (req) => (req.url.includes('/me/scope') ? { status: 200, data: scope } : req.url.includes('/admin/farmer-health/') ? { status: 200, data: dto } : { status: 404, data: {} }));
+    renderWithProviders(
+      <Routes>
+        <Route path="/farmer-health/:farmId" element={<FarmerHealthDrilldown />} />
+      </Routes>,
+      { route: `/farmer-health/${FARM}?org=${ORG}` },
+    );
+    await waitFor(() => expect(body()).toContain('No entry by a farmer has reached the server yet; entries by test accounts are left out.'), WAIT);
+    expect(body()).not.toContain('No entry from this farm has reached the server yet.');
+  });
+});
+
+describe('round 1 m7: Home fetches no owner phones for a half it does not show', () => {
+  it('m7_problems_not_measured_means_no_contact_fetch_for_the_suffering_farms', async () => {
+    const F1 = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const scope = {
+      outcome: 'Resolved',
+      scope: { userId: 'u1', orgId: ORG, orgType: 'Platform', orgRole: 'Owner', isPlatformAdmin: true, modules: ['farms.silent-churn', 'farms.suffering'].map((key) => ({ key, canRead: true, canExport: false, canWrite: false })) },
+      memberships: [],
+    };
+    const cs = installContactsStub((r) => {
+      if (r.path.endsWith('/me/scope')) return scope;
+      if (r.path.endsWith('/admin/farms/silent-churn')) return { data: { countedAtUtc: '2026-11-22T06:00:00Z', farms: [], notMeasuredReason: null }, meta: META };
+      if (r.path.endsWith('/admin/farms/suffering')) {
+        return { data: [{ farmId: F1, problemCount: 5, syncProblems: 1, entryProblems: 1, voiceProblems: 1, otherProblems: 2, lastProblemAt: '2026-11-21T09:00:00Z' }], meta: { ...META, ...FLAG } };
+      }
+      return { data: null, meta: META };
+    }, { [F1]: 'Example Mala' });
+    stub = cs;
+    renderWithProviders(<HomePage />, { route: `/home?org=${ORG}` });
+    await waitFor(() => expect(body()).toContain('Farms with repeated problems could not be counted.'), WAIT);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(cs.contactCalls()).toHaveLength(0);
   });
 });

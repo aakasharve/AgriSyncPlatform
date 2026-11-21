@@ -702,6 +702,8 @@ export function cohortScaleTop(cells: (number | null)[]): number {
 
 export function retentionView(d: CompanyMis): RetentionView {
   const r = d.retention;
+  /* I4: a range that ends today has a last day that is today so far; as-of numbers are not compared. */
+  const partial = d.lastDayComplete === false;
   const bandDefs: { key: string; label: string; n: MisNumber }[] = [
     { key: 'active', label: 'Saved in the last 7 days', n: r.activeFarms0To6 },
     { key: 's7', label: 'Silent 7–13 days', n: r.quietFarms7To13 },
@@ -715,14 +717,14 @@ export function retentionView(d: CompanyMis): RetentionView {
     : {
       kind: 'chart',
       data: {
-        asOf: fmtWeekdayDay(fromIsoDate(d.range.to)),
+        asOf: `${fmtWeekdayDay(fromIsoDate(d.range.to))}${partial ? ` (${TODAY_SO_FAR})` : ''}`,
         parts: bandDefs.map((b) => ({
           key: b.key,
           label: b.label,
           value: b.n.current.value as number,
           text: fmtInt(b.n.current.value as number),
           share: shareText(b.n.current.value as number, bandDefs.reduce((sum, x) => sum + (x.n.current.value as number), 0)),
-          delta: deltaOf(b.n, 'count', b.key === 'active'),
+          delta: partial ? { notCompared: NOT_COMPARED_TODAY } : deltaOf(b.n, 'count', b.key === 'active'),
         })),
       },
     };
@@ -755,8 +757,8 @@ export function retentionView(d: CompanyMis): RetentionView {
     ? {
       kind: 'chart',
       data: {
-        labels: r.winBackByDay.map((p) => fmtDay(fromIsoDate(p.day))),
-        titles: r.winBackByDay.map((p) => fmtWeekdayDay(fromIsoDate(p.day))),
+        labels: r.winBackByDay.map((p) => `${fmtDay(fromIsoDate(p.day))}${partial && p.day === d.range.to ? ` (${TODAY_SO_FAR})` : ''}`),
+        titles: r.winBackByDay.map((p) => `${fmtWeekdayDay(fromIsoDate(p.day))}${partial && p.day === d.range.to ? ` (${TODAY_SO_FAR})` : ''}`),
         current: r.winBackByDay.map((p) => p.value),
         previous: previousLine(r.quietFarms7To29.previousByDay, r.winBackByDay.length),
       },
@@ -767,8 +769,8 @@ export function retentionView(d: CompanyMis): RetentionView {
     tiles: [
       tileFrom('retention.d1', r.d1Pct, 'pct', true),
       tileFrom('retention.d30', r.d30Pct, 'pct', true),
-      tileFrom('retention.quiet', r.quietFarms7To29, 'count', false),
-      tileFrom('retention.silent30', r.silentFarms30Plus, 'count', false),
+      asOfTile(tileFrom('retention.quiet', r.quietFarms7To29, 'count', false), partial),
+      asOfTile(tileFrom('retention.silent30', r.silentFarms30Plus, 'count', false), partial),
     ],
     cohorts: farmsBlocked
       ? { kind: 'notMeasured', why: notMeasuredWhy(d1Reason, 'retention.cohorts') }
@@ -1007,7 +1009,7 @@ export function farmsView(d: CompanyMis): FarmsView {
     tiles: [
       asOfTile(tileFrom('farms.activeFarms', f.activeFarms, 'count', true), d.lastDayComplete === false),
       tileFrom('farms.registered', f.farmsRegistered, 'count', true),
-      tileFrom('farms.acres', f.acresCovered, 'acres', true),
+      asOfTile(tileFrom('farms.acres', f.acresCovered, 'acres', true), d.lastDayComplete === false),
       inFpo,
     ],
     perFpo,
@@ -1074,7 +1076,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const o = d.overview;
       const partial = d.lastDayComplete === false;
       const first = o.activeFarms.current.value !== null
-        ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} saved an entry in the 7 days to ${asOfText(d)}${partial ? ' (today so far, not compared)' : changeClause(o.activeFarms, 'count', true, compare)}.`
+        ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} had an entry reach the server in the 7 days to ${asOfText(d)}${partial ? ' (today so far, not compared)' : changeClause(o.activeFarms, 'count', true, compare)}.`
         : notMeasuredClause('Active farms', o.activeFarms.current, 'overview.activeFarms');
       const second = o.voiceSharePct.current.value === null
         ? notMeasuredClause('The share saved by voice', o.voiceSharePct.current, 'overview.voiceShare')
@@ -1086,7 +1088,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
     case 'acquisition': {
       const a = d.acquisition;
       const first = a.verified.current.value !== null
-        ? `${txt(a.verified.current, 'count')} ${noun(a.verified.current.value, 'person', 'people')} verified their phone${changeClause(a.verified, 'count', true, compare)}.`
+        ? `${txt(a.verified.current, 'count')} ${noun(a.verified.current.value, 'person', 'people')} signed up with a verified phone${changeClause(a.verified, 'count', true, compare)}.`
         : notMeasuredClause('Phone verification', a.verified.current, 'acquisition.verified');
       let second: string;
       if (a.habit.current.value === null) second = notMeasuredClause('The habit', a.habit.current, 'acquisition.habit');
@@ -1098,7 +1100,7 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
     case 'engagement': {
       const e = d.engagement;
       const first = e.logsPerActiveFarmPerWeek.current.value !== null
-        ? `An active farm saved ${txt(e.logsPerActiveFarmPerWeek.current, 'decimal')} ${noun(e.logsPerActiveFarmPerWeek.current.value, 'entry', 'entries')} a week${changeClause(e.logsPerActiveFarmPerWeek, 'decimal', true, compare)}.`
+        ? `An active farm saved ${txt(e.logsPerActiveFarmPerWeek.current, 'decimal')} ${noun(e.logsPerActiveFarmPerWeek.current.value, 'entry', 'entries')} a week${d.lastDayComplete === false ? ' (7 days to today so far, not compared)' : changeClause(e.logsPerActiveFarmPerWeek, 'decimal', true, compare)}.`
         : notMeasuredClause('Entries per active farm', e.logsPerActiveFarmPerWeek.current, 'engagement.logsPerFarm');
       let second: string;
       if (e.whenLogged.length === 0) {

@@ -403,6 +403,15 @@ export function DataList<T>(config: DataListConfig<T>) {
         </span>
       );
     }
+    if (shownNotCounted > 0) {
+      /* I3: a list that fits on one page still states the counted number, not the listed rows. */
+      return (
+        <span>
+          <b>{count(sorted.length)}</b> listed &middot; <b>{count(headlineTotal)}</b>{' '}
+          {nounFor(headlineTotal, noun)} counted
+        </span>
+      );
+    }
     return (
       <span>
         <b>{count(sorted.length)}</b> {nounFor(sorted.length, noun)}

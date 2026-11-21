@@ -151,6 +151,8 @@ interface ServerOptions {
   farms?: FarmSummary[];
   /** The server's own total. Defaults to the number of rows handed back. */
   farmsTotal?: number;
+  /** Test-owned farms the list still shows, on top of `farmsTotal` (fix wave S-N5). */
+  testFarmsShown?: number;
   users?: UserSummary[];
   farmsStatus?: number;
 }
@@ -163,6 +165,7 @@ function server({
   modules = [],
   farms = [],
   farmsTotal,
+  testFarmsShown,
   users = [],
   farmsStatus = 200,
 }: ServerOptions = {}): StubbedAdapter {
@@ -186,6 +189,7 @@ function server({
         data: envelope({
           items: farms,
           totalCount: farmsTotal ?? farms.length,
+          ...(testFarmsShown === undefined ? {} : { testFarmsShown }),
           page: 1,
           pageSize: 40,
         }),
@@ -791,6 +795,20 @@ describe('it says what it searched, and never reports a broken source as empty',
     await waitFor(() =>
       expect(palette().textContent).toContain('the first 2 of 900 farms'),
     );
+  });
+
+  it('m5_scope_line_counts_the_test_farms_the_list_still_shows', async () => {
+    await mountConsole('/', {
+      modules: readOnly(ModuleKeys.FarmsList),
+      farms: [ANAND, KAMBLE],
+      farmsTotal: 2,
+      testFarmsShown: 3,
+    });
+
+    await openPalette();
+
+    /* The list holds 2 counted + 3 test rows = 5. Two in hand is not everything. */
+    await waitFor(() => expect(palette().textContent).toContain('the first 2 of 5 farms'));
   });
 
   it('says the farm index BROKE instead of listing no farms', async () => {
