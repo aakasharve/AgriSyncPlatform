@@ -15,6 +15,7 @@ import AppVersionsPage from '../ops/AppVersionsPage';
 import FarmsListPage from '../farms/FarmsListPage';
 import SufferingPage from '../farms/SufferingPage';
 import SettingsAdminsPage from '../settings/SettingsAdminsPage';
+import UsersPage from '../users/UsersPage';
 import HomePage from '../HomePage';
 
 /**
@@ -433,5 +434,25 @@ describe('W-13 My access with a scope that did not resolve', () => {
     expect((await screen.findByTestId('settings-parts-open', undefined, WAIT)).textContent).toBe(
       'Your access comes from your organisation. 1 part is open to you.',
     );
+  });
+});
+
+describe('W-12 Users', () => {
+  it('W12_users_sorting_line_is_not_shown_while_the_list_says_could_not_load', async () => {
+    const qc = makeTestQueryClient();
+    let fail = false;
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      userId: `bbbbbbbb-0000-0000-0000-${String(i).padStart(12, '0')}`,
+      phone: '9000000001', displayName: `Example User ${i}`, email: null, apps: ['ShramSafal'], createdAt: '2026-01-12T09:00:00Z', lastLoginAt: null,
+    }));
+    stub = installAdapter(async () => (fail
+      ? { status: 500, data: { message: 'x' } }
+      : { status: 200, data: { data: { items, totalCount: 120, page: 1, pageSize: 50 }, meta: META } }));
+    renderWithProviders(<UsersPage />, { route: `/users?org=${ORG}`, queryClient: qc });
+    await screen.findByText(/Sorting a column orders the 50 .* on this page, not all 120/, undefined, WAIT);
+    fail = true;
+    await act(async () => { await qc.refetchQueries({ queryKey: ['users'] }); });
+    await waitFor(() => expect(body()).toMatch(/Couldn.t load/), WAIT);
+    expect(body()).not.toContain('Sorting a column orders');
   });
 });
