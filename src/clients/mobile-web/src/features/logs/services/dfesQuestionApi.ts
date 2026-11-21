@@ -11,6 +11,7 @@
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import type { SelectedQuestion, RecentQuestionEvent } from './dfesQuestionEngine';
 import { BANK_VERSION, QUESTION_ENGINE_VERSION } from './dfesQuestionBank';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 interface ViteImportMeta { env?: { VITE_AGRISYNC_API_URL?: unknown }; }
 
@@ -87,7 +88,8 @@ export async function fetchRecentQuestionEvents(farmId: string, sinceDays = 14):
     const now = Date.now();
     return dtos.map(d => ({
         questionKey: d.questionKey,
-        createdAtLocalDate: d.createdAtUtc.slice(0, 10),
+        // Lane DFES-Q bug 2: the farm's day is the India day, never the UTC date (01:30 IST is not yesterday).
+        createdAtLocalDate: getDateKey(d.createdAtUtc),
         ageDays: Math.floor((now - Date.parse(d.createdAtUtc)) / 86_400_000),
         skipped: d.skipped ?? false,
         // wave-3.1 — `?? null`, never `?? undefined`: a legacy row must arrive as an

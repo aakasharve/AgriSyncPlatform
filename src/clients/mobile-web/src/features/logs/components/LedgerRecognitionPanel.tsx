@@ -80,6 +80,7 @@ import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/stora
 import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
 import SurfaceSection from './shramsathi/SurfaceSection';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 /**
  * Task 4A: project the live WeatherWidget data (DetailedWeather) onto the
@@ -245,6 +246,8 @@ export function LedgerRecognitionPanel({
             questionInputs={{
                 crop,
                 todayLocalDate: resolvedDate,
+                // Lane DFES-Q bug 2: the one-a-day guard counts against the real India today, not the saved log's day.
+                askedOnLocalDate: getDateKey(),
                 score: savedLog?.understanding,
                 scheduleContext,
                 weather: weatherContext,

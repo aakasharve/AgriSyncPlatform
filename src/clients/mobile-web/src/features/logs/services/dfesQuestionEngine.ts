@@ -71,6 +71,13 @@ function effectiveCooldownDays(q: DfesQuestion, event: RecentQuestionEvent): num
 export interface DailyQuestionInputs {
     crop: string;
     todayLocalDate: string;
+    /**
+     * Lane DFES-Q bug 2 - the farm-local (India) date the question is being ASKED on, i.e. the real today. The one-question-a-day
+     * guard counts against it. `todayLocalDate` is the saved log's own day (a log told for a past day carries that day), which
+     * is right for the context questions but let a past-day log open a second question today. Absent on an older caller: the
+     * guard then falls back to `todayLocalDate`, exactly as before.
+     */
+    askedOnLocalDate?: string;
     score?: VlogScore;
     stageContext?: StageContext;
     lastStageConfirm?: LastStageConfirm | null;
@@ -360,8 +367,9 @@ function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): Sel
 
 export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuestion | null {
     // ONE combined question/day — if any event already recorded today, stop.
+    const askedOn = inputs.askedOnLocalDate ?? inputs.todayLocalDate;
     if (MAX_QUESTIONS_PER_DAY === 1
-        && inputs.recentEvents.some(e => e.createdAtLocalDate === inputs.todayLocalDate)) {
+        && inputs.recentEvents.some(e => e.createdAtLocalDate === askedOn)) {
         return null;
     }
     const recent = inputs.recentEvents;
