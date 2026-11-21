@@ -14,10 +14,16 @@ function readDays(raw: string | null): number {
   return Math.min(90, Math.round(n));
 }
 
-/** An ISO instant from the address, or null when it is not a date. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * An ISO instant from the address, or null when it is not one. It is judged by its shape, not by
+ * `Date.parse`: .NET's seven fractional digits are refused by some engines, which would drop the
+ * window. The string itself is sent on unchanged, so the window keeps its exact edge.
+ */
 function readInstant(raw: string | null): string | null {
   if (!raw) return null;
-  return Number.isFinite(Date.parse(raw)) ? raw : null;
+  return ISO_INSTANT.test(raw) ? raw : null;
 }
 
 /**
@@ -104,7 +110,9 @@ export default function HistoryPage() {
 
       {exact && (
         <p data-testid="history-exact-window" className="text-caption text-text-2">
-          Showing exactly the {exact.countedLooksOnly ? 'lines the trust report counted' : 'lines'}, from{' '}
+          {q.data?.hitLimit
+            ? `Showing only the newest lines of ${exact.countedLooksOnly ? 'the lines the trust report counted' : 'this window'}: the server reads at most ${fmt.num(q.data.limit) ?? q.data.limit}, so some are not shown. The window is from`
+            : `Showing exactly the ${exact.countedLooksOnly ? 'lines the trust report counted' : 'lines'}, from`}{' '}
           {fmtIndiaDateTime(exact.fromUtc) ?? 'an unknown time'} to {fmtIndiaDateTime(exact.toUtc) ?? 'an unknown time'}.
         </p>
       )}

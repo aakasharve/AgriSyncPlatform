@@ -627,15 +627,19 @@ export default function OpsLivePage() {
           id: 'events-2h',
           name: 'analytics.events · errors and slow calls, 2h',
           feeds: 'Recent events, below',
-          stateText: 'Reporting',
-          tone: 'green',
-          lastHeard: readAt,
-          detail:
-            'Three event types, newest first, capped at fifty rows: api.error, api.slow and client.error. A failed read shows as a failure, so an empty table means no events in the last two hours.',
+          /* I1: while the server says app events are not being recorded this feed is not "Reporting",
+             its row count is not 0, and an empty table does not mean "no events". */
+          stateText: analyticsSentence ? 'Not recording' : 'Reporting',
+          tone: analyticsSentence ? 'red' : 'green',
+          lastHeard: analyticsSentence ? null : readAt,
+          lastHeardWhy: analyticsSentence ?? undefined,
+          detail: analyticsSentence
+            ? `${analyticsSentence} Recent events are not measured, so an empty list is not a quiet two hours.`
+            : 'Three event types, newest first, capped at fifty rows: api.error, api.slow and client.error. A failed read shows as a failure, so an empty table means no events in the last two hours.',
           facts: [
             ['Window', 'trailing 2 hours'],
             ['Cap', '50 rows'],
-            ['Rows', fmt.num(events.length) ?? '0'],
+            ['Rows', analyticsSentence ? 'not measured' : (fmt.num(events.length) ?? '0')],
             ['Not included', "sync.mutation_rejected — a 200 that refused a farmer's work"],
           ],
         },
@@ -765,7 +769,7 @@ export default function OpsLivePage() {
           /* Rendered ONLY inside the sentence that disowns it — the FeedDown
              contract, asserted in this screen's test: the figure appears in
              that span and nowhere else on the page. */
-          lastGood={`${fmt.num(events.length)} events at ${checkedAt}`}
+          lastGood={analyticsSentence ? `events not measured at ${checkedAt}` : `${fmt.num(events.length)} events at ${checkedAt}`}
         />
       )}
 

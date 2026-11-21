@@ -6,10 +6,20 @@
 const IST_OFFSET_MS = 330 * 60_000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/**
+ * Milliseconds of an ISO-8601 instant, or NaN. .NET writes seven fractional digits; some engines
+ * (older Safari) refuse more than three, so the fraction is cut to milliseconds for READING only.
+ * The original string is what gets sent to the server, unchanged.
+ */
+export function parseInstantMs(iso: string | null | undefined): number {
+  if (!iso) return Number.NaN;
+  return Date.parse(iso.replace(/(\.\d{3})\d+/, '$1'));
+}
+
 /** "20 Nov 2026" (the India date of the instant), or null when `utcIso` is not a date. */
 export function fmtIndiaDate(utcIso: string | null | undefined): string | null {
   if (!utcIso) return null;
-  const ms = Date.parse(utcIso);
+  const ms = parseInstantMs(utcIso);
   if (!Number.isFinite(ms)) return null;
   const d = new Date(ms + IST_OFFSET_MS);
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -18,7 +28,7 @@ export function fmtIndiaDate(utcIso: string | null | undefined): string | null {
 /** "15 Nov 2026, 2:32 pm India time", or null when `utcIso` is not a date. */
 export function fmtIndiaDateTime(utcIso: string | null | undefined): string | null {
   if (!utcIso) return null;
-  const ms = Date.parse(utcIso);
+  const ms = parseInstantMs(utcIso);
   if (!Number.isFinite(ms)) return null;
   const d = new Date(ms + IST_OFFSET_MS);
   const h24 = d.getUTCHours();

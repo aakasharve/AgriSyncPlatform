@@ -57,12 +57,19 @@ function LastEntry({ state }: { state: FarmerHealthLastSyncDto | null | undefine
             state={state ? 'never' : 'unmeasured'}
             why={
               state
-                ? 'No entry from this farm has reached the server yet.'
+                ? 'No entry by a farmer has reached the server yet; entries by test accounts are left out.'
                 : 'The server sent no sync record for this farm.'
             }
           />
         )}
       </p>
+      {!at && (
+        <p data-testid="last-entry-why" className="mt-1 text-caption text-text-2">
+          {state
+            ? 'No entry by a farmer has reached the server yet; entries by test accounts are left out.'
+            : 'The server sent no sync record for this farm.'}
+        </p>
+      )}
       <MetricLines metric="fh-last-activity" className="mt-2" />
     </section>
   );

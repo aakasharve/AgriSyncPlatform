@@ -140,9 +140,12 @@ export function useShouldCallToday() {
   const sufferingItems = useMemo(() => suffering.data?.data ?? [], [suffering.data]);
 
   const unnamedIds = useMemo(() => {
+    /* m7: while the problems half is not measured it shows no farm, so no owner phone is fetched
+       for it (each fetch writes a History look that the trust report counts). */
+    if (problemsFlag) return [];
     const named = new Set(silentFarms.map((f) => f.farmId.toLowerCase()));
     return sufferingItems.map((s) => s.farmId).filter((id) => !named.has(id.toLowerCase()));
-  }, [silentFarms, sufferingItems]);
+  }, [silentFarms, sufferingItems, problemsFlag]);
   const { contacts, failed: contactsFailed } = useFarmContactsState(unnamedIds);
 
   const silentState: HalfState = !mayReadChurn
