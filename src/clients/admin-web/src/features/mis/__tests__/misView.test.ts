@@ -280,7 +280,7 @@ describe('misView: headlines (CR-2b Task 2)', () => {
 
   it('Headlines_use_real_numbers_or_say_not_measured: overview', () => {
     expect(headlineFor('overview', d, false)).toMatch(
-      /^412 farms saved an entry in the 7 days to 15 Nov( 2026)?\. Voice made 42\.5% of the 913 entries in this range\.$/,
+      /^412 farms had an entry reach the server in the 7 days to 15 Nov( 2026)?\. Voice made 42\.5% of the 913 entries in this range\.$/,
     );
     const nm = headlineFor('overview', misFixture({ overview: { activeFarms: notMeasured('farm_list_unreadable') } }), false);
     expect(nm).toContain(`is not measured: ${PLAN_REASONS.farm_list_unreadable}`);
@@ -290,11 +290,11 @@ describe('misView: headlines (CR-2b Task 2)', () => {
 
   it('Headlines_use_real_numbers_or_say_not_measured: acquisition', () => {
     expect(headlineFor('acquisition', d, false)).toBe(
-      '271 people verified their phone. 61 of 139 old enough to judge had entries reach the server on 3 of their first 7 days. Installs and channels are not measured yet.',
+      '271 people signed up with a verified phone. 61 of 139 old enough to judge had entries reach the server on 3 of their first 7 days. Installs and channels are not measured yet.',
     );
     const nm = headlineFor('acquisition', misFixture({ acquisition: { habit: notMeasured('no_complete_window'), habitEligible: notMeasured('no_complete_window') } }), false);
     expect(nm).toContain(`is not measured: ${PLAN_REASONS.no_complete_window}`);
-    expect(nm).toContain('271 people verified their phone');
+    expect(nm).toContain('271 people signed up with a verified phone');
     expect(nm).toContain('Installs and channels are not measured yet.');
   });
 
@@ -413,15 +413,15 @@ describe('misView: plain words (CR-2b B11, B13)', () => {
         }
       }
       if (n === 1) {
-        expect.soft(headlineFor('overview', d, false)).toMatch(/^1 farm saved an entry/);
+        expect.soft(headlineFor('overview', d, false)).toMatch(/^1 farm had an entry reach the server/);
         expect.soft(headlineFor('overview', d, false)).toMatch(/of the 1 entry in this range/);
-        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^1 person verified/);
+        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^1 person signed up with a verified phone/);
         expect.soft(headlineFor('farms', d, false)).toMatch(/^1 active farm\b(?!s)/);
         expect.soft(tileOf(farmsView(d).tiles, 'farms.inFpo').hint).toMatch(/\b1 [^,.;]*\bfarm\b(?!s)/);
       }
       if (n === 2) {
-        expect.soft(headlineFor('overview', d, false)).toMatch(/^2 farms saved an entry/);
-        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^2 people verified/);
+        expect.soft(headlineFor('overview', d, false)).toMatch(/^2 farms had an entry reach the server/);
+        expect.soft(headlineFor('acquisition', d, false)).toMatch(/^2 people signed up with a verified phone/);
         expect.soft(tileOf(farmsView(d).tiles, 'farms.inFpo').hint).toMatch(/\b2 [^,.;]*\bfarms\b/);
       }
     }

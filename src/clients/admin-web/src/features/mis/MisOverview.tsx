@@ -71,7 +71,7 @@ export const OverviewSection: React.FC<MisSectionProps<OverviewView>> = ({ view,
                     item="overview.installsAndSignUps"
                     className="col-span-12 xl:col-span-7"
                     title="Installs and sign-ups"
-                    subtitle="Sign-ups are people who verified a phone number"
+                    subtitle="Sign-ups are accounts made on that day, among accounts with a verified phone"
                     footnote={`Installs are not drawn. ${installsWhy}`}
                     table={view.signUps.kind === 'chart'
                         ? seriesTable('Day', view.signUps.data.titles, [{ name: 'Sign-ups', values: view.signUps.data.values, fmt: fmtInt }])

@@ -21,7 +21,7 @@ export const AcquisitionSection: React.FC<MisSectionProps<AcquisitionView>> = ({
                 fields={['acquisition.verified']}
                 className="col-span-12 xl:col-span-7"
                 title="From install to habit"
-                subtitle="How far people who verified their phone in this range got. Percentages are of sign-ups; the habit is of those 7 days in."
+                subtitle="How far accounts made in this range, with a verified phone, got. Percentages are of sign-ups; the habit is of those 7 days in."
                 table={{
                     columns: ['Step', 'People', 'Share'],
                     rows: view.steps.map((s) => [
