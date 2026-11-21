@@ -128,10 +128,17 @@ public sealed class AdminCompanyMisGateTests
         var data = doc.RootElement.GetProperty("data");
         data.GetProperty("timeZone").GetString().Should().Be("Asia/Kolkata");
         data.GetProperty("countedAtUtc").GetDateTime().ToUniversalTime().Should().Be(Now);
-        data.GetProperty("range").GetProperty("from").GetString().Should().Be("2026-10-16");
-        data.GetProperty("range").GetProperty("to").GetString().Should().Be("2026-11-14");
+        // Fix wave S-N8: with no range given, the answer is the 30 India days ending YESTERDAY, the last complete day
+        // (today is still running). Worked the way the server works it: Now is 14 Nov 12:00 India time, so 15 Oct..13 Nov.
+        var yesterdayIst = DateOnly.FromDateTime(Now + TimeSpan.FromMinutes(330)).AddDays(-1);
+        var expectedFrom = yesterdayIst.AddDays(-29).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var expectedTo = yesterdayIst.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        expectedFrom.Should().Be("2026-10-15", "arrange: the rule worked by hand");
+        expectedTo.Should().Be("2026-11-13", "arrange: the rule worked by hand");
+        data.GetProperty("range").GetProperty("from").GetString().Should().Be(expectedFrom);
+        data.GetProperty("range").GetProperty("to").GetString().Should().Be(expectedTo);
         doc.RootElement.GetProperty("meta").GetProperty("source").GetString().Should().Be("live");
-        doc.RootElement.GetProperty("meta").GetProperty("window").GetString().Should().Be("2026-10-16..2026-11-14");
+        doc.RootElement.GetProperty("meta").GetProperty("window").GetString().Should().Be($"{expectedFrom}..{expectedTo}");
 
         var withRange = await Ask(CompanyRoute, "?from=2026-11-08&to=2026-11-14", owner);
         withRange.Status.Should().Be(StatusCodes.Status200OK);

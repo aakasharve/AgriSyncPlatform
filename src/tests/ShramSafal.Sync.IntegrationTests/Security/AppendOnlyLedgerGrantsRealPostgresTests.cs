@@ -309,6 +309,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    guard); it adds no column to any existing table and grants or revokes nothing on any ledger. Down() raises while a row exists (the proof's data has none), else drops
         //    only the table. Safe to revert and re-apply mid-proof.
         "20261121090000_AddControlRoomPeople",
+        // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A1, founder D-159) - Reviewed 2026-11-22; Up() and Down() read in full: Up() adds
+        //    the column purpose (smallint NOT NULL DEFAULT 1) to public.otp_challenges, swaps its one-pending-per-phone unique index for one per phone
+        //    and purpose, and adds the CHECK ck_otp_challenges_purpose; Down() drops the CHECK, expires any pending door code, swaps the index back and
+        //    drops the column. USER context: the ShramSafal migrator never reverts or re-applies it, it only shares the scratch database's history
+        //    table. No GRANT, REVOKE, policy, ownership change or append-only ledger is touched. Safe mid-proof.
+        "20261122090000_AddOtpChallengePurpose",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

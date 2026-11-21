@@ -1426,6 +1426,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // existing table and never touches ssf.audit_events, its policies or its grants. Down() raises while a row exists (the proof's data has none), else drops only the table.
         // Safe mid-proof.
         "20261121090000_AddControlRoomPeople",
+        // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A1, founder D-159) - Reviewed 2026-11-22; Up() and Down() read in full: Up() adds the column
+        // purpose (smallint NOT NULL DEFAULT 1, so no row is rewritten) to public.otp_challenges, swaps its one-pending-per-phone unique index for one per
+        // phone and purpose, and adds the CHECK ck_otp_challenges_purpose; Down() drops the CHECK, expires any pending door code, swaps the index back and
+        // drops the column. It is a User-context migration that shares the scratch database's history table with this context's migrator, so it is only
+        // LISTED here: the ShramSafal migrator never reverts or re-applies it. Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261122090000_AddOtpChallengePurpose",
     ];
 
     /// <summary>

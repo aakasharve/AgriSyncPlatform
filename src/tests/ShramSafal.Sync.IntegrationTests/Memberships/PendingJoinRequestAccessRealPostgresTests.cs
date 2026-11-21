@@ -614,6 +614,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // policy of any kind (it holds no farm's data), so nothing here reads farm_memberships or farm_join_requests. No audit_events object, no ssf.farms policy, no seat touched.
         // Down() raises while a row exists, else drops the table. Re-Up recreates it.
         "20261121090000_AddControlRoomPeople",
+        // spec: trusted-control-room-2026-11-20 (CR-3 fix wave S-A1, founder D-159) - Up() and Down() read in full: one column (purpose, NOT NULL DEFAULT 1),
+        // a swapped unique index and one CHECK on public.otp_challenges, all undone by Down() (USER context; the ShramSafal migrator never reverts or
+        // re-applies it, it only shares the scratch database's history table). No farm_memberships or farm_join_requests object, no ssf.farms policy,
+        // no grant, no seat touched.
+        "20261122090000_AddOtpChallengePurpose",
     ];
 
     /// <summary>
