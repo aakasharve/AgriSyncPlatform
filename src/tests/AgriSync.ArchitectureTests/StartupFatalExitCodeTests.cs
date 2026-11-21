@@ -106,6 +106,13 @@ public sealed class StartupFatalExitCodeTests
         startInfo.ArgumentList.Add(dllPath);
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Staging";
 
+        // spec: trusted-control-room-2026-11-20 (CR-3 fix wave round 1, M-1): outside Development and Testing start-up
+        // refuses a missing JWT signing key or one committed in an appsettings file (fix wave S-A3), and that guard runs
+        // before the migration phase this test is about. A test-only key that no appsettings file carries (as
+        // ServerRouteTableTests and ClientErrorReportDoorTests give theirs) lets the child pass the guard and fail where
+        // this test says it fails. Nothing is ever signed here.
+        startInfo.Environment["Jwt__SigningKey"] = "startup-fatal-test-only-placeholder-signing-key-0000";
+
         // spec: plr-d10 lane WID fix pass 2 (review N5, F103) — EVERY connection name the host knows, so the child never
         // inherits one from this machine (on a developer PC the _Migration and _ReadOnly names point at his own
         // database). The child then can reach no database at all, whichever phase starts first.
@@ -159,6 +166,10 @@ public sealed class StartupFatalExitCodeTests
             + "OS/systemd as a clean shutdown — a half-applied schema behind a down API "
             + "must not look like exit 0. Captured output:\n"
             + $"STDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
+
+        (stdOut + stdErr).Should().NotContain(
+            "JWT signing key",
+            "the child must pass the signing-key guard (fix wave S-A3) and fail in the migration phase this test names");
     }
 
     private static async Task<string> SafeGetResultAsync(Task<string> task)

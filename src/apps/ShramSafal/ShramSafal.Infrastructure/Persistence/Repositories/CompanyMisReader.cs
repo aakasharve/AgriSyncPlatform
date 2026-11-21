@@ -543,9 +543,9 @@ public sealed class CompanyMisReader : ICompanyMisReader
         var refused = await ReadDayCountsAsync(
             _analytics.Database.GetDbConnection(),
             transaction: null,
-            $"""
+            $$"""
             SELECT ((occurred_at_utc AT TIME ZONE 'UTC') + INTERVAL '330 minutes')::date AS ist_day,
-                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{{1,9}}$'
+                   COALESCE(SUM(CASE WHEN props->>'rejectedWorkItems' ~ '^[0-9]{1,9}$'
                                      THEN (props->>'rejectedWorkItems')::int END), 0)::bigint AS refused
             FROM analytics.events
             WHERE event_type = 'sync.mutation_rejected'
@@ -553,7 +553,7 @@ public sealed class CompanyMisReader : ICompanyMisReader
               AND actor_role = 'system'
               AND occurred_at_utc >= @since
               AND occurred_at_utc < @counted
-              AND NOT COALESCE({AdminErrorFarm.PersonSql} = ANY(@excluded), false)
+              AND NOT COALESCE({{AdminErrorFarm.PersonSql}} = ANY(@excluded), false)
             GROUP BY 1
             """,
             sinceUtc, countedAtUtc, excludedUserIds, ct);

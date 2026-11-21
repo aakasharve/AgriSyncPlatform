@@ -716,7 +716,7 @@ public sealed class GetAppVersionsHandlerTests
         data.Versions.Select(v => v.AppVersion).Should().Equal("1.0.19", "1.0.18");
         data.OnOlderVersions.Should().ContainSingle().Which.Name.Should().Be("Example: Ramesh");
         repo.NameCalls.SelectMany(c => c).Should().NotContain(testAccount, "nothing is looked up about a test account");
-        repo.SignInDevicesExcluded.Should().ContainSingle().Which.Should().BeEquivalentTo(new[] { testAccount },
+        repo.SignInDevicesExcluded.Should().ContainSingle().Which!.Should().BeEquivalentTo(new[] { testAccount },
             "the signed-in phone totals leave the test accounts out too");
     }
 
