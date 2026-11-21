@@ -14,9 +14,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// <para><b>Behaviour: ADDITIVE.</b> One new table and nothing else: no column on any existing table, no policy, no grant on any other
     /// table, no data. The binary deployed before this release never names the table, so it runs unchanged against the migrated schema.</para>
     ///
-    /// <para><b>Why no row-level security.</b> The table holds staff access data, not a farm's own data: no <c>farm_id</c>, no farmer path
-    /// reads it, and every door that touches it is gated in the application (the Platform seat plus the module key). It is on the
-    /// <c>RlsExemptionAllowlistTests</c> list with that reason, as <c>organization_memberships</c> and <c>schedule_checks</c> are.</para>
+    /// <para><b>Why no row-level security.</b> The table is ShramSafal's staff access list, not a farm's own data: it has no <c>farm_id</c>
+    /// column, so there is nothing for a farm policy to key on, and every read happens before or outside any farm context. Who reads it:
+    /// the anonymous sign-in door (is this number approved; its background code sender too), the entitlement resolver (a team seat's
+    /// ticks, on every admin request), <c>/admin/me/scope</c>, the founder-only People routes, and the <c>phones_shown</c> History row of a
+    /// phone look (to name the reader's person). Not every reader is behind the Platform seat and a module key: the door is anonymous and
+    /// the resolver runs before any key is checked. It is on the <c>RlsExemptionAllowlistTests</c> list with that reason, as
+    /// <c>organization_memberships</c> and <c>schedule_checks</c> are.</para>
     ///
     /// <para><b>Why no foreign keys.</b> The account (<c>user_id</c>) and seat (<c>membership_id</c>) are plain columns: the person row must
     /// outlive an account that is removed or erased, and the door must be able to say "approved" before an account exists. Two partial

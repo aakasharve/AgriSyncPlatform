@@ -166,6 +166,31 @@ public sealed class ControlRoomResolverRealPostgresTests(Xunit.Abstractions.ITes
         (await ResolveAsync(rig, TeamSeat)).Outcome.Should().Be(ResolveOutcome.Unauthorized);
     }
 
+    // G1 fix round 1 (A3): the person row's own flag, alone. The seat stays active and the session began at the door, but the
+    // person row is inactive: its ticks never count, for the menu or for the schedule doors.
+    [SkippableFact]
+    public async Task An_inactive_person_row_gives_no_ticks_while_its_seat_stays_active()
+    {
+        await GuardAsync();
+        await using var rig = BuildRig();
+        await SeatAsync(rig, TeamSeat, ControlRoomTicks.CompanyNumbers, ControlRoomTicks.FarmerPhones, ControlRoomTicks.Schedules);
+        (await ResolveAsync(rig, TeamSeat)).Scope!.CanRead(ModuleKey.FarmsPhones)
+            .Should().BeTrue("the control: the ticks count while the person row is active");
+
+        await ExecAsSuperuserAsync("UPDATE ssf.control_room_people SET is_active = false WHERE user_id = @u", ("u", TeamSeat));
+
+        var result = await ResolveAsync(rig, TeamSeat);
+        result.Outcome.Should().Be(ResolveOutcome.Resolved, "the seat itself is still active");
+        Describe(result.Scope!.Modules).Should().Equal(Describe(ControlRoomTicks.ModulesFor([])),
+            "an inactive person row's ticks never count");
+        result.Scope.DoorSessionRequired.Should().BeFalse("the door was used; there is just no active person");
+
+        await using var scope = AdminScope(rig.Provider);
+        var resolver = scope.ServiceProvider.GetRequiredService<IEntitlementResolver>();
+        (await resolver.MayCheckSchedulesAsync(new UserId(TeamSeat), default)).Should().BeFalse("the Schedules tick is on an inactive row");
+        (await resolver.MayReadScheduleChecksAsync(new UserId(TeamSeat), default)).Should().BeFalse();
+    }
+
     [SkippableFact]
     public async Task Unticking_takes_effect_on_the_next_resolve()
     {
@@ -409,7 +434,7 @@ public sealed class ControlRoomResolverRealPostgresTests(Xunit.Abstractions.ITes
         var account = Guid.NewGuid();
         await ExecAsSuperuserAsync("""
             INSERT INTO public.users ("Id", phone, display_name, password_hash, credential_created_at_utc, created_at_utc, is_active, auth_mode, preferred_language)
-            VALUES (@user, '6000000099', 'example-farm-owner', 'x', NOW(), NOW(), TRUE, 0, 'mr');
+            VALUES (@user, '9000000617', 'example-farm-owner', 'x', NOW(), NOW(), TRUE, 0, 'mr');
             INSERT INTO ssf.farms ("Id", name, owner_user_id, owner_account_id, created_at_utc, modified_at_utc, weather_radius_km, geo_validation_status)
             VALUES (@farm, 'Example: Farm', @user, @account, NOW(), NOW(), 3.0, 'Unchecked');
             INSERT INTO ssf.farm_memberships ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status,

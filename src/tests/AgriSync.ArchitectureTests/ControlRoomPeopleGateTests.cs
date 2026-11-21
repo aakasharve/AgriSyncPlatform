@@ -147,6 +147,37 @@ public sealed class ControlRoomPeopleGateTests
         Code(missing.Body).Should().Be("control_room.person_not_found");
     }
 
+    // G1 fix round 1 (M1): a null or blank tick is an unknown tick. Add and change answer 400 control_room.tick_unknown,
+    // never 500, and nothing is written.
+    [Fact]
+    public async Task A_null_tick_is_refused_not_a_500()
+    {
+        var cases = new (string Method, string Route, string Body)[]
+        {
+            ("POST", Routes[1].Route, """{"displayName":"Example: Asha","phone":"9000000051","startingRole":"viewer","ticks":[null]}"""),
+            ("POST", Routes[1].Route, """{"displayName":"Example: Asha","phone":"9000000051","startingRole":"viewer","ticks":["company_numbers",null]}"""),
+            ("POST", Routes[1].Route, """{"displayName":"Example: Asha","phone":"9000000051","startingRole":"viewer","ticks":[""]}"""),
+            ("POST", Routes[1].Route, """{"displayName":"Example: Asha","phone":"9000000051","startingRole":"viewer","ticks":["  "]}"""),
+            ("PUT", Routes[2].Route, """{"displayName":"Example: Asha K","startingRole":"viewer","ticks":[null]}"""),
+            ("PUT", Routes[2].Route, """{"displayName":"Example: Asha K","startingRole":"viewer","ticks":["company_numbers",null]}"""),
+            ("PUT", Routes[2].Route, """{"displayName":"Example: Asha K","startingRole":"viewer","ticks":[""]}"""),
+        };
+
+        foreach (var (method, route, body) in cases)
+        {
+            var answer = await Ask(method, route, body, Founder());
+
+            answer.Status.Should().Be(StatusCodes.Status400BadRequest, $"{method} {body}: {answer.Body}");
+            Code(answer.Body).Should().Be("control_room.tick_unknown", $"{method} {body}");
+            answer.Fakes.Store.Calls.Should().NotContain(new[] { "Add", "AddSeat", "Record", "SaveChangesAsync" },
+                $"{method} {body}: nothing is written");
+            var asha = answer.Fakes.Store.People.Should().ContainSingle($"{method} {body}: no one is added").Subject;
+            asha.DisplayName.Should().Be("Example: Asha", $"{method} {body}: the listed person is unchanged");
+            asha.Ticks.Should().Equal(new[] { ControlRoomTicks.CompanyNumbers });
+            answer.Fakes.History.Written.Should().BeEmpty();
+        }
+    }
+
     // D2: a person is only added to a list. Nothing is texted, and nothing is queued for the console door's background
     // sender (the real queue, Task A6).
     [Fact]

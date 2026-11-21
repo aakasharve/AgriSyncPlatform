@@ -6,6 +6,18 @@ namespace ShramSafal.Application.Admin.Ports;
 /// <summary>
 /// Resolves the caller's AdminScope for the currently-selected active org.
 /// Every admin HTTP endpoint routes through this port before any business logic runs.
+/// <para>
+/// The rule (plan CR-3, Task A3, Lock 2; docs fixed in G1 fix round 1, A3): the Platform Owner seat and every seat of
+/// another organisation type (FPO, FPC, consulting firm, lab) get the <see cref="EntitlementMatrix"/> row of their role.
+/// A Platform seat that is not the Owner (a control-room team seat) gets only what its person's ticks give, and only when
+/// the session began at the console's door; without a door session it reads <c>admin.self</c> only, and with no active
+/// person row it holds no tick.
+/// </para>
+/// <para>
+/// The default members below are for test doubles that answer only <see cref="ResolveAsync"/>. They never grant more than
+/// the real resolver would: a double cannot know a person's ticks or the door, so they give a non-owner Platform seat
+/// nothing (fail closed). The real resolver overrides every one of them.
+/// </para>
 /// </summary>
 public interface IEntitlementResolver
 {
@@ -28,34 +40,40 @@ public interface IEntitlementResolver
 
     /// <summary>
     /// spec: plr-d10 lane SCH-A (Task 3; founder D-74, L8-R) - may this person CHECK library schedules? A schedule check is a
-    /// ShramSafal PLATFORM act: an ACTIVE seat of an ACTIVE Platform organisation whose role holds WRITE on
-    /// <see cref="ModuleKey.ScheduleReview"/> in <see cref="EntitlementMatrix"/> (Platform Owner and Employee; the Analyst
-    /// only reads). Never a farm seat: a farm's primary owner, and a farm seat with <c>AppRole.Agronomist</c>, hold nothing
-    /// here. QUIET like <see cref="IsPlatformOwnerAsync"/>: no admin-scope analytics event. The default (for test doubles)
-    /// reads the resolved memberships; the real resolver asks the database directly.
+    /// ShramSafal PLATFORM act, asked of an ACTIVE seat of an ACTIVE Platform organisation: the Platform Owner by the
+    /// <see cref="EntitlementMatrix"/> (WRITE on <see cref="ModuleKey.ScheduleReview"/>); any other Platform seat only when its
+    /// active person row holds the <c>schedules</c> tick AND the session began at the door (plan CR-3, Task A3, K07). No other
+    /// organisation type, and never a farm seat: a farm's primary owner, and a farm seat with <c>AppRole.Agronomist</c>, hold
+    /// nothing here. QUIET like <see cref="IsPlatformOwnerAsync"/>: no admin-scope analytics event. The default (for test
+    /// doubles) answers for a Platform Owner seat by the matrix and refuses every other seat (fail closed); the real resolver
+    /// asks the database directly.
     /// </summary>
     async Task<bool> MayCheckSchedulesAsync(UserId userId, CancellationToken ct)
     {
         var resolved = await ResolveAsync(userId, activeOrgId: null, ct);
-        return resolved.Memberships.Any(m =>
-            m.OrganizationType == OrganizationType.Platform
-            && EntitlementMatrix.For(m.OrganizationType, m.OrganizationRole)
-                .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanWrite));
+        return OwnerSeatHolds(resolved, write: true);
     }
 
     /// <summary>
-    /// spec: plr-d10 lane SCH-A (Task 4) - may this person READ the schedule-check queue? Platform Owner, Employee and
-    /// Analyst (read on <see cref="ModuleKey.ScheduleReview"/>); nobody else. Same seats and quietness as
-    /// <see cref="MayCheckSchedulesAsync"/>.
+    /// spec: plr-d10 lane SCH-A (Task 4) - may this person READ the schedule-check queue? The Platform Owner by the matrix
+    /// (READ on <see cref="ModuleKey.ScheduleReview"/>); any other Platform seat only with the <c>schedules</c> tick and a door
+    /// session; nobody else. Same seats, quietness and fail-closed default as <see cref="MayCheckSchedulesAsync"/>.
     /// </summary>
     async Task<bool> MayReadScheduleChecksAsync(UserId userId, CancellationToken ct)
     {
         var resolved = await ResolveAsync(userId, activeOrgId: null, ct);
-        return resolved.Memberships.Any(m =>
-            m.OrganizationType == OrganizationType.Platform
-            && EntitlementMatrix.For(m.OrganizationType, m.OrganizationRole)
-                .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanRead));
+        return OwnerSeatHolds(resolved, write: false);
     }
+
+    /// <summary>
+    /// The schedule-door defaults: true only for a Platform Owner seat whose matrix row holds the right. A non-owner Platform
+    /// seat's right depends on its person's ticks and the door, which a test double cannot know, so it gets nothing.
+    /// </summary>
+    private static bool OwnerSeatHolds(ResolveResult resolved, bool write) =>
+        resolved.Memberships.Any(m =>
+            m.OrganizationType == OrganizationType.Platform && m.OrganizationRole == OrganizationRole.Owner)
+        && EntitlementMatrix.For(OrganizationType.Platform, OrganizationRole.Owner)
+            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && (write ? e.CanWrite : e.CanRead));
 
     /// <summary>
     /// spec: plr-d10 lane RATE-1 fix round 1 (review F7) — which of these people are platform owners, by the SAME rule as

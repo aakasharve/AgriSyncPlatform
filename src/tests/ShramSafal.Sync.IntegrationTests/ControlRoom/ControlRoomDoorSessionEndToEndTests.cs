@@ -231,7 +231,8 @@ public sealed class ControlRoomDoorSessionEndToEndTests : IAsyncLifetime
 
         var refused = await GetAsync("/shramsafal/admin/farms?page=1&pageSize=20", farmer.AccessToken);
         refused.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await CodeOf(refused)).Should().Be(ControlRoomSessionClaims.RequiredErrorCode);
+        // G1 fix round 1 (A6): the literal the console reads, not the constant, so a rename cannot silently change the contract.
+        (await CodeOf(refused)).Should().Be("control_room.door_session_required");
 
         var scopeWithout = await ScopeAsync(farmer.AccessToken);
         scopeWithout.GetProperty("controlRoom").GetProperty("doorSessionRequired").GetBoolean().Should().BeTrue();

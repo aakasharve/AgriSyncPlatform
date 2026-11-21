@@ -109,7 +109,8 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
         global::Accounts.Infrastructure.DependencyInjection.AddAccountsInfrastructure(services, config);
 
         // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A5) — Program.cs registers the control room's phone directory
-        // (the host adapter over the User accounts); without it the three people routes answered 500 in this sweep.
+        // (the host adapter over the User accounts); without it the people routes whose handlers take it (GET and POST
+        // /admin/people, GET /admin/people/history and GET /admin/people/trust-report) answered 500 in this sweep.
         services.AddScoped<ShramSafal.Application.Ports.IControlRoomPhoneDirectory,
             AgriSync.Bootstrapper.Adapters.ControlRoomPhoneDirectory>();
     }
