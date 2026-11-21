@@ -31,6 +31,7 @@ import NoticeChangeSheet from './features/consent/reask/NoticeChangeSheet';
 // spec: plr-d10 lane NP-1 (founder D-56) — the one-time "is this your account?" question on a new phone.
 import DeviceCheckQuestion from './features/auth/deviceCheck/DeviceCheckQuestion';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
+import { useFeelRoot } from './shared/hooks/useFeel';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -194,6 +195,9 @@ const App: React.FC = () => {
 
     // Ops Phase 3 — catch unhandled JS rejections and report to telemetry
     useEffect(() => { installGlobalErrorHandlers(); }, []);
+
+    // FEEL-1 — the app's one press listener and the stored haptics off switch, mounted once for every screen.
+    useFeelRoot();
 
     // agrisync-prompt-ops Phase 4 — `?aiTest=1` toggles the AI test-mode flag
     // (banner appears via AiTestModeBanner). `?aiTest=0` clears all 3 keys.
