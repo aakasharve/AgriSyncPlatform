@@ -46,6 +46,18 @@ vi.mock('../../../infrastructure/storage/SessionStore', () => ({
     },
 }));
 
+// Queueing a money entry is fire-and-forget: it ends (queued, or kept on the phone) by nudging the sync worker once.
+// One timer tick was not that end on a busy runner (CI 45062867914): the row arrived during the NEXT test.
+const money = vi.hoisted(() => ({ started: 0, ended: 0 }));
+vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
+    backgroundSyncWorker: { triggerNow: () => { money.ended += 1; return Promise.resolve(); } },
+}));
+const addEvent = financeService._addEvent.bind(financeService);
+financeService._addEvent = (event) => { money.started += 1; addEvent(event); };
+async function moneySettled() {
+    await vi.waitFor(() => expect(money.ended).toBe(money.started), { timeout: 4000, interval: 2 });
+}
+
 const fakeRepo = {
     batchSave: vi.fn().mockResolvedValue(undefined),
 } as unknown as LogsRepository;
@@ -91,7 +103,7 @@ describe('LogCommandServiceImpl.confirmAndSave — money capture (Decision 3a)',
         ]);
 
         await service.confirmAndSave([log]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(1);
@@ -108,7 +120,7 @@ describe('LogCommandServiceImpl.confirmAndSave — money capture (Decision 3a)',
         ]);
 
         await service.confirmAndSave([log]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(0);
@@ -121,7 +133,7 @@ describe('LogCommandServiceImpl.confirmAndSave — money capture (Decision 3a)',
         ]);
 
         await service.confirmAndSave([log]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(1);
@@ -238,7 +250,7 @@ describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s
     it('a log on a plot of farm A, saved while the app shows another farm, sends its money to farm A', async () => {
         const service = new LogCommandServiceImpl(fakeRepo);
         await service.confirmAndSave([plotLog(PLOT_ON_A, 'r3a')]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(1);
@@ -253,7 +265,7 @@ describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s
         const service = new LogCommandServiceImpl(fakeRepo);
         const unknownPlot = '66666666-6666-6666-6666-666666666666';
         await service.confirmAndSave([plotLog(unknownPlot, 'r3b')]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         expect(await pendingAddCostEntryRows()).toHaveLength(0);
     });
@@ -270,7 +282,7 @@ describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s
 
         const saved = [plotLog(PLOT_ON_A, 'r3c')];
         await expect(service.confirmAndSave(saved)).resolves.toBeUndefined();
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         expect(lookup).toHaveBeenCalled();
         expect(fakeRepo.batchSave).toHaveBeenCalledTimes(1);
@@ -308,7 +320,7 @@ describe('LogCommandServiceImpl.confirmAndSave — money is dated on the work’
     it('a back-dated save: the money is on the day the work was done, not the day it was saved', async () => {
         const service = new LogCommandServiceImpl(fakeRepo);
         await service.confirmAndSave([pricedLog('f88a', '2026-10-25', '2026-10-31T10:00:00.000Z')]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(1);
@@ -319,7 +331,7 @@ describe('LogCommandServiceImpl.confirmAndSave — money is dated on the work’
         const service = new LogCommandServiceImpl(fakeRepo);
         // 2026-10-31T19:30Z is 01:00 on 1 November in India; the work is that day's.
         await service.confirmAndSave([pricedLog('f88b', '2026-11-01', '2026-10-31T19:30:00.000Z')]);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await moneySettled();
 
         const pending = await pendingAddCostEntryRows();
         expect(pending).toHaveLength(1);
