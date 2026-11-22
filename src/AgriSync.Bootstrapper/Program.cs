@@ -77,10 +77,14 @@ try
     // login starts returning 429 mid-suite. When the E2E harness is enabled
     // (ALLOW_E2E_SEED=true — never set in prod), relax the limits so the suite
     // does not self-throttle. Prod (flag absent) keeps the secure 10/30 limits.
-    var e2eHarnessEnabled = string.Equals(
-        Environment.GetEnvironmentVariable("ALLOW_E2E_SEED"),
-        "true",
-        StringComparison.OrdinalIgnoreCase);
+    //
+    // spec: D-184 / audit F09 — Production no longer relies on nobody setting the flag: it REFUSES TO START with it set
+    // (the flag opens the anonymous /__e2e reset, seed and fail-pushes doors and lifts the limits to 100,000). Same pattern
+    // as SmsGatewayStartupGuard below; asked here, before the limiter is registered and before any service is built.
+    E2eHarnessStartupGuard.EnsureSafeForEnvironment(
+        builder.Environment.IsProduction(),
+        Environment.GetEnvironmentVariable(E2eTestEndpoints.EnvFlag));
+    var e2eHarnessEnabled = E2eTestEndpoints.IsEnabled();
     // The "auth" / "ai" / "join" policies (and the relaxation above) live in
     // Composition/RateLimitingConfig so a test host can register exactly these and
     // prove the 429 (spec: plr-d7-m1-multiuser-2026-10-26, step 1).

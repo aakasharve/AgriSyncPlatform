@@ -78,6 +78,11 @@ DEPLOYED_AT="<iso-timestamp>"
 ALLOW_PRODUCTION_STARTUP_MIGRATIONS="false"
 ```
 
+**Never set `ALLOW_E2E_SEED` on the Production process.** It is the Playwright test harness switch: it opens the anonymous
+`/__e2e/reset`, `/__e2e/seed` and `/__e2e/fail-pushes` endpoints and lifts every rate limit to 100,000. The API **refuses to
+start** in Production when it is `true` (`E2eHarnessStartupGuard`). **Check the box's environment for it BEFORE deploying a build
+that contains the guard**, or the new build will crash on boot. Unset, or any value other than `true`, is fine.
+
 ## Seeding
 
 ```bash

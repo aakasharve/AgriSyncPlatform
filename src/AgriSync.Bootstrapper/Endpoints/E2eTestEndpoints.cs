@@ -30,11 +30,14 @@ public static class E2eTestEndpoints
 {
     public const string EnvFlag = "ALLOW_E2E_SEED";
 
-    public static bool IsEnabled() =>
-        string.Equals(
-            Environment.GetEnvironmentVariable(EnvFlag),
-            "true",
-            StringComparison.OrdinalIgnoreCase);
+    public static bool IsEnabled() => IsFlagOn(Environment.GetEnvironmentVariable(EnvFlag));
+
+    /// <summary>
+    /// The one test of the flag's value: literally "true" (any case). The doors above, the rate-limit relaxation in
+    /// <c>Program.cs</c> and <c>E2eHarnessStartupGuard</c> (the Production refusal) all ask this, so they cannot drift apart.
+    /// </summary>
+    public static bool IsFlagOn(string? value) =>
+        string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
     public static IEndpointRouteBuilder MapE2eEndpoints(this IEndpointRouteBuilder app)
     {
