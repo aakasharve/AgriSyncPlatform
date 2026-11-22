@@ -133,7 +133,10 @@ try
                     // pictures). A browser or WebView refuses that request in preflight unless the header is listed here,
                     // so without it the phone keeps the first copy it ever got and never learns of a newer one.
                     "If-None-Match")
-                .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                // spec: D-184 / audit F13 — PATCH was missing: LabourEndpoints already serves `PATCH field-operators/{id}`, and a
+                // browser or WebView refuses a PATCH in preflight unless the method is listed here, so the day a rename screen
+                // calls it the request would be blocked before it reached the server.
+                .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .AllowCredentials();
         });
     });

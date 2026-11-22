@@ -63,10 +63,18 @@ AWS_REGION="ap-south-1"
 ```bash
 Cors__AllowedOrigins__0="https://app.shramsafal.in"
 Cors__AllowedOrigins__1="https://shramsafal.in"
-Cors__AllowedOrigins__2="capacitor://localhost"
-Cors__AllowedOrigins__3="https://localhost"
-Cors__AllowedOrigins__4="http://localhost"
+Cors__AllowedOrigins__2="https://admin.shramsafal.in"
+Cors__AllowedOrigins__3="capacitor://localhost"
+Cors__AllowedOrigins__4="https://localhost"
 ```
+
+This is the same list as `appsettings.Production.json`, in the same order. Do NOT add `http://localhost`: the Android app
+runs on `https://localhost` (`androidScheme: 'https'` in `capacitor.config.ts`), so a plain-http origin that is allowed to send
+credentials is not needed and only widens who may call the API from a browser (security audit F14).
+Settings arrays merge BY INDEX: an index you set here replaces the file's entry at that index, and a shorter list leaves the
+file's (and the base `appsettings.json`'s) entries at the higher indexes in place. If the box already sets
+`Cors__AllowedOrigins__4="http://localhost"` (an older copy of this page told you to), change it to `https://localhost` or
+remove it.
 
 ## Runtime
 
