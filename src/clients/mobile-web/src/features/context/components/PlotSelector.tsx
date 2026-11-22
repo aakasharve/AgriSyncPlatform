@@ -203,17 +203,25 @@ export interface PlotSelectorProps {
     /** Something small before a chip's name (a crop photo, for a small crop on a screen with several crops). Chips only. */
     lead?: React.ReactNode;
     chipSize?: 'md' | 'lg';
+    /**
+     * Lane UI-9a (founder D-174 = A, 2026-11-22): a page that holds ONE search for every crop (the आढावा page with more than 15 plots) hands the
+     * text in here. The selector then draws no search box and no "no such plot" line of its own (the host says it once), and shows only the plots
+     * (boxes or chips) that answer the text. Left out: the selector keeps its own search box from 25 plots, exactly as before.
+     */
+    query?: string;
     testIds: PlotSelectorTestIds;
     language?: Language;
     disabled?: boolean;
 }
 
 export const PlotSelector: React.FC<PlotSelectorProps> = ({
-    plots, chosen, onChange, onTapPlot, numbers, color, cropNames, underHeader, quickButtons, groups, allToggle = 'toggle', mark, lead, chipSize, testIds, language: languageProp, disabled,
+    plots, chosen, onChange, onTapPlot, numbers, color, cropNames, underHeader, quickButtons, groups, allToggle = 'toggle', mark, lead, chipSize, query: hostQuery, testIds, language: languageProp, disabled,
 }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
-    const [query, setQuery] = useState('');
+    const [ownQuery, setQuery] = useState('');
+    const hosted = hostQuery !== undefined;
+    const query = hosted ? hostQuery : ownQuery;
     const mode = plotPickMode(plots.length);
     const short = underHeader ?? photoOnceFor(plots.length);
     const nameOf = (name: string) => (short ? plotShortName(name, cropNames ?? []) : name);
@@ -223,6 +231,8 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     // With `numbers` (the crop's WHOLE list) the number is that place among all the crop's plots, not among the plots in view.
     const entries = naturalOrder(plots.map(p => p.name)).map((i, rank) => ({ p: plots[i], position: numbers?.get(plots[i].id) ?? plotPosition(rank) }));
     const ids = entries.map(e => e.p.id);
+    // Only the plots that answer the search. A plot's number is its place among ALL the crop's plots (above), so a found plot keeps its number.
+    const shown = entries.filter(x => plotMatchesQuery({ name: x.p.name, position: x.position }, query));
 
     if (mode === 'chips') {
         return (
@@ -231,7 +241,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
                     <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle="none" buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
                 ) : null}
                 <div className="flex flex-wrap gap-2" data-testid={testIds.grid}>
-                    {entries.map(({ p }) => (
+                    {shown.map(({ p }) => (
                         <PlotChip key={p.id} testId={testIds.plot(p.id)} name={nameOf(p.name)} on={chosen.includes(p.id)} disabled={disabled} color={color} size={chipSize} lead={lead}
                             mark={mark?.(p.id, 'chips')} onClick={() => tap(p.id)} />
                     ))}
@@ -241,11 +251,10 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
     }
 
     const sw = SELECTOR_WORDS[language === 'en' ? 'en' : 'mr'];
-    const shown = entries.filter(x => plotMatchesQuery({ name: x.p.name, position: x.position }, query));
     return (
         <div data-mode="grid" className="space-y-2">
             <PlotQuickRow plotIds={ids} chosen={chosen} onChange={change} allToggle={allToggle} buttons={quickButtons} groups={groups} testIds={testIds} language={language} disabled={disabled} />
-            {hasPlotSearch(plots.length) && (
+            {!hosted && hasPlotSearch(plots.length) && (
                 <input type="search" value={query} onChange={e => setQuery(e.target.value)} data-testid={testIds.search} aria-label={sw.search} placeholder={sw.search}
                     className="min-h-[46px] w-full rounded-xl border-2 border-stone-300 bg-white px-3 text-[15px] font-bold text-stone-900 placeholder:text-stone-500" />
             )}
@@ -255,7 +264,7 @@ export const PlotSelector: React.FC<PlotSelectorProps> = ({
                         mark={mark?.(p.id, 'grid')} language={language} onClick={() => tap(p.id)} />
                 ))}
             </div>
-            {shown.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-600" data-testid={testIds.search ? `${testIds.search}-empty` : undefined}>{sw.noMatch}</p>}
+            {!hosted && shown.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-600" data-testid={testIds.search ? `${testIds.search}-empty` : undefined}>{sw.noMatch}</p>}
         </div>
     );
 };

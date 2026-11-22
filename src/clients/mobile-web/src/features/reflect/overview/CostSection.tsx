@@ -25,6 +25,7 @@ import { topOf, type MoneyFigure, type PartialReason, type SeasonTotals, type Sp
 import { rupees } from './reflectDates';
 import { Num, Tap } from './ui';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { MONEY_BARS_SHOWN, moreShownText } from '../../context/components/plotSelectorRules';
 
 const DASH = '—';
 const money = (n: number | null) => (n === null ? DASH : rupees(n));
@@ -112,11 +113,20 @@ const Figure: React.FC<{ label: string; figure: MoneyFigure; testId: string; cla
 
 type View = 'total' | 'crop' | 'plot';
 
-const ShareBars: React.FC<{ bars: readonly SpendBar[]; total: number; testId: string }> = ({ bars, total, testId }) => {
+/**
+ * The bars of one split of the spend. Lane UI-9a (founder D-175 = A): the "प्लॉटनुसार" split draws its first `cap` bars (in the order the app already
+ * draws them) and "आणखी N दाखवा" draws the rest; the biggest bar is still found among ALL of them (`topOf`, by the caller), and the scale (`max`)
+ * is the biggest of all, so a bar's length means the same before and after the tap.
+ */
+const ShareBars: React.FC<{ bars: readonly SpendBar[]; total: number; testId: string; cap?: number; language?: string | null }> = ({ bars, total, testId, cap, language }) => {
     const max = Math.max(1, ...bars.map(b => b.value));
+    const [showAll, setShowAll] = useState(false);
+    const drawn = cap !== undefined && !showAll ? bars.slice(0, cap) : bars;
+    const rest = bars.length - drawn.length;
     return (
+        <>
         <div className="mt-3 space-y-2" data-testid={testId}>
-            {bars.map(b => (
+            {drawn.map(b => (
                 <div key={b.key}>
                     <div className="flex justify-between gap-2 text-[13.5px] font-extrabold text-stone-700">
                         <span className="min-w-0 truncate">{b.label}</span>
@@ -126,6 +136,13 @@ const ShareBars: React.FC<{ bars: readonly SpendBar[]; total: number; testId: st
                 </div>
             ))}
         </div>
+        {rest > 0 && (
+            <button type="button" onClick={() => setShowAll(true)} data-testid="cost-bars-more"
+                className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-emerald-800 bg-white px-3 text-[14.5px] font-extrabold text-emerald-800 active:scale-[0.98]">
+                {moreShownText(rest, language)}
+            </button>
+        )}
+        </>
     );
 };
 
@@ -202,7 +219,8 @@ export const CostSection: React.FC<{ totals: SeasonTotals; spend: Spend; range: 
                             या दिवसांत खर्च नोंदलेला नाही.
                         </p>
                     ) : view === 'total' ? <DayBars points={spend.points} />
-                        : <ShareBars bars={view === 'crop' ? spend.byCrop : spend.byPlot} total={spent} testId={`cost-bars-${view}`} />}
+                        : <ShareBars bars={view === 'crop' ? spend.byCrop : spend.byPlot} total={spent} testId={`cost-bars-${view}`}
+                            cap={view === 'plot' ? MONEY_BARS_SHOWN : undefined} language={language} />}
                     {spent !== null && top && (
                         <p className="m-0 mt-2 rounded-xl bg-sky-50 px-3 py-2 text-[13.5px] font-bold text-stone-800" data-testid="cost-top">
                             सर्वात जास्त खर्च: {top.label} (<Num>{rupees(top.value)}</Num>)

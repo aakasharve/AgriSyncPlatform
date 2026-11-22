@@ -14,16 +14,19 @@
  * Lane UI-9a: a crop with 7 or more plots draws its plots as a number grid IN PLACE under the crop cards (the shared `PlotSelector`, rules
  * in `plotSelectorRules`), a crop of 4 or more with several crops in view under its own header (photo once); a small farm keeps its chips.
  * With every plot picked, one tap on a number shows ONLY that plot ("फक्त G7 दिसतो" and "सगळे दाखवा" say so); there is no "none" button
- * (the page is never empty, `reflectSelection.ts`). The quick buttons are true facts only: "आज सांगितलेले" and "आज बाकी" come from the
- * work recorded today (the same records the plot cards count) and are drawn only while the page is on today, never with a count of ०.
+ * (the page is never empty, `reflectSelection.ts`). The quick buttons ("सगळे निवडले", "आज बाकी", "आज सांगितलेले") are true facts only and moved
+ * out of the picker on 2026-11-22 (founder D-172 = B): they live on the day card above this section (`DayCountCard`), so there is no second copy.
  * Every Marathi string is PROPOSED.
  */
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { CropProfile } from '../../../types';
 import { pickCrop, soloPlotId, togglePlot, viewHasManyPlots, type ReflectSelection } from './reflectSelection';
 import { CropPlotPicker } from '../../context/components/CropPlotPicker';
-import { PickedCountLine, PlotGroupHeader, PlotQuickRow, PlotSelector, cropWordsOf } from '../../context/components/PlotSelector';
-import { SELECTOR_WORDS, buildQuickButtons, onlyShownText, photoOnceFor, pickedCountText, plotShortName } from '../../context/components/plotSelectorRules';
+import { PickedCountLine, PlotGroupHeader, PlotSelector, cropWordsOf } from '../../context/components/PlotSelector';
+import {
+    NUMBERS_WORDS, SELECTOR_WORDS, foldsManyPlots, onlyShownText, photoOnceFor, pickedCountText, plotMatchesQuery, plotNumbers, plotPickMode, plotShortName,
+} from '../../context/components/plotSelectorRules';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 
@@ -38,10 +41,11 @@ export const FarmStatus: React.FC<{
     crops: readonly CropProfile[];
     sel: ReflectSelection;
     onSel: (s: ReflectSelection) => void;
-    /** The plots with work recorded today, while the page is on today; `null`/absent = no "today" buttons. */
-    toldTodayPlotIds?: ReadonlySet<string> | null;
-}> = ({ crops, sel, onSel, toldTodayPlotIds }) => {
+}> = ({ crops, sel, onSel }) => {
     const language: Language = useOptionalLanguage()?.language ?? 'mr';
+    // Lane UI-9a (founder D-174 = A): with more than 15 plots in view each crop's number grid is folded and one search hears every crop.
+    const [query, setQuery] = useState('');
+    const [openGrids, setOpenGrids] = useState<ReadonlySet<string>>(() => new Set());
     if (crops.length === 0) {
         return <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="farm-status-empty">अजून पीक जोडलेलं नाही — शेत सेटअपमध्ये पीक आणि प्लॉट जोडा.</p>;
     }
@@ -55,8 +59,17 @@ export const FarmStatus: React.FC<{
         const plot = owner?.plots.find(p => p.id === solo);
         return plot ? (owner && photoOnceFor(owner.plots.length) ? plotShortName(plot.name, cropWordsOf(owner)) : plot.name) : '';
     })() : '';
-    const quick = buildQuickButtons({ plotIds: viewPlotIds, facts: toldTodayPlotIds ? { yesterday: null, today: toldTodayPlotIds } : null, kinds: ['toldToday', 'todayLeft'], language });
     const sw = SELECTOR_WORDS[language === 'en' ? 'en' : 'mr'];
+    const nw = NUMBERS_WORDS[language === 'en' ? 'en' : 'mr'];
+    const folded = foldsManyPlots(viewPlotIds.length);
+    const searching = folded && query.trim() !== '';
+    const toggleGrid = (cropId: string) => setOpenGrids(prev => { const next = new Set(prev); if (!next.delete(cropId)) next.add(cropId); return next; });
+    // How many plots of each crop answer the search (a plot's number is its place among ALL the crop's plots, as in the grid).
+    const answers = (c: CropProfile): number => {
+        const numbers = plotNumbers(c.plots);
+        return c.plots.filter(p => plotMatchesQuery({ name: p.name, position: numbers.get(p.id) ?? 0 }, query)).length;
+    };
+    const found = searching ? view.reduce((n, c) => n + answers(c), 0) : 0;
 
     return (
         <div data-testid="farm-status">
@@ -65,21 +78,37 @@ export const FarmStatus: React.FC<{
                 onTogglePlot={(_cropId, plotId) => onSel(togglePlot(crops, sel, plotId))} />
             {view.length > 0 && (
                 <div className="mt-2.5 space-y-3" data-testid="farm-plots" data-many={many ? 'yes' : 'no'}>
-                    {many && (
-                        <PlotQuickRow plotIds={viewPlotIds} chosen={picked} allToggle="select" buttons={quick} language={language}
-                            onChange={next => onSel({ crop: sel.crop, plotIds: next })}
-                            testIds={{ all: 'farm-plots-all', quick: id => `farm-quick-${id}` }} />
+                    {folded && (
+                        <input type="search" value={query} onChange={e => setQuery(e.target.value)} data-testid="farm-search" aria-label={sw.search} placeholder={sw.search}
+                            className="min-h-[46px] w-full rounded-xl border-2 border-stone-300 bg-white px-3 text-[15px] font-bold text-stone-900 placeholder:text-stone-500" />
                     )}
+                    {searching && found === 0 && <p className="m-0 text-[14px] font-bold text-stone-600" data-testid="farm-search-empty">{sw.noMatch}</p>}
                     {view.map(c => {
-                        const header = view.length > 1 && photoOnceFor(c.plots.length);
+                        if (searching && answers(c) === 0) return null;
+                        // A crop drawn as a number grid folds behind one row on a page of more than 15 plots; a small crop (chips) never does.
+                        const folds = folded && plotPickMode(c.plots.length) === 'grid';
+                        const open = !folds || searching || openGrids.has(c.id);
+                        const header = folds || (view.length > 1 && photoOnceFor(c.plots.length));
                         const mine = c.plots.filter(p => sel.plotIds.includes(p.id)).length;
                         return (
-                            <section key={c.id} className="space-y-2" data-testid={`farm-crop-section-${c.id}`} data-header={header ? 'yes' : 'no'}>
-                                {header && <PlotGroupHeader crop={c} testId={`farm-crop-header-${c.id}`} language={language} sub={pickedCountText(c.plots.length, mine, language)} />}
-                                <PlotSelector plots={c.plots} chosen={sel.plotIds.filter(id => c.plots.some(p => p.id === id))} color={c.color} cropNames={cropWordsOf(c)}
-                                    underHeader={header || (view.length === 1 && photoOnceFor(c.plots.length))} allToggle="none" language={language}
-                                    onTapPlot={plotId => onSel(togglePlot(crops, sel, plotId))}
-                                    testIds={{ plot: TEST_IDS.plot, grid: `farm-grid-${c.id}` }} />
+                            <section key={c.id} className="space-y-2" data-testid={`farm-crop-section-${c.id}`} data-header={header ? 'yes' : 'no'} data-folded={folds && !open ? 'yes' : 'no'}>
+                                {header && (
+                                    <PlotGroupHeader crop={c} testId={`farm-crop-header-${c.id}`} language={language} sub={pickedCountText(c.plots.length, mine, language)}
+                                        right={folds && !searching ? (
+                                            <button type="button" onClick={() => toggleGrid(c.id)} aria-expanded={open} data-testid={`farm-fold-${c.id}`}
+                                                className="inline-flex min-h-[44px] shrink-0 items-center gap-1 self-center rounded-xl border-2 border-stone-400 bg-white px-3 text-[14px] font-extrabold text-stone-800 active:scale-95">
+                                                <span>{open ? nw.hide : nw.show}</span>
+                                                {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+                                            </button>
+                                        ) : undefined} />
+                                )}
+                                {open && (
+                                    <PlotSelector plots={c.plots} chosen={sel.plotIds.filter(id => c.plots.some(p => p.id === id))} color={c.color} cropNames={cropWordsOf(c)}
+                                        underHeader={header || (view.length === 1 && photoOnceFor(c.plots.length))} allToggle="none" language={language}
+                                        query={folded ? query : undefined}
+                                        onTapPlot={plotId => onSel(togglePlot(crops, sel, plotId))}
+                                        testIds={{ plot: TEST_IDS.plot, grid: `farm-grid-${c.id}` }} />
+                                )}
                             </section>
                         );
                     })}

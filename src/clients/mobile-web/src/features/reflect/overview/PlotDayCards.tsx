@@ -16,8 +16,8 @@
  * and number, ONE status in words (all from what the card already holds) and, where the full card would show "अजून सांगा", a small mic. A tap
  * anywhere else opens the plot's day, as before. A crop with 1 to 3 cards keeps today's full card with its photo.
  */
-import React from 'react';
-import { Check, ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Mic, Paperclip, Thermometer, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Mic, Paperclip, Thermometer, User } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing';
 import { PartIcon } from '../../logs/components/voiceResult/HisWords';
@@ -33,7 +33,9 @@ import { useLogAttachmentCount } from './useLogAttachmentCount';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { PlotCount } from '../../context/components/CropPlotPicker';
 import { PlotGroupHeader, cropWordsOf } from '../../context/components/PlotSelector';
-import { plotNumbers, plotShortName, smallPlotCardsFor, sortedNaturally } from '../../context/components/plotSelectorRules';
+import {
+    MANY_PLOTS_CARDS_SHOWN, foldsManyPlots, moreShownText, plotNumbers, plotShortName, smallPlotCardsFor, sortedNaturally,
+} from '../../context/components/plotSelectorRules';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 /** The result screen's खर्च colour, for the ledger's money chip. */
@@ -115,8 +117,8 @@ const Foot: React.FC<{ card: DayCardCore; isToday: boolean; testKey: string }> =
 
 /** Words of the small card and its header tags. PROPOSED (Marathi); every one is a plain statement of a fact the card holds. */
 const SMALL_WORDS = {
-    mr: { problem: 'अडचण सांगितली', told: 'सांगितले', problemTag: 'अडचण', left: 'बाकी' },
-    en: { problem: 'A problem was reported', told: 'told', problemTag: 'problem', left: 'left' },
+    mr: { problem: 'अडचण सांगितली', told: 'सांगितले', problemTag: 'अडचण', left: 'बाकी', open: 'प्लॉट उघडा', close: 'प्लॉट बंद करा' },
+    en: { problem: 'A problem was reported', told: 'told', problemTag: 'problem', left: 'left', open: 'Open the plots', close: 'Close the plots' },
 } as const;
 
 /** One status for a plot's day, said in words: a stoppage told, how many times it was told, or nothing yet. */
@@ -159,8 +161,17 @@ const SmallPlotCard: React.FC<{ card: PlotDayCard; number?: number; isToday: boo
     );
 };
 
-/** A crop's header on the overview: its photo once, its plot count, and what the day looks like across its plots (true counts only; none drawn at 0). */
-const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ cards, isToday, onOpen, onTell }) => {
+/**
+ * A crop's header on the overview: its photo once, its plot count, and what the day looks like across its plots (true counts only; none drawn at 0).
+ *
+ * Lane UI-9a (founder D-173 = A, 2026-11-22), only when the page holds MORE THAN 15 plots (`folding`): the header gets a 44 px arrow and the crop
+ * folds (its counts stay, so the whole farm reads in a few lines). A crop that holds a problem opens by itself, and so does a crop that is alone
+ * on the page; his own tap on the arrow wins after that. Inside an open crop the cards come in the order of need - अडचण, then बाकी, then सांगितले,
+ * each in number order - the first 6 are drawn (every problem card always, never hidden) and "आणखी N दाखवा" draws the rest. The tags follow the day
+ * card's rule: "सांगितले" is every plot with a record (the stopped plots too), "अडचण" is drawn first as a flag with a warning-triangle shape.
+ * With 15 plots or fewer none of this applies and the group is drawn exactly as before.
+ */
+const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void; folding?: boolean; alone?: boolean }> = ({ cards, isToday, onOpen, onTell, folding = false, alone = false }) => {
     const language = useOptionalLanguage()?.language;
     const lang = language === 'en' ? 'en' : 'mr';
     const w = SMALL_WORDS[lang];
@@ -169,21 +180,59 @@ const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onO
     const numbers = plotNumbers(first.crop.plots ?? []);
     const counts = { problem: 0, told: 0, left: 0 };
     for (const c of cards) counts[smallStatusOf(c)] += 1;
-    const tag = (n: number, text: string, tone: string, id: string) => (n > 0
-        ? <span className={`rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ${tone}`} data-testid={`plot-group-${id}-${first.cropId}`}>{digitsFor(n, language)} {text}</span>
+    // His own tap on the arrow wins; until then a crop with a problem, or alone on the page, is open.
+    const [chosenOpen, setChosenOpen] = useState<boolean | null>(null);
+    const [showAll, setShowAll] = useState(false);
+    const open = !folding || (chosenOpen ?? (alone || counts.problem > 0));
+    // The order of need (a stable partition: natural number order is kept inside each kind) and the cap; a problem card is never capped away.
+    const ofKind = (kind: SmallStatus) => cards.filter(c => smallStatusOf(c) === kind);
+    const byNeed = folding ? [...ofKind('problem'), ...ofKind('left'), ...ofKind('told')] : cards;
+    const limit = Math.max(MANY_PLOTS_CARDS_SHOWN, counts.problem);
+    const drawn = folding && !showAll ? byNeed.slice(0, limit) : byNeed;
+    const rest = byNeed.length - drawn.length;
+    const tag = (n: number, text: string, tone: string, id: string, flag = false) => (n > 0
+        ? <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ${tone}`} data-testid={`plot-group-${id}-${first.cropId}`}>
+            {flag && <AlertTriangle size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" data-part="flag" />}{digitsFor(n, language)} {text}
+        </span>
         : null);
+    const arrow = folding ? (
+        <button type="button" onClick={() => setChosenOpen(!open)} aria-expanded={open} aria-label={open ? w.close : w.open} data-testid={`plot-group-fold-${first.cropId}`}
+            className="grid h-11 w-11 shrink-0 place-items-center self-center rounded-xl border-2 border-stone-300 bg-white text-stone-800 active:scale-95">
+            {open ? <ChevronUp size={22} aria-hidden="true" /> : <ChevronDown size={22} aria-hidden="true" />}
+        </button>
+    ) : undefined;
     return (
         <section className="space-y-2" data-testid={`plot-group-${first.cropId}`} data-small="yes">
             <PlotGroupHeader crop={first.crop} testId={`plot-group-header-${first.cropId}`} language={lang}
-                sub={<PlotCount total={cards.length} language={lang} />} />
+                sub={<PlotCount total={cards.length} language={lang} />} right={arrow} />
             <div className="flex flex-wrap gap-1.5 empty:hidden">
-                {tag(counts.told, w.told, 'bg-emerald-100 text-emerald-900', 'told')}
-                {tag(counts.problem, w.problemTag, 'bg-amber-100 text-amber-900', 'problem')}
-                {tag(counts.left, w.left, 'bg-stone-100 text-stone-700', 'left')}
+                {folding ? (
+                    <>
+                        {tag(counts.problem, w.problemTag, 'bg-amber-100 text-amber-900', 'problem', true)}
+                        {tag(counts.left, w.left, 'bg-stone-100 text-stone-700', 'left')}
+                        {tag(counts.told + counts.problem, w.told, 'bg-emerald-100 text-emerald-900', 'told')}
+                    </>
+                ) : (
+                    <>
+                        {tag(counts.told, w.told, 'bg-emerald-100 text-emerald-900', 'told')}
+                        {tag(counts.problem, w.problemTag, 'bg-amber-100 text-amber-900', 'problem')}
+                        {tag(counts.left, w.left, 'bg-stone-100 text-stone-700', 'left')}
+                    </>
+                )}
             </div>
-            <div className="grid grid-cols-2 gap-2" data-testid={`plot-small-cards-${first.cropId}`}>
-                {cards.map(c => <SmallPlotCard key={c.ref.key} card={c} number={c.ref.plotId ? numbers.get(c.ref.plotId) : undefined} isToday={isToday} onOpen={onOpen} onTell={onTell} />)}
-            </div>
+            {open && (
+                <>
+                    <div className="grid grid-cols-2 gap-2" data-testid={`plot-small-cards-${first.cropId}`}>
+                        {drawn.map(c => <SmallPlotCard key={c.ref.key} card={c} number={c.ref.plotId ? numbers.get(c.ref.plotId) : undefined} isToday={isToday} onOpen={onOpen} onTell={onTell} />)}
+                    </div>
+                    {rest > 0 && (
+                        <button type="button" onClick={() => setShowAll(true)} data-testid={`plot-more-${first.cropId}`}
+                            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-emerald-800 bg-white px-3 text-[14.5px] font-extrabold text-emerald-800 active:scale-[0.98]">
+                            {moreShownText(rest, language)}
+                        </button>
+                    )}
+                </>
+            )}
         </section>
     );
 };
@@ -309,10 +358,13 @@ export const PlotDayCards: React.FC<{
     }
     // Natural number order inside a crop (G2 before G10); a crop with no plot yet has its one card.
     const ordered = groups.map(g => (g[0].ref.plotId ? sortedNaturally(g, c => c.ref.plotName ?? '') : g));
+    // Lane UI-9a (founder D-173 = A): more than 15 plots ON THE PAGE (what is shown, not what the farm holds) folds the crops.
+    const folding = foldsManyPlots(cards.filter(c => c.ref.plotId).length);
+    const alone = ordered.filter(g => g[0].ref.plotId).length === 1;
     return (
         <div className="space-y-2.5" data-testid="plot-day-cards">
             {ordered.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
-                ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} />
+                ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} folding={folding} alone={alone} />
                 : g.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)))}
             {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
         </div>

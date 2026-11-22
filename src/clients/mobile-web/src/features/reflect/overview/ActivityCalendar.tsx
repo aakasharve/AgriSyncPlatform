@@ -21,6 +21,7 @@ import { WEEKDAY_SHORT_LIST, addDays, dateLabel, monthGridOf, monthLabel, sameDa
 import { Num, Tap } from './ui';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { CALENDAR_CHIPS_SHOWN, moreRecordsText, plotCountText } from '../../context/components/plotSelectorRules';
 
 export type CalendarMode = 'week' | 'month';
 
@@ -79,14 +80,23 @@ export const ActivityCalendar: React.FC<Props> = ({ date, onDate, mode, onMode, 
                                     ) : (
                                         <>
                                             {m.farmWide && <span className="rounded-lg bg-stone-500 px-2 py-1 text-[13px] font-extrabold text-white">पूर्ण शेत</span>}
-                                            {m.chips.map(x => (
+                                            {/* Lane UI-9a (founder D-175 = A): a day row draws its first 4 records, then "+N नोंदी"; the row stays the one tap that shows the
+                                                day above. A record that names several plots says how many ("१५ प्लॉट") instead of naming only its first. */}
+                                            {m.chips.slice(0, CALENDAR_CHIPS_SHOWN).map(x => (
                                                 <span key={x.logId} className={`rounded-lg px-2 py-1 text-white shadow-sm ${x.color}`} data-testid={`cal-chip-${x.logId}`}>
                                                     <span className="flex items-center gap-1 text-[11px] font-bold leading-none opacity-90">
-                                                        {x.plotIndex !== undefined && <Num className="rounded bg-white/25 px-1">{x.plotIndex + 1}</Num>}{x.plotLabel}
+                                                        {x.plotCount > 1
+                                                            ? plotCountText(x.plotCount, language)
+                                                            : <>{x.plotIndex !== undefined && <Num className="rounded bg-white/25 px-1">{x.plotIndex + 1}</Num>}{x.plotLabel}</>}
                                                     </span>
                                                     <span className="block text-[13px] font-extrabold leading-tight">{x.activity}</span>
                                                 </span>
                                             ))}
+                                            {m.chips.length > CALENDAR_CHIPS_SHOWN && (
+                                                <span className="rounded-lg bg-stone-200 px-2 py-1.5 text-[13px] font-extrabold text-stone-800" data-testid={`cal-more-${m.key}`}>
+                                                    {moreRecordsText(m.chips.length - CALENDAR_CHIPS_SHOWN, language)}
+                                                </span>
+                                            )}
                                         </>
                                     )}
                                     {m.due.map(t => (

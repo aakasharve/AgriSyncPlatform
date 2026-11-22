@@ -252,3 +252,46 @@ export const allCropsLine = (crops: number, plots: number, language: string | nu
 
 /** "+३ पिकं": the tile for the crops that did not fit among the photos. */
 export const moreCropsText = (n: number, language: string | null | undefined): string => `+${digitsFor(n, language)} ${SELECTOR_WORDS[language === 'en' ? 'en' : 'mr'].moreCrops}`;
+
+// ── the आढावा page with many plots (lane UI-9a; founder picks 2026-11-22: D-172 B, D-173 A, D-174 A, D-175 A) ──────────────
+//
+// ONE place for the numbers every part of the page reads, so "more than 15" can never mean two things on one screen. All of them are
+// small and reversible: a farm of 15 plots or fewer draws exactly what it drew before (except the day card, which only ADDS a sentence).
+
+/** From this many plots in view (all crops in view together): the page says the day in one sentence, with its bar and buttons (D-172). */
+export const DAY_CARD_FROM = PLOT_GRID_FROM;
+/** From this many plots in view ("more than 15"): crops fold, problems come first, the number grids fold behind one search (D-173, D-174). */
+export const MANY_PLOTS_FROM = 16;
+/** An open crop draws this many plot cards, then "आणखी N दाखवा"; a plot with a problem is never hidden (D-173). */
+export const MANY_PLOTS_CARDS_SHOWN = 6;
+/** A calendar day row draws this many record chips, then "+N नोंदी" (D-175). */
+export const CALENDAR_CHIPS_SHOWN = 4;
+/** The money "प्लॉटनुसार" list draws this many bars, then "आणखी N दाखवा" (D-175). */
+export const MONEY_BARS_SHOWN = 5;
+
+/** Whether the day card (sentence, bar, buttons) is drawn for this many plots in view. */
+export const hasDayCard = (plotCount: number): boolean => plotCount >= DAY_CARD_FROM;
+/** Whether the page holds more than 15 plots, so the crops fold. */
+export const foldsManyPlots = (plotCount: number): boolean => plotCount >= MANY_PLOTS_FROM;
+
+/** "आज १०० पैकी ४३ सांगितले": how the day stands, in one line. A zero is a true count and is said ("आज १४ पैकी ० सांगितले"). */
+export const dayCountText = (total: number, told: number, language: string | null | undefined): string =>
+    language === 'en' ? `Today: ${told} of ${total} told` : `आज ${digitsFor(total, language)} पैकी ${digitsFor(told, language)} सांगितले`;
+
+/** "आणखी ३४ दाखवा": the button that draws the rest of a capped list (PROPOSED Marathi). */
+export const moreShownText = (n: number, language: string | null | undefined): string =>
+    language === 'en' ? `Show ${n} more` : `आणखी ${digitsFor(n, language)} दाखवा`;
+
+/** "+८ नोंदी": the calendar day row's count of the records it did not draw (built from the existing word "नोंदी"; PROPOSED). */
+export const moreRecordsText = (n: number, language: string | null | undefined): string =>
+    language === 'en' ? `+${n} records` : `+${digitsFor(n, language)} नोंदी`;
+
+/** "१५ प्लॉट": a record that names several plots says how many instead of naming only the first (the app's own form). */
+export const plotCountText = (n: number, language: string | null | undefined): string =>
+    language === 'en' ? `${n} ${n === 1 ? 'plot' : 'plots'}` : `${digitsFor(n, language)} ${SELECTOR_WORDS.mr.plotWord}`;
+
+/** The folded crop row's button: opens (and closes) that crop's number grid in place (PROPOSED Marathi). */
+export const NUMBERS_WORDS = {
+    mr: { show: 'नंबर दाखवा', hide: 'नंबर लपवा' },
+    en: { show: 'Show numbers', hide: 'Hide numbers' },
+} as const;

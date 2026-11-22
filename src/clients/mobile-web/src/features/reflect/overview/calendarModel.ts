@@ -36,7 +36,18 @@ export function activityNameOf(log: DailyLog): string {
     return 'नोंद';
 }
 
-export interface CalendarChip { logId: string; color: string; plotLabel: string; plotIndex?: number; activity: string }
+export interface CalendarChip {
+    logId: string;
+    color: string;
+    plotLabel: string;
+    plotIndex?: number;
+    activity: string;
+    /**
+     * Lane UI-9a (founder D-175 = A): how many different plots the record names (across all the crops it names; the farm-wide marker is no plot).
+     * More than 1 and the chip says "१५ प्लॉट" instead of naming only the first plot; 1 or 0 changes nothing.
+     */
+    plotCount: number;
+}
 
 export interface CalendarDay {
     key: string;
@@ -80,8 +91,14 @@ export function buildCalendarDay({ date, history, crops, scope, dueTasks, today 
         if (!c) continue;
         const plotId = sel.selectedPlotIds?.[0];
         const plotIndex = plotId ? c.plots.findIndex(p => p.id === plotId) : -1;
+        const named = new Set<string>();
+        for (const part of l.context.selection) {
+            if (part.cropId === FARM_GLOBAL) continue;
+            for (const id of part.selectedPlotIds ?? []) named.add(id);
+        }
         chips.push({
             logId: l.id,
+            plotCount: named.size,
             color: c.color,
             // the plot's name as it is NOW (a renamed plot reads its new name); the name stored on the record otherwise
             plotLabel: plotIndex >= 0 ? c.plots[plotIndex].name : (sel.selectedPlotNames?.[0] || c.name),
