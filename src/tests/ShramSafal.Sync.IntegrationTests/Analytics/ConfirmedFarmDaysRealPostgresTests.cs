@@ -847,7 +847,7 @@ public sealed class ConfirmedFarmDaysRealPostgresTests(Xunit.Abstractions.ITestO
         var role = $"cr2e_lister_{Guid.NewGuid():N}"[..24];
         var listerConn = new NpgsqlConnectionStringBuilder(SuperuserConn) { Username = role, Password = "x" }.ConnectionString;
         await ExecAsSuperuserAsync($"""
-            CREATE ROLE {role} LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            CREATE ROLE {role} LOGIN PASSWORD 'x' BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
             GRANT CONNECT ON DATABASE "{ScratchDbName}" TO {role};
             GRANT USAGE ON SCHEMA ssf TO {role};
             GRANT SELECT ("Id", owner_account_id) ON ssf.farms TO {role};

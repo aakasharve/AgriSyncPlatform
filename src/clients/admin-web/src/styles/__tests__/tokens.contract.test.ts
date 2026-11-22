@@ -18,7 +18,8 @@ import html from '../../../index.html?raw';
  * "gate that cannot fail" shape, which is why the length check below is not
  * decoration; it is the thing that makes the rest of the file mean anything.
  */
-const css = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf-8');
+// LF whatever the checkout wrote: Windows checks this file out with CRLF.
+const css = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf-8').replaceAll('\r\n', '\n');
 
 it('read the real stylesheet — not an empty stub', () => {
   expect(css.length).toBeGreaterThan(2000);

@@ -470,7 +470,7 @@ public sealed class OneFarmPageRealPostgresTests(Xunit.Abstractions.ITestOutputH
         var role = $"cr2e_onefarm_{Guid.NewGuid():N}"[..26];
         var restrictedConn = new NpgsqlConnectionStringBuilder(SuperuserConn) { Username = role, Password = "x" }.ConnectionString;
         await ExecAsSuperuserAsync($"""
-            CREATE ROLE {role} LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            CREATE ROLE {role} LOGIN PASSWORD 'x' BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
             GRANT CONNECT ON DATABASE "{ScratchDbName}" TO {role};
             GRANT USAGE ON SCHEMA ssf TO {role};
             GRANT SELECT ON ssf.farms, ssf.farm_memberships TO {role};

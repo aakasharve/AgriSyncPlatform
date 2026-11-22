@@ -172,7 +172,8 @@ public static class AppReleaseAnswer
         }
 
         var value = raw.Trim();
-        if (Uri.TryCreate(value, UriKind.Absolute, out _))
+        // On Linux (production) a rooted path such as "/store" parses as an absolute file: URI.
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !uri.IsFile)
         {
             return value;
         }
