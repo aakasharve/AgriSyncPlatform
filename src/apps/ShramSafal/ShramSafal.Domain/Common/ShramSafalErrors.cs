@@ -281,6 +281,14 @@ public static class ShramSafalErrors
     public static readonly Error MissingVoiceTranscript = Error.Validation("ShramSafal.MissingVoiceTranscript", "Text transcript is required for AI parsing.");
     public static readonly Error InvalidCommand = Error.Validation("ShramSafal.InvalidCommand", "Request is invalid.");
 
+    /// <summary>
+    /// spec: D-184 / security audit F04 — one /sync/push carried more changes than the server takes in a single batch
+    /// (<c>PushSyncBatchHandler.MaxMutationsPerBatch</c>). Nothing in the batch was read or applied. The endpoint answers 413.
+    /// </summary>
+    public static readonly Error SyncBatchTooLarge = Error.Validation(
+        "ShramSafal.Sync.BatchTooLarge",
+        "This sync batch carries more changes than the server takes at once. Send the changes in smaller batches; nothing in this batch was applied.");
+
     // PLR-D10 I23 / N6 (founder D-16, 2026-10-26): "Future attendance must not be recorded as
     // completed work. Future work belongs in planning." An attendance mark dated after the farm's
     // India date is refused. THREE SEGMENTS for the same reason as LabourAssignmentConflict below:

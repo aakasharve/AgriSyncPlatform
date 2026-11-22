@@ -245,6 +245,15 @@ public sealed class PushSyncBatchHandler(
     public const string RejectedStatus = "failed";
 
     /// <summary>
+    /// spec: D-184 / security audit F04 — the most changes ONE push may carry. The phone sends at most 50 per push
+    /// (<c>BackgroundSyncWorker.pushPendingMutations</c> reads <c>getPending(50)</c>, unchanged since the first commit), so
+    /// 200 is four times any real batch and a farmer never meets it. A bigger batch is refused whole, before any change in it
+    /// is read, with <see cref="Domain.Common.ShramSafalErrors.SyncBatchTooLarge"/> (HTTP 413): one signed-in account can no
+    /// longer hold the server for minutes with a 50 MB list of changes.
+    /// </summary>
+    public const int MaxMutationsPerBatch = 200;
+
+    /// <summary>
     /// Literal token that opens every rejection log line. Stable on purpose: a
     /// CloudWatch Logs metric filter matching this exact string is the cheapest
     /// route from these lines to an alarm, and renaming it silently breaks that
@@ -278,6 +287,15 @@ public sealed class PushSyncBatchHandler(
             ? "unknown"
             : command.ActorRole.Trim();
         var mutations = command.Mutations ?? [];
+        if (mutations.Count > MaxMutationsPerBatch)
+        {
+            logger.LogWarning(
+                "SyncBatchTooLarge: {Count} mutations in one push (the cap is {Cap}); nothing was applied.",
+                mutations.Count,
+                MaxMutationsPerBatch);
+            return Result.Failure<SyncPushResponseDto>(Domain.Common.ShramSafalErrors.SyncBatchTooLarge);
+        }
+
         var normalizedDeviceId = command.DeviceId.Trim();
         if (normalizedDeviceId.Length > 128 || !DeviceIdPattern.IsMatch(normalizedDeviceId))
         {

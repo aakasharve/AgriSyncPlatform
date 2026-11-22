@@ -32,6 +32,13 @@ public static class SyncEndpoints
 
             var actorRole = EndpointActorContext.GetActorRole(user);
             var mutations = request.Mutations ?? [];
+            // spec: D-184 / audit F04 — a batch over the cap is refused here, before a single payload is cloned or
+            // handed on (the handler asks the same question for any caller that does not come through this route).
+            if (mutations.Count > PushSyncBatchHandler.MaxMutationsPerBatch)
+            {
+                return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.SyncBatchTooLarge);
+            }
+
             // Sub-plan 02 Task 11: forward the X-App-Version header into the
             // command so the handler can reject mutations that require a
             // newer client than the one talking to us.
@@ -155,6 +162,15 @@ public static class SyncEndpoints
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {
             return Results.Forbid();
+        }
+
+        // spec: D-184 / audit F04 — "too big" is its own answer, with the code in the body, so a caller can tell it from a
+        // malformed request without reading words.
+        if (error.Code == ShramSafal.Domain.Common.ShramSafalErrors.SyncBatchTooLarge.Code)
+        {
+            return Results.Json(
+                new { error = error.Code, message = error.Description },
+                statusCode: StatusCodes.Status413PayloadTooLarge);
         }
 
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
