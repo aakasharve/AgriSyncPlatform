@@ -673,6 +673,96 @@ describe('SCH-MAKER-EMPTY (founder B3): the person defines the days, nothing is 
     });
 });
 
+describe('DAY-1 (founder D-167): he types the day as he reads it - the start day is day 1 - and it is kept one lower', () => {
+    it('The_first_stage_starts_on_day_1_and_no_stage_day_box_goes_below_1', async () => {
+        open();
+        await toStages();
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        expect(screen.getByTestId('own-stage-from')).toHaveValue(1); // the first stage starts on the start day, which he reads as day 1 (not 0)
+        expect(screen.getByTestId('own-stage-from')).toHaveAttribute('min', '1');
+        expect(screen.getByTestId('own-stage-to')).toHaveAttribute('min', '1');
+        fireEvent.change(screen.getByTestId('own-stage-from'), { target: { value: '0' } });
+        expect(screen.getByTestId('own-stage-from')).toHaveValue(1); // a typed 0 is held at 1
+        fireEvent.click(screen.getByTestId('own-stage-from-less'));
+        expect(screen.getByTestId('own-stage-from')).toHaveValue(1); // and the minus tap stops at 1
+    });
+
+    it('No_work_day_box_goes_below_1_either', async () => {
+        open();
+        await toStages();
+        addStage('फुलोरा', 31, 60);
+        fireEvent.click(screen.getByTestId('own-add-work-0'));
+        expect(screen.getByTestId('own-from')).toHaveAttribute('min', '1');
+        expect(screen.getByTestId('own-to')).toHaveAttribute('min', '1');
+        fireEvent.change(screen.getByTestId('own-from'), { target: { value: '0' } });
+        expect(screen.getByTestId('own-from')).toHaveValue(1);
+        fireEvent.change(screen.getByTestId('own-to'), { target: { value: '-4' } });
+        expect(screen.getByTestId('own-to')).toHaveValue(1);
+    });
+
+    it('A_typed_5_to_20_is_saved_as_4_to_19_for_the_stage_and_for_the_work_and_the_repeat_count_is_not_moved', async () => {
+        open();
+        fireEvent.change(await screen.findByTestId('own-name'), { target: { value: 'माझं द्राक्ष' } });
+        fireEvent.click(screen.getByTestId('own-start-blank'));
+        fireEvent.click(await screen.findByTestId('own-mf-next'));
+        await screen.findByTestId('own-stages');
+        addStage('फुलोरा', 5, 20);
+        addWork('फवारणी', 5, 20, 3);
+        expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 5–20'); // what he sees is what he typed
+        expect(screen.getByTestId('own-work-row-0-0')).toHaveTextContent('दिवस 5–20');
+        await act(async () => { fireEvent.click(screen.getByTestId('own-save')); });
+        await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([SyncMutationName.ScheduleCreate, SyncMutationName.ScheduleEdit]));
+        const edit = (await queue())[1].payload as Record<string, unknown>;
+        expect(edit.stages).toEqual([{ name: 'फुलोरा', startDay: 4, endDay: 19 }]);
+        expect(edit.activities).toEqual([{ name: 'फवारणी', part: 'irrigation', startDay: 4, endDay: 19, frequencyMode: 'every_n_days', intervalDays: 3 }]);
+    });
+
+    it('A_typed_day_1_is_the_start_day_and_is_saved_as_0', async () => {
+        open();
+        await toStages();
+        addStage('छाटणीनंतर', 1, 10);
+        addWork('सिंचन', 1, 10, 2);
+        await act(async () => { fireEvent.click(screen.getByTestId('own-save')); });
+        await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([SyncMutationName.ScheduleCreate, SyncMutationName.ScheduleEdit]));
+        const edit = (await queue())[1].payload as Record<string, unknown>;
+        expect(edit.stages).toEqual([{ name: 'छाटणीनंतर', startDay: 0, endDay: 9 }]);
+        expect(edit.activities).toMatchObject([{ name: 'सिंचन', startDay: 0, endDay: 9, intervalDays: 2 }]);
+    });
+
+    it('The_next_new_stage_starts_the_day_after_the_last_one_ends_in_the_same_numbers_and_the_length_is_a_count', async () => {
+        open();
+        await toStages();
+        addStage('फुलोरा', 1, 45);
+        expect(screen.getByTestId('own-mf-box')).toHaveTextContent('45 दिवस'); // days 1 to 45 are 45 days
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        expect(screen.getByTestId('own-stage-from')).toHaveValue(46);
+    });
+
+    it('An_existing_schedule_opens_in_the_numbers_he_reads_and_goes_back_with_the_stored_ones_unchanged', async () => {
+        const V1 = ownRow({ id: id(1), name: 'माझं द्राक्ष शेड्यूल', stages: STAGES_A, activities: WORKS_A, version: 1 });
+        await seedRows([CHECKED, V1]);
+        render(<Host initial={{ page: 'edit', chainId: id(1) }} />);
+        await screen.findByTestId('own-stages');
+        expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 1–16'); // stored 0-15
+        fireEvent.click(screen.getByTestId('own-stage-edit-0'));
+        expect(await screen.findByTestId('own-stage-from')).toHaveValue(1);
+        expect(screen.getByTestId('own-stage-to')).toHaveValue(16);
+        fireEvent.click(screen.getByTestId('own-stage-cancel'));
+        fireEvent.click(screen.getByTestId('own-work-edit-2-0')); // the drip work, stored 31-60
+        expect(await screen.findByTestId('own-from')).toHaveValue(32);
+        expect(screen.getByTestId('own-to')).toHaveValue(61);
+        // he changes only how often (a count): every day number goes back exactly as it was stored
+        fireEvent.change(screen.getByTestId('own-interval'), { target: { value: '7' } });
+        fireEvent.click(screen.getByTestId('own-work-ok'));
+        await act(async () => { fireEvent.click(screen.getByTestId('own-save')); });
+        await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([SyncMutationName.ScheduleEdit]));
+        const edit = (await queue())[0].payload as Record<string, unknown>;
+        expect(edit.stages).toEqual(STAGES_A);
+        const drip = (edit.activities as Array<Record<string, unknown>>).find(a => a.name === 'ठिबक सिंचन');
+        expect(drip).toMatchObject({ startDay: 31, endDay: 60, intervalDays: 7 });
+    });
+});
+
 describe('English mode shows English only', () => {
     it('Start_screen_and_made_for_screen', async () => {
         language.current = 'en';
