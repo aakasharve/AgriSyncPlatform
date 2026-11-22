@@ -162,7 +162,10 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
     {
         Skip.If(_fx.Skip, _fx.SkipReason);
 
-        var questionKey = "farmA.posted." + Guid.NewGuid().ToString("N");
+        // A "learning." key: a kind that states no agronomy, so the DFES-Q source gate (RecordQuestionEventHandler) lets it through
+        // without look-line ids and this proof stays about the FORCE-RLS INSERT. An unprefixed key is kind "unknown", which the gate
+        // treats as agronomy and refuses with 400 before any row is written (CTO ruling 2026-11-23, RC1).
+        var questionKey = "learning.farmA.posted." + Guid.NewGuid().ToString("N");
 
         Guid insertedId;
         using (var resp = await PostAsync(DfesEndpointsTenancyFixture.MemberA,

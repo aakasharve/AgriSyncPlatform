@@ -615,6 +615,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // plots policies are per row on farm_id and a new column needs nothing). Down() is DATA-DESTROYING by design: it drops that one column, so a rollback loses every
         // group name typed since (the plots stay); the deploy rollback plan relies on the snapshot, not on Down(). Re-Up recreates the column empty.
         "20261120111737_AddPlotGroupName",
+        // spec: plr-d10 lane DFES-Q (question context, reviewed by the CTO 2026-11-23 for RC1) - Up() and Down() read in full: Up() adds nine nullable
+        // columns and one index to ssf.question_events, and creates ssf.question_photo_checks only, FORCE-RLS, with its tenant policy alone (NO user-select
+        // policy, so nothing here reads farm_memberships). No farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched. Down()
+        // drops the policy, the new table, the index and the nine columns: it destroys only data this migration created. Re-Up recreates them empty.
+        "20261121032701_AddDfesQuestionContext",
     ];
 
     /// <summary>

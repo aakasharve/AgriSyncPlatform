@@ -1426,6 +1426,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // design: it drops that one column, so a rollback loses every group name typed since (the plots stay); the deploy rollback plan relies on the snapshot, not on
         // Down(), as for AddInputUseFacts. Re-Up recreates the column empty.
         "20261120111737_AddPlotGroupName",
+        // spec: plr-d10 lane DFES-Q (question context, reviewed by the CTO 2026-11-23 for RC1) - Up() and Down() read in full: Up() adds nine nullable
+        // columns and one index (ix_question_events_farm_asked_user) to ssf.question_events, and creates ssf.question_photo_checks only (FORCE RLS, its
+        // tenant policy, SELECT + INSERT for the app role, UPDATE/DELETE/TRUNCATE revoked on that new table). It never touches ssf.audit_events, its
+        // policies or its grants. Down() drops the policy, the new table, the index and the nine columns: it destroys only data this migration created
+        // (the proof's data has none). Safe mid-proof.
+        "20261121032701_AddDfesQuestionContext",
     ];
 
     /// <summary>

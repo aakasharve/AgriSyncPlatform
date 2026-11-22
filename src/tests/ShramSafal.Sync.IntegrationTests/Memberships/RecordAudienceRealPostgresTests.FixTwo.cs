@@ -15,6 +15,7 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -250,7 +251,10 @@ public sealed partial class RecordAudienceRealPostgresTests
             "question-events" => await AsFarmMemberAsync(FarmA, CoOwner, async sp => CodeOf(await sp
                 .GetRequiredService<RecordQuestionEventHandler>()
                 .HandleAsync(new RecordQuestionEventCommand(
-                    CoOwner, FarmA, PlotA, PrivateLog, "q.fix2", "Grapes", null, null, "LogDate", "Log", "Choice", "Work", 1, 1, 0,
+                    // "learning." states no agronomy, so the DFES-Q source gate (which reads only the key and look-line ids, never farm
+                    // data) passes it and the audience gate is what refuses him; an unprefixed key is kind "unknown" and was refused as
+                    // agronomy (InvalidCommand) before the audience gate ran (CTO ruling 2026-11-23, RC1).
+                    CoOwner, FarmA, PlotA, PrivateLog, QuestionDoorKey, "Grapes", null, null, "LogDate", "Log", "Choice", "Work", 1, 1, 0,
                     "tap", "Safe", true, true, "b1", "e1", null, DateTime.UtcNow, null, null, "हो", null, null, null)))),
             "verify-for-payout" => await AsFarmMemberAsync(FarmA, CoOwner, async sp => CodeOf(await sp
                 .GetRequiredService<VerifyJobCardForPayoutHandler>()
@@ -266,7 +270,17 @@ public sealed partial class RecordAudienceRealPostgresTests
         };
 
         code.Should().Be(Closed, $"{door}: a record kept from him is refused by its audience, before anything else is done");
+
+        if (door == "question-events")
+        {
+            // Read back as superuser (RLS-bypassed): the refused question left no row behind.
+            await using var db = NewSuperuserContext();
+            (await db.QuestionEvents.CountAsync(q => q.QuestionKey == QuestionDoorKey && q.FarmId == FarmA))
+                .Should().Be(0, "question-events: the refused question must write nothing");
+        }
     }
+
+    private const string QuestionDoorKey = "learning.fix2";
 
     [Fact]
     public async Task N3_the_add_cost_duplicate_flag_never_compares_money_kept_from_the_caller()

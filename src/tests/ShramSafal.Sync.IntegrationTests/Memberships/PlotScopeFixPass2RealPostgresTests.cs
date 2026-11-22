@@ -163,7 +163,9 @@ public sealed class PlotScopeFixPass2RealPostgresTests(ITestOutputHelper output)
         var (hisQuestions, ownersQuestions) = await AsFarmMemberAsync(FarmA, Owner, async sp =>
         {
             var recorded = await sp.GetRequiredService<RecordQuestionEventHandler>().HandleAsync(new RecordQuestionEventCommand(
-                Owner, FarmA, PlotA, WorkerLog, "q.fix2.n1", "Grapes", null, null, "LogDate", "Log", "Choice", "Work", 1, 1, 0,
+                // "learning." states no agronomy, so the DFES-Q source gate passes it without look-line ids (an unprefixed key is
+                // kind "unknown", refused as agronomy); this proof stays about who may see the question (CTO ruling 2026-11-23, RC1).
+                Owner, FarmA, PlotA, WorkerLog, "learning.fix2.n1", "Grapes", null, null, "LogDate", "Log", "Choice", "Work", 1, 1, 0,
                 "tap", "Safe", true, true, "b1", "e1", null, DateTime.UtcNow, null, null, "हो", null, null, null));
             recorded.IsSuccess.Should().BeTrue(recorded.IsFailure ? recorded.Error.Code : null);
             var reader = sp.GetRequiredService<GetRecentQuestionEventsHandler>();
