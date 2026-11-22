@@ -250,7 +250,7 @@ describe('screens 5 and 6: stages, and adding one work', () => {
         expect(screen.getByTestId('own-stage-0')).toHaveTextContent('फुलोरा ते फळधारणा');
         expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 31–60');
         expect(screen.getByTestId('own-stage-0')).toHaveTextContent('या स्टेजमध्ये अजून काम नाही');
-        expect(screen.getByTestId('own-mf-box')).toHaveTextContent('61 दिवस');
+        expect(screen.getByTestId('own-mf-box')).toHaveTextContent('60 दिवस');
     });
 
     it('The_work_form_has_the_mic_first_then_the_type_box_and_the_three_boxes_always_there (TAP-1, Q3 = 1)', async () => {
@@ -363,8 +363,8 @@ describe('जतन करा: nothing before it, the contract\'s mutations afte
         const [create, edit] = (await queue()).map(r => r.payload as Record<string, unknown>);
         expect(create).toMatchObject({ farmId: FARM, cropKey: 'grape', name: 'माझं द्राक्ष', variety: 'Thompson Seedless', soilType: 'black' });
         expect(edit).toMatchObject({ scheduleTemplateId: create.scheduleTemplateId, farmId: FARM, variety: 'Thompson Seedless', soilType: 'black' });
-        expect(edit.stages).toEqual([{ name: 'फुलोरा ते फळधारणा', startDay: 31, endDay: 60 }]);
-        expect(edit.activities).toEqual([{ name: 'ठिबक सिंचन', part: 'irrigation', startDay: 31, endDay: 60, frequencyMode: 'every_n_days', intervalDays: 5 }]);
+        expect(edit.stages).toEqual([{ name: 'फुलोरा ते फळधारणा', startDay: 30, endDay: 59 }]);
+        expect(edit.activities).toEqual([{ name: 'ठिबक सिंचन', part: 'irrigation', startDay: 30, endDay: 59, frequencyMode: 'every_n_days', intervalDays: 5 }]);
         expect(await screen.findByTestId('flow-closed')).toBeInTheDocument(); // the maker closes; the library tells the rest
     });
 
@@ -545,7 +545,7 @@ describe('SCH-MAKER-EMPTY (founder B3): the person defines the days, nothing is 
         expect(screen.queryByTestId('own-stage-need')).toBeNull();
         expect(screen.getByTestId('own-stage-ok')).toBeEnabled();
         fireEvent.click(screen.getByTestId('own-stage-ok'));
-        expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 0–45');
+        expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 1–45');
     });
 
     it('The_second_NEW_stage_also_starts_with_an_empty_last_day (the box never offers "last + 30")', async () => {
@@ -619,8 +619,8 @@ describe('SCH-MAKER-EMPTY (founder B3): the person defines the days, nothing is 
         await act(async () => { fireEvent.click(screen.getByTestId('own-save')); });
         await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([SyncMutationName.ScheduleCreate, SyncMutationName.ScheduleEdit]));
         const edit = (await queue())[1].payload as Record<string, unknown>;
-        expect(edit.stages).toEqual([{ name: 'फुलोरा', startDay: 31, endDay: 60 }]);
-        expect(edit.activities).toEqual([{ name: 'फवारणी', part: 'irrigation', startDay: 35, endDay: 50, frequencyMode: 'every_n_days', intervalDays: 7 }]);
+        expect(edit.stages).toEqual([{ name: 'फुलोरा', startDay: 30, endDay: 59 }]);
+        expect(edit.activities).toEqual([{ name: 'फवारणी', part: 'irrigation', startDay: 34, endDay: 49, frequencyMode: 'every_n_days', intervalDays: 7 }]);
     });
 
     it('An_existing_schedule_loads_FILLED: its stage days and its work interval show as stored (only NEW rows start empty)', async () => {
@@ -629,7 +629,7 @@ describe('SCH-MAKER-EMPTY (founder B3): the person defines the days, nothing is 
         render(<Host initial={{ page: 'edit', chainId: id(1) }} />);
         await screen.findByTestId('own-stages');
         fireEvent.click(screen.getByTestId('own-stage-edit-2'));
-        expect(await screen.findByTestId('own-stage-to')).toHaveValue(60);
+        expect(await screen.findByTestId('own-stage-to')).toHaveValue(61);
         expect(screen.getByTestId('own-stage-ok')).toBeEnabled();
         fireEvent.click(screen.getByTestId('own-stage-cancel'));
         fireEvent.click(screen.getByTestId('own-work-edit-2-0'));
