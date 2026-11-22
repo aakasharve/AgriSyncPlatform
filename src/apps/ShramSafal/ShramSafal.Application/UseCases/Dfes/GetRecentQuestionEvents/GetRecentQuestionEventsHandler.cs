@@ -47,7 +47,9 @@ public sealed class GetRecentQuestionEventsHandler(IShramSafalRepository reposit
                 r.QuestionKey, r.TriggerType, r.ShownAtUtc, r.CreatedAtUtc, r.StageConfirmed, r.Skipped,
                 // wave-3.1 — the log this question was about. Already on the entity and the
                 // column; it simply never reached the client, so per-log dedupe was impossible.
-                r.DailyLogId))
+                r.DailyLogId,
+                // Lane DFES-Q (founder D-H) - the schedule task a why-not question was about: asked once per task.
+                r.ScheduleCardRef))
             .ToList();
         return Result.Success<IReadOnlyList<RecentQuestionEventDto>>(dtos);
     }

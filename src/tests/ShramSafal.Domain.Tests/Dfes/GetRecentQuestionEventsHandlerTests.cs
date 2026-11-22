@@ -121,6 +121,31 @@ public sealed class GetRecentQuestionEventsHandlerTests
         Assert.Equal(new[] { "gap.dose", "gap.what" }, result.Value.Select(r => r.questionKey).OrderBy(k => k).ToArray());
     }
 
+    /// <summary>
+    /// Lane DFES-Q (founder D-H, 2026-11-21: "Sorry My bad Dfes Must ask them") - the phone asks "why wasn't this done?" once
+    /// per passed schedule task, so the read must say which task each such question was about. Any other row carries none.
+    /// </summary>
+    [Fact]
+    public async Task Projects_the_schedule_task_a_why_not_question_was_about()
+    {
+        var farmId = Guid.NewGuid(); var owner = Guid.NewGuid();
+        const string cardRef = "plot-1:tpl-grape:2026-10-15:ot_fruit_pruning";
+        var whyNot = QuestionEvent.Create(
+            Guid.NewGuid(), null, farmId, null, "schedule.why_not", "grapes", null, null,
+            "log_date", "Schedule", "why_not", "Execution", 1, 4, 3, "voice", "informational",
+            false, true, "dfes-bank-1", "dfes-qengine-1", null, FixedNow, "schedule why-not", null,
+            null, null, false, false, FixedNow,
+            new QuestionEventContext(AskedUserId: owner, QuestionKind: "why_not", ScheduleCardRef: cardRef, DeviationReasonCode: "rain"));
+        var rows = new List<QuestionEvent> { whyNot, Row(farmId, dailyLogId: null) };
+        var handler = new GetRecentQuestionEventsHandler(new RecentRepo(farmId, rows, memberOfFarm: true), new FixedClock(FixedNow));
+
+        var result = await handler.HandleAsync(new GetRecentQuestionEventsQuery(owner, farmId, 14), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(cardRef, result.Value.Single(r => r.questionKey == "schedule.why_not").scheduleCardRef);
+        Assert.Null(result.Value.Single(r => r.questionKey == "gap.dose").scheduleCardRef);
+    }
+
     private sealed class RecentRepo(Guid farmId, List<QuestionEvent> rows, bool memberOfFarm) : FakeShramSafalRepository
     {
         public override Task<bool> IsUserMemberOfFarmAsync(Guid f, Guid u, CancellationToken ct = default)
