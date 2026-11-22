@@ -88,6 +88,8 @@ export default {
                 plrShrink: { from: { transform: 'scaleX(1)' }, to: { transform: 'scaleX(0)' } },
                 plrFlow: { to: { strokeDashoffset: '-72' } },
                 plrEq: { '0%, 100%': { transform: 'scaleY(0.30)' }, '50%': { transform: 'scaleY(1)' } },
+                // Lane RWF: the one thing to do next on the result screen gets three soft rings, then rests.
+                plrCue: { '0%, 100%': { boxShadow: '0 0 0 0 rgba(4,120,87,0.45)' }, '60%': { boxShadow: '0 0 0 10px rgba(4,120,87,0)' } },
             },
             animation: {
                 'plr-rise': 'plrRise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
@@ -108,6 +110,7 @@ export default {
                 'plr-flow-fast': 'plrFlow 1s linear infinite',
                 'plr-eq': 'plrEq 1s ease-in-out infinite',
                 'plr-orbit-rev': 'plrOrbit 26s linear infinite reverse',
+                'plr-cue': 'plrCue 1.4s ease-in-out 1.2s 3',
             },
             backgroundImage: {
                 'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

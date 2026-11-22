@@ -13,8 +13,9 @@ import {
     Calendar, Clock, Layers, User, Building2, Shield, Sparkles,
     ChevronDown, ChevronUp, Check
 } from 'lucide-react';
-import { CropScheduleTemplate, ScheduleOwnerType } from '../scheduler.types';
+import { ScheduleOwnerType } from '../scheduler.types';
 import { getAllTemplates, getTemplatesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
+import { scheduleNameMr } from '../schedulePage/scheduleNames';
 
 interface ScheduleSelectorProps {
     cropCode: string;  // Filter templates by crop
@@ -107,7 +108,7 @@ const ScheduleSelector: React.FC<ScheduleSelectorProps> = ({ cropCode, selectedT
                                 <div className="flex-1 min-w-0">
                                     {/* Template Name */}
                                     <h4 className={`font-black text-base leading-tight mb-1.5 ${isSelected ? 'text-emerald-800' : 'text-stone-800'}`}>
-                                        {template.name}
+                                        {scheduleNameMr(template.name)}
                                     </h4>
 
                                     {/* Owner Badge */}

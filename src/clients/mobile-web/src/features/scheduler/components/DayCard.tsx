@@ -1,6 +1,7 @@
 import React from 'react';
 import { Droplets, Sprout, SprayCan, CheckCircle2, Hammer, AlertCircle, Thermometer, Cloud } from 'lucide-react';
 import { formatTemperature, formatHumidity } from '../../../shared/utils/weatherFormatter';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 
 
 export type BlockStatus = 'DONE' | 'MISSED' | 'PENDING' | 'PLANNED' | 'NOT_REQUIRED';
@@ -179,7 +180,7 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
                 <span className={`text-[8px] uppercase font-black tracking-widest leading-none mb-0.5 ${labelTextClass}`}>
                     {words ? (dayType === 'PREP' ? words.prep : words.day) : (dayType === 'PREP' ? 'PREP' : 'DAY')}
                 </span>
-                <span className={`${dayNumberTextClass || (compact ? 'text-lg' : 'text-xl')} font-black font-mono leading-none tracking-tight`}>{dayNumber}</span>
+                <span className={`${dayNumberTextClass || (compact ? 'text-lg' : 'text-xl')} font-black font-mono leading-none tracking-tight`}>{words ? toDevanagariDigits(dayNumber) : dayNumber}</span>
                 <span className={`${dateLabelTextClass || 'text-[9px]'} uppercase font-bold opacity-60 mt-1`}>{dateLabel}</span>
             </div>
 

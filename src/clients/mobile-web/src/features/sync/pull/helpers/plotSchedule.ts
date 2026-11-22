@@ -68,10 +68,15 @@ export function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycle
     const normalizedPlotName = normalizeMojibakeText(plotDto.name);
     const normalizedCropName = normalizeMojibakeText(cycle.cropName);
 
+    // spec: plr-d10 lane GRP-1a - the owner's group label, as the server says it now (missing / blank = none). Display only.
+    const groupName = typeof plotDto.groupName === 'string' && plotDto.groupName.trim() ? normalizeMojibakeText(plotDto.groupName.trim()) : null;
+
     const existingPlot = crop.plots.find(p => p.id === plotDto.id);
     if (existingPlot) {
         existingPlot.name = normalizedPlotName;
         existingPlot.startDate = cycle.startDate;
+        // Written only when it differs, so a plot that never had a group keeps its exact shape (no `groupName: null` appears).
+        if ((existingPlot.groupName ?? null) !== groupName) existingPlot.groupName = groupName;
         // spec: plr-d10-redesign-real-integration (I9). A plot made on this phone carries
         // the farmer's own variety and his own area in his own unit ("20 गुंठे"). The
         // server keeps acres to 2 places and has no variety, so overwriting would replace
@@ -105,6 +110,7 @@ export function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycle
             unit: 'Acre',
         },
         schedule: defaultPlotSchedule(plotDto.id, cycle.startDate, templateId),
+        ...(groupName ? { groupName } : {}),
     };
 
     crop.plots.push(plot);

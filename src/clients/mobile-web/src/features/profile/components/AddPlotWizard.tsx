@@ -23,7 +23,9 @@ import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { VarietySelector } from '../../context/components/VarietySelector';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 import PlotStartQuestion, { type PlotStartMode } from '../plotStart/PlotStartQuestion';
+import { nextPlotName, plotWizardWords } from './addPlotWords';
 import {
     checkedScheduleForCrop, dayCountOn, earliestPlantingDate, plantingDateProblem, plantingWordKey,
     type NewPlotStart,
@@ -37,8 +39,18 @@ interface PlotWizardProps {
     onCancel: () => void;
 }
 
+/**
+ * UI-9a (redesign item 10): the labels of steps 1 and 2 are 16 px in #44403c (stone-700) - they were 12 px light grey (#94a3b8), too small and too
+ * pale to read in the sun. Step 3 (the date question and its tools list) keeps its own look.
+ */
+const LABEL = 'block text-[16px] font-bold text-stone-700 mb-1';
+
 const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel }) => {
     const { t, language } = useLanguage();
+    // The words of steps 1 and 2 that were English on a Marathi screen (placeholders, errors, hint, units); English mode keeps its English.
+    const w = plotWizardWords(language);
+    // The name placeholder shows the next name in HIS pattern ("G16" after G15) when his plot names end in a number; never a value, never a guess.
+    const nextName = nextPlotName(crop.plots.map(p => p.name));
     const [step, setStep] = useState(1);
 
     // --- FORM STATE ---
@@ -78,12 +90,12 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
     const validateStep1 = (): boolean => {
         const newErrors: { [key: string]: string } = {};
         if (!plotName.trim()) {
-            newErrors.plotName = 'Plot name is required';
+            newErrors.plotName = w.plotNameNeeded;
         }
         // spec: plr-d10-redesign-real-integration-2026-10-25 (I9). The server refuses a plot
         // with no area, and an area is never guessed for him — so it is asked for here.
         if (!(Number(area) > 0)) {
-            newErrors.area = 'क्षेत्र लिहा · Enter the area';
+            newErrors.area = w.areaNeeded;
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -96,15 +108,15 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
         const hasSeedInfo = materialType === 'Seed' ? seedCompany.trim().length > 0 : nurseryName.trim().length > 0;
 
         if (!hasVariety && !hasSeedInfo) {
-            newErrors.variety = 'Enter Variety name or Seed/Nursery name (at least one required)';
+            newErrors.variety = w.varietyNeeded;
         }
 
         // Seed/seedlings quantity required
         if (materialType === 'Seed' && (!seedQty || seedQty <= 0)) {
-            newErrors.seedQty = 'Seed quantity is required';
+            newErrors.seedQty = w.seedQtyNeeded;
         }
         if (materialType === 'Nursery' && (!plantAge || plantAge <= 0)) {
-            newErrors.plantAge = 'Plant age is required';
+            newErrors.plantAge = w.plantAgeNeeded;
         }
 
         setErrors(newErrors);
@@ -113,7 +125,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
 
     const handleSave = () => {
         if (!plotName.trim()) {
-            setErrors({ plotName: 'Plot name is required' });
+            setErrors({ plotName: w.plotNameNeeded });
             return;
         }
         // The finish button is off until the date question is answered; this keeps a stray call from making a plot with a guessed day.
@@ -197,7 +209,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             </div>
                         </div>
                     </div>
-                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {step}/3</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {digitsFor(step, language)}/{digitsFor(3, language)}</span>
                 </div>
 
                 <div className="p-6 overflow-y-auto flex-1">
@@ -206,11 +218,11 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                     {step === 1 && (
                         <div className="space-y-5 animate-in slide-in-from-right-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.plotName')} *</label>
+                                <label className={LABEL}>{t('profile.plotName')} *</label>
                                 <input
                                     autoFocus
                                     className={`w-full p-3 border rounded-xl font-bold text-lg outline-none focus:border-emerald-500 ${errors.plotName ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
-                                    placeholder="e.g. Riverside Plot"
+                                    placeholder={w.plotNameExample(nextName)}
                                     value={plotName}
                                     onChange={e => {
                                         setPlotName(e.target.value);
@@ -225,7 +237,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             </div>
                             <div className="flex gap-3">
                                 <div className="flex-1">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.area')}</label>
+                                    <label className={LABEL}>{t('profile.area')}</label>
                                     <input
                                         type="number"
                                         data-testid="plot-area"
@@ -244,7 +256,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                     )}
                                 </div>
                                 <div className="w-1/3">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.unit')}</label>
+                                    <label className={LABEL}>{t('profile.unit')}</label>
                                     <select
                                         className="w-full p-3 border border-slate-200 rounded-xl bg-white font-bold outline-none"
                                         value={areaUnit}
@@ -256,7 +268,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.variety')}</label>
+                                <label className={LABEL}>{t('profile.variety')}</label>
                                 <VarietySelector
                                     cropName={crop.name}
                                     value={variety}
@@ -265,8 +277,9 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                         if (errors.variety) setErrors({ ...errors, variety: '' });
                                     }}
                                     error={errors.variety}
+                                    language={language}
                                 />
-                                <p className="text-slate-400 text-xs mt-1">Or provide seed/nursery name in next step</p>
+                                <p className="text-slate-400 text-xs mt-1">{w.varietyOrNext}</p>
                             </div>
                         </div>
                     )}
@@ -283,19 +296,19 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             )}
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{t('profile.whatDidYouPlant')} *</label>
+                                <label className="block text-[16px] font-bold text-stone-700 mb-2">{t('profile.whatDidYouPlant')} *</label>
                                 <div className="flex bg-slate-100 p-1 rounded-xl">
                                     <button
                                         onClick={() => setMaterialType('Seed')}
                                         className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${materialType === 'Seed' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'}`}
                                     >
-                                        {t('profile.seeds')} (बियाणं)
+                                        {t('profile.seeds')}
                                     </button>
                                     <button
                                         onClick={() => setMaterialType('Nursery')}
                                         className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${materialType === 'Nursery' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'}`}
                                     >
-                                        {t('profile.saplings')} (रोप)
+                                        {t('profile.saplings')}
                                     </button>
                                 </div>
                             </div>
@@ -303,10 +316,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             {materialType === 'Seed' ? (
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.companyName')} {!variety.trim() && '*'}</label>
+                                        <label className={LABEL}>{t('profile.companyName')} {!variety.trim() && '*'}</label>
                                         <input
                                             className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.variety && !variety.trim() ? 'border-orange-300 bg-orange-50' : 'border-slate-200'}`}
-                                            placeholder="e.g. Mahabeej"
+                                            placeholder={w.seedCompanyExample}
                                             value={seedCompany}
                                             onChange={e => {
                                                 setSeedCompany(e.target.value);
@@ -316,7 +329,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                     </div>
                                     <div className="flex gap-3">
                                         <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.quantityPerAcre')} *</label>
+                                            <label className={LABEL}>{t('profile.quantityPerAcre')} *</label>
                                             <input
                                                 type="number"
                                                 className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.seedQty ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
@@ -332,15 +345,15 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                             )}
                                         </div>
                                         <div className="w-1/3">
-                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.unit')}</label>
+                                            <label className={LABEL}>{t('profile.unit')}</label>
                                             <select
                                                 className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none"
                                                 value={seedUnit}
                                                 onChange={e => setSeedUnit(e.target.value)}
                                             >
-                                                <option value="kg">kg</option>
-                                                <option value="gm">gm</option>
-                                                <option value="Packets">Pkt</option>
+                                                <option value="kg">{w.units.kg}</option>
+                                                <option value="gm">{w.units.gm}</option>
+                                                <option value="Packets">{w.units.Packets}</option>
                                             </select>
                                         </div>
                                     </div>
@@ -348,10 +361,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                             ) : (
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.nurseryName')} {!variety.trim() && '*'}</label>
+                                        <label className={LABEL}>{t('profile.nurseryName')} {!variety.trim() && '*'}</label>
                                         <input
                                             className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.variety && !variety.trim() ? 'border-orange-300 bg-orange-50' : 'border-slate-200'}`}
-                                            placeholder="e.g. Nashik Grapes"
+                                            placeholder={w.nurseryExample}
                                             value={nurseryName}
                                             onChange={e => {
                                                 setNurseryName(e.target.value);
@@ -360,11 +373,11 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.plantAgeDays')} *</label>
+                                        <label className={LABEL}>{t('profile.plantAgeDays')} *</label>
                                         <input
                                             type="number"
                                             className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.plantAge ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
-                                            placeholder="Days old when planted"
+                                            placeholder={w.plantAgeExample}
                                             value={plantAge}
                                             onChange={e => {
                                                 setPlantAge(parseFloat(e.target.value));

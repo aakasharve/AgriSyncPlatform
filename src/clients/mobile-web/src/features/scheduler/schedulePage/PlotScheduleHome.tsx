@@ -24,7 +24,7 @@ import { addDays } from './scheduleDates';
 import { LOOK_AHEAD_DAYS, PARTS, aheadItemCount, owedWork, pastDays, stageTally, todayOf, type Part, type ScheduleModel, type Tally } from './scheduleModel';
 import { OwedCard, TodayCard, TomorrowPeek } from './TodayTab';
 import { ScheduleFold } from './ScheduleFold';
-import { SC } from './scheduleCopy';
+import { SC, mrNum } from './scheduleCopy';
 import { THREE_PLUS_ONE_WORDS } from './threePlusOneCopy';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { ClipsByDay } from './usePlotClips';
@@ -104,7 +104,7 @@ export const PlotScheduleHome: React.FC<{
                 <TomorrowPeek tomorrow={facts.tomorrow} />
                 <AheadTab model={model} onlyStageId={trialStageId} />
             </ScheduleFold>
-            <ScheduleFold id="done" title={SC.doneTitle} count={facts.total.done} summary={`${SC.tabDone} ${facts.total.done} · ${SC.leftCount(facts.total.missed)}`}>
+            <ScheduleFold id="done" title={SC.doneTitle} count={facts.total.done} summary={`${SC.tabDone} ${mrNum(facts.total.done)} · ${SC.leftCount(facts.total.missed)}`}>
                 <DoneTab total={facts.total} byPart={facts.byPart} past={facts.past} clipCount={clipCount} onOpenDay={onOpenDay} />
             </ScheduleFold>
             {/* spec: plr-d10 lane SCH-GATE-b (D-99, R10) - the stage panel sits with the stage path. */}

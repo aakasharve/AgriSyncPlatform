@@ -19,17 +19,26 @@
  *     order, ShramSafal's check, the sample line, "वापरात आहे" and "पाहा" (the stages);
  *   3 "पक्कं करा" - ONE big button that names the plot ("<plot> साठी हे शेड्यूल लावा"), and under it "नवीन शेड्यूल बनवा", which only asks to go to planning.
  * Nothing else changed in what it offers (`libraryTemplates`) or how a choice is saved (the page's `onAdopt` -> `saveScheduleChoice`).
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane UI-9a, redesign item 4; founder 2026-11-21) - step 1 now asks the way every plot question
+ * asks: the crop row (each crop's photo ONCE; a tap on a crop picks that crop's first plot in number order), then the chosen crop's plots in the
+ * shared selector (`SinglePlotSection`: chips for 1 to 6, a number grid from 7, each number the plot's place among ALL the crop's plots). One crop on
+ * the farm has no crop row to choose from, so its photo and name stand once in a header. It used to be one chip "<crop> · <plot>" per plot of the
+ * whole farm, each with its own small photo. The chosen schedule row in step 2 is THE one chosen look (dark green, white letters, a white tick) in
+ * place of the blue ring and dot. The sort chips, the search, step 3 and the save path are untouched.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Eye, Plus, Search } from 'lucide-react';
+import { Check, CheckCircle2, Eye, Plus, Search } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
 import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
 import { getOperationCategory } from '../planning/ClientPlanEngine';
 import { isSampleSchedule, offeredForCrop } from '../planning/followableDefault';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
-import { PickerCropPhoto, PlotChip } from '../../context/components/CropPlotPicker';
-import { OWNER_LABEL, SC, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { CropPlotPicker, type PickerCrop } from '../../context/components/CropPlotPicker';
+import { SinglePlotSection } from '../../context/components/PlotSelector';
+import { sortedNaturally } from '../../context/components/plotSelectorRules';
+import { OWNER_LABEL, SC, frequencyMr, mrNum, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
@@ -91,7 +100,7 @@ const ownName = (opId: string, notes?: string): string | null => {
 
 const stageTasks = (template: CropScheduleTemplate, stageId: string): Array<{ label: string; detail: string | null; timing: string }> => [
     ...template.periodicExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: frequencyMr(i.frequencyMode, i.frequencyValue) })),
-    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: `दिवस ${i.targetDayFromRef}` })),
+    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: SC.dayN(i.targetDayFromRef) })),
 ];
 
 type Order = 'usual' | 'short';
@@ -154,7 +163,7 @@ const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => voi
                             <GlassCard key={stage.id} testId={`library-stage-${stage.orderIndex}`}>
                                 <div className="flex items-center justify-between gap-3">
                                     <h4 className="m-0 text-[17px] font-extrabold text-stone-900">{stageNameMr(stage.name)}</h4>
-                                    <span className="text-[14px] font-bold text-stone-600">दिवस {stage.dayStart}–{stage.dayEnd}</span>
+                                    <span className="text-[14px] font-bold text-stone-600">{SC.dayN(stage.dayStart)}–{mrNum(stage.dayEnd)}</span>
                                 </div>
                                 <ul className="m-0 mt-2 space-y-1.5 p-0">
                                     {tasks.length === 0
@@ -210,6 +219,27 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
         return order === 'short' ? sortTemplates(found, 'SHORTEST_DURATION') : found;
     }, [forCrop, search, order]);
 
+    // Step 1: the farm's crops, each holding ALL its plots (so a plot's number is its place among all the crop's plots). The crop is named by its
+    // STORED name (`cropRawName`, the photo's key); the picker shows it in his language.
+    const pickerCrops = useMemo<PickerCrop[]>(() => {
+        const byId = new Map<string, PickerCrop & { plots: { id: string; name: string }[] }>();
+        (plots ?? []).forEach(p => {
+            const c = byId.get(p.cropId) ?? { id: p.cropId, name: p.cropRawName, iconName: p.iconName, masterId: p.masterId, color: p.color, plots: [] };
+            c.plots.push({ id: p.id, name: p.name });
+            byId.set(p.cropId, c);
+        });
+        return [...byId.values()];
+    }, [plots]);
+    const activeCrop = pickerCrops.find(c => c.plots.some(p => p.id === plotId));
+    // One crop on the farm: its plots show even before one is chosen. Several crops: they show once a crop is (a plot always comes with its crop).
+    const shownCrop = activeCrop ?? (pickerCrops.length === 1 ? pickerCrops[0] : undefined);
+    // A tap on a crop picks that crop's first plot in number order (G1 before G10); a tap on the crop that is already chosen keeps its plot.
+    const pickCrop = (key: 'all' | string) => {
+        if (key === 'all' || key === activeCrop?.id) return;
+        const first = sortedNaturally(pickerCrops.find(c => c.id === key)?.plots ?? [], p => p.name)[0];
+        if (first) onPickPlot?.(key, first.id);
+    };
+
     // A pick belongs to the plot it was made for: another plot (or crop) starts with nothing picked.
     useEffect(() => { setPicked(null); }, [plotId, activeCropCode]);
 
@@ -233,12 +263,19 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
             {plots && plots.length > 0 && (
                 <section className="space-y-2" data-testid="library-step-plot">
                     <StepHead n={stepNo[0]} title={words.step1} testId="library-step-1" />
-                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={words.step1} data-testid="library-plots">
-                        {plots.map(p => (
-                            <PlotChip key={p.id} testId={`library-plot-${p.id}`} name={`${p.cropName} · ${p.name}`} on={p.id === plotId} color={p.color}
-                                lead={<PickerCropPhoto crop={{ name: p.cropRawName, iconName: p.iconName, masterId: p.masterId }} px={22} />}
-                                onClick={() => onPickPlot?.(p.cropId, p.id)} />
-                        ))}
+                    <div className="space-y-2.5" role="group" aria-label={words.step1} data-testid="library-plots">
+                        {/* The crop row (each photo once) - only when the farm has more than one crop to choose from. */}
+                        {pickerCrops.length > 1 && (
+                            <CropPlotPicker crops={pickerCrops} chosen={activeCrop?.id ?? ''} pickedPlotIds={plotId ? [plotId] : []} hidePlots language={language}
+                                onPickCrop={pickCrop} onTogglePlot={() => undefined}
+                                testIds={{ cropRow: 'library-crops', crop: key => `library-crop-${key}`, plot: id => `library-plot-${id}` }} />
+                        )}
+                        {shownCrop && (
+                            <SinglePlotSection crop={shownCrop} plotId={plotId} header={pickerCrops.length === 1} language={language}
+                                onPickPlot={id => onPickPlot?.(shownCrop.id, id)}
+                                sectionTestId="library-plot-section" headerTestId="library-crop-header"
+                                testIds={{ plot: id => `library-plot-${id}`, grid: 'library-plot-grid' }} />
+                        )}
                     </div>
                 </section>
             )}
@@ -261,23 +298,25 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                         const locked = lockedFor(t);
                         const on = effectivePick === t.id;
                         return (
+                            // Redesign item 4: the picked row is THE one chosen look - dark green, white letters (the small lines too), a white tick - in place of
+                            // the blue ring and dot. A row that is not picked stays white with its grey border; a locked row keeps its lock (grey, not choosable).
                             <div key={t.id} data-testid={`library-${t.id}`} data-picked={on ? 'yes' : 'no'}
-                                className={`flex flex-col gap-1 rounded-2xl border-2 p-2 ${on ? 'border-[#1448E6] bg-blue-50' : 'border-stone-200 bg-white'}`}>
-                                <label className={`flex min-h-[56px] w-full min-w-0 items-start gap-2.5 focus-within:ring-2 focus-within:ring-[#1448E6]/40 ${locked ? 'opacity-90' : 'cursor-pointer'}`}>
+                                className={`flex flex-col gap-1 rounded-2xl border-2 p-2 ${on ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-stone-200 bg-white'}`}>
+                                <label className={`flex min-h-[56px] w-full min-w-0 items-start gap-2.5 rounded-xl focus-within:ring-2 ${on ? 'focus-within:ring-white/80' : 'focus-within:ring-emerald-700/40'} ${locked ? 'opacity-90' : 'cursor-pointer'}`}>
                                     <input type="radio" name="library-schedule" className="sr-only" checked={on} disabled={locked} onChange={() => setPicked(t.id)} data-testid={`library-pick-${t.id}`} />
-                                    <span aria-hidden="true" className={`mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-[#1448E6]' : 'border-stone-400'} ${locked ? 'bg-stone-100' : 'bg-white'}`}>
-                                        {on && <span className="h-3 w-3 rounded-full bg-[#1448E6]" />}
+                                    <span aria-hidden="true" data-part={on ? 'tick' : 'radio'} className={`mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-white bg-emerald-800' : `border-stone-400 ${locked ? 'bg-stone-100' : 'bg-white'}`}`}>
+                                        {on && <Check size={15} strokeWidth={4} className="text-white" />}
                                     </span>
-                                    <ScheduleMakerBadge template={t} size={44} tone="light" testId={`library-badge-${t.id}`} />
+                                    <ScheduleMakerBadge template={t} size={44} tone={on ? 'dark' : 'light'} testId={`library-badge-${t.id}`} />
                                     <span className="min-w-0 flex-1">
-                                        <span className="block break-words text-[16px] font-black leading-snug text-stone-900" data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</span>
+                                        <span className={`block break-words text-[16px] font-black leading-snug ${on ? 'text-white' : 'text-stone-900'}`} data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</span>
                                         {/* PROPOSED (Marathi) */}
-                                        <span className="block text-[14px] font-bold text-stone-600">कोणी बनवलं: {madeBy(t)}</span>
-                                        <span className="block text-[13px] font-bold text-stone-600">{SC.edMeta(t.totalDurationDays ?? null, t.stages.length)}</span>
-                                        {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
-                                        <ScheduleCheckBadge template={t} testId={`library-check-${t.id}`} />
+                                        <span className={`block text-[14px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>कोणी बनवलं: {madeBy(t)}</span>
+                                        <span className={`block text-[13px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{SC.edMeta(t.totalDurationDays ?? null, t.stages.length)}</span>
+                                        {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only (its own dark tone on the dark green row) */}
+                                        <ScheduleCheckBadge template={t} tone={on ? 'dark' : 'light'} testId={`library-check-${t.id}`} />
                                         {/* spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample says it will go once its crop has a checked schedule */}
-                                        {isSampleSchedule(t) && <span className="mt-1 block text-[13.5px] font-bold text-stone-600" data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</span>}
+                                        {isSampleSchedule(t) && <span className={`mt-1 block text-[13.5px] font-bold ${on ? 'text-white' : 'text-stone-600'}`} data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</span>}
                                         {adopted && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{words.inUse}</Chip></span>}
                                         {alreadyFollowed && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{plotAdd!.words.alreadyFollowed}</Chip></span>}
                                     </span>

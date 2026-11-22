@@ -86,7 +86,8 @@ export const NotificationService = {
     // We will simulate this with setTimeout for the active session, 
     // which satisfies "Robustness" for a single-page app session.
     scheduleNotification: (title: string, options: ExtendedNotificationOptions, delayMs: number) => {
-        console.log(`Scheduling notification '${title}' in ${delayMs}ms`);
+        // F24: the delay only. A notification title can carry a plot, crop or person's name, so it is not logged.
+        console.log(`Scheduling a notification in ${delayMs}ms`);
         setTimeout(() => {
             NotificationService.showLocalNotification(title, options);
         }, delayMs);

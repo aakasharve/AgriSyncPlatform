@@ -94,11 +94,21 @@ interface CropSelectorProps {
     stepper?: StepperExtras;
 }
 
-// --- NEW COMPONENT: CropSymbol (Photo/Emoji Replacement) ---
+// --- CropSymbol: the crop's photo, or the app's own LOGO when there is no photo ---
 export { cropImageUrl };
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (UI-9a item 9, founder: "only with LOGO"). A crop whose photo is missing, or
+ * did not load, shows the app's own logo mark - never an emoji, never a leaf or an emoji on a coloured square. The mark is the
+ * shield `FarmNameBoard` already draws (`/brand/logo-mark.webp`); the wide wordmark `/logo.png` (shield + "ShramSafal" + tagline) is
+ * unreadable at 16-80 px.
+ */
+export const CROP_SYMBOL_LOGO = '/brand/logo-mark.webp';
 
 export const CropSymbol = ({ name, size = 'lg' }: { name: string, size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' }) => {
     const imageUrl = cropImageUrl(name);
+    // The address that failed to load (not a flag), so a different crop on the same mounted component gets its own photo tried.
+    const [failedUrl, setFailedUrl] = React.useState<string | null>(null);
 
     // Size mappings for Image
     const imgSizeClass =
@@ -107,56 +117,26 @@ export const CropSymbol = ({ name, size = 'lg' }: { name: string, size?: 'xs' | 
                 size === 'md' ? 'w-10 h-10' :
                     size === 'lg' ? 'w-16 h-16' : 'w-20 h-20';
 
-    // Size mappings for Emoji Fallback
-    const fontSize =
-        size === 'xs' ? 'text-xs' :
-            size === 'sm' ? 'text-sm' :
-                size === 'md' ? 'text-xl' :
-                    size === 'lg' ? 'text-3xl' : 'text-4xl';
-
-    if (imageUrl) {
+    if (imageUrl && failedUrl !== imageUrl) {
         return (
-            <>
-                <img
-                    src={imageUrl}
-                    alt={name}
-                    className={`${imgSizeClass} rounded-xl object-cover select-none shadow-sm`}
-                    onError={(e) => {
-                        // Fallback to emoji on error (hide image, show sibling span)
-                        e.currentTarget.style.display = 'none';
-                        const emojiSpan = e.currentTarget.nextElementSibling as HTMLElement;
-                        if (emojiSpan) emojiSpan.classList.remove('hidden');
-                    }}
-                />
-                {/* Fallback Emoji (Hidden by default if image loads) */}
-                <span className={`${fontSize} leading-none filter drop-shadow-sm select-none hidden`} role="img" aria-label={name}>
-                    {getSymbolFallback(name)}
-                </span>
-            </>
+            <img
+                src={imageUrl}
+                alt={name}
+                className={`${imgSizeClass} rounded-xl object-cover select-none shadow-sm`}
+                onError={() => setFailedUrl(imageUrl)}
+            />
         );
     }
 
     return (
-        <span className={`${fontSize} leading-none filter drop-shadow-sm select-none`} role="img" aria-label={name}>
-            {getSymbolFallback(name)}
-        </span>
+        <img
+            data-testid="crop-symbol-logo"
+            src={CROP_SYMBOL_LOGO}
+            alt={name}
+            className={`${imgSizeClass} object-contain select-none`}
+            draggable={false}
+        />
     );
-};
-
-// Extracted for reuse
-const getSymbolFallback = (n: string) => {
-    switch (n) {
-        case 'Grape': return '🍇';
-        case 'Sugarcane': return '🎋';
-        case 'Cotton': return '☁️';
-        case 'Wheat': return '🌾';
-        case 'Onion': return '🧅';
-        case 'Sprout': return '🌱';
-        case 'Flower2': return '🌻';
-        case 'Trees': return '🌳';
-        case 'Warehouse': return '🏡';
-        default: return '🌱';
-    }
 };
 
 // Visual Helper for Plot Markers - EXPORTED
@@ -637,6 +617,7 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                                     <button
                                                         key={plot.id}
                                                         data-testid="plot-tray-button"
+                                                        aria-pressed={!!isPlotSelected}
                                                         onClick={() => handlePlotToggle(crop.id, plot.id)}
                                                         disabled={disabled}
                                                         className={`

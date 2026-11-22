@@ -34,8 +34,8 @@ describe('H10 - no lateness verdict from invented thresholds', () => {
 
     it('the facts are still shown, as the two tiles, untouched', () => {
         mount(facts({ lastActions: { sprayDaysAgo: 12, irrigationDaysAgo: 6 } }));
-        expect(screen.getByTestId('last-spray')).toHaveTextContent('12 दिवसांपूर्वी');
-        expect(screen.getByTestId('last-water')).toHaveTextContent('6 दिवसांपूर्वी');
+        expect(screen.getByTestId('last-spray')).toHaveTextContent('१२ दिवसांपूर्वी');
+        expect(screen.getByTestId('last-water')).toHaveTextContent('६ दिवसांपूर्वी');
         expect(screen.getByText('शेवटची फवारणी')).toBeInTheDocument();
         expect(screen.getByText('शेवटचं पाणी')).toBeInTheDocument();
     });
@@ -50,11 +50,11 @@ describe('H10 - no lateness verdict from invented thresholds', () => {
     it('the two plain counts are kept - in a plain box, titled by nothing and amber-free', () => {
         const { container } = mount(facts({ dueToday: 1, tasksOpen: 2, lastActions: { sprayDaysAgo: 30, irrigationDaysAgo: 30 } }));
         const box = screen.getByTestId('open-work');
-        expect(box.textContent).toContain('आज 1 कामं बाकी');
-        expect(box.textContent).toContain('करायच्या यादीत 2 कामं बाकी');
+        expect(box.textContent).toContain('आज १ कामं बाकी');
+        expect(box.textContent).toContain('करायच्या यादीत २ कामं बाकी');
         expect(box.className).not.toMatch(/amber/);
         expect(container.textContent).not.toContain('काम मागे पडतंय');
         // exactly the two counts - the old gap lines are not among them, however long the gaps are
-        expect(openWorkLines(facts({ dueToday: 1, tasksOpen: 2, lastActions: { sprayDaysAgo: 30, irrigationDaysAgo: 30 } }))).toEqual(['आज 1 कामं बाकी', 'करायच्या यादीत 2 कामं बाकी']);
+        expect(openWorkLines(facts({ dueToday: 1, tasksOpen: 2, lastActions: { sprayDaysAgo: 30, irrigationDaysAgo: 30 } }))).toEqual(['आज १ कामं बाकी', 'करायच्या यादीत २ कामं बाकी']);
     });
 });

@@ -11,6 +11,7 @@
  *   - PROPOSED - written for this lane; each carries `// PROPOSED (Marathi)` / `// PROPOSED (English)`. The English twins are all PROPOSED.
  * No emoji. Nothing here says "AI".
  */
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 
 export type ScheduleMapLanguage = 'mr' | 'en';
 
@@ -56,7 +57,7 @@ export const SCHEDULE_MAP_WORDS: Readonly<Record<ScheduleMapLanguage, Words>> = 
         ownerTypeAria: 'बनवणाऱ्याचा प्रकार', // PROPOSED (Marathi)
         noScheduleGroup: 'शेड्यूल नाही', // PICTURE
         chooseSchedule: 'शेड्यूल निवडा', // PICTURE
-        dayN: n => `दिवस ${n}`, // the page's own phrase (`SC.dayN`)
+        dayN: n => `दिवस ${toDevanagariDigits(n)}`, // the page's own phrase (`SC.dayN`); Marathi digits (UI-9a item 9), English below keeps 0-9
         dayNotStarted: 'अजून सुरू नाही', // PROPOSED (Marathi)
         mapAria: 'कोणत्या प्लॉटला कोणतं शेड्यूल', // PROPOSED (Marathi)
         plotsAria: 'प्लॉट', // PROPOSED (Marathi)
@@ -64,7 +65,7 @@ export const SCHEDULE_MAP_WORDS: Readonly<Record<ScheduleMapLanguage, Words>> = 
         cropNoPlots: crop => `${crop}: या पिकात अजून प्लॉट नाही`, // PROPOSED (Marathi) - the page's own line (`SC.noPlots`) with the crop's name
         openBelow: 'खाली उघडलं आहे', // PROPOSED (Marathi)
         lineAria: (plot, schedule) => `${plot} — ${schedule}`, // PROPOSED (Marathi)
-        alsoFollows: n => `+${n} शेड्यूल`, // PROPOSED (Marathi)
+        alsoFollows: n => `+${toDevanagariDigits(n)} शेड्यूल`, // PROPOSED (Marathi); Marathi digits (UI-9a item 9)
         step1: 'कोणत्या प्लॉटसाठी?', // PICTURE
         step2: 'कोणतं शेड्यूल?', // PICTURE
         step3: 'पक्कं करा', // PICTURE

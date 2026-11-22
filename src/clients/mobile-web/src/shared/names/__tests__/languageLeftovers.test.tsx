@@ -7,7 +7,7 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import type { CropProfile } from '../../../domain/types/farm.types';
 import type { DexieTestInstance } from '../../../infrastructure/storage/DexieDatabase';
 
@@ -56,8 +56,10 @@ describe('आढावा crop cards: no "Grapes / Sugarcane" in Marathi mode', 
 
     it('Marathi mode', () => {
         render(<FarmStatus crops={crops} sel={{ crop: 'all', plotIds: [] }} onSel={() => undefined} />);
-        expect(screen.getByText('द्राक्ष')).toBeInTheDocument();
-        expect(screen.getByText('ऊस')).toBeInTheDocument();
+        // the crop is named under its photo in the all-crops card (the crop cards below it are not drawn any more: fix round item 6)
+        expect(within(screen.getByTestId('farm-crop-all-photo-c1')).getByText('द्राक्ष')).toBeInTheDocument();
+        expect(within(screen.getByTestId('farm-crop-all-photo-c2')).getByText('ऊस')).toBeInTheDocument();
+        expect(screen.queryByTestId('farm-crop-c1')).toBeNull();
         expect(screen.queryByText('Grapes')).toBeNull();
         expect(screen.queryByText('Sugarcane')).toBeNull();
     });
@@ -65,7 +67,7 @@ describe('आढावा crop cards: no "Grapes / Sugarcane" in Marathi mode', 
     it('English mode', () => {
         lang.current = 'en';
         render(<FarmStatus crops={crops} sel={{ crop: 'all', plotIds: [] }} onSel={() => undefined} />);
-        expect(screen.getByText('Grapes')).toBeInTheDocument();
+        expect(within(screen.getByTestId('farm-crop-all-photo-c1')).getByText('Grapes')).toBeInTheDocument();
         expect(screen.getByText('All crops')).toBeInTheDocument();
         expect(screen.queryByText('द्राक्ष')).toBeNull();
     });

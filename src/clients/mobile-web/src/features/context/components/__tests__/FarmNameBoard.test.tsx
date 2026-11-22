@@ -161,22 +161,34 @@ describe('FarmNameBoard — the shield has to be legible', () => {
         expect(subtitle).toHaveTextContent('Managed by Shram Safal');
         expect(subtitle.className, 'the subtitle must never carry an ellipsis')
             .not.toContain('truncate');
-        expect(subtitle.className, 'the words must not shrink').toContain('shrink-0');
-        expect(subtitle.className).toContain('whitespace-nowrap');
 
-        // The row must not be capped at the name's width, or the column never
-        // asks to be wide enough for the subtitle in the first place.
+        // FEEL-1 (register F313) — the 2026-08-31 pin said the text was `shrink-0 whitespace-nowrap` at EVERY width. That
+        // fixed a short name on a wide board, but at 320px the column beside the shield is only ~87px, the 120px nowrap
+        // text overflowed it, and the chamfer clipped both ends ("anaged by Shram Safa"). The rule is now: from 400px up
+        // the text is exactly as before (one unshrinkable line); below 400px it may WRAP, so it is never cut. What must
+        // NOT come back is the unconditional version of either class.
+        const classes = subtitle.className.split(/\s+/);
+        expect(classes, 'unconditional no-shrink is the 320px clip').not.toContain('shrink-0');
+        expect(classes, 'unconditional nowrap is the 320px clip').not.toContain('whitespace-nowrap');
+        expect(classes).toContain('min-[400px]:shrink-0');
+        expect(classes).toContain('min-[400px]:whitespace-nowrap');
+        expect(classes, 'it must be allowed to wrap and shrink below 400px').toContain('min-w-0');
+        expect(classes).toContain('text-center');
+
+        // The row can never be wider than its column (that is what lets the text wrap instead of spilling out), and the
+        // column still grows to the subtitle on a short name because the row is not given the NAME's width.
         const row = subtitle.parentElement!;
-        expect(row.className, 'the subtitle row must not inherit the name width')
-            .not.toContain('max-w-full');
+        expect(row.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'max-w-full']));
 
-        // ...and the decorative rules are the things that give way.
+        // ...and the decorative rules are the things that give way: absent below 400px, flexible and never shrink-0 above.
         const rules = Array.from(row.querySelectorAll('i'));
         expect(rules).toHaveLength(2);
         for (const rule of rules) {
-            expect(rule.className, 'ornaments must yield before the text does')
-                .not.toContain('shrink-0');
-            expect(rule.className).toContain('min-w-0');
+            const rc = rule.className.split(/\s+/);
+            expect(rc, 'ornaments must yield before the text does').not.toContain('shrink-0');
+            expect(rc).toContain('min-w-0');
+            expect(rc, 'no rules below 400px: they would only squeeze the text').toContain('hidden');
+            expect(rc).toContain('min-[400px]:block');
         }
     });
 });

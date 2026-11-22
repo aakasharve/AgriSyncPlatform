@@ -42,10 +42,10 @@ const FARM = 'f0f0f0f0-0000-4000-8000-0000000000f1';
 const DATE = '2026-11-09';
 
 const SPRAY = {
-    id: 'ev-spray', method: 'Spray', sourceText: 'कॉन्फिडॉर आणि प्रेम गोल्ड फवारलं',
+    id: 'ev-spray', method: 'Spray', sourceText: 'कॉन्फिडॉर आणि वाघोबा रसायन फवारलं',
     mix: [
         { id: 'm-conf', productName: 'कॉन्फिडॉर', dose: 1, unit: 'ml' },
-        { id: 'm-prem', productName: 'प्रेम गोल्ड' },
+        { id: 'm-prem', productName: 'वाघोबा रसायन' },
     ],
 };
 
@@ -62,7 +62,7 @@ const localLog = (over: Record<string, unknown> = {}): DailyLog => ({
 const sunilYes = { verdict: 'confirmed' as const, catalogProductId: 'p-imidacloprid-17-8-sl', assertedByUserId: SUNIL, assertedAtUtc: '2026-11-09T10:05:00.000Z' };
 const PRODUCTS: ReviewProduct[] = [
     { inputEventId: 'ev-spray', mixIndex: 0, spokenName: 'कॉन्फिडॉर', match: { state: 'found', productId: 'p-imidacloprid-17-8-sl' }, speakerAnswer: sunilYes },
-    { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'प्रेम गोल्ड', match: { state: 'notFound' } },
+    { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'वाघोबा रसायन', match: { state: 'notFound' } },
 ];
 
 const card = (over: Partial<ReviewItem> = {}): ReviewItem => ({
@@ -249,7 +249,7 @@ describe('the review card - what reaches it from the server (IT5 Task 2b)', () =
                 { inputEventId: 'ev-spray', mixIndex: 0, spokenName: ' कॉन्फिडॉर ', match: { state: 'found', productId: 'p-imidacloprid-17-8-sl' },
                     speakerAnswer: { verdict: 'Confirmed', catalogProductId: 'p-imidacloprid-17-8-sl', assertedByUserId: SUNIL, assertedAtUtc: '2026-11-09T10:05:00Z' },
                     check: { verdict: 'maybe', assertedByUserId: OWNER, assertedAtUtc: '2026-11-09T10:06:00Z' } },
-                { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'प्रेम गोल्ड', match: { state: 'notFound' } },
+                { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'वाघोबा रसायन', match: { state: 'notFound' } },
                 { inputEventId: 'ev-spray', mixIndex: 2, spokenName: '', match: { state: 'found' } }, // no name: dropped
                 { inputEventId: 'ev-spray', mixIndex: 3, spokenName: 'x', match: { state: 'nearly' } }, // a match word nobody defined: dropped
             ],
@@ -259,7 +259,7 @@ describe('the review card - what reaches it from the server (IT5 Task 2b)', () =
         expect(item.products).toEqual([
             { inputEventId: 'ev-spray', mixIndex: 0, spokenName: 'कॉन्फिडॉर', match: { state: 'found', productId: 'p-imidacloprid-17-8-sl' },
                 speakerAnswer: { verdict: 'confirmed', catalogProductId: 'p-imidacloprid-17-8-sl', assertedByUserId: SUNIL, assertedAtUtc: '2026-11-09T10:05:00Z' } }, // 'maybe' is no answer
-            { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'प्रेम गोल्ड', match: { state: 'notFound' } },
+            { inputEventId: 'ev-spray', mixIndex: 1, spokenName: 'वाघोबा रसायन', match: { state: 'notFound' } },
         ]);
     });
 

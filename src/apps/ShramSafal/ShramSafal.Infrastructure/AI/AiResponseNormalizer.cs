@@ -116,6 +116,13 @@ internal sealed class AiResponseNormalizer
         LabourRowGuard.Apply(root);
         SprayCarrierWaterGuard.Apply(root);
 
+        // PLR lane AI-PARSE-FIX — three TAGS, never a rewrite and never a delete (a mechanical check must not destroy what the
+        // model extracted): a future task is not work done; a stray number before a known fertilizer grade and a bare "board"
+        // beside a spray word each get a "did you mean" tag that keeps the model's name and his words as they were.
+        FutureTenseActivityGuard.Apply(root);
+        StrayLeadingGradeNumberGuard.Apply(root);
+        BordeauxBoardGuard.Apply(root);
+
         var dayOutcome = NormalizeDayOutcome(root["dayOutcome"]?.GetValue<string>());
         if (!HasAnyWork(root) && root["disturbance"] is JsonObject)
         {
@@ -335,7 +342,8 @@ internal sealed class AiResponseNormalizer
 
     private static bool HasAnyWork(JsonObject root)
     {
-        return HasAnyArrayItems(root, "cropActivities")
+        // A future task (tagged plannedOnly) is not work done: a day with nothing but one is not a work day.
+        return HasAnyDoneCropActivity(root)
                || HasAnyArrayItems(root, "irrigation")
                || HasAnyArrayItems(root, "labour")
                || HasAnyArrayItems(root, "inputs")
@@ -346,6 +354,15 @@ internal sealed class AiResponseNormalizer
     private static bool HasAnyArrayItems(JsonObject root, string propertyName)
     {
         return root[propertyName] is JsonArray array && array.Count > 0;
+    }
+
+    private static bool HasAnyDoneCropActivity(JsonObject root)
+    {
+        return root["cropActivities"] is JsonArray array
+               && array.Any(node => !(node is JsonObject item
+                                      && item[ShramSafal.Application.UseCases.Logs.Content.PlannedOnlyMarker.Key] is JsonValue marker
+                                      && marker.TryGetValue<bool>(out var plannedOnly)
+                                      && plannedOnly));
     }
 
     /// <summary>

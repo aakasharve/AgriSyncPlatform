@@ -82,6 +82,26 @@ describe('the result screen\'s own lines', () => {
         expect(placeOf([farm], 'mr')).toBe(RESULT_STR.wholeFarm);
         expect(placeOf([farm], 'en')).toBe('Whole farm');
     });
+
+    it('the place chip from 4 plots is a count, never a line of names (founder 2026-11-21): "द्राक्ष · ८ प्लॉट", all of them "द्राक्ष · सर्व १५ प्लॉट"', () => {
+        const names = (n: number) => Array.from({ length: n }, (_, i) => `द्राक्ष G${i + 1}`);
+        const many = (n: number) => log({ context: { selection: [{ cropId: 'grape', cropName: 'Grapes', selectedPlotIds: names(n).map((_, i) => `g${i}`), selectedPlotNames: names(n) }] } });
+        const farm = [{ id: 'grape', plots: Array.from({ length: 15 }, (_, i) => ({ id: `g${i}` })) }];
+        expect(placeOf([many(8)], 'mr', farm)).toBe('द्राक्ष · ८ प्लॉट');
+        expect(placeOf([many(15)], 'mr', farm)).toBe('द्राक्ष · सर्व १५ प्लॉट');
+        expect(placeOf([many(15)], 'mr')).toBe('द्राक्ष · १५ प्लॉट'); // the caller did not say the crop's total: never "सर्व"
+        expect(placeOf([many(3)], 'mr', farm)).toBe('द्राक्ष G1, द्राक्ष G2, द्राक्ष G3');
+        expect(placeOf([many(8)], 'en', farm)).toBe('Grapes · 8 plots');
+    });
+
+    it('two crops: each with its own plots by the same rule, joined by " + "', () => {
+        const two = log({ context: { selection: [
+            { cropId: 'grape', cropName: 'Grapes', selectedPlotIds: ['g1', 'g2', 'g3', 'g4', 'g5'], selectedPlotNames: ['G1', 'G2', 'G3', 'G4', 'G5'] },
+            { cropId: 'cane', cropName: 'Sugarcane', selectedPlotIds: ['c1'], selectedPlotNames: ['S1'] },
+        ] } });
+        expect(placeOf([two], 'mr')).toBe('द्राक्ष · ५ प्लॉट + ऊस · S1');
+        expect(placeOf([two], 'en')).toBe('Grapes · 5 plots + Sugarcane · S1');
+    });
 });
 
 describe('AddedRow renders in the app language', () => {

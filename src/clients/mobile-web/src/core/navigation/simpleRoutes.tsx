@@ -69,6 +69,13 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                     }
                     ctx.setCurrentRoute('schedule');
                 }}
+                // UI-9a (redesign item 7) - Setup's "शेड्यूल बघा": the schedule tab on this crop (home view); SchedulerPage reads the key once.
+                onOpenSchedule={(cropId?: string) => {
+                    if (typeof window !== 'undefined' && cropId) {
+                        window.sessionStorage.setItem('schedule_view_crop_id', cropId);
+                    }
+                    ctx.setCurrentRoute('schedule');
+                }}
                 // lane MU-3 — पैसे व हिशोब only for a seat that sees the farm's money (the hub then hides its row).
                 onOpenFinanceManager={ctx.maySeeMoney === false ? undefined : () => ctx.setCurrentRoute('finance-manager')}
                 onOpenLabour={() => ctx.setCurrentRoute('labour')}

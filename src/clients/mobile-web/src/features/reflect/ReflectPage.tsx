@@ -80,6 +80,7 @@ import { CostSection, InHandCard, MoneyStripFace } from './overview/CostSection'
 import { PastDayTell } from './overview/PastDayTell';
 import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
 import { FarmStatus } from './overview/FarmStatus';
+import { plotIdsWithWorkOn } from '../context/components/plotSelectorRules';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
 import { NotesList } from './overview/NotesList';
@@ -170,6 +171,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const dateKey = getDateKey(date);
     const todayKey = getDateKey();
     const isToday = dateKey === todayKey;
+    // Lane UI-9a — the plots told today, for the picker's true quick buttons: the same records the plot cards count, and only while the page is on today.
+    const toldTodayPlotIds = useMemo(() => (isToday ? plotIdsWithWorkOn(history, todayKey) : null), [isToday, history, todayKey]);
 
     // ── who is looking (lane RF): his own records, his money, his ▶ ────────────────────────────────────
     const moneyVisible = mayShowFarmMoney(farmRole, maySeeMoney);
@@ -335,7 +338,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             case 'status':
                 return (
                     <SectionBlock id="status" title="शेताची स्थिती" icon={<LayoutGrid size={22} aria-hidden="true" />} tone="green" hint="कोणत्या पिकाचं, कोणत्या प्लॉटचं पाहायचं ते निवडा" {...fold}>
-                        <FarmStatus crops={crops} sel={selection} onSel={setSel} />
+                        <FarmStatus crops={crops} sel={selection} onSel={setSel} toldTodayPlotIds={toldTodayPlotIds} />
                     </SectionBlock>
                 );
             case 'todo':

@@ -82,7 +82,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe('खरेदी — words', () => {
     it('leaves no English on the page, the receipt sheet included', () => {
         render(<ProcurementPage crops={CROPS} onBack={vi.fn()} onTell={vi.fn()} onGo={vi.fn()} />);
-        fireEvent.click(screen.getByTestId('buy-crop-c1'));
+        fireEvent.click(screen.getByTestId('buy-crop-all-photo-c1'));
         fireEvent.click(screen.getByTestId('buy-plot-p1'));
         expect(screen.getByTestId('page-title')).toHaveTextContent('खरेदी');
         expect(latinLeftovers()).toEqual([]);
@@ -115,7 +115,7 @@ describe('खरेदी — the pick drives the list and the three totals', ()
 
     it('one crop: its plots\' bills (even one saved without a crop) + its shared bills + farm-wide', () => {
         render(<ProcurementPage crops={CROPS} />);
-        fireEvent.click(screen.getByTestId('buy-crop-c1'));
+        fireEvent.click(screen.getByTestId('buy-crop-all-photo-c1'));
         expect(listedIds().sort()).toEqual(['bill-b1', 'bill-b2', 'bill-b3', 'bill-b5']);
         expect(screen.getByTestId('buy-totals-cover')).toHaveTextContent('सर्व द्राक्ष');
         expect(totalText('plot')).toContain('₹ 3,000');
@@ -125,7 +125,7 @@ describe('खरेदी — the pick drives the list and the three totals', ()
 
     it('one plot: its own bills + its crop\'s shared bills + farm-wide — not the next plot\'s', () => {
         render(<ProcurementPage crops={CROPS} />);
-        fireEvent.click(screen.getByTestId('buy-crop-c1'));
+        fireEvent.click(screen.getByTestId('buy-crop-all-photo-c1'));
         fireEvent.click(screen.getByTestId('buy-plot-p1'));
         expect(listedIds().sort()).toEqual(['bill-b1', 'bill-b3', 'bill-b5']);
         expect(screen.getByTestId('buy-totals-cover')).toHaveTextContent('थॉम्पसन (द्राक्ष)');
@@ -136,9 +136,9 @@ describe('खरेदी — the pick drives the list and the three totals', ()
 
     it('picking another crop starts its plots at "सर्व" and moves the totals with it', () => {
         render(<ProcurementPage crops={CROPS} />);
-        fireEvent.click(screen.getByTestId('buy-crop-c1'));
+        fireEvent.click(screen.getByTestId('buy-crop-all-photo-c1'));
         fireEvent.click(screen.getByTestId('buy-plot-p1'));
-        fireEvent.click(screen.getByTestId('buy-crop-c2'));
+        fireEvent.click(screen.getByTestId('buy-crop-all-photo-c2'));
         expect(screen.getByTestId('buy-plot-all')).toHaveAttribute('aria-pressed', 'true');
         expect(totalText('plot')).toContain('₹ 32,000');
         expect(totalText('crop')).toContain('₹ 8,000');

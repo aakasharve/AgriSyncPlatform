@@ -25,7 +25,9 @@ import { Check, Sprout } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { useCropPicture } from './cropImage';
+import { SELECTOR_WORDS, allCropsColumns, allCropsLine, allCropsPhotoSlots, moreCropsText, pickedCountText, sortedNaturally } from './plotSelectorRules';
 
 const NUM = "'DM Sans', sans-serif";
 
@@ -51,7 +53,12 @@ export const cropColorOf = (color: string | undefined): string => (color && colo
 
 const Num: React.FC<{ children: React.ReactNode }> = ({ children }) => <span style={{ fontFamily: NUM }}>{children}</span>;
 
-/** "2 प्लॉट", or "1 पैकी 2 प्लॉट" once a count is chosen; "प्लॉट नाही" for a crop with none. */
+/**
+ * "२ प्लॉट", or - once a count is chosen - "२ पैकी १ निवडले" in Marathi (the total comes before पैकी: the same sentence the grid's count line
+ * says, founder 2026-11-20, fix round item 4) and "1 of 2 plots" in English; "प्लॉट नाही" for a crop with none. Marathi mode writes the digits
+ * in Devanagari (lane UI-9a, founder D-123b), in the screen's own font (the number font has no Devanagari digits); English keeps the number
+ * font and 0-9.
+ */
 export const PlotCount: React.FC<{ total: number; picked?: number; language: Language }> = ({ total, picked, language }) => {
     const w = PICKER_WORDS[language === 'en' ? 'en' : 'mr'];
     if (total === 0) return <>{w.noPlots}</>;
@@ -61,8 +68,8 @@ export const PlotCount: React.FC<{ total: number; picked?: number; language: Lan
             : <><Num>{picked}</Num> of <Num>{total}</Num> {total === 1 ? 'plot' : 'plots'}</>;
     }
     return picked === undefined
-        ? <><Num>{total}</Num> {w.plot}</>
-        : <><Num>{picked}</Num> पैकी <Num>{total}</Num> {w.plot}</>;
+        ? <>{digitsFor(total, language)} {w.plot}</>
+        : <>{pickedCountText(total, picked, language)}</>;
 };
 
 /** The crop's real picture (a rounded square, founder 2026-11-20: never a circle), or a plain leaf. Matched by the crop master id, then name, then icon (`cropImage.ts`). */
@@ -132,9 +139,26 @@ export const CropTile: React.FC<CropTileProps> = ({ testId, name, on, onClick, d
             <span className="line-clamp-1 block break-words text-[15.5px] font-extrabold leading-tight text-stone-900">{name}</span>
             {count !== undefined && count !== null && (wide
                 ? <span className="mt-0.5 block text-[12.5px] font-semibold leading-snug text-stone-600">{count}</span>
-                : <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11.5px] font-extrabold leading-snug ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'}`}>{count}</span>)}
+                : <span className={`mt-0.5 inline-block rounded-xl px-2 py-0.5 text-[13px] font-extrabold leading-snug ${on ? 'bg-emerald-100 text-emerald-900' : 'bg-stone-100 text-stone-700'}`}>{count}</span>)}
         </span>
         {on && <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-600 text-white ${wide ? '' : 'absolute right-1.5 top-2.5'}`} data-part="tick"><Check size={15} strokeWidth={3} aria-hidden="true" /></span>}
+    </button>
+);
+
+/**
+ * The chosen crop on the log's plot step (founder 2026-11-20, fix round, strip A): the one "chosen" look every plot already wears - dark green,
+ * white letters, a white tick - with the crop's photo and its name and nothing else. The tick sits on the photo's corner so it takes no width;
+ * the "chosen crop" label and the count are gone (the count is already one sentence under the grid). Fits the 154 px box at 360 px and the
+ * 120 px box at 320 px in 76 px of height (64 on a short screen): the name takes up to two lines. The caller adds the ring and the size.
+ */
+export const ChosenCropStrip: React.FC<{ testId: string; name: string; onClick: () => void; disabled?: boolean; photo: React.ReactNode; className?: string }> = ({ testId, name, onClick, disabled, photo, className = '' }) => (
+    <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-pressed data-look="chosen-strip"
+        className={`relative flex items-center gap-1.5 overflow-hidden rounded-2xl bg-emerald-800 p-1.5 text-left transition active:scale-[0.97] disabled:opacity-60 ${className}`}>
+        <span className="relative shrink-0" data-part="photo">
+            {photo}
+            <span data-part="tick" className="absolute -bottom-1 -right-1 grid h-[18px] w-[18px] place-items-center rounded-full bg-white text-emerald-800 ring-2 ring-emerald-800"><Check size={12} strokeWidth={4} aria-hidden="true" /></span>
+        </span>
+        <span className="line-clamp-2 min-w-0 flex-1 break-words text-[16px] font-extrabold leading-tight text-white" data-part="name">{name}</span>
     </button>
 );
 
@@ -154,14 +178,17 @@ export interface PlotChipProps {
     size?: 'md' | 'lg';
 }
 
-/** A plot as a chip: the crop's colour dot, its name, a tick when chosen. Chosen = green ring and tick; not chosen = plain grey ring. */
+/**
+ * A plot as a chip: the crop's colour dot, its name, a tick when chosen. THE chosen look (lane UI-9a, founder 2026-11-20): dark green
+ * fill, white letters, a white tick - a shape, so it still reads in sunlight; never the crop's own colour. Not chosen: white with a grey border.
+ */
 export const PlotChip: React.FC<PlotChipProps> = ({ testId, name, on, onClick, disabled, color, lead, mark, size = 'md' }) => (
     <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-pressed={on}
-        className={`relative inline-flex max-w-full items-center gap-1.5 rounded-full px-3.5 font-extrabold transition active:scale-95 disabled:opacity-60 ${size === 'lg' ? 'min-h-[52px] text-[16px]' : 'min-h-[44px] text-[14.5px]'} ${on ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500' : 'bg-white text-stone-500 ring-1 ring-stone-300'}`}>
-        <span aria-hidden="true" data-part="dot" className={`h-3 w-3 shrink-0 rounded-full ${cropColorOf(color)}`} />
+        className={`relative inline-flex max-w-full items-center gap-1.5 rounded-full px-3.5 font-extrabold transition active:scale-95 disabled:opacity-60 ${size === 'lg' ? 'min-h-[52px] text-[16px]' : 'min-h-[44px] text-[14.5px]'} ${on ? 'bg-emerald-800 text-white ring-2 ring-emerald-800' : 'bg-white text-stone-700 ring-1 ring-stone-400'}`}>
+        <span aria-hidden="true" data-part="dot" className={`h-3 w-3 shrink-0 rounded-full ${cropColorOf(color)} ${on ? 'ring-2 ring-white' : ''}`} />
         {lead}
         <span className="min-w-0 truncate">{name}</span>
-        {on && <Check size={15} strokeWidth={3} className="shrink-0 text-emerald-600" aria-hidden="true" data-part="tick" />}
+        {on && <Check size={15} strokeWidth={3} className="shrink-0 text-white" aria-hidden="true" data-part="tick" />}
         {mark}
     </button>
 );
@@ -199,7 +226,63 @@ export interface CropPlotPickerProps {
     language?: Language;
 }
 
-type Tile = { key: 'all' | string; crop?: PickerCrop };
+/**
+ * The all-crops card (lane UI-9a, founder pick C, 2026-11-20): ONE wide card above the crop cards with a small photo of EVERY crop, each
+ * with its own colour strip, its name and its plot count. Every photo is its own button and picks that crop - the same tap as the crop's
+ * card below. With every crop on the card has the green border and a tick; with one crop chosen it loses both and says "सगळी बघा", one
+ * tap back to the whole farm, written where he is looking. More than 8 crops: 7 photos and a "+N पिकं" tile (info, not a button).
+ */
+export const AllCropsCard: React.FC<{
+    crops: readonly PickerCrop[];
+    chosen: 'all' | string;
+    onPickCrop: (key: 'all' | string) => void;
+    testIds: Pick<PickerTestIds, 'crop'>;
+    language: Language;
+}> = ({ crops, chosen, onPickCrop, testIds, language }) => {
+    const words = PICKER_WORDS[language === 'en' ? 'en' : 'mr'];
+    const sel = SELECTOR_WORDS[language === 'en' ? 'en' : 'mr'];
+    const on = chosen === 'all';
+    const { shown, more } = allCropsPhotoSlots(crops.length);
+    const cols = allCropsColumns(shown, more > 0);
+    // Sized so the photos still fit their columns on the narrowest phone (320 px): four across 56, three across 76, two across 96.
+    const px = cols >= 4 ? 56 : cols === 3 ? 76 : 96;
+    const id = testIds.crop('all');
+    const plots = crops.reduce((n, c) => n + c.plots.length, 0);
+    return (
+        <div data-testid={`${id}-card`} data-on={on ? 'yes' : 'no'}
+            className={`rounded-3xl border-2 bg-white p-2.5 ${on ? 'border-emerald-700 shadow-[0_8px_20px_-12px_rgba(4,120,87,0.7)]' : 'border-stone-200'}`}>
+            <button type="button" data-testid={id} aria-pressed={on} onClick={() => onPickCrop('all')}
+                className="flex min-h-[44px] w-full items-center gap-2 text-left active:scale-[0.99]">
+                <span className="min-w-0 flex-1 text-[19px] font-extrabold leading-tight text-stone-900">{words.allCrops}</span>
+                <span className="shrink-0 text-[13px] font-bold text-stone-600" data-testid={`${id}-line`}>{allCropsLine(crops.length, plots, language)}</span>
+                {on
+                    ? <span data-part="tick" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-700 text-white"><Check size={16} strokeWidth={3} aria-hidden="true" /></span>
+                    : <span data-part="see-all" className="inline-flex min-h-[40px] shrink-0 items-center rounded-xl border-2 border-stone-300 bg-white px-3 text-[13.5px] font-extrabold text-stone-800">{sel.seeAll}</span>}
+            </button>
+            <div className="mt-1.5 grid gap-2" data-testid={`${id}-photos`} data-cols={cols} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                {crops.slice(0, shown).map(c => {
+                    const own = chosen === c.id;
+                    return (
+                        <button key={c.id} type="button" data-testid={`${id}-photo-${c.id}`} aria-pressed={own} onClick={() => onPickCrop(c.id)}
+                            className={`flex min-w-0 flex-col items-center rounded-2xl border-2 px-1 pb-1.5 pt-1.5 text-center active:scale-95 ${own ? 'border-emerald-700 bg-emerald-50' : 'border-transparent bg-stone-50'}`}>
+                            <span className="relative">
+                                <PickerCropPhoto crop={c} px={px} />
+                                {own && <span data-part="tick" className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-emerald-700 text-white"><Check size={14} strokeWidth={3} aria-hidden="true" /></span>}
+                            </span>
+                            <span aria-hidden="true" data-part="accent" className={`mt-1 block h-[5px] rounded-full ${cropColorOf(c.color)}`} style={{ width: px }} />
+                            <span className="mt-1 line-clamp-1 w-full break-words text-[13.5px] font-extrabold leading-tight text-stone-900">{cropNameIn(c.name, language, c.masterId)}</span>
+                            <span className="block text-[11.5px] font-bold leading-tight text-stone-600"><PlotCount total={c.plots.length} language={language} /></span>
+                        </button>
+                    );
+                })}
+                {more > 0 && (
+                    <span data-testid={`${id}-more`} className="grid place-items-center rounded-2xl border-2 border-dashed border-stone-300 px-1 text-center text-[14px] font-extrabold text-stone-600">{moreCropsText(more, language)}</span>
+                )}
+            </div>
+            <p className="m-0 mt-1.5 text-[14px] font-bold text-stone-700">{language === 'en' ? 'Tap a photo: only that crop is shown' : 'फोटो दाबा: फक्त ते पीक दिसेल'}</p>
+        </div>
+    );
+};
 
 /** Crop tiles first, then the plots of the chosen crop (or of every crop), each plot with its crop's colour. */
 export const CropPlotPicker: React.FC<CropPlotPickerProps> = ({
@@ -207,16 +290,18 @@ export const CropPlotPicker: React.FC<CropPlotPickerProps> = ({
 }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
-    const words = PICKER_WORDS[language === 'en' ? 'en' : 'mr'];
     const of = (key: 'all' | string) => crops.filter(c => key === 'all' || c.id === key);
-    const total = (key: 'all' | string) => of(key).reduce((n, c) => n + c.plots.length, 0);
-    const picked = (key: 'all' | string) => of(key).reduce((n, c) => n + c.plots.filter(p => pickedPlotIds.includes(p.id)).length, 0);
+    const picked = (cropId: string) => of(cropId).reduce((n, c) => n + c.plots.filter(p => pickedPlotIds.includes(p.id)).length, 0);
     const allTile = allCrops && crops.length > 1;
-    const tiles: Tile[] = [...(allTile ? [{ key: 'all' as const }] : []), ...crops.map(c => ({ key: c.id, crop: c }))];
-    // With no "all" tile to stand for "everything" (one crop, or a page that does not offer it), a page that is on `all` has every crop on.
-    const isOn = (t: Tile) => chosen === t.key || (chosen === 'all' && !allTile && t.crop !== undefined);
-    const plotsShown = of(chosen).flatMap(c => c.plots.map(p => ({ p, c })));
-    const showTiles = !choiceOnly || tiles.length > 1;
+    // Founder 2026-11-20 (fix round, item 6): while the all-crops card holds a photo of EVERY crop (8 crops or fewer) it already does what the
+    // crop cards below it do (the same tap, the same tick), so those cards are not drawn a second time. With more crops the card shows 7
+    // photos and a "+N" note, so the cards stay: they are then the only way to reach the other crops.
+    const cardsRepeatPhotos = allTile && allCropsPhotoSlots(crops.length).more === 0;
+    // The all-crops card (UI-9a) sits ABOVE the crop cards, so the cards themselves are the crops only.
+    // With no all-crops card to stand for "everything" (one crop, or a page that does not offer it), a page that is on `all` has every crop on.
+    const isOn = (c: PickerCrop) => chosen === c.id || (chosen === 'all' && !allTile);
+    const plotsShown = of(chosen).flatMap(c => sortedNaturally(c.plots, p => p.name).map(p => ({ p, c }))); // natural number order: G2 before G10
+    const showTiles = !choiceOnly || crops.length > 1;
     const showPlots = !hidePlots && (choiceOnly ? plotsShown.length > 1 : plotsShown.length > 0);
     const question = (text: string | undefined) => (text ? <p className="m-0 mb-1 px-1 text-[13.5px] font-extrabold text-stone-600">{text}</p> : null);
 
@@ -225,21 +310,21 @@ export const CropPlotPicker: React.FC<CropPlotPickerProps> = ({
             {showTiles && (
                 <div data-testid={testIds.cropRow}>
                     {question(cropQuestion)}
-                    <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
-                        {tiles.map(t => {
-                            const on = isOn(t);
-                            const name = t.crop ? cropNameIn(t.crop.name, language, t.crop.masterId) : words.allCrops;
-                            return (
-                                <CropTile key={t.key} testId={testIds.crop(t.key)} name={name} on={on} onClick={() => onPickCrop(t.key)}
-                                    color={t.crop ? cropColorOf(t.crop.color) : undefined}
-                                    className="min-w-[108px] max-w-[160px] flex-1 shrink-0 snap-start"
-                                    photo={t.crop
-                                        ? <PickerCropPhoto crop={t.crop} px={56} />
-                                        : <span className="flex h-14 w-14 items-center -space-x-4">{crops.slice(0, 3).map(c => <PickerCropPhoto key={c.id} crop={c} px={40} className="ring-2 ring-white" />)}</span>}
-                                    count={<PlotCount total={total(t.key)} picked={on ? picked(t.key) : undefined} language={language} />} />
-                            );
-                        })}
-                    </div>
+                    {allTile && <div className="mb-2.5"><AllCropsCard crops={crops} chosen={chosen} onPickCrop={onPickCrop} testIds={testIds} language={language} /></div>}
+                    {!cardsRepeatPhotos && (
+                        <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
+                            {crops.map(c => {
+                                const on = isOn(c);
+                                return (
+                                    <CropTile key={c.id} testId={testIds.crop(c.id)} name={cropNameIn(c.name, language, c.masterId)} on={on} onClick={() => onPickCrop(c.id)}
+                                        color={cropColorOf(c.color)}
+                                        className="min-w-[108px] max-w-[160px] flex-1 shrink-0 snap-start"
+                                        photo={<PickerCropPhoto crop={c} px={56} />}
+                                        count={<PlotCount total={c.plots.length} picked={on ? picked(c.id) : undefined} language={language} />} />
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
             {showPlots && (

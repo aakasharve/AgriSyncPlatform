@@ -81,6 +81,16 @@ export interface ResultCopy {
     yesThis: string;
     /** A name the library holds more than once: no way to pick yet, so it only says the owner will look (never "say which one"). */
     ambiguousLine: string;
+    /** Lane FACTS-2 (founder 2026-11-20): the library names that sound like what he said - he taps the one he meant. */
+    didYouMean: string;
+    /** The row's status line when such names exist. */
+    didYouMeanRow: string;
+    /** Under the names: nothing is chosen for him, and the photo is still there. */
+    didYouMeanHint: string;
+    /** On the card of a product he picked from those names: his word and the library's name differ, and he chose. */
+    pickedNote: (said: string, picked: string) => string;
+    /** The speaker line and the row status of a product he picked from those names: he chose it; he did not say it was a library match. */
+    speakerChose: (name: string) => string;
     notThis: string;
     answerNo: string;
     answerPhoto: string;
@@ -104,6 +114,10 @@ export interface ResultCopy {
     /** The folded "his words" line. */
     yourWords: string;
     seeWords: string;
+    /** Lane RWF: his words are open when the screen comes; the line under the title says a tap closes them. */
+    hideWords: string;
+    /** Lane RWF: under the part tiles - a word with no colour was not placed in any part (so what he said but was not noted shows). */
+    plainWordsNote: string;
 }
 
 const mr: ResultCopy = {
@@ -171,6 +185,11 @@ const mr: ResultCopy = {
     answerYes: 'हो',
     yesThis: 'हो, हेच',
     ambiguousLine: 'लायब्ररीत एकापेक्षा जास्त जुळले — मालक पाहतील', // PROPOSED (Marathi)
+    didYouMean: 'तुम्हाला हे म्हणायचं होतं का?', // PROPOSED (Marathi)
+    didYouMeanRow: 'जवळची नावं सापडली — दाबून निवडा', // PROPOSED (Marathi)
+    didYouMeanHint: 'यातलं नसेल तर फोटो घ्या — आम्ही आपणहून काही निवडत नाही.', // PROPOSED (Marathi)
+    pickedNote: (said: string, picked: string) => `तुम्ही “${said}” म्हणालात; लायब्ररीतलं “${picked}” तुम्ही निवडलं. नोंदीत तुमचे शब्द “${said}” तसेच राहतात.`, // PROPOSED (Marathi)
+    speakerChose: (name: string) => `${name}ने हे नाव निवडलं`, // PROPOSED (Marathi)
     notThis: 'हे नाही',
     answerNo: 'नाही',
     answerPhoto: 'फोटो',
@@ -190,6 +209,8 @@ const mr: ResultCopy = {
     mixSource: (title: string) => `स्रोत: ${title}`,
     yourWords: 'तुमचं बोलणं',
     seeWords: 'शब्द पाहण्यासाठी दाबा',
+    hideWords: 'लपवण्यासाठी दाबा', // PROPOSED (Marathi)
+    plainWordsNote: 'रंग नसलेले शब्द कोणत्याही भागात घेतलेले नाहीत.', // PROPOSED (Marathi)
 };
 
 const en: ResultCopy = {
@@ -241,6 +262,11 @@ const en: ResultCopy = {
     answerYes: 'Yes',
     yesThis: 'yes, this one',
     ambiguousLine: 'The library found more than one match — the owner will look', // PROPOSED (English)
+    didYouMean: 'Did you mean one of these?', // PROPOSED (English)
+    didYouMeanRow: 'Names that sound like it were found — tap to choose', // PROPOSED (English)
+    didYouMeanHint: 'If none is right, take a photo — nothing is chosen for you.', // PROPOSED (English)
+    pickedNote: (said: string, picked: string) => `You said “${said}”; you chose “${picked}” from the library. The record keeps your words “${said}” as said.`, // PROPOSED (English)
+    speakerChose: (name: string) => `${name} chose this name`, // PROPOSED (English)
     notThis: 'not this one',
     answerNo: 'No',
     answerPhoto: 'Photo',
@@ -260,6 +286,8 @@ const en: ResultCopy = {
     mixSource: (title: string) => `Source: ${title}`,
     yourWords: 'Your words',
     seeWords: 'Tap to see the words',
+    hideWords: 'Tap to hide', // PROPOSED (English)
+    plainWordsNote: 'Words without a colour were not placed in any part.', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

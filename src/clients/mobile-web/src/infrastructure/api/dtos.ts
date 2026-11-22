@@ -89,6 +89,12 @@ export interface PlotDto {
     areaInAcres: number;
     createdAtUtc: string;
     modifiedAtUtc: string;
+    /**
+     * spec: plr-d10 lane GRP-1a - the owner's own name for a cluster of plots ("विहिरीजवळचे"), or none. Missing, null or blank all mean
+     * "no group" (an older server never sends it). A group is ONLY this label: plots of one crop with the same trimmed name are the group.
+     * It is never someone's access: Team access is a list of plot ids and does not follow a group.
+     */
+    groupName?: string | null;
 }
 
 export interface CropCycleDto {

@@ -64,6 +64,8 @@ export function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
     const payloads: LogTaskMutationPayload[] = [];
 
     log.cropActivities.forEach(activity => {
+        // PLR lane AI-PARSE-FIX: a future task (tagged plannedOnly) is not work done - no done-work line. Server mirror: LogTaskProjection.
+        if (activity.plannedOnly === true) return;
         payloads.push({
             logTaskId: ensureUuid(activity.id),
             activityType: activity.workTypes?.[0] || activity.title,

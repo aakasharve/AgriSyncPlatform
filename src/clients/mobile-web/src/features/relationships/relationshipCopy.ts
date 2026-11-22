@@ -142,7 +142,7 @@ const mr: RelationshipCopy = {
             [SyncMutationName.TestinstanceReported]: 'चाचणी',
             AttendanceMark: 'हजेरी',
             DailyLog: 'कामाची नोंद',
-            ScheduleSubscription: 'वेळापत्रकातील बदल',
+            ScheduleSubscription: 'शेड्यूलमधील बदल', // draft Marathi - needs review (UI-9a item 9: "शेड्यूल", not "वेळापत्रक")
             RefusedSyncMutation: 'काम',
         },
         whatOther: 'काम', // PROPOSED (Marathi)

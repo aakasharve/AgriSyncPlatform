@@ -45,15 +45,17 @@ describe('शेताची स्थिती (FarmStatus)', () => {
         const onSel = vi.fn();
         const { rerender } = render(<FarmStatus crops={CROPS} sel={selectAll(CROPS)} onSel={onSel} />);
         expect(screen.getByTestId('farm-crop-all')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('द्राक्ष');
+        expect(screen.getByTestId('farm-crop-all-photo-grape')).toHaveTextContent('द्राक्ष'); // the card's photo is the crop's one place now (fix round item 6)
+        expect(screen.queryByTestId('farm-crop-grape')).toBeNull();
         expect(screen.getAllByTestId(/^farm-plot-/)).toHaveLength(3);
-        fireEvent.click(screen.getByTestId('farm-crop-grape'));
+        fireEvent.click(screen.getByTestId('farm-crop-all-photo-grape'));
         expect(onSel).toHaveBeenCalledWith({ crop: 'grape', plotIds: ['g1', 'g2'] });
         rerender(<FarmStatus crops={CROPS} sel={{ crop: 'grape', plotIds: ['g1'] }} onSel={onSel} />);
         expect(screen.getAllByTestId(/^farm-plot-/)).toHaveLength(2);
         expect(screen.getByTestId('farm-plot-g1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('farm-plot-g2')).toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('1 पैकी 2 प्लॉट');
+        expect(screen.getByTestId('farm-crop-all-photo-grape')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('farm-crop-all-photo-cane')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('no crop yet: says so plainly', () => {

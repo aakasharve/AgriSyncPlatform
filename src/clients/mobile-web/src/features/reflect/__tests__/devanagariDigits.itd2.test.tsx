@@ -108,11 +108,12 @@ const renderPage = () => {
 /**
  * EXCEPTIONS - on the same page, not changed by this lane (D-128). Each is a test id (or prefix) and WHY it keeps its digits:
  *   day-label                         the page's day label ("25 ऑक्टो"): the shared reflect date formatter
- *   farm-crop-*, activity-feed-count  the page's own crop / recording counters
+ *   activity-feed-count               the page's own recording counter
+ *   (farm-crop-*, the crop picker's plot counts, left this list in lane UI-9a: `PlotCount` now prints Devanagari digits)
  *   vr-day-*                          the day view's rows (`DayParts`, shared with the check and correction screens)
  *   rf-time-*                         the day view's time chips (`formatFarmerLogTime`, the app's fixed Marathi time words)
  */
-const EXCEPTIONS = ['day-label', 'activity-feed-count', 'farm-crop-all', 'vr-day-head-labour', 'rf-time-g1-me'];
+const EXCEPTIONS = ['day-label', 'activity-feed-count', 'vr-day-head-labour', 'rf-time-g1-me'];
 
 describe('IT-D2 - पूर्ण शेतीचा आढावा: the plot card in Marathi mode', () => {
     it('every plot card and the day view header hold no Latin digit', async () => {
@@ -183,6 +184,20 @@ describe('IT-D2 - पूर्ण शेतीचा आढावा: English mo
         expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ 1,800');
         expect(screen.getByTestId('plot-files-grape:g1').getAttribute('aria-label')).toBe('जोडलेल्या फाइल 2');
         expect(screen.getByTestId('plot-card-grape:g1')).toHaveTextContent('28.5°C');
+    });
+});
+
+describe('UI-9a - the counts on the crop picker are in Devanagari digits in Marathi mode', () => {
+    it('the all-crops card, the crop cards and the plot boxes hold no Latin digit of their own counts', async () => {
+        lang.value = 'mr';
+        renderPage();
+        await waitFor(() => expect(screen.getByTestId('plot-hint-grape:g1')).toBeInTheDocument());
+        // (the crop cards under the all-crops card are not drawn any more, fix round item 6: the card's photos carry each crop's count)
+        for (const id of ['farm-crop-all', 'farm-crop-all-line', 'farm-crop-all-photo-grape']) {
+            const el = screen.getByTestId(id);
+            expect(el.textContent, id).toMatch(/[०-९]/);
+            expect(latinDigitFindings(el), id).toEqual([]);
+        }
     });
 });
 

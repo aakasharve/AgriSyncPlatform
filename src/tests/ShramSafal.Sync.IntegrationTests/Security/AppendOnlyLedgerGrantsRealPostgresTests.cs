@@ -304,6 +304,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    rebuildable rows, not a ledger). It grants or revokes nothing on any append-only ledger. Down() drops the four policies, both tables and the two
         //    columns - only what Up() added. Safe to revert and re-apply mid-proof.
         "20261119105639_AddInputUseFacts",
+        // ── Reviewed 2026-11-20 (spec: plr-d10 lane GRP-1a, owner-named groups of plots); Up() and Down() read in full: Up() adds ONE NULLABLE column (group_name,
+        //    varchar(30)) to ssf.plots - current state, not a ledger - and nothing else: it grants or revokes nothing, on any table or ledger, and creates no table.
+        //    Down() is DATA-DESTROYING by design: it drops that one column (a rollback loses every group name typed since; the plots stay), and the deploy rollback
+        //    plan relies on the snapshot, not on Down(). Safe to revert and re-apply mid-proof (re-Up recreates the column empty).
+        "20261120111737_AddPlotGroupName",
         // spec: trusted-control-room-2026-11-20 (plan CR-3, Task A2) - Reviewed 2026-11-21; Up() and Down() read in full: Up() creates ssf.control_room_people only (no RLS by design;
         //    SELECT + INSERT + UPDATE for the app role on THIS new table - current state, not a ledger - and a DELETE and TRUNCATE revoke on it with its own effective-privilege
         //    guard); it adds no column to any existing table and grants or revokes nothing on any ledger. Down() raises while a row exists (the proof's data has none), else drops

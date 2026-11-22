@@ -8,6 +8,8 @@
  * choice names are the MU design's own words (§2, decided); every other line is NEW wording, PROPOSED, awaiting the
  * founder's wording review. No "AI", no emoji; nothing points at the owner.
  */
+import { PLOT_COUNT_FROM } from '../../../shared/names/placeWords';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import type { PlotScopeName } from '../data/membershipAdminClient';
 
 export interface PlotScopeCopy {
@@ -25,6 +27,8 @@ export interface PlotScopeCopy {
     pickOne: string;
     /** No plot on this phone yet. */
     noPlots: string;
+    /** Over the plots that no crop of this phone holds, when other plots are drawn under their crop (lane UI-9a, item 6). */
+    otherPlots: string;
     save: string;
     cancel: string;
     /** The overview's title for a person who covers chosen plots (it must not say "whole farm" to him). */
@@ -53,10 +57,11 @@ const mr: PlotScopeCopy = {
         ChosenPlots: 'फक्त निवडलेल्या प्लॉटचं काम दिसेल व नोंदवता येईल.', // PROPOSED (Marathi)
         OwnWork: 'कोणत्याही प्लॉटवर स्वतःचं काम नोंदवतील; इतरांचं काम दिसणार नाही.', // PROPOSED (Marathi)
     },
-    countPlots: n => `${n} प्लॉट`, // MU design §6 ("3 प्लॉट")
+    countPlots: n => `${toDevanagariDigits(n)} प्लॉट`, // MU design §6 ("३ प्लॉट"); Marathi digits (founder 2026-11-21)
     sheetTitle: 'कोणते प्लॉट?', // PROPOSED (Marathi)
     pickOne: 'किमान एक प्लॉट निवडा.', // PROPOSED (Marathi)
     noPlots: 'या फोनवर अजून प्लॉट नाहीत.', // PROPOSED (Marathi)
+    otherPlots: 'इतर प्लॉट', // draft Marathi - needs review
     save: 'ठेवा', // PROPOSED (Marathi)
     cancel: 'राहू द्या', // the authority switches' word (lane 2b)
     overviewTitle: 'माझ्या प्लॉटचा आढावा', // PROPOSED (Marathi)
@@ -83,6 +88,7 @@ const en: PlotScopeCopy = {
     sheetTitle: 'Which plots?', // PROPOSED (English)
     pickOne: 'Choose at least one plot.', // PROPOSED (English)
     noPlots: 'No plots on this phone yet.', // PROPOSED (English)
+    otherPlots: 'Other plots', // draft English - needs review
     save: 'Keep', // PROPOSED (English)
     cancel: 'Not now', // the authority switches' word (lane 2b)
     overviewTitle: 'My plots overview', // PROPOSED (English)
@@ -109,5 +115,6 @@ export function plotScopeSummary(
     const ids = new Set(plotIds ?? []);
     // In the farm's own plot order (the picker's), so the same choice always reads the same.
     const names = [...plotNames].filter(([id, name]) => ids.has(id) && !!name.trim()).map(([, name]) => name);
-    return names.length === ids.size && names.length > 0 ? names.join(', ') : copy.countPlots(ids.size);
+    // 1 to 3 plots by name; from 4 (founder 2026-11-21, "one count rule") the count: "प्लॉट: ८ प्लॉट", never a line of fifteen names.
+    return names.length === ids.size && names.length > 0 && names.length < PLOT_COUNT_FROM ? names.join(', ') : copy.countPlots(ids.size);
 }

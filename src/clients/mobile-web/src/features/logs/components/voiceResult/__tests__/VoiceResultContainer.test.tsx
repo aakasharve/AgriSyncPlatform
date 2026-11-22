@@ -199,8 +199,7 @@ describe('the ONE result screen — what he reads', () => {
 
     it('marks his words ONLY with verified phrases, each tagged with its part; tapping a part shows its words', () => {
         mount(props());
-        expect(screen.queryByTestId('vr-words')).toBeNull(); // lane IT4 Task 1: folded under one line until he taps it
-        fireEvent.click(screen.getByTestId('vr-words-toggle'));
+        expect(screen.getByTestId('vr-words')).toBeTruthy(); // lane RWF: his words are open from the start, no tap
         const words = screen.getByTestId('vr-words');
         expect(words.textContent).toContain('दोन तास पाणी');
         const marks = [...words.querySelectorAll('mark')];
@@ -217,14 +216,19 @@ describe('the ONE result screen — what he reads', () => {
         expect(screen.queryByTestId('vr-link-labour')).toBeNull();
     });
 
-    it('what the day holds is ONE tappable line per part (lane IT4 Task 1); this recording\'s parts carry "नवीन"', () => {
+    it('the parts are ONE tappable line each (lane IT4 Task 1): this recording\'s own list first; the whole day is folded below, its new parts marked "नवीन" (lane RWF)', () => {
         mount(props());
         const lines = screen.getByTestId('vr-lines');
         expect(within(lines).getByTestId('vr-line-head-part:irrigation').textContent).toBe('२ तास');
-        expect(lines.textContent).toContain('छाटणी'); // the morning's work is part of the day
-        expect(screen.getByTestId('vr-line-part:irrigation').getAttribute('data-touched')).toBe('yes');
-        expect(screen.getByTestId('vr-line-part:crop').getAttribute('data-touched')).toBe('no');
+        expect(lines.textContent).not.toContain('छाटणी'); // the morning's work is the whole day's, not this recording's
         expect(lines.querySelectorAll('[data-open="yes"]')).toHaveLength(0); // nothing expanded
+        // The whole day, folded until a tap: the morning's work is part of it, and this recording's parts carry the tag.
+        expect(screen.queryByTestId('vr-day-lines-list')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr-dayfold-toggle'));
+        const day = screen.getByTestId('vr-day-lines-list');
+        expect(day.textContent).toContain('छाटणी');
+        expect(screen.getByTestId('vr-day-line-part:irrigation').getAttribute('data-touched')).toBe('yes');
+        expect(screen.getByTestId('vr-day-line-part:crop').getAttribute('data-touched')).toBe('no');
     });
 
     it('an item the server could NOT verify carries the approved flag, never stands as a plain fact', () => {
@@ -544,7 +548,7 @@ describe('the ONE result screen — lane L6b (founder design)', () => {
             meta: { createdAtISO: '2026-10-26T10:00:00.000Z', createdByOperatorId: ME },
         });
         mount(props({ history: [rec] }));
-        fireEvent.click(screen.getByTestId('vr-words-toggle')); // his words are folded under one line (lane IT4 Task 1)
+        // his words (and the why-tiles in them) are open from the start (lane RWF)
         expect(screen.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
         const card = screen.getByTestId('vr-link-card'); // open before any tap: the first part he said
         expect(card.getAttribute('data-part')).toBe('crop');

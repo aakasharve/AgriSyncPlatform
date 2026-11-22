@@ -25,7 +25,7 @@ import { formatFarmerTime } from '../../../shared/utils/displayTime';
 import { SANS, Tap } from '../../../shared/components/ui/placeUi';
 import type { DailyLog } from '../../../types';
 import { dayDateLabel } from './scheduleDates';
-import { SC } from './scheduleCopy';
+import { SC, mrNum } from './scheduleCopy';
 import { PART_LABEL, PARTS, extrasOn, partsDone, type ScheduleDay } from './scheduleModel';
 import { ItemLine, PartIcon, StatusChip } from './scheduleUi';
 
@@ -86,7 +86,7 @@ export const ScheduleDaySheet: React.FC<{ day: ScheduleDay; stageName: string | 
                 </div>
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-24 pt-3">
                     <section data-testid="day-clips" data-count={clips.length}>
-                        <h3 className="m-0 text-[16px] font-extrabold text-stone-800">{SC.voiceTalk} <span className="text-[14px] font-bold text-stone-600">({clips.length})</span></h3>
+                        <h3 className="m-0 text-[16px] font-extrabold text-stone-800">{SC.voiceTalk} <span className="text-[14px] font-bold text-stone-600">({mrNum(clips.length)})</span></h3>
                         <p className="m-0 mb-2 text-[13px] font-bold text-stone-500">{SC.thisPhoneClips}</p>
                         {clips.length === 0
                             ? <p className="m-0 text-[15px] font-semibold text-stone-600" data-testid="day-no-clips">{SC.noClipsOnPhone}</p>

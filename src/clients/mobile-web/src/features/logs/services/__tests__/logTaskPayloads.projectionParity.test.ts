@@ -46,6 +46,7 @@ describe('lane F1 — the phone\'s task lines for a stored document (shared C#�
             expect.stringContaining('real parse — typed Marathi'),
             expect.stringContaining('real parse — spoken English'),
             expect.stringContaining('edge values'),
+            expect.stringContaining('planned-only crop activity'),
         ]);
     });
 

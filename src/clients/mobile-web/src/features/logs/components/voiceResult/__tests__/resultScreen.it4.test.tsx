@@ -80,7 +80,7 @@ const SPRAY = {
     id: 'ev-spray', method: 'Spray', sourceText: 'कॉन्फिडॉर आणि प्रेम गोल्ड फवारलं',
     mix: [
         { id: 'm-conf', productName: 'कॉन्फिडॉर', dose: 1, unit: 'ml' },
-        { id: 'm-prem', productName: 'प्रेम गोल्ड' },
+        { id: 'm-prem', productName: 'वाघोबा रसायन' },
     ],
 };
 /** Calcium nitrate and 19:19:19 in ONE drip tank (a never-together pair when a reviewed rule exists). */
@@ -196,16 +196,16 @@ describe('Task 1 - the simple form, one tappable line per part', () => {
         expect(screen.getByTestId('vr-line-part:labour').getAttribute('data-open')).toBe('yes');
     });
 
-    it('HisWords_FoldedUnderOneLine_WithPlay', async () => {
+    it('HisWords_OpenFromTheStart_WithPlay_AndATapOnTheTitleHidesThem', async () => {
         await getDatabase().voiceClips.bulkPut([clipRow()]);
         mount(props({ history: [sevenParts()] }));
-        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy()); // his recording's play button is on the fold
-        expect(screen.queryByTestId('vr-words')).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy()); // his recording's play button is under his words
+        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर'); // lane RWF: open, no tap
         expect(screen.getByTestId('vr-words-toggle').textContent).toContain('तुमचं बोलणं');
         fireEvent.click(screen.getByTestId('vr-words-toggle'));
-        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर');
-        fireEvent.click(screen.getByTestId('vr-words-toggle'));
         expect(screen.queryByTestId('vr-words')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr-words-toggle'));
+        expect(screen.getByTestId('vr-words').textContent).toContain('कॉन्फिडॉर');
     });
 
     it('ConfirmAndEdit_StillPresent_ForOwnerOnly', () => {
@@ -259,7 +259,7 @@ describe('Task 2 - the product rows, the card, and हो / नाही / फ�
 
     it('AmbiguousProduct_SaysLibraryFoundSeveral_AndOwnerWillLook_NoWayToPickPromised', () => {
         expect(AMBIGUOUS_NAME).not.toBe('');
-        const ambiguous = log(NOW, { fullTranscript: AMBIGUOUS_NAME, inputs: [{ id: 'ev-amb', method: 'Spray', mix: [{ id: 'm-amb', productName: AMBIGUOUS_NAME }, { id: 'm-amb2', productName: 'प्रेम गोल्ड' }] }] });
+        const ambiguous = log(NOW, { fullTranscript: AMBIGUOUS_NAME, inputs: [{ id: 'ev-amb', method: 'Spray', mix: [{ id: 'm-amb', productName: AMBIGUOUS_NAME }, { id: 'm-amb2', productName: 'वाघोबा रसायन' }] }] });
         mount(props({ history: [ambiguous] }));
         open('inputs:ev-amb');
         const row = screen.getByTestId('vr-prow-m-amb');

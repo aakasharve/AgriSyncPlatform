@@ -51,7 +51,7 @@ const mr: AuthorityCopy = {
         ReviewMoney: 'पैशांच्या नोंदी तपासणे व दुरुस्त करणे', // PROPOSED (Marathi)
         EditFarmSetup: 'शेताची रचना बदलणे (प्लॉट, हद्द)', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी', // PROPOSED (Marathi)
-        ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने', // PROPOSED (Marathi)
+        ScheduleTemplates: 'पीक शेड्यूलचे नमुने', // PROPOSED (Marathi); draft Marathi - needs review (UI-9a item 9: "शेड्यूल", not "वेळापत्रक")
         PlanWork: 'कामाचं नियोजन करणे', // PROPOSED (Marathi) — lane L8b-1 (founder D-73: "the people you give it")
         AssignWork: 'काम सोपवणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24c: assigning to someone else)
         SeeAllTasks: 'सगळी कामे पाहणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24e1, D-79)
