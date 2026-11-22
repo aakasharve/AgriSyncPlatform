@@ -97,9 +97,8 @@ vi.mock('../../../features/logs/hooks/useDayUnderstanding', () => ({
 }));
 vi.mock('../../../i18n/LanguageContext', async () => {
     const { t: translate } = await import('../../../i18n/translations');
-    return {
-        useLanguage: () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => translate(k, 'mr') }),
-    };
+    const ctx = () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => translate(k, 'mr') });
+    return { useLanguage: ctx, useOptionalLanguage: ctx };
 });
 // Stage questions ON, as release-build.yml / release.yml set them: the panel runs computePreviousLog over `allLogs` only when this is on.
 vi.mock('../../../app/featureFlags', () => ({

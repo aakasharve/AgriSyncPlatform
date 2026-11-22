@@ -35,6 +35,7 @@ vi.mock('../../hooks/useDayUnderstanding', () => ({
 }));
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
+    useOptionalLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
 }));
 
 function makeSavedLog(overrides: Partial<DailyLog> = {}): DailyLog {

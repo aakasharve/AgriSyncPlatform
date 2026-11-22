@@ -19,6 +19,7 @@ import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
 import type { ScheduleGapContext } from './dfesScheduleWindow';
 import type { MissedCard } from './dfesWhyNot';
+import type { StageQuestionContext } from './dfesStageQuestion';
 import type { WeatherReconcileContext } from './dfesWeatherReconcile';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
@@ -98,6 +99,11 @@ export interface DailyQuestionInputs {
      * The engine asks about the first one not already asked (recent events' card refs): once per task.
      */
     missedCards?: readonly MissedCard[];
+    /**
+     * Lane DFES-Q (task 6) - the plot's stage question for today (dfesStageQuestion.computeStageQuestion): a cited look line of Shram
+     * Safal's own schedule (`stage_look`), or the open question (`stage_open`). Absent = none.
+     */
+    stageQuestion?: StageQuestionContext;
     /** Task 3A — category-scoped "planned but not done today" signal (dfesScheduleWindow.ts). */
     scheduleContext?: ScheduleGapContext;
     /** Task 4B — severe-weather-with-no-logged-impact care-check signal (dfesWeatherReconcile.ts). */
@@ -297,6 +303,8 @@ const TOKEN_VALUES: ReadonlyArray<readonly [string, (inputs: DailyQuestionInputs
     // task as the only entry.
     ['missedWork', i => i.missedCards?.[0]?.workMr],
     ['missedDate', i => i.missedCards?.[0]?.dateMr],
+    // Lane DFES-Q (task 6) - the cited look line's own question, "{N}" already filled.
+    ['stageAsk', i => (i.stageQuestion?.kind === 'stage_look' ? i.stageQuestion.askMr ?? undefined : undefined)],
 ];
 
 /**
@@ -444,6 +452,17 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
     }
 
+    // P3 Stage - lane DFES-Q (task 6): a cited look line for this day of his season. The line travels with the event; the server
+    // resolves its sources from the same schedule and refuses the event otherwise.
+    const stage = inputs.stageQuestion;
+    if (stage?.kind === 'stage_look' && stage.line && stage.askMr) {
+        const q = findQuestion('stage.look');
+        const lines = [stage.line.id];
+        if (eligible(q, recent, sourceLogId, lines)) {
+            return { ...pack(q, inputs, `stage look: day ${stage.scheduleDay} ${stage.line.id}`), lookLineIds: lines };
+        }
+    }
+
     // P4 Schedule - lane DFES-Q (founder D-H): "why wasn't this done?" about a passed task of his own schedule, once per task.
     if (inputs.missedCards?.length) {
         const q = findQuestion('schedule.why_not');
@@ -484,6 +503,13 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     if (inputs.openObservation) {
         const q = findQuestion('followup.observation_outcome');
         if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, 'open observation outcome');
+    }
+
+    // Lane DFES-Q (task 6, design §9.7) - the open stage question, last before Learning: it states nothing, so it never pushes out a
+    // missing detail of his record, and a plot is never silent.
+    if (stage) {
+        const q = findQuestion('stage.open');
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `stage open: day ${stage.scheduleDay ?? '-'}`);
     }
 
     // P8 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).

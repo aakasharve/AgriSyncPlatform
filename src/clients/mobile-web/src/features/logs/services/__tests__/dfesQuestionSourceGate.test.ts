@@ -56,8 +56,8 @@ describe('lane DFES-Q - the phone gate', () => {
         const blocked = DFES_QUESTION_BANK.filter(q => !isAllowed(q)).map(q => q.questionKey).sort();
 
         expect(blocked).toEqual([
-            'safety.spray_wind_high', 'schedule.category_planned_not_done', 'schedule.why_not', 'weather.rain_before_spray',
-            'weather.severe_care_check',
+            'safety.spray_wind_high', 'schedule.category_planned_not_done', 'schedule.why_not', 'stage.look', 'stage.open',
+            'weather.rain_before_spray', 'weather.severe_care_check',
         ]);
         expect(allowed).toContain('gap.dose');
         expect(allowed).toContain('followup.observation_outcome');

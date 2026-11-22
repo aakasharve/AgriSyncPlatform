@@ -69,6 +69,8 @@ import { t as translateForced } from '../../../i18n/translations';
 import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { findMissedCards } from '../services/dfesWhyNot';
+import { computeStageQuestion } from '../services/dfesStageQuestion';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import { computePreviousLog } from '../services/dfesPreviousLog';
 import { computeTodayWork } from '../services/dfesTodayWork';
@@ -183,6 +185,12 @@ export function LedgerRecognitionPanel({
     const missedCards = questionsEnabled && mayPlanWork
         ? findMissedCards({ crops, history: allLogs, plotId, todayLocalDate: getDateKey() })
         : undefined;
+    // Lane DFES-Q (task 6): SAME gate - the plot's stage question for the real India today (a log told for a past day must not ask
+    // about that old day's stage). In English mode no look line is asked (no English twin yet).
+    const language = useOptionalLanguage()?.language;
+    const stageQuestion = questionsEnabled
+        ? computeStageQuestion({ crops, plotId, todayLocalDate: getDateKey(), language }) ?? undefined
+        : undefined;
     // Task 4A: SAME gate — a flag-OFF (or farm-less) render builds no weather
     // context either, zero extra work.
     const weatherContext = questionsEnabled ? buildWeatherContext(weather) : undefined;
@@ -268,6 +276,7 @@ export function LedgerRecognitionPanel({
                 score: savedLog?.understanding,
                 scheduleContext,
                 missedCards,
+                stageQuestion,
                 weather: weatherContext,
                 weatherReconcileContext,
                 previousLog,

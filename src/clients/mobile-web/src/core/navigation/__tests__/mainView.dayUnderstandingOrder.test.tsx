@@ -81,13 +81,14 @@ async function loadRenderLogView(understandingMeter: boolean, dayScore: number |
         },
     }));
 
-    vi.doMock('../../../i18n/LanguageContext', () => ({
-        useLanguage: () => ({
+    vi.doMock('../../../i18n/LanguageContext', () => {
+        const ctx = () => ({
             language: 'mr',
             setLanguage: () => {},
             t: (k: string) => translate(k, 'mr'),
-        }),
-    }));
+        });
+        return { useLanguage: ctx, useOptionalLanguage: ctx };
+    });
 
     vi.doMock('../../../app/featureFlags', () => ({
         FEATURE_FLAGS: { understandingMeter, dailyLoop: false, voiceContinuity: false },
