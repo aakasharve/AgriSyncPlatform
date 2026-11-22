@@ -7,7 +7,8 @@
  *
  * The pure rules behind the add-plot wizard's one question "ही लागवड केव्हा केली?". No screen, no storage.
  *   - which dates may be chosen: not after today, not more than 3 years back (a date is never guessed for him);
- *   - the day counter shown under the question: the SAME count the schedule tab shows (`daysBetween`, day 0 = the chosen day);
+ *   - the day counter shown under the question: the SAME count the schedule tab shows (`daysBetween`, stored day 0 = the chosen day, printed
+ *     as day 1 through `shownScheduleDay`);
  *   - the schedule that follows by itself: the crop's ShramSafal-CHECKED schedule, found by the one rule the schedule tab uses for a plot
  *     that chose nothing (`defaultScheduleForCrop`). A crop with no checked schedule has NONE: the unchecked sample and the app's
  *     stand-in are never named, so they can never be adopted (doctrine P4).
@@ -47,8 +48,9 @@ export function plantingDateProblem(key: string, todayKey: string): PlantingDate
 }
 
 /**
- * Today's day number if day 0 is `plantedKey` - exactly what the schedule tab shows for the plot once it follows a schedule from that day
- * (`scheduleModel.todayDay`, the editor's "म्हणजे आज दिवस N"): planting today reads 0. One count in the whole app.
+ * Today's STORED day number if day 0 is `plantedKey` - exactly the stored count the schedule tab holds for the plot once it follows a schedule
+ * from that day (`scheduleModel.todayDay`): planting today is stored day 0. What the farmer READS is `shownScheduleDay` of it (planting
+ * today reads DAY 1 - the schedule tab, the editor's "म्हणजे आज दिवस N" and this counter all print it that way). One count in the whole app.
  */
 export function dayCountOn(plantedKey: string, todayKey: string): number {
     return daysBetween(plantedKey, todayKey);

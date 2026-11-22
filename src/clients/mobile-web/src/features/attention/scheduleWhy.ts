@@ -21,6 +21,7 @@ import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 import { fromDateKey, offsetOf } from '../reflect/overview/reflectDates';
 import { stepLabelMr, type ScheduledWorkItem } from './scheduledWork';
 import { scheduleNameMr } from '../scheduler/schedulePage/scheduleNames';
+import { shownScheduleDay } from '../scheduler/schedulePage/scheduleDates';
 
 /** "दर ५ दिवसांनी" / "आठवड्यात २ वेळा" from the server's repeat code; `null` for none stored or a code this phone does not know. PROPOSED (Marathi) */
 export function repeatLineMr(code: string | null | undefined): string | null {
@@ -67,7 +68,7 @@ export function scheduleWhyLineMr(step: ScheduledWorkItem, todayKey: string): st
         parts.push(whoSaysMr([scheduleName, ...step.alsoAskedBy.map(scheduleNameMr)]));
     } else {
         const repeat = repeatLineMr(step.repeatText);
-        parts.push(`${scheduleName} नुसार दिवस ${toDevanagariDigits(step.scheduleDay)} ला ${label}${repeat ? ` (${repeat})` : ''}`);
+        parts.push(`${scheduleName} नुसार दिवस ${toDevanagariDigits(shownScheduleDay(step.scheduleDay))} ला ${label}${repeat ? ` (${repeat})` : ''}`);
     }
 
     if (step.lastSameWorkDate === null) {

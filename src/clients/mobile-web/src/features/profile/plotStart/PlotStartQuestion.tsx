@@ -5,12 +5,13 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane WIZARD-F2; founder pick F2, 2026-11-19)
  *
  * The add-plot wizard's one required question on step 3: "ही लागवड केव्हा केली?" - two big choices ("आज", "आधी केली" with a date picker),
- * nothing pre-selected; under it the live day count ("आज दिवस N", the schedule tab's own count); under that a plain card saying which
+ * nothing pre-selected; under it the live day count ("आज दिवस N", the schedule tab's own count; the chosen day is day 1); under that a plain card saying which
  * checked schedule will follow by itself - or, for a crop with none, that the plot is made without one. The state lives in the wizard;
  * this is the picture of it.
  */
 import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, BadgeCheck, CalendarDays } from 'lucide-react';
+import { shownScheduleDay } from '../../scheduler/schedulePage/scheduleDates';
 import { scheduleNameMr } from '../../scheduler/schedulePage/scheduleNames';
 import type { CheckedScheduleForCrop, PlantingDateProblem, PlantingWordKey } from './plotStartChoice';
 import { plotStartWords } from './plotStartCopy';
@@ -28,7 +29,7 @@ interface PlotStartQuestionProps {
     minKey: string;
     maxKey: string;
     problem: PlantingDateProblem | null;
-    /** Today's day number once a usable date is chosen; `null` until then. */
+    /** Today's STORED day number (day 0 = the chosen day, `dayCountOn`) once a usable date is chosen; `null` until then. It is printed as day + 1. */
     dayCount: number | null;
     /** The crop's checked schedule, or `null` when the crop has none. */
     checked: CheckedScheduleForCrop | null;
@@ -92,7 +93,7 @@ const PlotStartQuestion: React.FC<PlotStartQuestionProps> = ({
             )}
 
             {dayCount !== null && (
-                <p className="m-0 text-[17px] font-black text-emerald-800" data-testid="plot-start-day">{words.dayToday(dayCount)}</p>
+                <p className="m-0 text-[17px] font-black text-emerald-800" data-testid="plot-start-day">{words.dayToday(shownScheduleDay(dayCount))}</p>
             )}
 
             {checked ? (

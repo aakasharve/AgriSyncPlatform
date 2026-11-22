@@ -25,6 +25,7 @@ import { getProduct, type CatalogProduct } from '../../../../domain/inputs/input
 import { nearProducts, type NearProduct } from '../../../../domain/inputs/nearNames';
 import { factSources, ingredientFactsFor, ingredientKeysOf, stageLinesFor, type FactsLanguage, type UseContext } from '../../../../domain/inputs/ingredientFacts';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
+import { shownScheduleDay } from '../../../scheduler/schedulePage/scheduleDates';
 import { amountText, productName, type ProductItem } from './productModel';
 import {
     answersOf,
@@ -171,7 +172,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const lang: FactsLanguage = language === 'en' ? 'en' : 'mr';
     const useContext = found ? kit.useContextOf?.(logId) ?? null : null;
     const ingredientFacts = found ? ingredientFactsFor(identity.product, lang) : [];
-    const stageLines = found ? stageLinesFor(ingredientKeysOf(identity.product), useContext, lang, undefined, n => digitsFor(n, language)) : [];
+    const stageLines = found ? stageLinesFor(ingredientKeysOf(identity.product), useContext, lang, undefined, n => digitsFor(shownScheduleDay(n), language)) : [];
 
     const run = async (kind: 'answer' | 'photo', go: () => Promise<void>) => {
         if (busy) return;
@@ -232,7 +233,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                         )}
                         {companyLine(identity, language) && <Fact label={copy.factCompany} testId="vr-fact-company">{companyLine(identity, language)}</Fact>}
                         {useContext && useContext.day !== null && useContext.refType && (
-                            <Fact label={copy.factWhen} testId="vr-fact-when">{copy.dayAfter(useContext.refType, digitsFor(useContext.day, language))}</Fact>
+                            <Fact label={copy.factWhen} testId="vr-fact-when">{copy.dayAfter(useContext.refType, digitsFor(shownScheduleDay(useContext.day), language))}</Fact>
                         )}
                         {useContext && useContext.stageName && language !== 'en' && <Fact label={copy.factStage} testId="vr-fact-stage">{useContext.stageName}</Fact>}
                         {amount

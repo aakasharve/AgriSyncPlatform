@@ -13,6 +13,7 @@ import { ArrowDownUp, Download, FlaskConical, RefreshCw } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { GlassCard, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
+import { shownScheduleDay } from '../../scheduler/schedulePage/scheduleDates';
 import { amountText } from '../../logs/components/voiceResult/productModel';
 import { arrange, downloadLedgerCsv, loadLedger, rebuildLedger, type Ledger, type LedgerRow, type SortKey } from './seasonLedgerClient';
 
@@ -145,7 +146,7 @@ const SeasonInputLedger: React.FC<{ farmId: string }> = ({ farmId }) => {
                                         {row.carrierWaterLitres !== null ? ` · ${words.water} ${digitsFor(row.carrierWaterLitres, lang)} ${words.litres}` : ''}
                                     </p>
                                     <p className="m-0 text-[12.5px] font-bold text-stone-500" data-testid="season-ledger-when">
-                                        {[row.plotName, row.dayOfSeason !== null ? `${words.dayAfter} ${digitsFor(row.dayOfSeason, lang)}` : null, row.stageName].filter(Boolean).join(' · ')}
+                                        {[row.plotName, row.dayOfSeason !== null ? `${words.dayAfter} ${digitsFor(shownScheduleDay(row.dayOfSeason), lang)}` : null, row.stageName].filter(Boolean).join(' · ')}
                                     </p>
                                     {row.ingredients.length > 0 && (
                                         <p className="m-0 text-[12.5px] font-bold text-stone-500" data-testid="season-ledger-ingredients">
