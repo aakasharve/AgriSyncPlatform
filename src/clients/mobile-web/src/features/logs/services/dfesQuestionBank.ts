@@ -285,6 +285,20 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         agronomistApproved: false, marathiApproved: false,
     },
     {
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (lane DFES-Q, task 7; founder D-H 2026-11-21 "Sorry My bad Dfes Must
+        // ask them") - "why wasn't this done?", asked once about a one-time task of HIS OWN schedule whose window has fully passed
+        // with no work of its kind logged on the plot (dfesWhyNot.ts), only to people who plan the farm's work. It states nothing but
+        // what his schedule said, so it needs no source (kind why_not). The answer is his reason and his अडचण; the record never
+        // changes. CONTENT GATE: the sentence is a DRAFT, inert until the founder ticks it on the approval page (marathiApproved
+        // flips then). The eight reasons are the founder's own words (WHY_NOT_REASONS). agronomistApproved stays false: the
+        // new server's gate no longer reads it (D-B), and nothing about this question is agronomy.
+        questionKey: 'schedule.why_not', crop: '*', triggerType: 'Schedule', questionType: 'why_not',
+        lens: 'Execution', depthLevel: 1, priority: P_SCHEDULE, cooldownDays: 3, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',
+        promptMr: 'तुमच्या वेळापत्रकात {missedDate} ला {missedWork} होतं. ते राहिलं, असं दिसतं. काय झालं?',
+        agronomistApproved: false, marathiApproved: false,
+    },
+    {
         questionKey: 'weather.severe_care_check', crop: '*', triggerType: 'WeatherReconcile', questionType: 'observation',
         lens: 'Execution', depthLevel: 1, priority: P_WEATHER_RECONCILE, cooldownDays: 1, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',

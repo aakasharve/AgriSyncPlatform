@@ -18,6 +18,7 @@ import type { StageContext } from './meterGaps';
 import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
 import type { ScheduleGapContext } from './dfesScheduleWindow';
+import type { MissedCard } from './dfesWhyNot';
 import type { WeatherReconcileContext } from './dfesWeatherReconcile';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
@@ -50,6 +51,8 @@ export interface RecentQuestionEvent {
      * construction site IS the point.
      */
     dailyLogId: string | null;
+    /** Lane DFES-Q (founder D-H) - the schedule task a why-not question was about; absent/null on every other row. */
+    scheduleCardRef?: string | null;
 }
 
 /**
@@ -89,6 +92,12 @@ export interface DailyQuestionInputs {
     stageContext?: StageContext;
     lastStageConfirm?: LastStageConfirm | null;
     weather?: WeatherTriggerContext;
+    /**
+     * Lane DFES-Q (founder D-H, 2026-11-21) - the passed, undone one-time tasks of the plot's own schedule, most recently closed
+     * first (dfesWhyNot.findMissedCards). The caller fills it only for a person who plans the farm's work (D-D); absent = none.
+     * The engine asks about the first one not already asked (recent events' card refs): once per task.
+     */
+    missedCards?: readonly MissedCard[];
     /** Task 3A — category-scoped "planned but not done today" signal (dfesScheduleWindow.ts). */
     scheduleContext?: ScheduleGapContext;
     /** Task 4B — severe-weather-with-no-logged-impact care-check signal (dfesWeatherReconcile.ts). */
@@ -169,6 +178,8 @@ export interface SelectedQuestion {
     lookLineIds?: string[];
     /** Lane DFES-Q - the schedule card a "why wasn't this done?" question is about. */
     scheduleCardRef?: string | null;
+    /** Lane DFES-Q - the task a why-not question is about: the answer card shows the reasons and opens that day. */
+    missedCard?: MissedCard;
 }
 
 /**
@@ -282,6 +293,10 @@ const TOKEN_VALUES: ReadonlyArray<readonly [string, (inputs: DailyQuestionInputs
     // Gated on the confidence rule as well as presence, so even a template that used
     // this token outside a confident variant could not name a guessed activity.
     ['todayActivity', i => (isWorkRecognitionConfident(i) ? i.todayWork?.activityMr : undefined)],
+    // Lane DFES-Q (founder D-H) - the why-not question's task, from his own schedule (dfesWhyNot.ts); `pack` hands the chosen
+    // task as the only entry.
+    ['missedWork', i => i.missedCards?.[0]?.workMr],
+    ['missedDate', i => i.missedCards?.[0]?.dateMr],
 ];
 
 /**
@@ -427,6 +442,19 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     if (isStageConfirmationWindowOpen(inputs.stageContext, inputs.lastStageConfirm ?? null)) {
         const q = findQuestion('stage.confirm_current');
         if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
+    }
+
+    // P4 Schedule - lane DFES-Q (founder D-H): "why wasn't this done?" about a passed task of his own schedule, once per task.
+    if (inputs.missedCards?.length) {
+        const q = findQuestion('schedule.why_not');
+        const card = inputs.missedCards.find(c => !recent.some(e => e.scheduleCardRef === c.cardRef));
+        if (card && eligible(q, recent, sourceLogId, linesFor(q))) {
+            return {
+                ...pack(q, { ...inputs, missedCards: [card] }, `why-not: ${card.cardRef}`),
+                scheduleCardRef: card.cardRef,
+                missedCard: card,
+            };
+        }
     }
 
     // P4 Schedule — category-scoped "was today's planned {category} work done?"

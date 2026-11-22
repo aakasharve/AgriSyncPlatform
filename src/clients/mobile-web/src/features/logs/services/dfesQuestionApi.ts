@@ -41,6 +41,8 @@ export interface RecentQuestionEventDto {
      * to the day cooldown" rather than "asked about no log".
      */
     dailyLogId: string | null;
+    /** Lane DFES-Q (founder D-H) - the schedule task a why-not question was about. Absent from an older server. */
+    scheduleCardRef?: string | null;
 }
 
 /** Response outcome captured after the farmer interacts with (or skips) the question. */
@@ -106,5 +108,6 @@ export async function fetchRecentQuestionEvents(farmId: string, sinceDays = 14):
         // wave-3.1 — `?? null`, never `?? undefined`: a legacy row must arrive as an
         // explicit null so wave-3.2's `e.dailyLogId === null` legacy branch can see it.
         dailyLogId: d.dailyLogId ?? null,
+        scheduleCardRef: d.scheduleCardRef ?? null,
     }));
 }

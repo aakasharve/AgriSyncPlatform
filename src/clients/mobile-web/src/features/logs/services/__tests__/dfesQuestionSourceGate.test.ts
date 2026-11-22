@@ -51,12 +51,13 @@ describe('lane DFES-Q - the phone gate', () => {
         expect(isAllowed({ ...stageLook, marathiApproved: false }, ['grapes-fp-d12-buds'])).toBe(false);
     });
 
-    it("today's bank keeps its behaviour: the reviewed entries pass, the four inert ones stay off", () => {
+    it("today's bank keeps its behaviour: the reviewed entries pass, the four inert ones (and the draft why-not) stay off", () => {
         const allowed = DFES_QUESTION_BANK.filter(q => isAllowed(q)).map(q => q.questionKey).sort();
         const blocked = DFES_QUESTION_BANK.filter(q => !isAllowed(q)).map(q => q.questionKey).sort();
 
         expect(blocked).toEqual([
-            'safety.spray_wind_high', 'schedule.category_planned_not_done', 'weather.rain_before_spray', 'weather.severe_care_check',
+            'safety.spray_wind_high', 'schedule.category_planned_not_done', 'schedule.why_not', 'weather.rain_before_spray',
+            'weather.severe_care_check',
         ]);
         expect(allowed).toContain('gap.dose');
         expect(allowed).toContain('followup.observation_outcome');

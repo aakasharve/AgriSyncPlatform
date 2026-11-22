@@ -266,6 +266,9 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                     savedLog={savedLog}
                                     allLogs={history}
                                     weather={weatherData}
+                                    // Lane DFES-Q (founder D-D, D-H) - why-not only for a person who plans the work; its past-day door.
+                                    mayPlanWork={ctx.mayPlanWork ?? ctx.farmRole === 'PrimaryOwner'}
+                                    onTellPastDay={dateKey => requestSpeak({ purpose: 'addToDay', context: { date: dateKey }, returnTo: { route: 'main', mainView: 'log' } })}
                                     // wave-3.7, founder decision 3 — "no taps before he
                                     // speaks". The tap writes NOTHING (question_events is
                                     // append-only, so a row written now could never

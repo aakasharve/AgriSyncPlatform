@@ -23,6 +23,7 @@ import { notifyDfesAnswered } from '../services/dfesAnswerSignal';
 import type { DailyQuestionInputs } from '../services/dfesQuestionEngine';
 import type { PendingQuestionAnswer } from '../services/pendingQuestionAnswer';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
+import { WHY_NOT_REASONS, type WhyNotReason } from '../services/dfesWhyNot';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 
@@ -55,10 +56,15 @@ export interface MeterQuestionHostProps {
     onAnswerBySpeaking?: (pending: PendingQuestionAnswer) => void;
     /** spec: plr-d10 (lane L6b) — handed to MeterDisplay: 'sathi' = the result screen's designed question card. */
     look?: 'card' | 'sathi';
+    /**
+     * Lane DFES-Q (founder D-H) - opens "त्या दिवसाचं काम सांगा" for a day (the existing past-day flow). Used by the why-not card's
+     * "केलं, पण नोंद केली नाही". Optional: without it the reason is still recorded, and no door is drawn that goes nowhere.
+     */
+    onTellPastDay?: (dateKey: string) => void;
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking, look,
+    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking, look, onTellPastDay,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
@@ -83,6 +89,19 @@ export function MeterQuestionHost({
             skipped: false, response: option.value,
             stageConfirmed: option.stageConfirmedValue ?? null, dailyLogId: sourceLogId,
         });
+    };
+    // Lane DFES-Q (founder D-H) - a why-not answer: his reason as the founder's own words, the code, and his अडचण verbatim, in the
+    // ONE insert. The record is never changed by it.
+    const reasonLabel = (code: WhyNotReason): string => WHY_NOT_REASONS.find(r => r.code === code)?.labelMr ?? code;
+    const handleWhyNotReason = (code: WhyNotReason, challenge: string | null) => {
+        void recordOutcome({
+            skipped: false, response: reasonLabel(code), dailyLogId: sourceLogId,
+            deviationReasonCode: code, deviationChallenge: challenge,
+        });
+    };
+    const handleDidItNotLogged = (dateKey: string, challenge: string | null) => {
+        handleWhyNotReason('done_not_logged', challenge);
+        onTellPastDay?.(dateKey);
     };
     // wave-3.7 (founder decision 3) — the tap is a ROUTE, not a write. Everything the
     // deferred POST will need travels with him: the resolved question (so the prompt can be
@@ -115,6 +134,8 @@ export function MeterQuestionHost({
             onAnswer={handleAnswer}
             onDismiss={() => { void recordOutcome({ skipped: true, dailyLogId: sourceLogId }); }}
             look={look}
+            onWhyNotReason={handleWhyNotReason}
+            onDidItNotLogged={handleDidItNotLogged}
         />
     );
 }

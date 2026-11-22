@@ -73,7 +73,7 @@ const CATEGORY_PRIORITY: readonly OperationCategory[] = ['FOLIAR_SPRAY', 'FERTIG
  * identical split already used by features/compare/plotComparisonService.ts
  * (`i.category !== 'FOLIAR_SPRAY' && i.category !== 'FERTIGATION' && i.category !== 'IRRIGATION'` => activity).
  */
-const toBucketCategory = (category: string): OperationCategory => {
+export const toBucketCategory = (category: string): OperationCategory => {
     if (category === 'FOLIAR_SPRAY' || category === 'FERTIGATION' || category === 'IRRIGATION') return category;
     return 'ACTIVITY';
 };
