@@ -60,7 +60,7 @@ vi.mock('../../../i18n/LanguageContext', async (importActual) => ({
 }));
 
 import ReflectPage from '../ReflectPage';
-import { CROPS, TODAY_KEY, log, money, task } from './reflectFixtures';
+import { CROPS, TODAY_KEY, crop, log, money, plot, task } from './reflectFixtures';
 
 const history = [
     log({
@@ -427,5 +427,42 @@ describe('ReflectPage — lane MU-4 fix pass 1 (L5): one language at a time', ()
     it('in Marathi mode it keeps its words', () => {
         renderPage();
         expect(within(screen.getByTestId('reflect-section-cost')).getByText('आतापर्यंतचा हिशोब आणि खर्चाचा आलेख')).toBeTruthy();
+    });
+});
+
+// ── lane UI-9a (founder D-172 = B, 2026-11-22): the day in one sentence, above शेताची स्थिती ───────────────────────────────────────────────
+describe('the day card on the page', () => {
+    /** The founder's pilot farm shape: 14 plots over 4 crops, no crop of 7. */
+    const mk = (id: string, name: string, icon: string, color: string, letter: string, n: number) =>
+        crop(id, name, icon, color, Array.from({ length: n }, (_, i) => plot(`${id}${i + 1}`, `${name} ${letter}${i + 1}`)));
+    const ABK = [mk('g', 'द्राक्ष', 'Grapes', 'bg-green-500', 'G', 6), mk('p', 'डाळिंब', 'Pomegranate', 'bg-red-500', 'P', 4), mk('s', 'ऊस', 'Sugarcane', 'bg-pink-500', 'S', 2), mk('o', 'कांदा', 'Onion', 'bg-amber-500', 'O', 2)];
+    const told = ['g1', 'g2', 'g3', 'p1', 'p2', 's1', 'o1'].map(id => log({ id: `t-${id}`, cropId: id[0], plotIds: [id], cropActivities: [{ id: `a-${id}`, title: 'काम' }] }));
+
+    it('14 plots over 4 crops: the sentence, the bar and the two buttons, and it sits above शेताची स्थिती', () => {
+        renderPage({ crops: ABK, history: told });
+        expect(screen.getByTestId('day-count-sentence')).toHaveTextContent('आज १४ पैकी ७ सांगितले');
+        expect(screen.getByTestId('farm-quick-todayLeft')).toHaveTextContent('आज बाकी ७');
+        expect(screen.getByTestId('farm-quick-toldToday')).toHaveTextContent('आज सांगितलेले ७');
+        const card = screen.getByTestId('day-count-card');
+        const status = screen.getByTestId('reflect-section-status');
+        expect(card.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // the buttons left the picker: the picker holds no quick row of its own
+        expect(within(screen.getByTestId('farm-status')).queryByTestId('plot-quick-row')).toBeNull();
+    });
+
+    it('a tap on "आज बाकी" narrows every section to the 7 plots not yet told', () => {
+        renderPage({ crops: ABK, history: told });
+        fireEvent.click(screen.getByTestId('farm-quick-todayLeft'));
+        expect(screen.getByTestId('farm-quick-todayLeft').getAttribute('aria-pressed')).toBe('true');
+        // the plots not yet told are the chosen ones (a small crop draws chips, each pressed or not), the told ones are not
+        for (const id of ['g4', 'g5', 'g6', 'p3', 'p4', 's2', 'o2']) expect(screen.getByTestId(`farm-plot-${id}`).getAttribute('aria-pressed')).toBe('true');
+        for (const id of ['g1', 'g2', 'g3', 'p1', 'p2', 's1', 'o1']) expect(screen.getByTestId(`farm-plot-${id}`).getAttribute('aria-pressed')).toBe('false');
+        // the sentence did not change as he tapped
+        expect(screen.getByTestId('day-count-sentence')).toHaveTextContent('आज १४ पैकी ७ सांगितले');
+    });
+
+    it('a small farm (the fixture farm: 3 plots) gets no card at all', () => {
+        renderPage();
+        expect(screen.queryByTestId('day-count-card')).toBeNull();
     });
 });

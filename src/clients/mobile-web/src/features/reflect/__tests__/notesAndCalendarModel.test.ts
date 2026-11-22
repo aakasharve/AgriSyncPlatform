@@ -63,8 +63,8 @@ describe('buildCalendarDay', () => {
         ];
         const day = buildCalendarDay({ date: TODAY, history, crops: CROPS, scope: all, dueTasks: [], today: TODAY });
         expect(day.chips).toEqual([
-            { logId: 'a', color: 'bg-purple-500', plotLabel: 'थॉम्पसन', plotIndex: 1, activity: 'छाटणी' },
-            { logId: 'b', color: 'bg-emerald-500', plotLabel: 'ऊस १', plotIndex: 0, activity: 'पाणी' },
+            { logId: 'a', color: 'bg-purple-500', plotLabel: 'थॉम्पसन', plotIndex: 1, activity: 'छाटणी', plotCount: 1 },
+            { logId: 'b', color: 'bg-emerald-500', plotLabel: 'ऊस १', plotIndex: 0, activity: 'पाणी', plotCount: 1 },
         ]);
         expect(day.cropColors).toEqual(['bg-purple-500', 'bg-emerald-500']);
         expect(day.isToday).toBe(true);

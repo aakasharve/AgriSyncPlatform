@@ -31,7 +31,10 @@ import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 
 const GRAPES = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 15 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
 const CANE = crop('cane', 'ऊस', 'Sugarcane', 'bg-pink-500', [plot('c1', 'ऊस S1'), plot('c2', 'ऊस S2'), plot('c3', 'ऊस S3')]);
-const FARM = [GRAPES, CANE];
+// 15 plots, the boundary: MORE than 15 folds the crops (D-173, `PlotDayCards.folded.test.tsx`), so this file, written for the unfolded
+// look, keeps its page at 15 plots. The 3-plot crop is exercised in its own farm of 12 + 3 below.
+const FARM = [GRAPES];
+const MIXED = [crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 12 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`))), CANE];
 const meta = (hhmm: string) => ({ createdAtISO: `2026-10-25T${hhmm}:00.000Z`, createdByOperatorId: 'op' });
 
 /** g1 told twice, g2..g9 once, g13 a stoppage; the other five plots nothing. */
@@ -52,7 +55,7 @@ beforeEach(() => { lang.value = 'mr'; });
 afterEach(cleanup);
 
 describe('a crop with 15 plots: the photo once, two small cards across', () => {
-    it('one header with the crop photo; 15 small cards, none with a photo banner of its own; the 3-plot crop keeps full cards with their photo', () => {
+    it('one header with the crop photo; 15 small cards, none with a photo banner of its own', () => {
         render(<PlotDayCards cards={cardsOf()} isToday onOpen={vi.fn()} />);
         const group = screen.getByTestId('plot-group-grape');
         expect(group).toHaveAttribute('data-small', 'yes');
@@ -64,7 +67,11 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
         expect(grid.children.length).toBe(15);
         expect(group.querySelectorAll('[data-part="banner"]').length).toBe(0);
         expect(group.querySelectorAll('img').length + group.querySelectorAll('svg[data-part="banner"]').length).toBeLessThanOrEqual(1); // only the header's photo
-        // cane has 3 plots: today's full cards, each with its banner photo, no group header
+    });
+
+    it('a crop with 3 plots next to it keeps today\'s full cards, each with its banner photo, and no group header (a farm of 12 + 3)', () => {
+        render(<PlotDayCards cards={cardsOf(MIXED)} isToday onOpen={vi.fn()} />);
+        expect(screen.getByTestId('plot-small-cards-grape').children.length).toBe(12);
         expect(screen.queryByTestId('plot-group-cane')).toBeNull();
         for (const id of ['cane:c1', 'cane:c2', 'cane:c3']) expect(part(screen.getByTestId(`plot-card-${id}`), 'banner')).toBeTruthy();
     });
@@ -228,7 +235,8 @@ describe('the number of cards drawn decides, not the crop\'s size', () => {
 
     it('two big crops get two headers, each with its own photo', () => {
         const caneBig = crop('cane', 'ऊस', 'Sugarcane', 'bg-pink-500', Array.from({ length: 6 }, (_, i) => plot(`c${i + 1}`, `ऊस S${i + 1}`)));
-        render(<PlotDayCards cards={cardsOf([GRAPES, caneBig])} isToday onOpen={vi.fn()} />);
+        const grapes9 = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 9 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
+        render(<PlotDayCards cards={cardsOf([grapes9, caneBig])} isToday onOpen={vi.fn()} />);
         expect(screen.getByTestId('plot-group-header-grape')).toBeTruthy();
         expect(screen.getByTestId('plot-group-header-cane')).toBeTruthy();
         expect(part(screen.getByTestId('plot-card-cane:c3'), 'edge')?.className).toContain('bg-pink-500');

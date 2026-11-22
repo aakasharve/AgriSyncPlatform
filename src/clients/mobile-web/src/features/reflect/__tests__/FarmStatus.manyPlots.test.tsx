@@ -5,9 +5,10 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane UI-9a, founder pick overview C "number grid in place")
  *
- * The overview's "शेताची स्थिती" for an owner with 15 plots of one crop: the number grid in place under the crop cards, with every plot
- * picked ONE tap on a number shows only that plot ("फक्त G7 दिसतो" + "सगळे दाखवा"), no "none" button (the page is never empty), true quick
- * buttons only ("आज सांगितलेले", "आज बाकी", never a count of ०). A small farm keeps its chips and the tap it always had.
+ * The overview's "शेताची स्थिती" for an owner with 15 plots (12 of one crop + 3 of another; MORE than 15 folds, `FarmStatus.folded.test.tsx`): the number grid in place under the crop cards, with every plot
+ * picked ONE tap on a number shows only that plot ("फक्त G7 दिसतो" + "सगळे दाखवा"), no "none" button (the page is never empty). The quick buttons
+ * moved out of the picker to the day card above it (founder D-172 = B, 2026-11-22: see `DayCountCard.test.tsx`). A small farm keeps its chips and
+ * the tap it always had.
  */
 import React, { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -19,23 +20,23 @@ import { CANE, CROPS, crop, plot } from './reflectFixtures';
 
 afterEach(cleanup);
 
-const GRAPES = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 15 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
+const GRAPES = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 12 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
 const CANE3 = crop('cane', 'ऊस', 'Sugarcane', 'bg-pink-500', [plot('c1', 'ऊस S1'), plot('c2', 'ऊस S2'), plot('c3', 'ऊस S3')]);
 const FARM = [GRAPES, CANE3];
 
-const Harness: React.FC<{ crops: typeof FARM; told?: ReadonlySet<string> | null; start?: (c: typeof FARM) => ReflectSelection; onSel?: (s: ReflectSelection) => void }> = ({ crops, told, start, onSel }) => {
+const Harness: React.FC<{ crops: typeof FARM; start?: (c: typeof FARM) => ReflectSelection; onSel?: (s: ReflectSelection) => void }> = ({ crops, start, onSel }) => {
     const [sel, setSel] = useState<ReflectSelection>(() => (start ? start(crops) : selectAll(crops)));
-    return <FarmStatus crops={crops} sel={sel} onSel={s => { setSel(s); onSel?.(s); }} toldTodayPlotIds={told} />;
+    return <FarmStatus crops={crops} sel={sel} onSel={s => { setSel(s); onSel?.(s); }} />;
 };
 const part = (el: HTMLElement, name: string) => el.querySelector(`[data-part="${name}"]`);
 const pressed = (id: string) => screen.getByTestId(id).getAttribute('aria-pressed');
 const ids = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
 
-describe('the overview picker with 15 plots', () => {
-    it('draws the 15 grape plots as a number grid in place (Devanagari numbers, "G7" under each), under the all-crops card', () => {
+describe('the overview picker with 15 plots in view (12 grapes + 3 cane): nothing folds, as before', () => {
+    it('draws the 12 grape plots (15 plots on the farm, so nothing folds) as a number grid in place (Devanagari numbers, "G7" under each), under the all-crops card', () => {
         render(<Harness crops={FARM} />);
         const grid = screen.getByTestId('farm-grid-grape');
-        expect(grid.children.length).toBe(15);
+        expect(grid.children.length).toBe(12);
         expect(part(screen.getByTestId('farm-plot-g7'), 'number')).toHaveTextContent('७');
         expect(part(screen.getByTestId('farm-plot-g7'), 'name')).toHaveTextContent('G7');
         expect(screen.getByTestId('farm-crop-all-card').compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -45,7 +46,7 @@ describe('the overview picker with 15 plots', () => {
         expect(screen.getByTestId('farm-plot-g7').className).toContain('h-[64px]');
         expect(part(screen.getByTestId('farm-plot-g7'), 'tick')).toBeTruthy();
         // everything starts chosen, in the one dark-green look
-        for (const id of ids('g', 15)) expect(pressed(`farm-plot-${id}`)).toBe('true');
+        for (const id of ids('g', 12)) expect(pressed(`farm-plot-${id}`)).toBe('true');
         expect(screen.getByTestId('farm-plot-g7').className).toContain('bg-emerald-800');
     });
 
@@ -79,18 +80,16 @@ describe('the overview picker with 15 plots', () => {
         const header = screen.getByTestId('farm-crop-header-grape');
         expect(part(header, 'strip')?.className).toContain('bg-green-500');
         expect(part(header, 'accent')).toBeNull();
-        expect(header).toHaveTextContent('१५ पैकी १५ निवडले');
+        expect(header).toHaveTextContent('१२ पैकी १२ निवडले');
         expect(header.lastElementChild?.lastElementChild?.className).toContain('text-[14px]');
     });
 
-    it('there is no "none" button on the overview (the page is never empty), and no word for it', () => {
+    it('there is no "none" button on the overview (the page is never empty), and no word for it; the all-toggle is on the day card now, not here', () => {
         render(<Harness crops={FARM} />);
         expect(document.body.textContent).not.toMatch(/एकही नाही/);
-        // the one toggle can only choose all: with everything chosen it reads "सगळे निवडले" and does nothing
-        const all = screen.getByTestId('farm-plots-all');
-        expect(all).toHaveTextContent('सगळे निवडले');
-        fireEvent.click(all);
-        for (const id of ids('g', 15)) expect(pressed(`farm-plot-${id}`)).toBe('true');
+        expect(screen.queryByTestId('farm-plots-all')).toBeNull();
+        expect(screen.queryByTestId('plot-quick-row')).toBeNull();
+        for (const id of ids('g', 12)) expect(pressed(`farm-plot-${id}`)).toBe('true');
     });
 });
 
@@ -108,13 +107,13 @@ describe('one tap on a number shows only that plot', () => {
         render(<Harness crops={FARM} />);
         fireEvent.click(screen.getByTestId('farm-plot-g7'));
         expect(pressed('farm-plot-g7')).toBe('true');
-        for (const id of ids('g', 15).filter(x => x !== 'g7')) expect(pressed(`farm-plot-${id}`)).toBe('false');
+        for (const id of ids('g', 12).filter(x => x !== 'g7')) expect(pressed(`farm-plot-${id}`)).toBe('false');
         expect(pressed('farm-plot-c1')).toBe('false');
         expect(screen.getByTestId('farm-solo-line')).toHaveTextContent('फक्त G7 दिसतो');
         expect(screen.getByTestId('farm-solo-all')).toHaveTextContent('सगळे दाखवा');
         expect(screen.queryByTestId('farm-picked-count')).toBeNull();
         fireEvent.click(screen.getByTestId('farm-solo-all'));
-        for (const id of [...ids('g', 15), ...ids('c', 3)]) expect(pressed(`farm-plot-${id}`)).toBe('true');
+        for (const id of [...ids('g', 12), ...ids('c', 3)]) expect(pressed(`farm-plot-${id}`)).toBe('true');
         expect(screen.queryByTestId('farm-solo-line')).toBeNull();
         expect(screen.getByTestId('farm-tap-hint')).toHaveTextContent('एक नंबर दाबा: फक्त तो प्लॉट दिसेल');
     });
@@ -126,7 +125,7 @@ describe('one tap on a number shows only that plot', () => {
         expect(pressed('farm-plot-g7')).toBe('true');
         expect(pressed('farm-plot-g9')).toBe('true');
         expect(screen.queryByTestId('farm-solo-line')).toBeNull();
-        expect(screen.getByTestId('farm-picked-count')).toHaveTextContent('१८ पैकी २ निवडले');
+        expect(screen.getByTestId('farm-picked-count')).toHaveTextContent('१५ पैकी २ निवडले');
         fireEvent.click(screen.getByTestId('farm-plot-g7'));
         expect(screen.getByTestId('farm-solo-line')).toHaveTextContent('फक्त G9 दिसतो');
     });
@@ -135,7 +134,7 @@ describe('one tap on a number shows only that plot', () => {
         render(<Harness crops={FARM} />);
         fireEvent.click(screen.getByTestId('farm-plot-g7'));
         fireEvent.click(screen.getByTestId('farm-plot-g7'));
-        for (const id of ids('g', 15)) expect(pressed(`farm-plot-${id}`)).toBe('true');
+        for (const id of ids('g', 12)) expect(pressed(`farm-plot-${id}`)).toBe('true');
     });
 
     it('the solo line names the plot as the grid does; the other crop\'s plot shows as its full name', () => {
@@ -153,46 +152,9 @@ describe('one tap on a number shows only that plot', () => {
     });
 });
 
-describe('quick buttons are true facts only', () => {
-    const told9 = new Set(ids('g', 9));
-
-    it('"आज सांगितलेले ९" and "आज बाकी ९" come from the plots told today; a tap picks exactly those plots', () => {
-        render(<Harness crops={FARM} told={told9} />);
-        expect(screen.getByTestId('farm-quick-toldToday')).toHaveTextContent('आज सांगितलेले ९');
-        expect(screen.getByTestId('farm-quick-todayLeft')).toHaveTextContent('आज बाकी ९');
-        fireEvent.click(screen.getByTestId('farm-quick-toldToday'));
-        for (const id of ids('g', 9)) expect(pressed(`farm-plot-${id}`)).toBe('true');
-        for (const id of [...ids('g', 15).slice(9), ...ids('c', 3)]) expect(pressed(`farm-plot-${id}`)).toBe('false');
-        expect(pressed('farm-quick-toldToday')).toBe('true');
-        expect(screen.getByTestId('farm-picked-count')).toHaveTextContent('१८ पैकी ९ निवडले');
-        fireEvent.click(screen.getByTestId('farm-quick-todayLeft'));
-        expect(pressed('farm-plot-g1')).toBe('false');
-        expect(pressed('farm-plot-g10')).toBe('true');
-        expect(pressed('farm-plot-c3')).toBe('true');
-    });
-
-    it('a button whose count is ० is not drawn (everything told: no "आज बाकी"; nothing told: no "आज सांगितलेले")', () => {
-        const { unmount } = render(<Harness crops={FARM} told={new Set([...ids('g', 15), ...ids('c', 3)])} />);
-        expect(screen.getByTestId('farm-quick-toldToday')).toHaveTextContent('आज सांगितलेले १८');
-        expect(screen.queryByTestId('farm-quick-todayLeft')).toBeNull();
-        unmount();
-        render(<Harness crops={FARM} told={new Set<string>()} />);
-        expect(screen.queryByTestId('farm-quick-toldToday')).toBeNull();
-        expect(screen.getByTestId('farm-quick-todayLeft')).toHaveTextContent('आज बाकी १८');
-    });
-
-    it('on any day but today (no facts given) neither "today" button is drawn, and nothing invented takes their place', () => {
-        render(<Harness crops={FARM} told={null} />);
-        expect(screen.queryByTestId('farm-quick-toldToday')).toBeNull();
-        expect(screen.queryByTestId('farm-quick-todayLeft')).toBeNull();
-        expect(screen.getByTestId('farm-plots-all')).toBeTruthy();
-        expect(document.body.textContent).not.toMatch(/अलीकडचे|उशीर|कालचेच/);
-    });
-});
-
 describe('small farms look and behave as before', () => {
     it('2 plots and 1 plot: chips with full names, no quick row, no solo line, and a tap with all chosen takes that plot OFF', () => {
-        render(<Harness crops={CROPS} told={new Set(['g1'])} />);
+        render(<Harness crops={CROPS} />);
         expect(screen.getByTestId('farm-plots')).toHaveAttribute('data-many', 'no');
         expect(screen.queryByTestId('farm-plots-all')).toBeNull();
         expect(screen.queryByTestId('farm-quick-toldToday')).toBeNull();

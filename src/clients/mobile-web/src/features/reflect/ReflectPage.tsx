@@ -79,6 +79,7 @@ import { buildCalendarDay } from './overview/calendarModel';
 import { CostSection, InHandCard, MoneyStripFace } from './overview/CostSection';
 import { PastDayTell } from './overview/PastDayTell';
 import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
+import { DayCountCard } from './overview/DayCountCard';
 import { FarmStatus } from './overview/FarmStatus';
 import { plotIdsWithWorkOn } from '../context/components/plotSelectorRules';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
@@ -338,7 +339,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             case 'status':
                 return (
                     <SectionBlock id="status" title="शेताची स्थिती" icon={<LayoutGrid size={22} aria-hidden="true" />} tone="green" hint="कोणत्या पिकाचं, कोणत्या प्लॉटचं पाहायचं ते निवडा" {...fold}>
-                        <FarmStatus crops={crops} sel={selection} onSel={setSel} toldTodayPlotIds={toldTodayPlotIds} />
+                        <FarmStatus crops={crops} sel={selection} onSel={setSel} />
                     </SectionBlock>
                 );
             case 'todo':
@@ -422,6 +423,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
 
             <div className="space-y-3 px-3">
+                {/* Lane UI-9a (founder D-172 = B, 2026-11-22): how the day stands in one sentence, above शेताची स्थिती, from 7 plots in view. Its buttons
+                    left the picker; the card itself draws nothing for fewer plots. */}
+                <DayCountCard crops={crops} sel={selection} onSel={setSel} toldTodayPlotIds={toldTodayPlotIds} />
                 {[FIXED_FIRST, ...layout.order].map(id => {
                     const at = layout.order.indexOf(id);
                     const reorder = reordering && layout.move && id !== FIXED_FIRST ? {
