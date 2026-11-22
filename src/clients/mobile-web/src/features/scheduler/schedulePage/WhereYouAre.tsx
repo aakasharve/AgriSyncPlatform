@@ -17,6 +17,7 @@ import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing
 import { Tap } from '../../../shared/components/ui/placeUi';
 import type { CropScheduleTemplate } from '../scheduler.types';
 import { SC, mrNum } from './scheduleCopy';
+import { shownScheduleDay } from './scheduleDates';
 import type { ScheduleModel } from './scheduleModel';
 import { GLASS } from './scheduleUi';
 import type { FollowedCheckNote } from './followedCheck';
@@ -44,8 +45,8 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
     const stage = model.currentStage;
     const started = model.todayDay >= 0;
     const tiles: ReadonlyArray<readonly [string, string, string]> = [
-        [started ? mrNum(model.todayDay) : '—', SC.dayNow, 'day-now'],
-        [model.totalDays !== null ? mrNum(model.totalDays) : '—', SC.dayTotal, 'day-total'],
+        [started ? mrNum(shownScheduleDay(model.todayDay)) : '—', SC.dayNow, 'day-now'],
+        [model.totalDaysShown !== null ? mrNum(model.totalDaysShown) : '—', SC.dayTotal, 'day-total'],
         [mrNum(model.stages.length), SC.stageCount, 'stage-count'],
     ];
     // UI-8 (D-148 layout C, D-150): which plot this is, then the WHITE owner bar (the maker's picture place, real name, schedule name), the three
@@ -70,7 +71,7 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
                     <CategoryIcon name="sprout" size={22} className="shrink-0" />
                     <span className="text-[16px] font-black leading-snug text-emerald-800" data-testid="stage-line">
-                        {SC.stage} {mrNum(stage.index + 1)} · {stage.name} <span className="text-[14px] font-bold text-emerald-700">({SC.dayN(stage.from)}–{mrNum(stage.to)})</span>
+                        {SC.stage} {mrNum(stage.index + 1)} · {stage.name} <span className="text-[14px] font-bold text-emerald-700">({SC.dayN(shownScheduleDay(stage.from))}–{mrNum(shownScheduleDay(stage.to))})</span>
                     </span>
                 </div>
             )}
@@ -109,7 +110,7 @@ export const StageProgress: React.FC<{ model: ScheduleModel }> = ({ model }) => 
                             <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[16px] font-black ${s.current ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : s.past ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-500'}`}>{s.past ? '✓' : mrNum(s.index + 1)}</span>
                             <span className="min-w-0 flex-1">
                                 <span className={`block text-[18px] font-extrabold leading-snug ${s.current ? 'text-emerald-900' : s.past ? 'text-stone-700' : 'text-stone-500'}`}>{s.name}</span>
-                                <span className="block text-[14px] font-bold text-stone-600">{SC.dayN(s.from)}–{mrNum(s.to)}</span>
+                                <span className="block text-[14px] font-bold text-stone-600">{SC.dayN(shownScheduleDay(s.from))}–{mrNum(shownScheduleDay(s.to))}</span>
                             </span>
                             {s.current && <span className="shrink-0 rounded-full bg-[#1448E6] px-2.5 py-1 text-[13px] font-extrabold text-white">{SC.here}</span>}
                         </div>
@@ -153,7 +154,7 @@ const SampleMark: React.FC = () => {
 export const BehindBanner: React.FC<{ model: Pick<ScheduleModel, 'todayDay' | 'lossDays'> }> = ({ model }) => {
     const { todayDay, lossDays } = model;
     if (lossDays <= 0) return null;
-    const day = (n: number) => (n >= 0 ? String(n) : '—');
+    const day = (n: number) => (n >= 0 ? String(shownScheduleDay(n)) : '—');
     return (
         <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-3" data-testid="behind-banner">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-100 text-orange-600"><Info size={20} aria-hidden="true" /></span>

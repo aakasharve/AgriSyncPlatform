@@ -36,7 +36,7 @@ import {
 import { getExecutionCountByCategory } from '../../../shared/utils/dayState';
 import { countCompletedIrrigationEvents } from '../../../core/domain/services/IrrigationCompletionService';
 import { CATEGORY_LABEL_MR } from '../../logs/services/dfesScheduleWindow';
-import { addDays, daysBetween, toDayKey } from './scheduleDates';
+import { addDays, daysBetween, shownScheduleDay, toDayKey } from './scheduleDates';
 import { opNameMr, stageNameMr } from './scheduleCopy';
 import { taskNameMr } from './scheduleNames';
 
@@ -90,6 +90,12 @@ export interface ScheduleModel {
     /** Days the schedule has been pushed back by recorded shifts up to today (the 'N days behind' banner). */
     lossDays: number;
     totalDays: number | null;
+    /**
+     * The schedule's length as the farmer reads it ("दिवस ४१ / ४१" on the last day): the same count as `totalDays`, except when the schedule
+     * gives no total and `totalDays` falls back to the last stage's end day (a 0-based day) - then it is that day + 1. DISPLAY ONLY: the
+     * progress bar and every comparison keep using `totalDays`.
+     */
+    totalDaysShown: number | null;
     progressPct: number | null;
     stages: StageView[];
     /** The stage today is inside; `null` before the first stage starts and after the last one ends. */
@@ -226,7 +232,9 @@ export function buildScheduleModel(input: ScheduleInput): ScheduleModel {
         const filled = todayDay >= r.to ? 100 : todayDay < r.from ? 0 : ((todayDay - r.from + 1) / len) * 100;
         return { id: r.s.id, name: stageNameMr(r.s.name), from: r.from, to: r.to, index, filledPct: Math.round(filled), current: r === currentRange, past: todayDay > r.to };
     });
-    const totalDays = template.totalDurationDays && template.totalDurationDays > 0 ? template.totalDurationDays : (ranges.length ? lastEnd : null);
+    const hasTotal = !!template.totalDurationDays && template.totalDurationDays > 0;
+    const totalDays = hasTotal ? template.totalDurationDays! : (ranges.length ? lastEnd : null);
+    const totalDaysShown = hasTotal ? template.totalDurationDays! : (ranges.length ? shownScheduleDay(lastEnd) : null);
     const progressPct = totalDays ? Math.min(100, Math.max(0, Math.round((todayDay / totalDays) * 100))) : null;
 
     // From PREP_DAYS before day 0 (never after today, never more than MAX_BACK_DAYS back).
@@ -273,6 +281,7 @@ export function buildScheduleModel(input: ScheduleInput): ScheduleModel {
         todayDay,
         lossDays: shiftDaysUpTo(shifts, todayKey),
         totalDays,
+        totalDaysShown,
         progressPct,
         stages,
         currentStage,

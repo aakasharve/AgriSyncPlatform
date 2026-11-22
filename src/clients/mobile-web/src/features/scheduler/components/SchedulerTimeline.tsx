@@ -17,7 +17,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import DayCard, { type BlockStatus, type DayCardProps, type DayCardWords } from './DayCard';
-import { addDays, dayDateLabel } from '../schedulePage/scheduleDates';
+import { addDays, dayDateLabel, shownScheduleDay } from '../schedulePage/scheduleDates';
 import { SC, mrNum } from '../schedulePage/scheduleCopy';
 import { PART_LABEL, type CellStatus, type DayCell, type ScheduleDay, type ScheduleModel } from '../schedulePage/scheduleModel';
 
@@ -79,7 +79,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ model, onOpenDay 
                     <div className="sticky top-[61px] z-10 flex items-center justify-between gap-2 border-b-2 border-stone-800 bg-[#FDFBF7] px-2 py-2">
                         <h3 className="m-0 text-[16px] font-black text-stone-800">{group.name}</h3>
                         <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[13px] font-bold text-stone-600">
-                            {SC.dayN(group.days[0].day)} – {mrNum(group.days[group.days.length - 1].day)}
+                            {SC.dayN(shownScheduleDay(group.days[0].day))} – {mrNum(shownScheduleDay(group.days[group.days.length - 1].day))}
                         </span>
                     </div>
                     <div className="flex border-b border-stone-300 bg-stone-50 py-1.5 text-[12px] font-extrabold text-stone-600">
@@ -101,7 +101,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ model, onOpenDay 
                                     </div>
                                 )}
                                 <DayCard
-                                    dayNumber={day.day}
+                                    dayNumber={shownScheduleDay(day.day)}
                                     dateLabel={dayDateLabel(day.key)}
                                     isToday={day.when === 'today'}
                                     isPast={day.when === 'past'}

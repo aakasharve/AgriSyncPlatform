@@ -7,7 +7,7 @@
  * each day's tasks grouped in the four parts. Days with nothing expected are left out.
  */
 import React, { useState } from 'react';
-import { addDays, dayDateLabel } from './scheduleDates';
+import { addDays, dayDateLabel, shownScheduleDay } from './scheduleDates';
 import { SC } from './scheduleCopy';
 import { upcomingDays, type ScheduleModel } from './scheduleModel';
 import { GLASS, PartGroup } from './scheduleUi';
@@ -32,7 +32,7 @@ export const AheadTab: React.FC<{ model: ScheduleModel; onlyStageId?: string | n
             <div className="space-y-3">
                 {days.map(d => (
                     <article key={d.key} className={`rounded-3xl p-3.5 ${GLASS}`} data-testid={`ahead-${d.key}`}>
-                        <p className="m-0 mb-2 text-[18px] font-black text-stone-900">{SC.dayN(d.day)} · {d.key === tomorrowKey ? `${SC.tomorrow} · ` : ''}{dayDateLabel(d.key)}</p>
+                        <p className="m-0 mb-2 text-[18px] font-black text-stone-900">{SC.dayN(shownScheduleDay(d.day))} · {d.key === tomorrowKey ? `${SC.tomorrow} · ` : ''}{dayDateLabel(d.key)}</p>
                         <PartGroup items={d.items} statusOf={p => d.cells[p].status} testId={`ahead-${d.key}-parts`} />
                     </article>
                 ))}

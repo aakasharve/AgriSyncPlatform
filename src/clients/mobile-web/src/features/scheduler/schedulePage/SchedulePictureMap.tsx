@@ -17,6 +17,7 @@
 import React, { useMemo, useState } from 'react';
 import { PickerCropPhoto, PlotCount } from '../../context/components/CropPlotPicker';
 import { scheduleNameMr } from './scheduleNames';
+import { shownScheduleDay } from './scheduleDates';
 import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
 import { MAP_PLOT_H, layoutScheduleMap, type MapPlot, type MapSchedule, type ScheduleMapModel } from './scheduleMapModel';
 import { scheduleMapWords, type ScheduleMapLanguage } from './scheduleMapCopy';
@@ -50,7 +51,7 @@ export const SchedulePictureMap: React.FC<{
     const layout = useMemo(() => layoutScheduleMap(model), [model]);
     const colourOf = useMemo(() => new Map(model.schedules.map(s => [s.key, s.colour])), [model]);
     const litPlots = useMemo(() => new Set(lit ? model.schedules.find(s => s.key === lit)?.plotIds ?? [] : []), [lit, model]);
-    const dayOf = (p: MapPlot): string => (p.day === null ? '' : p.day >= 0 ? words.dayN(p.day) : words.dayNotStarted);
+    const dayOf = (p: MapPlot): string => (p.day === null ? '' : p.day >= 0 ? words.dayN(shownScheduleDay(p.day)) : words.dayNotStarted);
 
     const pick = (p: MapPlot) => { setLit(null); onPickPlot(p.cropId, p.plotId); };
 
