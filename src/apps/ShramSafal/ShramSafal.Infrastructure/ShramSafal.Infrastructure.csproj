@@ -37,4 +37,14 @@
     <EmbeddedResource Include="Privacy\Resources\*.txt" />
   </ItemGroup>
 
+  <!-- spec: plr-d10 lane DFES-Q (founder D-B, D-G) - Shram Safal's own published schedule, as DFES reads it (look lines and their
+       sources, projected by sync-contract/scripts/project-dfes-schedule.mjs). Linked, never copied: the phone reads the same file.
+       ScheduleSourceResolver turns the line ids a phone names into the sources those lines carry. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\..\sync-contract\schedules\*.dfes.json">
+      <LogicalName>ShramSafal.Infrastructure.Schedules.%(Filename)%(Extension)</LogicalName>
+      <Link>AI\Dfes\Schedules\%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

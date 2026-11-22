@@ -112,6 +112,26 @@ public sealed partial class RecordQuestionEventHandlerTests
         Assert.Equal("pattern", repo.Captured.PromptOrigin);
     }
 
+    /// <summary>
+    /// The production resolver over the embedded schedule (sync-contract/schedules/*.dfes.json): a real look line of Shram Safal's own
+    /// October-pruning schedule is accepted with the pages that schedule cites; a line it does not have is refused.
+    /// </summary>
+    [Fact]
+    public async Task With_the_embedded_schedule_a_real_look_line_is_accepted_with_its_cited_pages_and_a_made_up_one_is_refused()
+    {
+        var resolver = new ShramSafal.Infrastructure.AI.Dfes.ScheduleSourceResolver();
+        var repo = new CapturingRepo(memberOfFarm: true);
+
+        var accepted = await Handler(repo, resolver).HandleAsync(
+            StageLook(Guid.NewGuid(), Guid.NewGuid(), "grapes-table-oct-fruit-pruning/sprout.0"), CancellationToken.None);
+        var refused = await Handler(new CapturingRepo(memberOfFarm: true), resolver).HandleAsync(
+            StageLook(Guid.NewGuid(), Guid.NewGuid(), "grapes-table-oct-fruit-pruning/made-up"), CancellationToken.None);
+
+        Assert.True(accepted.IsSuccess);
+        Assert.Contains("\"lineId\":\"grapes-table-oct-fruit-pruning/sprout.0\"", repo.Captured!.SourceRefsJson);
+        Assert.True(refused.IsFailure);
+    }
+
     [Fact]
     public async Task A_stage_question_with_no_source_is_rejected()
     {

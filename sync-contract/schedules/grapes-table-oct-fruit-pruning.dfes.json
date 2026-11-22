@@ -1,0 +1,502 @@
+{
+  "scheduleId": "grapes-table-oct-fruit-pruning",
+  "schemaVersion": "0.1-draft",
+  "projectedFrom": "dfes-fixture-grapes-oct-days-1-15.json",
+  "crop": "grapes",
+  "season": "October fruit pruning",
+  "dayOne": "pruning day",
+  "stages": [
+    {
+      "code": "preparation",
+      "nameMr": "तयारी (छाटणीआधी)",
+      "nameEn": "Preparation before pruning",
+      "dayFrom": -19,
+      "dayTo": 0
+    },
+    {
+      "code": "pruning",
+      "nameMr": "छाटणीचा दिवस",
+      "nameEn": "Pruning day",
+      "dayFrom": 1,
+      "dayTo": 1
+    },
+    {
+      "code": "to-sprouting",
+      "nameMr": "छाटणी ते कळ्या फुटणं",
+      "nameEn": "Pruning to bud sprouting",
+      "dayFrom": 2,
+      "dayTo": 13
+    },
+    {
+      "code": "shoots-to-bunch",
+      "nameMr": "फुटवे ते घड दिसणं",
+      "nameEn": "Shoots to bunch visible",
+      "dayFrom": 14,
+      "dayTo": 26
+    }
+  ],
+  "lines": [
+    {
+      "id": "grapes-table-oct-fruit-pruning/fym.0",
+      "cardId": "fym",
+      "cardType": "once",
+      "n0": -14,
+      "n1": -14,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "माती-पानदेठ रिपोर्टमध्ये स्फुरद आणि कॅल्शियम दोन्ही कमी आले का?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "17"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/prune.0",
+      "cardId": "prune",
+      "cardType": "once",
+      "n0": 1,
+      "n1": 1,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "छाटलेल्या काड्यांपैकी किती काड्या 6 मि.मी. किंवा त्याहून बारीक होत्या, आणि त्यांचं काय केलं?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "13"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "26"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "63"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/prune.1",
+      "cardId": "prune",
+      "cardType": "once",
+      "n0": 1,
+      "n1": 1,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "छाटायच्या काड्यांवरच्या कळ्या फुगलेल्या दिसल्या का?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "62"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/prune.2",
+      "cardId": "prune",
+      "cardType": "once",
+      "n0": 1,
+      "n1": 1,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "किती काड्यांवर करप्याचे डाग दिसले, आणि ते भाग काढले का?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "92"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/neigh.0",
+      "cardId": "neigh",
+      "cardType": "conditional",
+      "n0": 1,
+      "n1": 1,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "शेजारचा न छाटलेला भाग किती दिवसांत छाटणार आहेत?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "34"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/irrig.0",
+      "cardId": "irrig",
+      "cardType": "daily",
+      "n0": 2,
+      "n1": 41,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "आज किती तास पाणी दिलं, आणि पावसाने जमीन पूर्ण भिजली होती का?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "19"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "20"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "71"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/hcn.0",
+      "cardId": "hcn",
+      "cardType": "once",
+      "n0": 2,
+      "n1": 3,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "एक ओळ फिरून पाहा: किती काड्यांवर पिवळी खूण दिसत नाही?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "34"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/mealy.0",
+      "cardId": "mealy",
+      "cardType": "once",
+      "n0": 2,
+      "n1": 3,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींचं खोड पाहा: किती वेलींवर पांढरे ढेकूण दिसले, आणि मुंग्या होत्या का?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "95"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "96"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "43"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/sprout.0",
+      "cardId": "sprout",
+      "cardType": "daily",
+      "n0": 7,
+      "n1": 13,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींवरच्या काड्या पाहा: किती काड्यांवर कळ्या फुटल्या, आणि किती फक्त फुगल्या?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "64"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "71"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "43"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/fleab.0",
+      "cardId": "fleab",
+      "cardType": "conditional",
+      "n0": 7,
+      "n1": 13,
+      "startsWhenStageSeen": true,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "रात्री {N} वेलींच्या नव्या कळ्या पाहा: किती वेलींवर भुंगेरे किंवा पानांवर छिद्रं दिसली?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "96"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/spodo.0",
+      "cardId": "spodo",
+      "cardType": "conditional",
+      "n0": 7,
+      "n1": 13,
+      "startsWhenStageSeen": true,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "रात्री {N} वेलींच्या कळ्या पाहा: किती वेलींवर अळ्या दिसल्या, आणि किती कळ्या खाल्लेल्या?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "97"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/anth.0",
+      "cardId": "anth",
+      "cardType": "conditional",
+      "n0": 9,
+      "n1": 11,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींची नवी पानं पाहा: किती वेलींवर डाग दिसले?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "91"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "92"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "86"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/dew.0",
+      "cardId": "dew",
+      "cardType": "daily",
+      "n0": 11,
+      "n1": 41,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "आज सकाळी 9 वाजता {N} वेलींची पानं पाहा: किती वेलींवर पानं अजून ओली होती?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "29"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "34"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "35"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "90"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/dew.1",
+      "cardId": "dew",
+      "cardType": "daily",
+      "n0": 11,
+      "n1": 41,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींच्या पानांची वरची बाजू पाहा: किती वेलींवर तेलकट ठिपके दिसले?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "90"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "30"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/mil1.0",
+      "cardId": "mil1",
+      "cardType": "conditional",
+      "n0": 12,
+      "n1": 16,
+      "startsWhenStageSeen": true,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींवर प्रत्येकी एक फुटवा पाहा: एका फुटव्यावर साधारण किती पानं उघडली?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "85"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "35"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/powdery.0",
+      "cardId": "powdery",
+      "cardType": "daily",
+      "n0": 11,
+      "n1": 41,
+      "startsWhenStageSeen": true,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "{N} वेलींच्या नव्या पानांची खालची बाजू पाहा: किती वेलींवर ठिपके दिसले?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "91"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "28"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "29"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/nutri.0",
+      "cardId": "nutri",
+      "cardType": "conditional",
+      "n0": 11,
+      "n1": 41,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "किती वेलींवर पानं आत वळलेली किंवा चकचकीत ठिपके दिसले?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "17"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/thrips.0",
+      "cardId": "thrips",
+      "cardType": "daily",
+      "n0": 13,
+      "n1": 31,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "दुपारी {N} फुटवे पांढऱ्या कागदावर झटका: एका फुटव्यावरून साधारण किती थ्रिप्स पडले?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "94"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "45"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/thrips.1",
+      "cardId": "thrips",
+      "cardType": "daily",
+      "n0": 13,
+      "n1": 31,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "नव्या फुटव्यांची कोवळी पानं वळलेली किंवा कपासारखी दिसली का?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "94"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/trap.0",
+      "cardId": "trap",
+      "cardType": "once",
+      "n0": 13,
+      "n1": 31,
+      "startsWhenStageSeen": false,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "संध्याकाळी {N} फुटवे हलकेच धरून पाहा: एका फुटव्यावर साधारण किती तुडतुडे दिसले?",
+      "askFarmerHasSample": true,
+      "sources": [
+        {
+          "docId": "book-on-grape-2023",
+          "page": "95"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "94"
+        }
+      ]
+    },
+    {
+      "id": "grapes-table-oct-fruit-pruning/flower.0",
+      "cardId": "flower",
+      "cardType": "conditional",
+      "n0": 15,
+      "n1": 18,
+      "startsWhenStageSeen": true,
+      "ourChoice": false,
+      "expertDecides": false,
+      "askFarmer": "एका काडीवर किती फुटवे होते, किती ठेवले, आणि वेलीवर किती घड ठेवले?",
+      "askFarmerHasSample": false,
+      "sources": [
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "13"
+        },
+        {
+          "docId": "book-on-grape-2023",
+          "page": "64"
+        },
+        {
+          "docId": "gap-table-grapes-2013",
+          "page": "31"
+        }
+      ]
+    }
+  ]
+}
