@@ -115,8 +115,8 @@ describe('layout B (D-99)', () => {
         expect(get).toHaveBeenCalledWith(PATH); // the stage-plan door, for this plot (the server answers for today)
         expect(within(panel).getByTestId('stage-plan-title')).toHaveTextContent('या स्टेजमध्ये शेड्यूल काय सांगतात');
         expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('छाटणीनंतर');
-        expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('दिवस ०–१४'); // UI-9a item 9: Marathi digits
-        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('तुम्ही दिवस ९ वर');
+        expect(within(panel).getByTestId('stage-plan-stage')).toHaveTextContent('दिवस १–१५'); // UI-9a item 9: Marathi digits
+        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('तुम्ही दिवस १० वर');
         const order = [...panel.querySelectorAll('[data-testid^="stage-plan-schedule-"]')].map(e => [e.getAttribute('data-slot'), e.getAttribute('data-origin')]);
         expect(order).toEqual([['1', 'Outside'], ['2', 'Outside'], ['0', 'Own']]);
         // parts in the app's order inside schedule 1: सिंचन, फवारणी, कामे (खत is empty and named in one line)
@@ -174,7 +174,7 @@ describe('the numbers (P3, P4)', () => {
         const times = within(panel).getByTestId(`stage-plan-times-${water.activityId}`);
         expect(times).toHaveTextContent('या स्टेजमध्ये ५ वेळा');
         fireEvent.click(times);
-        expect(within(panel).getByTestId(`stage-plan-days-${water.activityId}`)).toHaveTextContent('दिवस: ०, ३, ६, ९, १२');
+        expect(within(panel).getByTestId(`stage-plan-days-${water.activityId}`)).toHaveTextContent('दिवस: १, ४, ७, १०, १३');
         fireEvent.click(times);
         expect(within(panel).queryByTestId(`stage-plan-days-${water.activityId}`)).toBeNull();
     });
@@ -330,7 +330,7 @@ describe('words and targets', () => {
         mount();
         const panel = await card();
         expect(within(panel).getByTestId('stage-plan-title')).toHaveTextContent('What the schedules say for this stage');
-        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('You are on day 9');
+        expect(within(panel).getByTestId('stage-plan-day')).toHaveTextContent('You are on day 10');
         expect(within(panel).getByTestId('stage-plan-times-a0000000-0000-4000-8000-000000000100')).toHaveTextContent('2 times in this stage');
         expect(panel.textContent).toContain('Every 3 days');
         expect(panel.textContent).toContain('Order: after Drip irrigation');

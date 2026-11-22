@@ -39,7 +39,7 @@ beforeEach(async () => {
     const db = getDatabase();
     await Promise.all([db.mutationQueue.clear(), db.scheduleSubscriptions.clear(), db.plots.clear(), db.cropCycles.clear(), db.appMeta.clear()]);
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // schedule day 9
+    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // stored schedule day 9, printed as day 10
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -76,7 +76,7 @@ describe('the picture map: who follows what, at a glance', () => {
         expect(screen.getByTestId(`map-plot-${P.g2}`)).toHaveAttribute('data-schedule', T.university);
         expect(screen.getByTestId(`map-plot-${P.u1}`)).toHaveAttribute('data-schedule', T.ownCane);
         expect(text(`map-plot-${P.g1}`)).toContain('G1');
-        expect(text(`map-plot-${P.g1}`)).toContain('दिवस ९'); // UI-9a item 9: Marathi digits
+        expect(text(`map-plot-${P.g1}`)).toContain('दिवस १०'); // UI-9a item 9: Marathi digits
         expect(screen.getByTestId(`map-plot-${P.g1}`).querySelector('[data-part="bar"]')).toHaveStyle({ background: '#1448E6' });
     });
 
@@ -207,7 +207,7 @@ describe('the owner bar and what the page had before', () => {
         for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByTestId('sched-owner-bar').className).toContain('bg-white');
         for (const row of ['owed', 'ahead', 'done', 'stages', 'followed', 'tools']) expect(screen.getByTestId(`fold-${row}`)).toBeInTheDocument();
-        expect(text('day-now')).toBe('९');
+        expect(text('day-now')).toBe('१०');
         expect(screen.getByTestId('sched-check')).toHaveAttribute('data-check-state', 'Checked'); // ShramSafal's check is still said, under the name
     });
 

@@ -59,7 +59,7 @@ const OLD_ENGLISH = ['VIEW', 'LIBRARY', 'MODIFY', "Today's Scheduled Tasks", 'Ti
 beforeAll(() => setScheduleTemplatesFromReferenceData([SERVER_TEMPLATE, SPRAY_TEMPLATE]));
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // 11:30 IST, schedule day 9
+    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // 11:30 IST, stored schedule day 9, printed as day 10
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -72,7 +72,7 @@ function mount(crops: CropProfile[] = [crop()]) {
 const text = (id: string) => screen.getByTestId(id).textContent ?? '';
 
 describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', () => {
-    it('one page bar with "← मागे"; the card names crop · plot, the schedule in Marathi, who made it, day 9 of 40 and the stage', () => {
+    it('one page bar with "← मागे"; the card names crop · plot, the schedule in Marathi, who made it, day 10 of 40 and the stage', () => {
         const p = mount();
         expect(text('page-title')).toBe('शेड्यूल');
         fireEvent.click(screen.getByTestId('page-back'));
@@ -84,11 +84,11 @@ describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', ()
         expect(text('sched-owner')).toContain('शेड्यूल बनवणारे');
         expect(text('sched-owner-name')).toBe('ॲपमधलं मूळ शेड्यूल');
         // UI-9a item 9: every number on the page is in Marathi digits
-        expect(text('day-now')).toBe('९');
+        expect(text('day-now')).toBe('१०');
         expect(text('day-total')).toBe('४०');
         expect(text('stage-count')).toBe('२');
         expect(text('stage-line')).toContain('स्टेज १ · छाटणीनंतर');
-        expect(text('stage-line')).toContain('दिवस ०–१४');
+        expect(text('stage-line')).toContain('दिवस १–१५');
         expect(text('here-pin')).toContain('तुम्ही इथे आहात');
         expect(screen.getByTestId('stage-row-1')).toHaveAttribute('data-current', 'yes');
         expect(screen.getByTestId('ribbon-1')).toHaveAttribute('data-filled', '67');
@@ -117,12 +117,12 @@ describe('the three big buttons (S5) and the आज list (S6, S12)', () => {
         expect(owed).toHaveAttribute('data-count', '3');
         expect(within(owed).getByText('आधी राहिलेलं काम')).toBeInTheDocument();
         expect(text('owed-irrigation')).toContain('ठिबक सिंचन');
-        expect(text('owed-irrigation')).toContain('दिवस ६'); // day 3's miss was made up on day 4
+        expect(text('owed-irrigation')).toContain('दिवस ७'); // day 3's miss was made up on day 4
         expect(text('owed-irrigation')).toContain('सिंचन');
         expect(text('owed-spray')).toContain('फवारणी');
         expect(text('owed-spray')).toContain('बुरशीनाशक फवारणी'); // the schedule's "Fungicide spray"
         expect(text('owed-work')).toContain('खुरपणी');
-        expect(text('today-card')).toContain('दिवस ९ / ४०');
+        expect(text('today-card')).toContain('दिवस १० / ४०');
         expect(text('today-parts-irrigation')).toContain('ठिबक सिंचन');
         expect(text('tomorrow-peek')).toContain('या दिवशी शेड्यूलमध्ये काही नव्हतं');
         expect(screen.getByTestId('ahead')).toBeInTheDocument(); // the "पुढचे दिवस" row holds tomorrow and the 8-day list
@@ -171,7 +171,7 @@ describe('झालं: expected vs done (S7), past days (S8) and the day sheet 
 
         fireEvent.click(screen.getByTestId(`open-day-${k(0)}`));
         const sheet = screen.getByTestId('day-sheet');
-        expect(text('day-sheet-title')).toContain('दिवस ०');
+        expect(text('day-sheet-title')).toContain('दिवस १ · ');
         expect(screen.getByTestId('day-clips')).toHaveAttribute('data-count', '2');
         expect(within(sheet).getByText('फक्त या फोनवरचं रेकॉर्डिंग दिसतं')).toBeInTheDocument();
         expect(text('typed-tag')).toBe('लिहिलेलं');
@@ -241,8 +241,8 @@ describe('Marathi digits on the schedule tab (UI-9a item 9; founder 2026-11-21)'
         // the progress percentage, the stage rows and the strip's day numbers
         expect(text('progress-pct')).toMatch(/^[०-९]+%$/);
         expect(text('stage-row-1')).toMatch(/^[०-९]/); // the stage's number in its circle
-        expect(text('stage-row-1')).toContain('दिवस ०–१४');
-        expect(text(`strip-${k(8)}`)).toBe('८');
+        expect(text('stage-row-1')).toContain('दिवस १–१५');
+        expect(text(`strip-${k(8)}`)).toBe('९');
         // a missing number is still a dash, never a digit (P4)
         expect(text('day-now')).not.toBe('—');
     });
@@ -250,8 +250,8 @@ describe('Marathi digits on the schedule tab (UI-9a item 9; founder 2026-11-21)'
     it('the day sheet and the ahead list say their day numbers in Marathi digits; their dates are untouched', () => {
         mount();
         fireEvent.click(screen.getByTestId(`strip-${k(8)}`));
-        expect(text('day-sheet-title').startsWith('दिवस ८ · ')).toBe(true);
-        expect(screen.getByTestId('day-sheet').getAttribute('aria-label')).toBe('दिवस ८');
+        expect(text('day-sheet-title').startsWith('दिवस ९ · ')).toBe(true);
+        expect(screen.getByTestId('day-sheet').getAttribute('aria-label')).toBe('दिवस ९');
         expect(text('day-clips')).toContain('(०)');
     });
 

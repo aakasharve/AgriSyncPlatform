@@ -30,7 +30,7 @@ describe('scheduleCopy - counted lines in Devanagari digits', () => {
         expect(SC.stagesLine(8)).toBe('८ स्टेज');
         expect(SC.leftCount(3)).toBe('राहिलं ३');
         expect(SC.edTodayIs(40)).toBe('म्हणजे आज दिवस ४०');
-        expect(SC.edDayZero).toBe('दिवस ०');
+        expect(SC.edDayZero).toBe('दिवस १');
         expect(SC.next3).toBe('३ दिवस');
         expect(SC.next8).toBe('८ दिवस');
     });

@@ -248,7 +248,7 @@ describe('words: one language at a time', () => {
         await seedFarmSubscriptions();
         mount({ mayMakeOwnSchedule: true, onMakeOwnSchedule: vi.fn() });
         await screen.findByTestId(`map-schedule-${T.university}`);
-        expect(text(`map-plot-${P.g1}`)).toContain('Day 9');
+        expect(text(`map-plot-${P.g1}`)).toContain('Day 10');
         expect(text('map-unscheduled-title')).toBe('No schedule');
         expect(text(`map-choose-${P.g3}`)).toBe('Choose a schedule');
         expect(text('sched-owner')).toContain('Schedule made by');
