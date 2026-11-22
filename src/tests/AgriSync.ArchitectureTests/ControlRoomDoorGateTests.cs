@@ -953,11 +953,11 @@ public sealed class ControlRoomDoorGateTests
 
         public async Task<Result<SmsDispatchReceipt>> SendOtpAsync(string phoneNumberInternational, string otpCode, CancellationToken cancellationToken = default)
         {
+            // The timer exists before anyone is told the provider started: a test that advances the fake clock on
+            // Started would otherwise move it before the timer is set, and the provider would never finish.
+            var providerWait = slow is { } delay ? Task.Delay(delay, time, CancellationToken.None) : Task.CompletedTask;
             Started.TrySetResult();
-            if (slow is { } delay)
-            {
-                await Task.Delay(delay, time, CancellationToken.None);
-            }
+            await providerWait;
 
             if (throws)
             {
