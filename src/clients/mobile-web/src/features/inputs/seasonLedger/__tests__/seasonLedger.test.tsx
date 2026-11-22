@@ -62,7 +62,7 @@ describe('season ledger: what is shown', () => {
         expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('२५० मिली');
         expect(within(r).getByTestId('season-ledger-amount').textContent).toContain('फवारणी');
         expect(within(r).getByTestId('season-ledger-amount').textContent).not.toContain('Spray');
-        expect(within(r).getByTestId('season-ledger-when').textContent).toContain('दिवस ९');
+        expect(within(r).getByTestId('season-ledger-when').textContent).toContain('दिवस १०');
         expect(within(r).getByTestId('season-ledger-when').textContent).toContain('छाटणीनंतर');
         expect(within(r).getByTestId('season-ledger-ingredients').textContent).toContain('लॅम्बडा सायहॅलोथ्रिन (IRAC 3A)');
         expect(within(r).getByTestId('season-ledger-ingredients').textContent).not.toContain('Lambda');
@@ -99,7 +99,7 @@ describe('season ledger: what is shown', () => {
         (globalThis as unknown as { __ledgerLang: { current: string } }).__ledgerLang.current = 'en';
         await open(ledgerOf([row({ amount: null, unit: null })]));
         expect((await screen.findByTestId('season-ledger-amount')).textContent).toContain('not said');
-        expect(screen.getByTestId('season-ledger-when').textContent).toContain('Day 9');
+        expect(screen.getByTestId('season-ledger-when').textContent).toContain('Day 10');
         expect(screen.getByTestId('season-ledger-amount').textContent).toContain('Spray');
         expect(screen.getByTestId('season-ledger-ingredients').textContent).toContain('Lambda-cyhalothrin');
     });

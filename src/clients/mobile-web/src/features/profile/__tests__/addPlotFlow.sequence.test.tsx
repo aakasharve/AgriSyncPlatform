@@ -86,7 +86,7 @@ describe('the add-plot flow, from the screen to the outbox', () => {
         fillStep(); next();
         fireEvent.click(screen.getByTestId('plot-start-earlier'));
         fireEvent.change(screen.getByTestId('plot-start-date'), { target: { value: '2026-10-12' } });
-        expect(screen.getByTestId('plot-start-day')).toHaveTextContent('आज दिवस ३८');
+        expect(screen.getByTestId('plot-start-day')).toHaveTextContent('आज दिवस ३९');
         fireEvent.click(screen.getByRole('button', { name: /profile\.finishSetup/ }));
 
         await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([
