@@ -6,6 +6,7 @@ using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Dfes;
 
 namespace ShramSafal.Application.UseCases.Inputs.InputUseLedger;
 
@@ -69,7 +70,7 @@ public sealed class GetInputUseLedgerHandler(IInputUseStore store, IShramSafalRe
             return Result.Failure<InputUseLedgerDto>(ShramSafalErrors.Forbidden);
         }
 
-        var today = DateOnly.FromDateTime(clock.UtcNow);
+        var today = FarmLocalDay.From(clock.UtcNow); // the farmer's day: until 05:30 IST the UTC date is still yesterday
         var last = to ?? today;
         var first = from ?? last.AddYears(-1);
         if (first > last)

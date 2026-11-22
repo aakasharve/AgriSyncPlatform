@@ -303,11 +303,12 @@ public sealed partial class RecordAudienceRealPostgresTests
                 break;
             case "edit-price":
                 // He reviews money, but this money is kept from him: a change of its price is refused, nothing saved.
-                const string Repriced = """{"schema":1,"inputs":[{"id":"in-1","productName":"औषध","quantity":1,"unit":"l","cost":9.99}]}""";
+                const string Repriced = """{"schema":1,"inputs":[{"id":"in-1","productName":"औषध","quantity":1,"unit":"l","cost":8642.97}]}""";
                 var refused = await PushAsync(CoOwner, "revise_log_content", $"fix3-reprice-{log:N}", RevisionPayload(log, Repriced, wordsWithheld: true, amountsWithheld: false));
                 refused.ErrorCode.Should().Be("ShramSafal.LogContentPrices.Conflict", "the price he cannot see is not his to change");
                 var (ownerBody, _) = await PullAsync(Owner);
-                ownerBody.Should().NotContain("9.99").And.Contain("7171.71");
+                // Four digits before the point: the seconds of a timestamp ("20:09.998206Z") can never read as this price.
+                ownerBody.Should().NotContain("8642.97").And.Contain("7171.71");
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(door), door, null);
