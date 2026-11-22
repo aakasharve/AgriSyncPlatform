@@ -80,7 +80,7 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('push', (event) => {
     console.log('[Service Worker] Push Received.');
-    console.log(`[Service Worker] Push had this data: "${event.data.text()}"`);
+    // F24: the push payload is no longer printed - it can carry a plot, crop or person's name.
 
     let data = { title: 'ShramSafal Notification', content: 'Something happened!', openUrl: '/', image: null, actions: [] };
 

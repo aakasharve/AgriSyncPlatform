@@ -548,7 +548,7 @@ export const useVoiceRecorder = ({
         // If we had a pending transcript and just parsed new audio -> Combine and Re-Process
         if (pendingTranscript && response.fullTranscript) {
             const combined = `${pendingTranscript} ${response.fullTranscript}`;
-            console.log("🎤 Combined Voice Clarification:", combined);
+            // F24: no console.log of `combined` here - it is what the farmer SAID, and a transcript never goes to a log.
             setPendingTranscript(null);
             setClarificationNeeded(null);
 
@@ -685,8 +685,7 @@ export const useVoiceRecorder = ({
             // Let's clear it here.
             setPendingTranscript(null);
             setClarificationNeeded(null);
-            // Update the scope console log if needed
-            console.log("🔄 Combined Clarification:", combined);
+            // F24: the console.log of `combined` that was here printed the farmer's words; a transcript never goes to a log.
         }
 
         const isSegmentUpdate = !!draftLog && !!recordingSegment;

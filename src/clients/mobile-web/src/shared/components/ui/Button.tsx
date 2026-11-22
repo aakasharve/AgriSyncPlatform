@@ -20,7 +20,7 @@ const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseStyles = "relative overflow-hidden flex items-center justify-center px-6 py-4 rounded-2xl font-display font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.96] hover:-translate-y-0.5";
+  const baseStyles = "relative overflow-hidden flex items-center justify-center px-6 py-4 rounded-2xl font-display font-bold text-lg transition-all duration-100 focus:outline-none focus:ring-4 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform press-feel hover:-translate-y-0.5";
 
   const variants = {
     primary: "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white hover:shadow-glow-emerald hover:to-emerald-600 focus:ring-emerald-500/50 shadow-lg shadow-emerald-500/20 border border-emerald-400/20",

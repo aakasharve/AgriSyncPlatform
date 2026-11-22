@@ -83,6 +83,55 @@
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
+/* ------------------------------------------------------------------------------------------------
+   FEEL-1 - press feedback you can see, defined ONCE.
+
+   --press-scale / --press-ms are the token. A pressed control shrinks to 97% over 100 ms and returns.
+   Two ways in, both reading the token:
+     1. every real button, tab and summary gets it by default (the rule below, zero specificity);
+     2. `.press-feel` gives it to anything else that is tappable (a card made from a div).
+   The CSS `scale` property is used, not `transform`, so it composes with a control's own translate or transform
+   (centred fixed bars, Tailwind scale-110 selected states) instead of replacing it. A browser that does not know
+   `scale` simply shows no shrink; the haptic is unaffected.
+
+   Opt out with data-press="off". Controls that already carry their own Tailwind `active:scale-*` keep it (no double shrink),
+   disabled and aria-hidden controls (click-away backdrops) do not move, and nothing moves for a person who asked for reduced
+   motion. Sizes are untouched: 48 px touch targets stay 48 px.
+   `@layer base` is the lowest layer, so any Tailwind class on a control (transition-*, active:scale-*) wins over this.
+   ------------------------------------------------------------------------------------------------ */
+@layer base {
+  :root {
+    --press-scale: 0.97;
+    --press-ms: 100ms;
+  }
+
+  :where(button, [role="button"], [role="tab"], summary):where(:not(:disabled, [aria-disabled="true"], [aria-hidden="true"], [data-press="off"], [class*="active:scale"])) {
+    transition: scale var(--press-ms) ease-out;
+  }
+
+  :where(button, [role="button"], [role="tab"], summary):where(:not(:disabled, [aria-disabled="true"], [aria-hidden="true"], [data-press="off"], [class*="active:scale"])):active {
+    scale: var(--press-scale);
+  }
+}
+
+@layer components {
+  .press-feel {
+    transition: scale var(--press-ms) ease-out;
+  }
+
+  .press-feel:not(:disabled, [aria-disabled="true"], [data-press="off"]):active {
+    scale: var(--press-scale);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role="button"], [role="tab"], summary):active,
+  .press-feel:active {
+    scale: none !important;
+    transition: none !important;
+  }
+}
+
 /* Global Body Style Upgrade */
 body {
   @apply bg-[length:200%_200%] animate-fade-in text-stone-900 antialiased font-sans;

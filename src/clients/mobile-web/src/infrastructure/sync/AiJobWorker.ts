@@ -39,6 +39,8 @@ function emitPermanentFailureToast(): void {
         detail: {
             message: PERMANENT_FAILURE_MESSAGE_MR,
             type: 'error',
+            // FEEL-1 — a background worker giving up is not something the farmer just did: shown, never buzzed.
+            quiet: true,
         },
     }));
 }

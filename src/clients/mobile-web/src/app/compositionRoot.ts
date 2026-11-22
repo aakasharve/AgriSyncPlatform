@@ -25,6 +25,8 @@ import { FarmAnchoredWeatherService } from '../infrastructure/weather/FarmAnchor
 import { BackendWeatherClient } from '../infrastructure/weather/BackendWeatherClient';
 import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
 import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
+// FEEL-1 — the toast owner: the outcome buzz is attached to the call that asks for a message (never to a render or a timeout).
+import { toastFromGlobalDetail, useFeelToast } from '../shared/hooks/useFeel';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
@@ -34,14 +36,15 @@ export interface AgriLogAppConfig {
 
 const GLOBAL_TOAST_EVENT = 'agrisync:toast';
 // Lane E1 — 'partial' too: the "बदला" screen's save says what reached no server in the same colour the old form did.
-type GlobalToastDetail = { message: string; type: 'success' | 'error' | 'partial' };
+// FEEL-1 — `quiet`: raised by a background worker (not by a tap), so the message is shown but not felt.
+type GlobalToastDetail = { message: string; type: 'success' | 'error' | 'partial'; quiet?: boolean };
 
 export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     // `'partial'` — see ActionToast. A partly-skipped save is neither a success
     // nor a failure, and rendering it as either teaches the farmer something
     // untrue about a record that is sitting safely on their phone.
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'partial' } | null>(null);
+    const [toast, setToast] = useFeelToast();
     const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
     const [lastSavedLogIds, setLastSavedLogIds] = useState<string[]>([]);
     const [mode, setMode] = useState<InputMode>('voice');
@@ -156,24 +159,15 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
 
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {
-            const detail = (event as CustomEvent<GlobalToastDetail>).detail;
-            if (!detail || typeof detail.message !== 'string' || detail.message.trim().length === 0) {
-                return;
-            }
-
-            if (detail.type !== 'success' && detail.type !== 'error' && detail.type !== 'partial') {
-                return;
-            }
-
-            setToast({
-                message: detail.message,
-                type: detail.type,
-            });
+            // The same two checks as before (a non-blank message, one of the three types) now live in `toastFromGlobalDetail`
+            // so `quiet` is tested in one place; a message with neither is ignored exactly as it was.
+            const next = toastFromGlobalDetail((event as CustomEvent<GlobalToastDetail>).detail);
+            if (next) setToast(next);
         };
 
         window.addEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
         return () => window.removeEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
-    }, []);
+    }, [setToast]); // `setToast` is one stable callback for the life of the hook (`useFeelToast`), so this still subscribes once
 
     // --- 6. WEATHER ---
     // Consent-gated device GPS for weather when a farm has no drawn centre.

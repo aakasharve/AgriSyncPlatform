@@ -28,6 +28,8 @@
 import React, { useState } from 'react';
 import { Check, Plus, Sprout } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { plotsOnlyOnFarm, useStoredAccessScopes } from '../../../core/session/storedFarmScope';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, useCropPicture } from './cropImage';
 import { cropNameIn } from '../../../shared/names/namesIn';
@@ -132,14 +134,20 @@ const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'image
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false, look, workFacts: workFactsProp,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm: hideEntireFarmProp = false, hideAddCrop = false, calmRings = false, look, workFacts: workFactsProp,
 }) => {
     const languageContext = useOptionalLanguage();
     const language = languageContext?.language ?? 'en';
     // spec I18 — the count words ("2 पैकी 2 प्लॉट") follow the crop names: the app's default outside a provider is Marathi.
     const countLanguage = languageContext?.language ?? 'mr';
     // Lane UI-7 — the shared look everywhere, but compare (it sets these three flags and nothing else does) keeps the classic one until its own lane.
-    const classic = look === 'classic' || (look === undefined && (hideEntireFarm || hideAddCrop || calmRings));
+    const classic = look === 'classic' || (look === undefined && (hideEntireFarmProp || hideAddCrop || calmRings));
+    // F03 (phone half) - a seat that covers CHOSEN PLOTS only is never offered "संपूर्ण शेत": the same card compare hides for its own reason, hidden
+    // here for every caller at once (log entry, place picker, plan form, task done). It is NOT part of `classic` above: a plot-limited seat keeps
+    // the shared look. The owner and an own-work seat are unchanged; the server half (refusing a whole-farm record) is a later server lane.
+    const farmCtx = useOptionalFarmContext();
+    const plotsOnly = plotsOnlyOnFarm(useStoredAccessScopes(), farmCtx?.currentFarmId, farmCtx?.currentFarm);
+    const hideEntireFarm = hideEntireFarmProp || plotsOnly;
     // spec I18 — every crop name in his language (the founder's crop master); the stored name is never changed.
     // Outside the language provider (tests, previews) the app's own default, Marathi.
     const crops = storedCrops.map(c => ({ ...c, name: cropNameIn(c.name, languageContext?.language ?? 'mr') }));

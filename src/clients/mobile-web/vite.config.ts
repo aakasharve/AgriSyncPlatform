@@ -1,6 +1,26 @@
+import fs from 'fs';
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, transformWithEsbuild, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+
+// F24 - `public/sw.js` is copied into the build as it is: Vite never transforms it, so `esbuild.drop` cannot reach it. In the
+// production build ONLY, run the copied file through the same drop. (The source file keeps its lifecycle logs for dev and fieldtest.)
+function dropConsoleInServiceWorker(): Plugin {
+  let outDir = '';
+  return {
+    name: 'agrisync-drop-console-in-sw',
+    apply: 'build',
+    configResolved(resolved) {
+      outDir = path.resolve(resolved.root, resolved.build.outDir);
+    },
+    async closeBundle() {
+      const file = path.join(outDir, 'sw.js');
+      if (!fs.existsSync(file)) return;
+      const out = await transformWithEsbuild(fs.readFileSync(file, 'utf8'), file, { loader: 'js', drop: ['console', 'debugger'] });
+      fs.writeFileSync(file, out.code);
+    },
+  };
+}
 
 // DATA_PRINCIPLE_SPINE Phase 01 sub-phase 01.W0 (Y.md §7): the browser
 // bundle must not carry any direct AI-provider API key. This guard fails
@@ -55,17 +75,24 @@ function assertRequiredEnv(): void {
   }
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   if (command === 'build') {
     assertRequiredEnv();
   }
 
+  // F24 (read-only security audit): the production phone build shipped every console.log / info / warn / error. Strip
+  // them, and `debugger`, from the REAL production build ONLY (`vite build`, `--mode production`: what the release workflow
+  // runs). The fieldtest build (the founder's TEST copy on the PC test stack, `--mode fieldtest`) keeps its console - it is
+  // how that stack is read - and so do dev and vitest. `scripts/check-bundle-console.mjs` proves it on a built folder.
+  const dropConsole = command === 'build' && mode === 'production';
+
   return {
+    ...(dropConsole ? { esbuild: { drop: ['console', 'debugger'] as ('console' | 'debugger')[] } } : {}),
     server: {
       port: 3000,
       host: '0.0.0.0',
     },
-    plugins: [react()],
+    plugins: [react(), ...(dropConsole ? [dropConsoleInServiceWorker()] : [])],
     build: {
       rollupOptions: {
         output: {

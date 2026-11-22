@@ -28,6 +28,21 @@ export function useStoredAccessScopes(): StoredAccessScopes | null {
 }
 
 /**
+ * F03 (phone half) - does this seat cover CHOSEN PLOTS ONLY on this farm? The stored answer for the farm when there is one (the
+ * server's last pull is the authority); otherwise `/me/context`'s `plotScope` (the stand-in before this phone's first pull). The owner
+ * (AllPlots), an own-work seat, an older server that sends no scope, and no farm at all are all `false`.
+ */
+export function plotsOnlyOnFarm(
+    stored: StoredAccessScopes | null,
+    farmId: string | null | undefined,
+    meFarm: Pick<MeFarm, 'plotScope'> | null | undefined,
+): boolean {
+    const scope = scopeForFarm(stored, farmId);
+    if (scope) return scope.plotScope === 'ChosenPlots';
+    return meFarm?.plotScope === 'ChosenPlots';
+}
+
+/**
  * May the money doors open on this farm? The stored answer for the farm when there is one (a seat that is no longer
  * Active sees nothing); otherwise `/me/context`'s see-money authority; with no farm at all, `false` when the stored
  * answer says no farm's money is his, else `undefined` (the role rule, `mayShowFarmMoney`).
