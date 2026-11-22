@@ -31,7 +31,7 @@ import { getScheduleById } from '../../planning/ClientPlanEngine';
 import { libraryTemplates } from '../ScheduleLibraryView';
 import { DAY_ZERO_LABEL, OWNER_LABEL, SC } from '../../schedulePage/scheduleCopy';
 import { scheduleNameMr } from '../../schedulePage/scheduleNames';
-import { daysBetween, toDayKey } from '../../schedulePage/scheduleDates';
+import { daysBetween, shownScheduleDay, toDayKey } from '../../schedulePage/scheduleDates';
 import { resolvePlotSchedule, type EditorChoice } from '../../schedulePage/resolveSchedule';
 import type { ScheduleChoice } from '../../schedulePage/scheduleSubscriptions';
 import { shiftDaysUpTo } from '../../schedulePage/scheduleModel';
@@ -97,7 +97,8 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
 
     const chosen = options.find(t => t.id === templateId);
     const dayKey = toDayKey(startDate);
-    // The same day number the शेड्यूल page will then show: from day 0, less this plot's recorded shifts (V2-06).
+    // The same day number the शेड्यूल page will then show: from day 0, less this plot's recorded shifts (V2-06). It is the STORED (0-based) day; the
+    // line below prints `shownScheduleDay(todayDay)` (the date picked here is day 1 as the farmer reads it).
     const todayDay = dayKey ? daysBetween(dayKey, todayKey) - shiftDaysUpTo(plot?.scheduleShifts, todayKey) : null;
     // B013: the editor's pick is for THIS plot only; the line is shown only when the pick would change this plot.
     const onlyThisPlot = !!crop && crop.plots.length > 1 && !!templateId && templateId !== current;
@@ -170,7 +171,7 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
                     </label>
                     {todayDay !== null && (
                         <p className="m-0 mt-2 px-1 text-[15px] font-bold text-stone-700" data-testid="editor-today-day">
-                            {todayDay >= 0 ? SC.edTodayIs(todayDay) : SC.notStarted(-todayDay)}
+                            {todayDay >= 0 ? SC.edTodayIs(shownScheduleDay(todayDay)) : SC.notStarted(-todayDay)}
                         </p>
                     )}
                 </GlassCard>

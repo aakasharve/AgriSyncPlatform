@@ -17,6 +17,7 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import { SCHEDULE_GATE_WORDS, type GateLanguage } from './scheduleGateCopy';
 import type { CropScheduleTemplate } from '../scheduler.types';
+import { shownScheduleDay } from './scheduleDates';
 import type { ScheduleModel, StageView } from './scheduleModel';
 import { GLASS } from './scheduleUi';
 
@@ -61,7 +62,7 @@ export const TrialStages: React.FC<{ model: Pick<ScheduleModel, 'stages' | 'curr
                         <li key={s.id} data-testid={`trial-stage-${s.index + 1}`} data-today={isToday ? 'yes' : 'no'} data-greyed={isToday ? 'no' : 'yes'}
                             className={`rounded-2xl px-3 py-2.5 ${isToday ? 'border-2 border-emerald-300 bg-emerald-50/80' : 'border border-stone-200 bg-stone-100/70 opacity-70'}`}>
                             <span className={`block text-[18px] font-extrabold leading-snug ${isToday ? 'text-emerald-900' : 'text-stone-500'}`}>{name}</span>
-                            <span className={`block text-[14px] font-bold ${isToday ? 'text-stone-700' : 'text-stone-500'}`}>{words.dayRange(s.from, s.to)}</span>
+                            <span className={`block text-[14px] font-bold ${isToday ? 'text-stone-700' : 'text-stone-500'}`}>{words.dayRange(shownScheduleDay(s.from), shownScheduleDay(s.to))}</span>
                             {isToday && <span className="mt-1 block text-[14px] font-extrabold text-emerald-800">{words.trialToday}</span>}
                         </li>
                     );

@@ -40,6 +40,7 @@ import { SinglePlotSection } from '../../context/components/PlotSelector';
 import { sortedNaturally } from '../../context/components/plotSelectorRules';
 import { OWNER_LABEL, SC, frequencyMr, mrNum, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { shownScheduleDay } from '../schedulePage/scheduleDates';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
@@ -100,7 +101,7 @@ const ownName = (opId: string, notes?: string): string | null => {
 
 const stageTasks = (template: CropScheduleTemplate, stageId: string): Array<{ label: string; detail: string | null; timing: string }> => [
     ...template.periodicExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: frequencyMr(i.frequencyMode, i.frequencyValue) })),
-    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: SC.dayN(i.targetDayFromRef) })),
+    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: SC.dayN(shownScheduleDay(i.targetDayFromRef)) })),
 ];
 
 type Order = 'usual' | 'short';
@@ -163,7 +164,7 @@ const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => voi
                             <GlassCard key={stage.id} testId={`library-stage-${stage.orderIndex}`}>
                                 <div className="flex items-center justify-between gap-3">
                                     <h4 className="m-0 text-[17px] font-extrabold text-stone-900">{stageNameMr(stage.name)}</h4>
-                                    <span className="text-[14px] font-bold text-stone-600">{SC.dayN(stage.dayStart)}–{mrNum(stage.dayEnd)}</span>
+                                    <span className="text-[14px] font-bold text-stone-600">{SC.dayN(shownScheduleDay(stage.dayStart))}–{mrNum(shownScheduleDay(stage.dayEnd))}</span>
                                 </div>
                                 <ul className="m-0 mt-2 space-y-1.5 p-0">
                                     {tasks.length === 0

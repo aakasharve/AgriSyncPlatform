@@ -11,6 +11,7 @@
 import React from 'react';
 import { Pin } from 'lucide-react';
 import { SC } from './scheduleCopy';
+import { shownScheduleDay } from './scheduleDates';
 import { PART_LABEL, type OwedEntry, type ScheduleDay } from './scheduleModel';
 import { GLASS, PartGroup, StatusChip } from './scheduleUi';
 
@@ -31,7 +32,7 @@ export const OwedCard: React.FC<{ owed: readonly OwedEntry[]; onOpenDay: (key: s
                                     {o.detail && <span className="block text-[15px] font-bold text-stone-700">{o.detail}</span>}
                                 </span>
                                 <span className="w-full text-[14px] font-bold text-red-800">
-                                    {o.times > 1 ? `${SC.since(o.firstDay)} · ${SC.times(o.times)}` : SC.dayN(o.lastDay)} · {PART_LABEL[o.part]}
+                                    {o.times > 1 ? `${SC.since(shownScheduleDay(o.firstDay))} · ${SC.times(o.times)}` : SC.dayN(shownScheduleDay(o.lastDay))} · {PART_LABEL[o.part]}
                                 </span>
                             </button>
                         </li>
@@ -47,12 +48,12 @@ export const OwedCard: React.FC<{ owed: readonly OwedEntry[]; onOpenDay: (key: s
  * day 0 it says when the schedule starts (never "दिवस -3"), after the last day that it has ended (never
  * "दिवस 69 / 40") — the same words as the card at the top (V2-03).
  */
-export const TodayPill: React.FC<{ day: number; totalDays: number | null; ended: boolean }> = ({ day, totalDays, ended }) => {
+export const TodayPill: React.FC<{ day: number; /** The schedule's length as the farmer reads it (`ScheduleModel.totalDaysShown`). `day` is the stored, 0-based day. */ totalDays: number | null; ended: boolean }> = ({ day, totalDays, ended }) => {
     const onSchedule = day >= 0 && !ended;
     return (
         <p className={`m-0 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[15px] font-extrabold ${onSchedule ? 'bg-[#1448E6] text-white' : 'bg-amber-100 text-amber-950'}`} data-testid="today-pill">
             {onSchedule
-                ? <><Pin size={15} aria-hidden="true" />{SC.here} · {SC.today} · {totalDays !== null ? SC.dayOf(day, totalDays) : SC.dayN(day)}</>
+                ? <><Pin size={15} aria-hidden="true" />{SC.here} · {SC.today} · {totalDays !== null ? SC.dayOf(shownScheduleDay(day), totalDays) : SC.dayN(shownScheduleDay(day))}</>
                 : <>{SC.today} · {ended ? SC.ended : SC.notStarted(-day)}</>}
         </p>
     );
@@ -79,7 +80,7 @@ export const TodayCard: React.FC<{ today: ScheduleDay | undefined; totalDays: nu
 export const TomorrowPeek: React.FC<{ tomorrow: ScheduleDay | undefined }> = ({ tomorrow }) => (
     tomorrow ? (
         <section className={`rounded-3xl p-4 ${GLASS}`} data-testid="tomorrow-peek">
-            <p className="m-0 mb-2 text-[18px] font-black text-stone-900">→ {SC.tomorrow} · {SC.dayN(tomorrow.day)}</p>
+            <p className="m-0 mb-2 text-[18px] font-black text-stone-900">→ {SC.tomorrow} · {SC.dayN(shownScheduleDay(tomorrow.day))}</p>
             {tomorrow.items.length === 0
                 ? <p className="m-0 text-[16px] font-bold text-stone-700">{SC.noExpectation}</p>
                 : <PartGroup items={tomorrow.items} statusOf={p => tomorrow.cells[p].status} testId="tomorrow-parts" />}

@@ -96,7 +96,7 @@ export const PlotScheduleHome: React.FC<{
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} ownerImageUrl={ownerImageUrl} />
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
-            <TodayCard today={facts.today} totalDays={model.totalDays} ended={model.ended} />
+            <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
             <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
                 <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
             </ScheduleFold>

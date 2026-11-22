@@ -24,6 +24,7 @@ import { Tap } from '../../../shared/components/ui/placeUi';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { PlotStagePlanDto, StagePlanItemDto, StagePlanScheduleDto } from '../../../infrastructure/api/stagePlanDtos';
 import { stageNameMr } from './scheduleCopy';
+import { shownScheduleDay } from './scheduleDates';
 import { SCHEDULE_GATE_WORDS, type GateLanguage } from './scheduleGateCopy';
 import { PARTS, PART_LABEL, type Part } from './scheduleModel';
 import { scheduleNameMr, taskNameMr } from './scheduleNames';
@@ -72,7 +73,7 @@ export const ItemLine: React.FC<{ item: StagePlanItemDto; language: GateLanguage
                 <span className="mt-1 block text-[14.5px] font-bold text-stone-600" data-testid={`stage-plan-nodays-${item.activityId}`}>{words.daysNotWritten}</span>
             )}
             {open && days !== null && (
-                <span className="mt-1 block text-[15px] font-bold text-stone-800" data-testid={`stage-plan-days-${item.activityId}`}>{words.daysList(days.join(', '))}</span>
+                <span className="mt-1 block text-[15px] font-bold text-stone-800" data-testid={`stage-plan-days-${item.activityId}`}>{words.daysList(days.map(shownScheduleDay).join(', '))}</span>
             )}
             {after && <span className="mt-1 block text-[14.5px] font-extrabold text-amber-900" data-testid={`stage-plan-after-${item.activityId}`}>{words.afterWork(after)}</span>}
         </li>
@@ -139,8 +140,8 @@ export const StagePlanView: React.FC<{ result: StagePlanResult; language: GateLa
                 <>
                     {stage && stageName && (
                         <div className="space-y-0.5">
-                            <p className="m-0 text-[18px] font-black text-emerald-900" data-testid="stage-plan-stage">{stageName} <span className="text-[15px] font-bold text-stone-700">({words.dayRange(stage.startDay, stage.endDay)})</span></p>
-                            <p className="m-0 text-[15px] font-extrabold text-stone-800" data-testid="stage-plan-day">{words.onDay(stage.dayToday)}</p>
+                            <p className="m-0 text-[18px] font-black text-emerald-900" data-testid="stage-plan-stage">{stageName} <span className="text-[15px] font-bold text-stone-700">({words.dayRange(shownScheduleDay(stage.startDay), shownScheduleDay(stage.endDay))})</span></p>
+                            <p className="m-0 text-[15px] font-extrabold text-stone-800" data-testid="stage-plan-day">{words.onDay(shownScheduleDay(stage.dayToday))}</p>
                         </div>
                     )}
                     {result.kind === 'plan' && result.source === 'cache' && (

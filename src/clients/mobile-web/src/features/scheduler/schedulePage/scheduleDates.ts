@@ -35,6 +35,18 @@ export const addDays = (key: string, n: number): string => new Date(utcOf(key) +
 /** Whole days from `fromKey` to `toKey` (negative when `toKey` is earlier). */
 export const daysBetween = (fromKey: string, toKey: string): number => Math.round((utcOf(toKey) - utcOf(fromKey)) / DAY_MS);
 
+/**
+ * The ONE place the farmer's day numbering meets the stored one (founder D-167: the start day - pruning day for grapes, planting day
+ * for the other crops - is DAY 1, as in the printed schedules). Everything the app stores, compares, syncs and sends keeps counting
+ * from 0 (the server's contract); only the number PRINTED for a schedule day goes through `shownScheduleDay`, and a number the farmer
+ * TYPES as a schedule day goes back through `storedScheduleDay` before it is kept. A difference of days ("starts in 3 days",
+ * "N days behind", "every N days") is not a day number and is never shifted.
+ */
+export const shownScheduleDay = (stored: number): number => stored + 1;
+
+/** The inverse of `shownScheduleDay`: the day a farmer typed (day 1 = the start day) as the stored, 0-based day. */
+export const storedScheduleDay = (shown: number): number => shown - 1;
+
 /** "सोम, 26 ऑक्टो" — Marathi words, the app's Latin digits (same formatter as the money pages). */
 export function dayDateLabel(key: string): string {
     try {

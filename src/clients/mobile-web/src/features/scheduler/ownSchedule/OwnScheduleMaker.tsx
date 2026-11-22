@@ -25,6 +25,7 @@ import { scheduleCropCode } from '../../../infrastructure/reference/TemplateCata
 import { PlanMic } from '../../plannedWork/components/PlanMic';
 import { understandPlanSpeech, type PlanSpeechResult } from '../../plannedWork/data/planVoice';
 import { plannedWorkWords } from '../../plannedWork/plannedWorkWords';
+import { shownScheduleDay, storedScheduleDay } from '../schedulePage/scheduleDates';
 import { SCHEDULE_GATE_WORDS } from '../schedulePage/scheduleGateCopy';
 import { changeText, daysText, diffVersions, frequencyText, type ChangeItem } from './changeList';
 import { madeForOptions, varietiesFor } from './madeFor';
@@ -72,8 +73,15 @@ interface Draft {
 
 // Lane SCH-MAKER-EMPTY (founder B3): `n` (every N days / times a week) of a NEW work and `to` (the last day) of a NEW stage start EMPTY (null): the person
 // types them, nothing is suggested. A row that already has values opens with them.
+//
+// D-167 (day 1 = the start day): every DAY NUMBER held by these two forms (`from`, `to`, `stageFrom`, `stageTo`) is the number the farmer reads and types - SHOWN
+// numbers, day 1 = the start day. The draft's stages and works (`OwnStage` / `OwnWork`, what is saved and sent) keep the server's 0-based days: a form is filled
+// with `shownScheduleDay(stored)` when it opens and its numbers go back through `storedScheduleDay(shown)` when a work or a stage is committed. `n` is a count, never shifted.
 interface WorkForm { editIndex: number | null; name: string; part: WorkPart; from: number; to: number; mode: WorkMode; n: number | null; operationKey?: string; stageName: string; stageFrom: number; stageTo: number }
 interface StageForm { index: number | null; name: string; from: number; to: number | null }
+
+/** The least day number a box may hold: the start day, as the farmer counts it. (Stored day 0.) */
+const FIRST_SHOWN_DAY = shownScheduleDay(0);
 
 const PARTS: readonly WorkPart[] = ['irrigation', 'nutrition', 'spray', 'work'];
 const byStart = (a: OwnStage, b: OwnStage): number => a.startDay - b.startDay || a.endDay - b.endDay;
@@ -317,7 +325,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
         const finish = () => {
             if (!ok) return;
             const work: OwnWork = {
-                name: wf.name.trim(), part: wf.part, startDay: wf.from, endDay: wf.to, mode: wf.mode, intervalDays: wf.mode === 'one_time' ? 1 : wf.n ?? 1,
+                name: wf.name.trim(), part: wf.part, startDay: storedScheduleDay(wf.from), endDay: storedScheduleDay(wf.to), mode: wf.mode, intervalDays: wf.mode === 'one_time' ? 1 : wf.n ?? 1,
                 ...(wf.operationKey ? { operationKey: wf.operationKey } : {}),
             };
             setDraft(d => {
@@ -352,8 +360,8 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                     <section className="rounded-3xl border border-stone-200 bg-white p-3.5" data-testid="own-box-when">
                         <div className="text-[15px] font-extrabold text-stone-900">{words.whenLabel} <span className="text-[13px] font-bold text-stone-500">{words.whenSub(wf.stageName, wf.stageFrom, wf.stageTo)}</span></div>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                            <div><div className="text-[13.5px] font-bold text-stone-600">{words.from}</div><NumberBox testId="own-from" value={wf.from} label={words.from} language={language} bad={bad} onChange={n => setWf(f => (f ? { ...f, from: n } : f))} /></div>
-                            <div><div className="text-[13.5px] font-bold text-stone-600">{words.to}</div><NumberBox testId="own-to" value={wf.to} label={words.to} language={language} bad={bad} onChange={n => setWf(f => (f ? { ...f, to: n } : f))} /></div>
+                            <div><div className="text-[13.5px] font-bold text-stone-600">{words.from}</div><NumberBox testId="own-from" min={FIRST_SHOWN_DAY} value={wf.from} label={words.from} language={language} bad={bad} onChange={n => setWf(f => (f ? { ...f, from: n } : f))} /></div>
+                            <div><div className="text-[13.5px] font-bold text-stone-600">{words.to}</div><NumberBox testId="own-to" min={FIRST_SHOWN_DAY} value={wf.to} label={words.to} language={language} bad={bad} onChange={n => setWf(f => (f ? { ...f, to: n } : f))} /></div>
                         </div>
                         {bad && <p className="m-0 mt-2 text-[14px] font-bold text-rose-800" role="alert" data-testid="own-work-err">{words.errEnd}</p>}
                     </section>
@@ -396,9 +404,9 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
         const stage = draft.stages[stageIndex];
         const w = editIndex === null ? null : draft.works[editIndex];
         setWf({
-            editIndex, name: w?.name ?? '', part: w?.part ?? 'work', from: w?.startDay ?? stage.startDay, to: w?.endDay ?? stage.endDay,
+            editIndex, name: w?.name ?? '', part: w?.part ?? 'work', from: shownScheduleDay(w?.startDay ?? stage.startDay), to: shownScheduleDay(w?.endDay ?? stage.endDay),
             mode: w?.mode ?? 'one_time', n: w ? w.intervalDays : null, ...(w?.operationKey ? { operationKey: w.operationKey } : {}),
-            stageName: stage.name, stageFrom: stage.startDay, stageTo: stage.endDay,
+            stageName: stage.name, stageFrom: shownScheduleDay(stage.startDay), stageTo: shownScheduleDay(stage.endDay),
         });
         go('work');
     };
@@ -418,7 +426,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     const stageOk = sf !== null && sf.name.trim().length > 0 && sf.to !== null && sf.to >= sf.from;
     const commitStage = () => {
         if (!sf || !stageOk || sf.to === null) return;
-        const stage: OwnStage = { name: sf.name.trim(), startDay: sf.from, endDay: sf.to };
+        const stage: OwnStage = { name: sf.name.trim(), startDay: storedScheduleDay(sf.from), endDay: storedScheduleDay(sf.to) };
         setDraft(d => {
             if (!d) return d;
             const next = d.stages.slice();
@@ -430,7 +438,8 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     const openStageForm = (index: number | null) => {
         const last = draft.stages.reduce((m, s) => Math.max(m, s.endDay), -1);
         const s = index === null ? null : draft.stages[index];
-        setSf({ index, name: s?.name ?? '', from: s?.startDay ?? last + 1, to: s?.endDay ?? null });
+        // A new stage starts the day after the last one ends: stored `last + 1` (0 for the first stage), shown as day `last + 2` (day 1 for the first).
+        setSf({ index, name: s?.name ?? '', from: shownScheduleDay(s?.startDay ?? last + 1), to: s ? shownScheduleDay(s.endDay) : null });
     };
 
     return (
@@ -447,7 +456,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                     <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                             <strong className="block text-[17px] font-black text-stone-900">{stage.name}</strong>
-                            <span className="block text-[14px] font-bold text-stone-600">{words.stageLine(stage.startDay, stage.endDay, words.worksN(byStage[i].length))}</span>
+                            <span className="block text-[14px] font-bold text-stone-600">{words.stageLine(shownScheduleDay(stage.startDay), shownScheduleDay(stage.endDay), words.worksN(byStage[i].length))}</span>
                         </div>
                         <div className="flex shrink-0 items-center">
                             <Tap onClick={() => openStageForm(i)} data-testid={`own-stage-edit-${i}`} className="min-h-[48px] rounded-full px-3 text-[15px] font-extrabold text-sky-800">{words.change}</Tap>
@@ -475,8 +484,8 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                     <input id="own-stage-name" value={sf.name} maxLength={80} data-testid="own-stage-name" onChange={e => setSf(f => (f ? { ...f, name: e.target.value } : f))}
                         className="mt-1 min-h-[52px] w-full rounded-2xl border-2 border-stone-300 bg-white px-3 text-[18px] font-bold text-stone-900 outline-none focus:border-emerald-600" />
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.from}</div><NumberBox testId="own-stage-from" value={sf.from} label={words.from} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, from: n } : f))} /></div>
-                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.to}</div><NumberBox testId="own-stage-to" allowEmpty value={sf.to} label={words.to} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, to: n } : f))} /></div>
+                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.from}</div><NumberBox testId="own-stage-from" min={FIRST_SHOWN_DAY} value={sf.from} label={words.from} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, from: n } : f))} /></div>
+                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.to}</div><NumberBox testId="own-stage-to" allowEmpty min={FIRST_SHOWN_DAY} value={sf.to} label={words.to} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, to: n } : f))} /></div>
                     </div>
                     {sf.to !== null && sf.to < sf.from && <p className="m-0 mt-2 text-[14px] font-bold text-rose-800" role="alert" data-testid="own-stage-err">{words.errEnd}</p>}
                     {sf.to === null && <p className="m-0 mt-2 rounded-2xl bg-stone-100 px-3 py-2 text-[14px] font-bold text-stone-700" data-testid="own-stage-need">{words.needStageEnd(sf.name.trim())}</p>}

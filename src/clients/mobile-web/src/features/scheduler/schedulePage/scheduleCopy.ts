@@ -16,6 +16,7 @@
 import type { ScheduleOwnerType } from '../scheduler.types';
 import { stageNameMr as sharedStageNameMr } from '../../../shared/utils/stageNameMr';
 import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
+import { shownScheduleDay } from './scheduleDates';
 
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 (UI-9a, item 9; founder 2026-11-21: "Marathi digits") - every word in this file is
@@ -137,7 +138,7 @@ export const SC = {
     edNone: 'या पिकासाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.', // PROPOSED (Marathi) — same line as the library's
     // spec: plr-d10 lane L8b-2 (founder C2) - the editor's choice is for this plot only; the library is the door for the whole crop.
     edThisPlotOnly: 'हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.', // PROPOSED (Marathi)
-    edDayZero: 'दिवस ०', // preview word ("दिवस")
+    edDayZero: `दिवस ${toDevanagariDigits(shownScheduleDay(0))}`, // preview word ("दिवस"); D-167: the start day the date names is day 1 (stored day 0)
     edTodayIs: (d: number) => `म्हणजे आज दिवस ${mrNum(d)}`, // PROPOSED (Marathi)
     edSave: 'जतन करा', // app word (translations `save`)
     edMeta: (days: number | null, stages: number) => `एकूण दिवस ${days === null ? '—' : mrNum(days)} · स्टेज ${mrNum(stages)}`, // preview words

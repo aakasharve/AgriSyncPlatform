@@ -57,11 +57,11 @@ describe('the library writes its counts in Devanagari digits (item 9)', () => {
         fireEvent.click(screen.getByTestId(`library-view-${CHECKED}`));
         const sheet = screen.getByTestId('library-stages');
         const second = within(sheet).getByTestId('library-stage-2');
-        expect(second).toHaveTextContent('दिवस १३–१४०');
+        expect(second).toHaveTextContent('दिवस १४–१४१');
         expect(second).toHaveTextContent('दर ७ दिवसांनी');
         expect(second).toHaveTextContent('आठवड्यातून २ वेळा');
-        expect(within(sheet).getByTestId('library-stage-1')).toHaveTextContent('दिवस ०–१२');
-        expect(within(sheet).getByTestId('library-stage-1')).toHaveTextContent('दिवस ४'); // the one-time work's day
+        expect(within(sheet).getByTestId('library-stage-1')).toHaveTextContent('दिवस १–१३');
+        expect(within(sheet).getByTestId('library-stage-1')).toHaveTextContent('दिवस ५'); // the one-time work's day
         expect(sheet.textContent).not.toMatch(/[0-9]/);
     });
 });

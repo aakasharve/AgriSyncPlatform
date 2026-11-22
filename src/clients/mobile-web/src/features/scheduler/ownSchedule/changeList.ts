@@ -20,6 +20,7 @@
 import type { MadeForKey, OwnChain, OwnStage, OwnWork, ScheduleBody } from './ownScheduleModel';
 import { MADE_FOR_KEYS } from './ownScheduleModel';
 import { tagLabel } from './madeFor';
+import { shownScheduleDay } from '../schedulePage/scheduleDates';
 
 export type ChangeLanguage = 'mr' | 'en';
 
@@ -89,8 +90,15 @@ const SHORT: Readonly<Record<ChangeLanguage, Readonly<Record<MadeForKey, string>
     en: { variety: 'variety', soilType: 'soil', region: 'region', climate: 'climate' }, // PROPOSED (English)
 };
 
-export const daysText = (from: number, to: number, language: ChangeLanguage): string =>
-    language === 'mr' ? (from === to ? `दिवस ${from}` : `दिवस ${from}–${to}`) : (from === to ? `day ${from}` : `days ${from}–${to}`);
+/**
+ * "दिवस 10–40" for a stage's or a work's days. Takes the STORED (0-based) days a stage / work holds and prints them as the farmer counts
+ * (day 1 = the start day, D-167) - every caller passes `startDay` / `endDay` straight from an `OwnStage` / `OwnWork`.
+ */
+export const daysText = (from: number, to: number, language: ChangeLanguage): string => {
+    const a = shownScheduleDay(from);
+    const b = shownScheduleDay(to);
+    return language === 'mr' ? (a === b ? `दिवस ${a}` : `दिवस ${a}–${b}`) : (a === b ? `day ${a}` : `days ${a}–${b}`);
+};
 
 export const frequencyText = (mode: OwnWork['mode'], n: number, language: ChangeLanguage): string => {
     if (language === 'mr') return mode === 'one_time' ? 'एकदाच' : mode === 'every_n_days' ? `दर ${n} दिवसांनी` : `आठवड्यातून ${n} वेळा`;

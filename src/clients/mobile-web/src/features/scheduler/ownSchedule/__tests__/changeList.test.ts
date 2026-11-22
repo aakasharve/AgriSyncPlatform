@@ -37,19 +37,19 @@ describe('the first version', () => {
 });
 
 describe('a later version: one line per change', () => {
-    it('Work_added_names_the_work_and_its_days: "सिंचन जोडलं — दिवस 10–40"', () => {
+    it('Work_added_names_the_work_and_its_days: "सिंचन जोडलं — दिवस 11–41"', () => {
         const chain = chainOf(
             { id: id(1), stages: [{ name: 'अ', startDay: 0, endDay: 60 }], activities: [{ name: 'घड विरळणी', startDay: 38, endDay: 38 }] },
             { id: id(2), version: 2, previousVersionId: id(1), stages: [{ name: 'अ', startDay: 0, endDay: 60 }], activities: [{ name: 'घड विरळणी', startDay: 38, endDay: 38 }, { name: 'सिंचन', part: 'Irrigation', startDay: 10, endDay: 40 }] },
         );
-        expect(texts(chain)[0].text).toBe('सिंचन जोडलं — दिवस 10–40');
+        expect(texts(chain)[0].text).toBe('सिंचन जोडलं — दिवस 11–41');
     });
     it('Work_added_that_repeats_also_says_how_often', () => {
         const chain = chainOf(
             { id: id(1), stages: STAGES_A, activities: [WORKS_A[2]] },
             next(2, { activities: [WORKS_A[2], WORKS_A[0]] }),
         );
-        expect(texts(chain)[0].text).toBe('ठिबक सिंचन जोडलं — दिवस 31–60 · दर 5 दिवसांनी');
+        expect(texts(chain)[0].text).toBe('ठिबक सिंचन जोडलं — दिवस 32–61 · दर 5 दिवसांनी');
     });
     it('Work_removed: "फवारणी काढली" for a word that ends in ी, "काढलं" for the others', () => {
         const chain = chainOf(
@@ -64,16 +64,16 @@ describe('a later version: one line per change', () => {
     it('Work_changed_says_the_new_days_and_how_often_only_when_the_repeat_changed', () => {
         const base = { name: 'बुरशीनाशक फवारणी', part: 'Spray', startDay: 34, endDay: 55, frequencyMode: 'every_n_days' as const, intervalDays: 7 };
         const days = chainOf({ id: id(1), stages: STAGES_A, activities: [base] }, next(2, { activities: [{ ...base, endDay: 58 }] }));
-        expect(texts(days)[0].text).toBe('बुरशीनाशक फवारणी बदलली — दिवस 34–58');
+        expect(texts(days)[0].text).toBe('बुरशीनाशक फवारणी बदलली — दिवस 35–59');
         const often = chainOf({ id: id(1), stages: STAGES_A, activities: [base] }, next(2, { activities: [{ ...base, intervalDays: 10 }] }));
-        expect(texts(often)[0].text).toBe('बुरशीनाशक फवारणी बदलली — दिवस 34–55 · दर 10 दिवसांनी');
+        expect(texts(often)[0].text).toBe('बुरशीनाशक फवारणी बदलली — दिवस 35–56 · दर 10 दिवसांनी');
     });
     it('A_work_on_one_day_says_"दिवस N" and a weekly one says "आठवड्यातून N वेळा"', () => {
         const chain = chainOf(
             { id: id(1), stages: STAGES_A, activities: [WORKS_A[2]] },
             next(2, { activities: [WORKS_A[2], { name: 'तण काढणी', part: 'Work', startDay: 40, endDay: 50, frequencyMode: 'per_week', intervalDays: 2 }] }),
         );
-        expect(texts(chain)[0].text).toBe('तण काढणी जोडली — दिवस 40–50 · आठवड्यातून 2 वेळा');
+        expect(texts(chain)[0].text).toBe('तण काढणी जोडली — दिवस 41–51 · आठवड्यातून 2 वेळा');
     });
     it('Stage_added_removed_and_changed_are_lines_of_their_own', () => {
         const chain = chainOf(
@@ -83,8 +83,8 @@ describe('a later version: one line per change', () => {
             next(4, { stages: STAGES_A.slice(0, 3) }),
         );
         const t = texts(chain).map(l => l.text);
-        expect(t).toContain('स्टेज जोडली — काढणी · दिवस 101–120');
-        expect(t).toContain('स्टेज बदलली — फळवाढ · दिवस 61–110');
+        expect(t).toContain('स्टेज जोडली — काढणी · दिवस 102–121');
+        expect(t).toContain('स्टेज बदलली — फळवाढ · दिवस 62–111');
         expect(t).toContain('स्टेज काढली — फळवाढ');
     });
     it('A_rename_is_a_line', () => {
@@ -148,7 +148,7 @@ describe('English mode shows English only', () => {
             next(2, { activities: [WORKS_A[2], WORKS_A[0]], soilType: 'red' }),
         );
         const t = texts(chain, 'en').map(l => l.text);
-        expect(t).toContain('ठिबक सिंचन added — days 31–60 · every 5 days');
+        expect(t).toContain('ठिबक सिंचन added — days 32–61 · every 5 days');
         expect(t).toContain('Made for: soil Red');
         expect(t.join(' ')).not.toMatch(/[ऀ-ॿ]{3,} (जोडलं|जोडली|काढलं|काढली)/);
     });

@@ -24,6 +24,7 @@ import { LOG_REASON_MAX_WORDS, SetLogReasonCommand, type LogReasonKind } from '.
 import { understandPlanSpeech } from '../plannedWork/data/planVoice';
 import PlanMic from '../plannedWork/components/PlanMic';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { shownScheduleDay } from '../scheduler/schedulePage/scheduleDates';
 import { KIND_ICON, PartIcon } from './compareBits';
 import { n } from './compareWords';
 import { SheetShell, type SheetContext, type ShownReason } from './CompareSheets';
@@ -90,7 +91,7 @@ export const OwnWorkSheet: React.FC<{
     const canSaveWords = kind !== null && typed !== '' && !(kept.current && kept.current.kind === kind && kept.current.words === typed);
     const savedKind = kept.current?.kind ?? null;
     const savedWords = kept.current?.words ?? '';
-    const stageDay = words.ownWhen(own.day);
+    const stageDay = words.ownWhen(shownScheduleDay(own.day)); // the server's `Day` counts from 0 (FarmCompareService.cs:222); the farmer reads the start day as day 1
 
     return (
         <SheetShell title={own.title ? own.title : words.oneRecord} subtitle={words.notInScheduleDidIt} icon={<PartIcon part="own" size={18} />} words={words} onClose={onClose} onBack={onBack} testId="compare-own-sheet">

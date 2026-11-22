@@ -13,7 +13,7 @@
  */
 import React, { useState } from 'react';
 import { ChevronRight, Mic } from 'lucide-react';
-import { dayDateLabel } from './scheduleDates';
+import { dayDateLabel, shownScheduleDay } from './scheduleDates';
 import { SC, mrNum } from './scheduleCopy';
 import { PART_LABEL, PARTS, dayVerdict, extrasOn, type ScheduleDay, type Tally, type Part } from './scheduleModel';
 import { GLASS, PART_TINT, PartIcon, StatusChip } from './scheduleUi';
@@ -58,9 +58,9 @@ export const CompareCard: React.FC<{ total: Tally; byPart: Record<Part, Tally>; 
                         const v = dayVerdict(d);
                         const cls = v === 'allDone' ? 'bg-emerald-600 text-white' : v === 'missed' ? 'bg-red-500 text-white' : v === 'mixed' ? 'bg-amber-400 text-stone-900' : 'bg-stone-200 text-stone-600';
                         return (
-                            <button key={d.key} type="button" onClick={() => onDay(d.key)} data-testid={`strip-${d.key}`} data-verdict={v} aria-label={`${SC.dayN(d.day)} · ${dayDateLabel(d.key)}`}
+                            <button key={d.key} type="button" onClick={() => onDay(d.key)} data-testid={`strip-${d.key}`} data-verdict={v} aria-label={`${SC.dayN(shownScheduleDay(d.day))} · ${dayDateLabel(d.key)}`}
                                 className={`flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl text-[15px] font-extrabold ${cls}`}>
-                                {mrNum(d.day)}{clipCount(d.key) > 0 && <Mic size={12} aria-hidden="true" />}
+                                {mrNum(shownScheduleDay(d.day))}{clipCount(d.key) > 0 && <Mic size={12} aria-hidden="true" />}
                             </button>
                         );
                     })}
@@ -76,7 +76,7 @@ export const PastDayRow: React.FC<{ day: ScheduleDay; clips: number; onOpen: (ke
     return (
         <li className="list-none" data-testid={`past-${day.key}`}>
             <button type="button" onClick={() => onOpen(day.key)} data-testid={`open-day-${day.key}`} className={`flex w-full items-start gap-3 rounded-2xl p-3 text-left active:bg-white ${GLASS}`}>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-stone-800 text-[18px] font-extrabold text-white">{mrNum(day.day)}</span>
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-stone-800 text-[18px] font-extrabold text-white">{mrNum(shownScheduleDay(day.day))}</span>
                 <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2 text-[15px] font-extrabold text-stone-800">
                         {dayDateLabel(day.key)}

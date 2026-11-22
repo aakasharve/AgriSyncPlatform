@@ -154,8 +154,8 @@ describe('what the card shows', () => {
         setup();
         chooseAll();
         const panel = await card();
-        expect(within(panel).getByTestId('schedule-advice-stage')).toHaveTextContent('दिवस १३–४०'); // UI-9a item 9: Marathi digits
-        expect(within(panel).getByTestId('schedule-advice-day')).toHaveTextContent('तुम्ही दिवस २० वर');
+        expect(within(panel).getByTestId('schedule-advice-stage')).toHaveTextContent('दिवस १४–४१'); // UI-9a item 9: Marathi digits
+        expect(within(panel).getByTestId('schedule-advice-day')).toHaveTextContent('तुम्ही दिवस २१ वर');
         const lines = [...panel.querySelectorAll('[data-testid^="schedule-advice-line-"]')];
         expect(lines.map(l => [l.getAttribute('data-slot'), l.getAttribute('data-origin')])).toEqual([['1', 'Outside'], ['2', 'Outside']]);
         const first = within(lines[0] as HTMLElement);
@@ -166,7 +166,7 @@ describe('what the card shows', () => {
         expect(first.getByTestId(`stage-plan-repeat-${A1}`)).toHaveTextContent('दर ५ दिवसांनी');
         expect(first.getByTestId(`stage-plan-times-${A1}`)).toHaveTextContent('या स्टेजमध्ये ६ वेळा');
         fireEvent.click(first.getByTestId(`stage-plan-times-${A1}`));
-        expect(first.getByTestId(`stage-plan-days-${A1}`)).toHaveTextContent('दिवस: १३, १८, २३, २८, ३३, ३८');
+        expect(first.getByTestId(`stage-plan-days-${A1}`)).toHaveTextContent('दिवस: १४, १९, २४, २९, ३४, ३९');
         const second = within(lines[1] as HTMLElement);
         expect(second.getByTestId('stage-plan-chip')).toHaveTextContent('2');
     });

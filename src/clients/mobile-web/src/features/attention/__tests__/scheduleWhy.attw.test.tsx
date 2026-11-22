@@ -49,13 +49,13 @@ describe('the "का दिसतंय" line, one case at a time', () => {
     it('one schedule, a last record: schedule, its day, how often, and when it was last done', () => {
         const line = scheduleWhyLineMr(stepOf(), TODAY);
 
-        expect(line).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी) · शेवटची फवारणी ६ दिवसांपूर्वी');
+        expect(line).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३५ ला फवारणी (दर ५ दिवसांनी) · शेवटची फवारणी ६ दिवसांपूर्वी');
     });
 
     it('one schedule, no record: "अजून नोंद नाही" - never "० दिवस"', () => {
         const line = scheduleWhyLineMr(stepOf({ lastSameWorkDate: null }), TODAY);
 
-        expect(line).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी) · अजून नोंद नाही');
+        expect(line).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३५ ला फवारणी (दर ५ दिवसांनी) · अजून नोंद नाही');
         expect(line).not.toMatch(/[०0] दिवस/);
     });
 
@@ -67,7 +67,7 @@ describe('the "का दिसतंय" line, one case at a time', () => {
 
     it('a schedule the app ships is named in Marathi (UI-9a item 9: scheduleNameMr); a name a person wrote stays as written', () => {
         expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Spray' }), TODAY))
-            .toBe('द्राक्ष — फवारणी शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी) · शेवटची फवारणी ६ दिवसांपूर्वी');
+            .toBe('द्राक्ष — फवारणी शेड्यूल नुसार दिवस ३५ ला फवारणी (दर ५ दिवसांनी) · शेवटची फवारणी ६ दिवसांपूर्वी');
         expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Spray', alsoAskedBy: ['Grapes - Standard Seasonal Template', 'माझं'] }), TODAY))
             .toBe('द्राक्ष — फवारणी शेड्यूल, द्राक्ष — हंगामी शेड्यूल आणि माझं सगळे सांगतात · शेवटची फवारणी ६ दिवसांपूर्वी');
         expect(scheduleWhyLineMr(stepOf({ scheduleName: 'Grapes - Our Own Plan' }), TODAY)).toContain('Grapes - Our Own Plan नुसार');
@@ -86,17 +86,17 @@ describe('the "का दिसतंय" line, one case at a time', () => {
     it('no part is drawn from a missing field', () => {
         // no repeat stored -> no "(दर … दिवसांनी)"
         const noRepeat = scheduleWhyLineMr(stepOf({ repeatText: null }), TODAY);
-        expect(noRepeat).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३४ ला फवारणी · शेवटची फवारणी ६ दिवसांपूर्वी');
+        expect(noRepeat).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३५ ला फवारणी · शेवटची फवारणी ६ दिवसांपूर्वी');
         expect(noRepeat).not.toContain('(');
 
         // the server did not say anything about the last record (the field is not there) -> neither "none" nor a day count
         const noLast = scheduleWhyLineMr(stepOf({ lastSameWorkDate: undefined }), TODAY);
-        expect(noLast).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी)');
+        expect(noLast).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३५ ला फवारणी (दर ५ दिवसांनी)');
         expect(noLast).not.toContain('नोंद');
         expect(noLast).not.toContain('शेवटची');
 
         // a record "in the future" (a wrong clock) is not drawn
-        expect(scheduleWhyLineMr(stepOf({ lastSameWorkDate: '2026-11-20' }), TODAY)).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३४ ला फवारणी (दर ५ दिवसांनी)');
+        expect(scheduleWhyLineMr(stepOf({ lastSameWorkDate: '2026-11-20' }), TODAY)).toBe('विद्यापीठ शेड्यूल नुसार दिवस ३५ ला फवारणी (दर ५ दिवसांनी)');
     });
 
     it('a per-week repeat is worded in weeks, an unknown code is not drawn', () => {
@@ -192,7 +192,7 @@ describe('the line on the page', () => {
         expect(model.counts.todaySteps).toBe(2);
         const withWhy = model.today.find(i => i.kind === 'step' && i.step.plannedActivityId === 'step-1');
         const without = model.today.find(i => i.kind === 'step' && i.step.plannedActivityId === 'step-2');
-        expect(withWhy && withWhy.kind === 'step' ? withWhy.why : null).toContain('नुसार दिवस ३४ ला');
+        expect(withWhy && withWhy.kind === 'step' ? withWhy.why : null).toContain('नुसार दिवस ३५ ला');
         expect(without && without.kind === 'step' ? without.why : 'x').toBeUndefined();
     });
 

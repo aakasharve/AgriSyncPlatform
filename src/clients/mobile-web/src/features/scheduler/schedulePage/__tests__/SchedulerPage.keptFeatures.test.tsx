@@ -42,7 +42,7 @@ const noEnglish = () => { for (const w of ENGLISH) expect(document.body.textCont
 beforeAll(() => setScheduleTemplatesFromReferenceData([SERVER_TEMPLATE, SPRAY_TEMPLATE]));
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // 11:30 IST, schedule day 9
+    vi.setSystemTime(new Date('2026-10-26T06:00:00Z')); // 11:30 IST, stored schedule day 9, printed as day 10 (the start day is day 1)
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -71,11 +71,11 @@ describe('crop and plot pick', () => {
         expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('map-plot-plot-2')).toHaveAttribute('aria-pressed', 'false');
         expect(text('sched-crop-plot')).toBe('द्राक्ष · A'); // spec I18: the server's "Grapes" in Marathi
-        expect(text('day-now')).toBe('९'); // UI-9a item 9: Marathi digits
+        expect(text('day-now')).toBe('१०'); // UI-9a item 9: Marathi digits
 
         fireEvent.click(screen.getByTestId('map-plot-plot-2'));
         expect(text('sched-crop-plot')).toBe('द्राक्ष · B');
-        expect(text('day-now')).toBe('६');
+        expect(text('day-now')).toBe('७');
         expect(screen.getByTestId('map-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('map-plot-plot-1')).toHaveAttribute('aria-pressed', 'false');
 
@@ -110,22 +110,22 @@ describe('the \'N days behind\' banner', () => {
     it('in Marathi; the crop\'s day is the card\'s day and the editor\'s day — one rule, one number (V2-06)', () => {
         mount([crop([shifted()])]);
         expect(text('behind-banner')).toContain('शेड्यूल २ दिवस मागे चाललं आहे');
-        // Calendar: 9 days since day 0. Crop: 9 less the 2-day shift = 7 — the same 7 as the card's tile
-        // (the old banner counted 1-based from the plot's start date and said 8 here).
-        expect(text('day-now')).toBe('७');
-        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस ९ · पिकासाठी दिवस ७');
+        // Calendar: day 10 (9 days after the start day, which is day 1). Crop: 10 less the 2-day shift = 8 - the same 8 as the card's tile
+        // (the shift, 2 days, is a count and is not moved; only the printed day numbers are one higher than the stored ones).
+        expect(text('day-now')).toBe('८');
+        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस १० · पिकासाठी दिवस ८');
         fireEvent.click(screen.getByTestId('open-editor'));
-        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ७');
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ८');
     });
 
     it('after the editor moves day 0, the banner counts from the new day 0 (it kept the old start date before)', () => {
         mount([crop([shifted()])]);
         fireEvent.click(screen.getByTestId('open-editor'));
         fireEvent.change(screen.getByTestId('editor-date'), { target: { value: k(1) } });
-        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ६');
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ७');
         fireEvent.click(screen.getByTestId('editor-save'));
-        expect(text('day-now')).toBe('६');
-        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस ८ · पिकासाठी दिवस ६');
+        expect(text('day-now')).toBe('७');
+        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस ९ · पिकासाठी दिवस ७');
     });
 
     it('not drawn when nothing slipped', () => {
@@ -152,25 +152,25 @@ describe('honest states', () => {
         expect(within(screen.getByTestId('stage-ribbon')).getAllByText('तुम्ही इथे आहात')).toHaveLength(1);
     });
 
-    it('the today card after the end says it ended — never "दिवस 69 / 40", never "तुम्ही इथे आहात" (V2-03)', () => {
+    it('the today card after the end says it ended — never "दिवस 70 / 40", never "तुम्ही इथे आहात" (V2-03)', () => {
         const old = plot({ startDate: k(-60), schedule: { ...plot().schedule, referenceDate: k(-60) } });
         mount([crop([old])]);
         expect(text('today-pill')).toBe('आज · या शेड्यूलचे सगळे दिवस संपले');
-        expect(text('today-card')).not.toMatch(/दिवस 69|तुम्ही इथे आहात/);
+        expect(text('today-card')).not.toMatch(/दिवस (69|70|६९|७०)|तुम्ही इथे आहात/);
     });
 
-    it('the today card before day 0 says when it starts — never "दिवस -3" and no pin (V2-03)', () => {
+    it('the today card before day 0 says when it starts — never "दिवस -3" or "दिवस -2" and no pin (V2-03)', () => {
         const soon = plot({ startDate: k(12), schedule: { ...plot().schedule, referenceDate: k(12) } });
         mount([crop([soon])]);
         expect(text('day-now')).toBe('—');
         expect(text('not-started')).toBe('शेड्यूल ३ दिवसांनी सुरू होईल');
         expect(text('today-pill')).toBe('आज · शेड्यूल ३ दिवसांनी सुरू होईल');
-        expect(text('today-card')).not.toMatch(/-3|तुम्ही इथे आहात/);
+        expect(text('today-card')).not.toMatch(/-[23]|तुम्ही इथे आहात/);
     });
 
-    it('while on the schedule the pill is "तुम्ही इथे आहात · आज · दिवस 9 / 40"', () => {
+    it('while on the schedule the pill is "तुम्ही इथे आहात · आज · दिवस १० / ४०"', () => {
         mount();
-        expect(text('today-pill')).toBe('तुम्ही इथे आहात · आज · दिवस ९ / ४०');
+        expect(text('today-pill')).toBe('तुम्ही इथे आहात · आज · दिवस १० / ४०');
     });
 });
 
@@ -294,9 +294,9 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         expect(screen.getByTestId(`editor-schedule-${TEMPLATE_ID}`)).toHaveAttribute('aria-pressed', 'true');
         expect(text(`editor-schedule-${TEMPLATE_ID}`)).toContain('द्राक्ष — हंगामी शेड्यूल');
         expect(text(`editor-schedule-${TEMPLATE_ID}`)).toContain('एकूण दिवस ४० · स्टेज २');
-        expect(text('editor-day-zero')).toContain('छाटणीची तारीख (दिवस ०)');
+        expect(text('editor-day-zero')).toContain('छाटणीची तारीख (दिवस १)');
         expect((screen.getByTestId('editor-date') as HTMLInputElement).value).toBe(REF);
-        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ९');
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस १०');
         expect(text('editor-save')).toBe('जतन करा');
         expect(screen.queryByTestId('editor-this-plot-only')).toBeNull(); // one plot only
         noEnglish();
@@ -307,7 +307,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         fireEvent.click(screen.getByTestId('open-editor'));
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
         fireEvent.change(screen.getByTestId('editor-date'), { target: { value: k(1) } });
-        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ८');
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ९');
         fireEvent.click(screen.getByTestId('editor-save'));
 
         const saved = p.onUpdateCrops.mock.calls[0][0] as CropProfile[];
@@ -315,7 +315,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: k(1) });
         expect(text('page-title')).toBe('शेड्यूल');
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
-        expect(text('day-now')).toBe('८');
+        expect(text('day-now')).toBe('९');
         expect(text('stage-line')).toContain('फुलोऱ्यापूर्वी');
         await screen.findByTestId('owed-card'); // UI-4: the page is drawn again with its rows closed; autoOpenFolds opens them
         expect(screen.getAllByTestId('owed-spray').map(e => e.textContent)).toEqual([
@@ -355,6 +355,6 @@ describe('the day grid (दिवसवार तक्ता)', () => {
         expect(text(`grid-${k(4)}`)).toContain('31');
         noEnglish();
         fireEvent.click(within(screen.getByTestId(`grid-${k(8)}`)).getAllByRole('button')[0]);
-        expect(text('day-sheet-title')).toContain('दिवस ८');
+        expect(text('day-sheet-title')).toContain('दिवस ९');
     });
 });

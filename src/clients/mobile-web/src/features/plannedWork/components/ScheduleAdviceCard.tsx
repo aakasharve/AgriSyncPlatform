@@ -19,6 +19,7 @@
 import React from 'react';
 import type { ScheduleAdviceLineDto } from '../../../infrastructure/api/scheduleAdviceDtos';
 import { stageNameMr } from '../../scheduler/schedulePage/scheduleCopy';
+import { shownScheduleDay } from '../../scheduler/schedulePage/scheduleDates';
 import { SCHEDULE_GATE_WORDS, type GateLanguage } from '../../scheduler/schedulePage/scheduleGateCopy';
 import { scheduleNameMr } from '../../scheduler/schedulePage/scheduleNames';
 import { GLASS } from '../../scheduler/schedulePage/scheduleUi';
@@ -64,8 +65,8 @@ export const ScheduleAdviceView: React.FC<{ result: ScheduleAdviceResult; langua
             {advice?.notRecognised && <p className="m-0 text-[15px] font-bold text-stone-700" data-testid="schedule-advice-not-recognised">{words.adviceNotRecognised}</p>}
             {advice && !advice.notRecognised && stage && stageName && (
                 <div className="space-y-0.5">
-                    <p className="m-0 text-[17px] font-black text-emerald-900" data-testid="schedule-advice-stage">{stageName} <span className="text-[15px] font-bold text-stone-700">({gate.dayRange(stage.startDay, stage.endDay)})</span></p>
-                    <p className="m-0 text-[15px] font-extrabold text-stone-800" data-testid="schedule-advice-day">{gate.onDay(stage.dayToday)}</p>
+                    <p className="m-0 text-[17px] font-black text-emerald-900" data-testid="schedule-advice-stage">{stageName} <span className="text-[15px] font-bold text-stone-700">({gate.dayRange(shownScheduleDay(stage.startDay), shownScheduleDay(stage.endDay))})</span></p>
+                    <p className="m-0 text-[15px] font-extrabold text-stone-800" data-testid="schedule-advice-day">{gate.onDay(shownScheduleDay(stage.dayToday))}</p>
                 </div>
             )}
             {result.kind === 'advice' && result.source === 'cache' && (

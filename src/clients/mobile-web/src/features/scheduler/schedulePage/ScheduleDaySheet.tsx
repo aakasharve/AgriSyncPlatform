@@ -24,7 +24,7 @@ import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { formatFarmerTime } from '../../../shared/utils/displayTime';
 import { SANS, Tap } from '../../../shared/components/ui/placeUi';
 import type { DailyLog } from '../../../types';
-import { dayDateLabel } from './scheduleDates';
+import { dayDateLabel, shownScheduleDay } from './scheduleDates';
 import { SC, mrNum } from './scheduleCopy';
 import { PART_LABEL, PARTS, extrasOn, partsDone, type ScheduleDay } from './scheduleModel';
 import { ItemLine, PartIcon, StatusChip } from './scheduleUi';
@@ -72,7 +72,7 @@ export const ScheduleDaySheet: React.FC<{ day: ScheduleDay; stageName: string | 
     const extras = extrasOn(day);
     return (
         <div className="fixed inset-0 z-[60] flex justify-center bg-stone-900/30">
-            <div className="flex h-full w-full max-w-md flex-col bg-stone-50" role="dialog" aria-modal="true" aria-label={SC.dayN(day.day)} data-testid="day-sheet" style={{ fontFamily: SANS }}>
+            <div className="flex h-full w-full max-w-md flex-col bg-stone-50" role="dialog" aria-modal="true" aria-label={SC.dayN(shownScheduleDay(day.day))} data-testid="day-sheet" style={{ fontFamily: SANS }}>
                 <div className="flex shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-3 py-2.5">
                     <Tap onClick={onClose} data-testid="day-sheet-back" aria-label="मागे"
                         className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-full border border-stone-300 bg-white pl-2 pr-5 text-stone-800 shadow-sm">
@@ -80,7 +80,7 @@ export const ScheduleDaySheet: React.FC<{ day: ScheduleDay; stageName: string | 
                         <span className="text-[17px] font-extrabold">मागे</span>
                     </Tap>
                     <div className="min-w-0">
-                        <p className="m-0 text-[17px] font-extrabold text-stone-900" data-testid="day-sheet-title">{SC.dayN(day.day)} · {dayDateLabel(day.key)}</p>
+                        <p className="m-0 text-[17px] font-extrabold text-stone-900" data-testid="day-sheet-title">{SC.dayN(shownScheduleDay(day.day))} · {dayDateLabel(day.key)}</p>
                         {stageName && <p className="m-0 text-[13px] font-bold text-stone-600">{SC.stage}: {stageName}</p>}
                     </div>
                 </div>

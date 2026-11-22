@@ -99,13 +99,13 @@ describe('the trial view (R10)', () => {
         const today = within(view).getByTestId('trial-stage-1');
         expect(today).toHaveAttribute('data-today', 'yes');
         expect(today).toHaveTextContent('छाटणीनंतर');
-        expect(today).toHaveTextContent('दिवस ०–१४'); // UI-9a item 9: Marathi digits
+        expect(today).toHaveTextContent('दिवस १–१५'); // UI-9a item 9: Marathi digits
         expect(today).toHaveTextContent('आजची स्टेज — वर पूर्ण दिसते');
         const other = within(view).getByTestId('trial-stage-2');
         expect(other).toHaveAttribute('data-today', 'no');
         expect(other).toHaveAttribute('data-greyed', 'yes');
         expect(other).toHaveTextContent('फूट वाढ');
-        expect(other).toHaveTextContent('दिवस १५–३९');
+        expect(other).toHaveTextContent('दिवस १६–४०');
         expect(other.textContent).not.toContain('आजची स्टेज'); // only today's stage carries the marker
         expect(other.textContent).not.toContain('✓'); // a greyed stage shows no tick, no bar
         expect(other.querySelector('[data-testid^="ribbon-"]')).toBeNull();
@@ -160,7 +160,7 @@ describe('the trial view (R10)', () => {
         expect(screen.getByTestId('trial-rule')).toHaveTextContent("By ShramSafal's rule, during the trial today's stage shows in full");
         expect(screen.getByTestId('trial-heading')).toHaveTextContent('Trial');
         expect(within(view).getByTestId('trial-stage-1')).toHaveTextContent("Today's stage — shown in full above");
-        expect(within(view).getByTestId('trial-stage-2')).toHaveTextContent('Day 15–39');
+        expect(within(view).getByTestId('trial-stage-2')).toHaveTextContent('Day 16–40');
         expect(view.textContent ?? '').not.toMatch(/[ऀ-ॿ]/);
     });
 

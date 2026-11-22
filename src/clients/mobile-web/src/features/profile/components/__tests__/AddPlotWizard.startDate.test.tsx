@@ -103,11 +103,11 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         expect(onSave).not.toHaveBeenCalled();
     });
 
-    it('"आज" enables finish and the counter reads आज दिवस ० in Devanagari digits (the schedule tab\'s own count: day 0 is the chosen day)', () => {
+    it('"आज" enables finish and the counter reads आज दिवस १ in Devanagari digits (the schedule tab\'s own count: the chosen day is day 1)', () => {
         openStep3();
         fireEvent.click(byId('plot-start-today'));
         expect(byId('plot-start-today')).toHaveAttribute('aria-pressed', 'true');
-        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस ०');
+        expect(byId('plot-start-day')).toHaveTextContent(/आज दिवस १(?![०-९])/); // day 1, not 10-19
         expect(finish()).not.toBeDisabled();
     });
 
@@ -128,10 +128,10 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         openStep3();
         fireEvent.click(byId('plot-start-earlier'));
         fireEvent.change(byId('plot-start-date'), { target: { value: '2026-10-12' } });
-        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस ३८');
+        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस ३९');
         expect(finish()).not.toBeDisabled();
         fireEvent.change(byId('plot-start-date'), { target: { value: '2026-11-09' } });
-        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस १०');
+        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस ११');
     });
 
     it('a date after today is refused in words and finish stays off', () => {
@@ -158,7 +158,7 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         fireEvent.click(byId('plot-start-earlier'));
         fireEvent.change(byId('plot-start-date'), { target: { value: '2026-10-12' } });
         fireEvent.click(byId('plot-start-today'));
-        expect(byId('plot-start-day')).toHaveTextContent('आज दिवस ०');
+        expect(byId('plot-start-day')).toHaveTextContent(/आज दिवस १(?![०-९])/); // day 1, not 39
         expect(screen.queryByTestId('plot-start-date')).toBeNull();
     });
 
@@ -240,7 +240,7 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         expect(byId('plot-start-earlier')).toHaveTextContent('Earlier');
         fireEvent.click(byId('plot-start-earlier'));
         fireEvent.change(byId('plot-start-date'), { target: { value: '2026-10-12' } });
-        expect(byId('plot-start-day')).toHaveTextContent('Day 38 today');
+        expect(byId('plot-start-day')).toHaveTextContent('Day 39 today');
         expect(byId('plot-start-schedule')).toHaveTextContent('Schedule will start by itself');
         expect(byId('plot-start-schedule')).toHaveTextContent('Checked by ShramSafal');
         expect(within(byId('plot-start-schedule')).getByText(/Grapes - Standard Seasonal Template/)).toBeInTheDocument();

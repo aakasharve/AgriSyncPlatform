@@ -71,7 +71,7 @@ describe('product card: one word is enough', () => {
         const log = logWith('Karate');
         show(log, kitFor(log, ctxOf()));
         expect(screen.queryByTestId('vr-card-does')).toBeNull();
-        expect(screen.getByTestId('vr-fact-when').textContent).toContain('छाटणीनंतर दिवस ३३');
+        expect(screen.getByTestId('vr-fact-when').textContent).toContain('छाटणीनंतर दिवस ३४');
         expect(screen.getByTestId('vr-fact-stage').textContent).toContain('शेंडा वाढ');
     });
 
@@ -112,7 +112,7 @@ describe('product card: what to know at this stage', () => {
         show(log, kitFor(log, ctxOf({ day: 2, stageName: 'छाटणी' })));
         const line = screen.getByTestId('vr-stage-hc-bud-48h');
         expect(line.textContent).toContain('४८ तासांच्या आत');
-        expect(line.textContent).toContain('दिवस २');
+        expect(line.textContent).toContain('दिवस ३');
         expect(line.textContent).toContain('सल्ल्याच्या वेळेत');
         expect(line.querySelector('[data-src="NHB"]')).toBeTruthy();
     });
@@ -130,7 +130,7 @@ describe('product card: what to know at this stage', () => {
         const log = logWith('Karate');
         show(log, kitFor(log, ctxOf()));
         expect(screen.getByTestId('vr-does-lambdacyhalothrin').textContent).toMatch(/Acts on the pest/);
-        expect(screen.getByTestId('vr-fact-when').textContent).toContain('Day 33 after pruning');
+        expect(screen.getByTestId('vr-fact-when').textContent).toContain('Day 34 after pruning');
         expect(screen.queryByTestId('vr-fact-stage')).toBeNull();
     });
 });
