@@ -346,6 +346,22 @@
 //     Independently, a scrub is not executable here at all: the creating
 //     migration runs REVOKE UPDATE, DELETE, TRUNCATE ON ssf.question_events
 //     FROM agrisync_app — append-only by privilege, not by convention.
+//     LANE DFES-Q (20261121032701_AddDfesQuestionContext, founder D-B / D-D, 2026-11-21) — the table now ALSO carries
+//     asked_user_id (who the question was put to) as an OPAQUE user id ONLY, kept on erasure exactly as
+//     ssf.log_practice_reasons keeps its author id (P6: anonymise the person, never the work; the phone names a person
+//     only through the operator directory, which erasure anonymises), and three more free-text columns that KEEP for
+//     the response reason above: prompt_text (Sathi's words shown; a follow-up quotes his own earlier observation, which
+//     ssf.observation_events already keeps), deviation_challenge (his "अडचण", an answer
+//     like response) and source_refs / schedule_card_ref / deviation_reason_code / question_kind / prompt_origin
+//     (fixed values and ids, no person). photo_attachment_id points at an attachment whose own disposition governs the
+//     file. The "NO user_id column" sentence above is the history of this table before that migration.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
+//   - ssf.question_photo_checks (lane DFES-Q, founder D-E) — KEEP. One row is one check of a photo given as proof of an
+//     observation: farm_id, question_event_id, attachment_id (the file's own disposition governs the photo), the count he
+//     stated, the count read, a confidence, a fixed verdict word (matches / does_not_match / unclear / not_enough), the
+//     model name and when. No free text of a person and no user id. Farm-co-owned evidence about the crop, append-only by
+//     privilege (REVOKE UPDATE, DELETE, TRUNCATE, with its migration's effective-privilege guard).
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
 //   - ssf.daily_richness_aggregates — KEEP. Farm-scoped derived rollup

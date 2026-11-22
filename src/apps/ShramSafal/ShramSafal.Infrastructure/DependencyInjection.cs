@@ -584,6 +584,8 @@ public static class DependencyInjection
         services.AddScoped<SarvamChatClient>();
         services.AddScoped<SarvamVisionClient>();
         services.AddScoped<SarvamDocIntelClient>();
+        // Lane DFES-Q (founder D-B, D-G) — sources come only from Shram Safal's own published schedule, embedded (fail closed on any unknown line).
+        services.AddSingleton<IQuestionSourceResolver, AI.Dfes.ScheduleSourceResolver>();
         services.AddScoped<IAiProvider, SarvamAiProvider>();
         services.AddScoped<IAiProvider, GeminiAiProvider>();
 

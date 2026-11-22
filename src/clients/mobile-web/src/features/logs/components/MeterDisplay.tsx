@@ -33,6 +33,8 @@ import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import { SathiQuestionCard } from './voiceResult/SathiQuestionCard';
+import { WhyNotAnswer } from './WhyNotAnswer';
+import type { WhyNotReason } from '../services/dfesWhyNot';
 
 // Marathi body text must render with Noto Sans Devanagari (incl. the Devanagari
 // numerals ०-९) — never system-ui / generic fallbacks. See CHARTER §Font rules.
@@ -70,6 +72,10 @@ export interface MeterDisplayProps {
      * the same. Default 'card' (every other surface, unchanged).
      */
     look?: 'card' | 'sathi';
+    /** Lane DFES-Q (founder D-H) - a why-not question answered with one of the eight reasons (and his अडचण). */
+    onWhyNotReason?: (code: WhyNotReason, challenge: string | null) => void;
+    /** Lane DFES-Q - "केलं, पण नोंद केली नाही" on a why-not question: the host records it and opens that day. */
+    onDidItNotLogged?: (dateKey: string, challenge: string | null) => void;
 }
 
 export function MeterDisplay({
@@ -82,6 +88,8 @@ export function MeterDisplay({
     onDismiss,
     onAnswerBySpeaking,
     look = 'card',
+    onWhyNotReason,
+    onDidItNotLogged,
 }: MeterDisplayProps): React.ReactElement | null {
     const { t } = useLanguage();
 
@@ -112,6 +120,23 @@ export function MeterDisplay({
     // Phase 5: when stageQuestions is ON and a combined question is available,
     // surface it as the single tappable card ahead of the raw placeholder gaps.
     const combinedQuestion = FEATURE_FLAGS.stageQuestions && dfesQuestion ? dfesQuestion : null;
+
+    // Lane DFES-Q (founder D-H) - a why-not question takes its own answer card (the eight reasons, अडचण, the past-day door), on
+    // either look; without the host's handlers it falls through to the plain card below, never a dead button.
+    if (combinedQuestion?.missedCard && onWhyNotReason && onDidItNotLogged) {
+        return (
+            <div data-testid="meter-display" data-look={look}>
+                <WhyNotAnswer
+                    card={combinedQuestion.missedCard}
+                    prompt={combinedQuestion.resolvedPromptMr}
+                    onReason={onWhyNotReason}
+                    onDidItNotLogged={onDidItNotLogged}
+                    onSpeak={onAnswerBySpeaking}
+                    onLater={() => onDismiss?.()}
+                />
+            </div>
+        );
+    }
 
     // Lane L6b — the designed card, for a question it can answer for real: tap choices, or an open question with the
     // route to the microphone (without that route the old card's bare acknowledgement stays, never a dead mic button).

@@ -18,12 +18,15 @@ import type { StageContext } from './meterGaps';
 import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
 import type { ScheduleGapContext } from './dfesScheduleWindow';
+import type { MissedCard } from './dfesWhyNot';
+import type { StageQuestionContext } from './dfesStageQuestion';
 import type { WeatherReconcileContext } from './dfesWeatherReconcile';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
     findQuestion, findGapQuestion, type DfesQuestion, type DfesAnswerOption,
 } from './dfesQuestionBank';
 import { DFES_TUNING } from './dfesTuning';
+import { questionKindForKey, statesAgronomy } from './dfesQuestionKinds';
 
 export interface WeatherTriggerContext {
     rainProbNext6h?: number;
@@ -49,6 +52,8 @@ export interface RecentQuestionEvent {
      * construction site IS the point.
      */
     dailyLogId: string | null;
+    /** Lane DFES-Q (founder D-H) - the schedule task a why-not question was about; absent/null on every other row. */
+    scheduleCardRef?: string | null;
 }
 
 /**
@@ -71,10 +76,34 @@ function effectiveCooldownDays(q: DfesQuestion, event: RecentQuestionEvent): num
 export interface DailyQuestionInputs {
     crop: string;
     todayLocalDate: string;
+    /**
+     * Lane DFES-Q bug 2 - the farm-local (India) date the question is being ASKED on, i.e. the real today. The one-question-a-day
+     * guard counts against it. `todayLocalDate` is the saved log's own day (a log told for a past day carries that day), which
+     * is right for the context questions but let a past-day log open a second question today. Absent on an older caller: the
+     * guard then falls back to `todayLocalDate`, exactly as before.
+     */
+    askedOnLocalDate?: string;
+    /**
+     * Lane DFES-Q (founder D-B, D-G) - the look lines of Shram Safal's published schedule available today, per question key
+     * (filled by the stage producer from the schedule's sourced lines). A question that states agronomy is allowed only with its
+     * lines, and the lines travel with the event so the server can resolve their sources. Absent = none.
+     */
+    lookLinesByKey?: Readonly<Record<string, readonly string[]>>;
     score?: VlogScore;
     stageContext?: StageContext;
     lastStageConfirm?: LastStageConfirm | null;
     weather?: WeatherTriggerContext;
+    /**
+     * Lane DFES-Q (founder D-H, 2026-11-21) - the passed, undone one-time tasks of the plot's own schedule, most recently closed
+     * first (dfesWhyNot.findMissedCards). The caller fills it only for a person who plans the farm's work (D-D); absent = none.
+     * The engine asks about the first one not already asked (recent events' card refs): once per task.
+     */
+    missedCards?: readonly MissedCard[];
+    /**
+     * Lane DFES-Q (task 6) - the plot's stage question for today (dfesStageQuestion.computeStageQuestion): a cited look line of Shram
+     * Safal's own schedule (`stage_look`), or the open question (`stage_open`). Absent = none.
+     */
+    stageQuestion?: StageQuestionContext;
     /** Task 3A — category-scoped "planned but not done today" signal (dfesScheduleWindow.ts). */
     scheduleContext?: ScheduleGapContext;
     /** Task 4B — severe-weather-with-no-logged-impact care-check signal (dfesWeatherReconcile.ts). */
@@ -146,6 +175,17 @@ export interface SelectedQuestion {
     actualStageApplicability: string | null;
     /** Tap-choice options (Task 2A), resolved straight from the bank entry; undefined when the question is ack/skip-only. */
     answerOptions?: DfesAnswerOption[];
+    /**
+     * Lane DFES-Q - where the words shown came from: the bank, an approved pattern, or the server's AI writer. Absent = bank.
+     * Sent with the event so the server can apply the right gate (approved copy for bank and pattern).
+     */
+    promptOrigin?: 'bank' | 'pattern' | 'ai';
+    /** Lane DFES-Q - the ids of the schedule look lines a question that states agronomy came from. The server resolves their sources. */
+    lookLineIds?: string[];
+    /** Lane DFES-Q - the schedule card a "why wasn't this done?" question is about. */
+    scheduleCardRef?: string | null;
+    /** Lane DFES-Q - the task a why-not question is about: the answer card shows the reasons and opens that day. */
+    missedCard?: MissedCard;
 }
 
 /**
@@ -159,12 +199,24 @@ export interface SelectedQuestion {
  * schedule.category_planned_not_done, weather.severe_care_check) set it false explicitly
  * and this gate is what keeps them inert.
  *
- * The field name stays as it is on purpose: RecordQuestionEventHandler.cs:28 hard-rejects
- * any event whose wire `agronomistApproved` is not true, so renaming it here would turn
- * every question event into a 400. The farmer-facing label is `dfes.shramSafalReviewed`.
+ * The field name stays as it is on purpose (an OLDER server still hard-rejects an event whose wire `agronomistApproved` is
+ * not true). Lane DFES-Q (founder D-B, 2026-11-21): the flag no longer gates on the new server or here; `isAllowed` below is the
+ * gate - Marathi-approved copy, plus the schedule look lines for a question that states agronomy. The farmer-facing label is
+ * `dfes.shramSafalReviewed`.
  */
-function approved(q: DfesQuestion | undefined): q is DfesQuestion {
-    return !!q && q.agronomistApproved && q.marathiApproved;
+function approved(q: DfesQuestion | undefined, lookLineIds: readonly string[] = []): q is DfesQuestion {
+    return !!q && isAllowed(q, lookLineIds);
+}
+
+/**
+ * Lane DFES-Q (founder D-B, 2026-11-21) - the gate that replaced the agronomist flag: the words must be Marathi-approved copy, and a
+ * question that STATES AGRONOMY (decided from its key, `questionKindForKey`) must carry the schedule look lines it came from. The
+ * server applies the same rule for itself and resolves the lines' sources from Shram Safal's own published schedule; this copy only
+ * keeps the phone from choosing a question the server would refuse. Today's four inert entries stay inert: the two advice entries
+ * have no look lines, the two others are not Marathi-approved.
+ */
+export function isAllowed(q: DfesQuestion, lookLineIds: readonly string[] = []): boolean {
+    return q.marathiApproved && (!statesAgronomy(questionKindForKey(q.questionKey)) || lookLineIds.length > 0);
 }
 
 /**
@@ -215,8 +267,9 @@ function eligible(
     q: DfesQuestion | undefined,
     recent: RecentQuestionEvent[],
     sourceLogId?: string,
+    lookLines: readonly string[] = [],
 ): q is DfesQuestion {
-    if (!approved(q)) return false;
+    if (!approved(q, lookLines)) return false;
     if (isPerLogScoped(q)) {
         // Per-log questions: permanent exclusion for THIS log, and the day cooldown
         // still applies to rows that predate per-log tracking (dailyLogId === null).
@@ -246,6 +299,12 @@ const TOKEN_VALUES: ReadonlyArray<readonly [string, (inputs: DailyQuestionInputs
     // Gated on the confidence rule as well as presence, so even a template that used
     // this token outside a confident variant could not name a guessed activity.
     ['todayActivity', i => (isWorkRecognitionConfident(i) ? i.todayWork?.activityMr : undefined)],
+    // Lane DFES-Q (founder D-H) - the why-not question's task, from his own schedule (dfesWhyNot.ts); `pack` hands the chosen
+    // task as the only entry.
+    ['missedWork', i => i.missedCards?.[0]?.workMr],
+    ['missedDate', i => i.missedCards?.[0]?.dateMr],
+    // Lane DFES-Q (task 6) - the cited look line's own question, "{N}" already filled.
+    ['stageAsk', i => (i.stageQuestion?.kind === 'stage_look' ? i.stageQuestion.askMr ?? undefined : undefined)],
 ];
 
 /**
@@ -355,16 +414,21 @@ function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): Sel
         expectedStage: inputs.stageContext?.expectedStage ?? null,
         actualStageApplicability: q.expectedStageApplicability ?? null,
         answerOptions: q.answerOptions,
+        promptOrigin: 'bank',
+        lookLineIds: [...(inputs.lookLinesByKey?.[q.questionKey] ?? [])],
+        scheduleCardRef: null,
     };
 }
 
 export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuestion | null {
     // ONE combined question/day — if any event already recorded today, stop.
+    const askedOn = inputs.askedOnLocalDate ?? inputs.todayLocalDate;
     if (MAX_QUESTIONS_PER_DAY === 1
-        && inputs.recentEvents.some(e => e.createdAtLocalDate === inputs.todayLocalDate)) {
+        && inputs.recentEvents.some(e => e.createdAtLocalDate === askedOn)) {
         return null;
     }
     const recent = inputs.recentEvents;
+    const linesFor = (q: DfesQuestion | undefined): readonly string[] => (q ? inputs.lookLinesByKey?.[q.questionKey] ?? [] : []);
     // wave-3.2, Ruling 1 — threaded into every eligibility check, not just the Gap tier,
     // so a future question added to any tier cannot bypass per-log scoping by omission.
     const sourceLogId = inputs.sourceLogId;
@@ -373,26 +437,50 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     // P1 Safety — high wind makes spraying unsafe.
     if (w && (w.windKph ?? 0) >= TRIGGER_CONFIG.windKphThreshold) {
         const q = findQuestion('safety.spray_wind_high');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `wind ${w.windKph}kph >= ${TRIGGER_CONFIG.windKphThreshold}`);
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `wind ${w.windKph}kph >= ${TRIGGER_CONFIG.windKphThreshold}`);
     }
 
     // P2 Weather — rain likely before a planned spray.
     if (w && (w.rainProbNext6h ?? 0) >= TRIGGER_CONFIG.rainProbThresholdPct) {
         const q = findQuestion('weather.rain_before_spray');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `rainProbNext6h ${w.rainProbNext6h}% >= ${TRIGGER_CONFIG.rainProbThresholdPct}`);
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `rainProbNext6h ${w.rainProbNext6h}% >= ${TRIGGER_CONFIG.rainProbThresholdPct}`);
     }
 
     // P3 StageWindow — planned-vs-actual confirmation window open.
     if (isStageConfirmationWindowOpen(inputs.stageContext, inputs.lastStageConfirm ?? null)) {
         const q = findQuestion('stage.confirm_current');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
+    }
+
+    // P3 Stage - lane DFES-Q (task 6): a cited look line for this day of his season. The line travels with the event; the server
+    // resolves its sources from the same schedule and refuses the event otherwise.
+    const stage = inputs.stageQuestion;
+    if (stage?.kind === 'stage_look' && stage.line && stage.askMr) {
+        const q = findQuestion('stage.look');
+        const lines = [stage.line.id];
+        if (eligible(q, recent, sourceLogId, lines)) {
+            return { ...pack(q, inputs, `stage look: day ${stage.scheduleDay} ${stage.line.id}`), lookLineIds: lines };
+        }
+    }
+
+    // P4 Schedule - lane DFES-Q (founder D-H): "why wasn't this done?" about a passed task of his own schedule, once per task.
+    if (inputs.missedCards?.length) {
+        const q = findQuestion('schedule.why_not');
+        const card = inputs.missedCards.find(c => !recent.some(e => e.scheduleCardRef === c.cardRef));
+        if (card && eligible(q, recent, sourceLogId, linesFor(q))) {
+            return {
+                ...pack(q, { ...inputs, missedCards: [card] }, `why-not: ${card.cardRef}`),
+                scheduleCardRef: card.cardRef,
+                missedCard: card,
+            };
+        }
     }
 
     // P4 Schedule — category-scoped "was today's planned {category} work done?"
     // (Task 3A). Category-level only — never a fabricated precise task claim.
     if (inputs.scheduleContext) {
         const q = findQuestion('schedule.category_planned_not_done');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
     }
 
     // P5 WeatherReconcile — severe weather recorded, no logged impact (Task
@@ -400,28 +488,35 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     // relevant than a generic gap, so it sits ahead of Gap.
     if (inputs.weatherReconcileContext) {
         const q = findQuestion('weather.severe_care_check');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `weather reconcile: ${inputs.weatherReconcileContext.reason}`);
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `weather reconcile: ${inputs.weatherReconcileContext.reason}`);
     }
 
     // P6 Gap — biggest comprehension gap from the (stage-aware) ranker.
     if (inputs.score) {
         for (const gap of rankMeterGaps(inputs.score, inputs.stageContext, 8)) {
             const q = findGapQuestion(gap.dimension);
-            if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `gap ${gap.dimension} leverage ${gap.leverage}`);
+            if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `gap ${gap.dimension} leverage ${gap.leverage}`);
         }
     }
 
     // P7 Followup — an open observation awaiting an outcome.
     if (inputs.openObservation) {
         const q = findQuestion('followup.observation_outcome');
-        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, 'open observation outcome');
+        if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, 'open observation outcome');
+    }
+
+    // Lane DFES-Q (task 6, design §9.7) - the open stage question, last before Learning: it states nothing, so it never pushes out a
+    // missing detail of his record, and a plot is never silent.
+    if (stage) {
+        const q = findQuestion('stage.open');
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `stage open: day ${stage.scheduleDay ?? '-'}`);
     }
 
     // P8 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
     if (inputs.engagement.totalRichDays >= DFES_TUNING.richDayThreshold) {
         for (const key of ['learning.deepen_hypothesis', 'learning.next_experiment']) {
             const q = findQuestion(key);
-            if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `learning tier (richDays ${inputs.engagement.totalRichDays})`);
+            if (eligible(q, recent, sourceLogId, linesFor(q))) return pack(q, inputs, `learning tier (richDays ${inputs.engagement.totalRichDays})`);
         }
     }
 

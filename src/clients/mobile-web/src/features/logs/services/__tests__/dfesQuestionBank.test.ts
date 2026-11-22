@@ -6,7 +6,9 @@ import {
 // spec: dfes-companion-2026-07-11 (Task 3A, extended Task 4B) — the ONLY
 // documented content-gate exceptions to the hard AgronomistApproved &&
 // MarathiApproved invariant below.
-const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done', 'weather.severe_care_check']);
+// Lane DFES-Q (founder D-H): 'schedule.why_not' - the sentence is a draft until the founder ticks it on the approval page.
+// Lane DFES-Q task 6: 'stage.look' (the look lines' Marathi) and 'stage.open' - drafts until the founder ticks them.
+const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done', 'weather.severe_care_check', 'schedule.why_not', 'stage.look', 'stage.open']);
 
 // Founder ruling 2026-08-13 (`flip-now`): the two spray-advice entries are
 // agronomist-gated but Marathi-approved — the Marathi copy is founder-reviewed,

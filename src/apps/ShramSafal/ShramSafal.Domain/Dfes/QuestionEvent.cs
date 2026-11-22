@@ -7,7 +7,7 @@ namespace ShramSafal.Domain.Dfes;
 /// engine (bank definition snapshot + what was actually shown / answered). Mapped to
 /// <c>ssf.question_events</c>; the migration <c>REVOKE UPDATE, DELETE FROM agrisync_app</c>
 /// so it is INSERT-only by privilege. Carries its own <see cref="FarmId"/> (direct RLS)
-/// plus a nullable <see cref="DailyLogId"/> FK. NO user_id, NO farmer PII beyond the
+/// plus a nullable <see cref="DailyLogId"/> FK. The asked person (<see cref="AskedUserId"/>, lane DFES-Q) is the only user id; NO farmer PII beyond the
 /// optional free-text <see cref="Response"/> → farm-co-owned, KEEP on erasure.
 /// <para>Phase 1 is the persistence shape. Selection, priority, cooldown and telemetry
 /// stamping are Phase 5 — nothing in Phase 1 writes these rows.</para>
@@ -23,7 +23,8 @@ public sealed class QuestionEvent : Entity<Guid>
         int depthLevel, int priority, int cooldown, string answerModes, string safetyClass,
         bool agronomistApproved, bool marathiApproved, string bankVersion, string questionEngineVersion,
         Guid? answerObservationId, DateTime? shownAtUtc, string? triggerReason, string? weatherContext,
-        string? response, bool? stageConfirmed, bool? photoSubmitted, bool? skipped, DateTime createdAtUtc)
+        string? response, bool? stageConfirmed, bool? photoSubmitted, bool? skipped, DateTime createdAtUtc,
+        QuestionEventContext? context)
         : base(id)
     {
         if (farmId == Guid.Empty)
@@ -60,6 +61,17 @@ public sealed class QuestionEvent : Entity<Guid>
         PhotoSubmitted = photoSubmitted;
         Skipped = skipped;
         CreatedAtUtc = createdAtUtc;
+
+        // Lane DFES-Q — absent on every older phone's row (P11).
+        AskedUserId = context?.AskedUserId;
+        PromptText = context?.PromptText;
+        PromptOrigin = context?.PromptOrigin;
+        QuestionKind = context?.QuestionKind;
+        SourceRefsJson = context?.SourceRefsJson;
+        ScheduleCardRef = context?.ScheduleCardRef;
+        DeviationReasonCode = context?.DeviationReasonCode;
+        DeviationChallenge = context?.DeviationChallenge;
+        PhotoAttachmentId = context?.PhotoAttachmentId;
     }
 
     public Guid? DailyLogId { get; private set; }
@@ -92,6 +104,17 @@ public sealed class QuestionEvent : Entity<Guid>
     public bool? Skipped { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
+    // Lane DFES-Q (founder D-B, D-D, D-G, 2026-11-21) — see QuestionEventContext.
+    public Guid? AskedUserId { get; private set; }
+    public string? PromptText { get; private set; }
+    public string? PromptOrigin { get; private set; }
+    public string? QuestionKind { get; private set; }
+    public string? SourceRefsJson { get; private set; }
+    public string? ScheduleCardRef { get; private set; }
+    public string? DeviationReasonCode { get; private set; }
+    public string? DeviationChallenge { get; private set; }
+    public Guid? PhotoAttachmentId { get; private set; }
+
     public static QuestionEvent Create(
         Guid id, Guid? dailyLogId, Guid farmId, Guid? plotId,
         string questionKey, string crop, string? expectedStage, string? actualStageApplicability,
@@ -99,10 +122,11 @@ public sealed class QuestionEvent : Entity<Guid>
         int depthLevel, int priority, int cooldown, string answerModes, string safetyClass,
         bool agronomistApproved, bool marathiApproved, string bankVersion, string questionEngineVersion,
         Guid? answerObservationId, DateTime? shownAtUtc, string? triggerReason, string? weatherContext,
-        string? response, bool? stageConfirmed, bool? photoSubmitted, bool? skipped, DateTime createdAtUtc)
+        string? response, bool? stageConfirmed, bool? photoSubmitted, bool? skipped, DateTime createdAtUtc,
+        QuestionEventContext? context = null)
         => new(id, dailyLogId, farmId, plotId, questionKey, crop, expectedStage, actualStageApplicability,
                anchorDateType, triggerType, questionType, lens, depthLevel, priority, cooldown,
                answerModes, safetyClass, agronomistApproved, marathiApproved, bankVersion,
                questionEngineVersion, answerObservationId, shownAtUtc, triggerReason, weatherContext,
-               response, stageConfirmed, photoSubmitted, skipped, createdAtUtc);
+               response, stageConfirmed, photoSubmitted, skipped, createdAtUtc, context);
 }

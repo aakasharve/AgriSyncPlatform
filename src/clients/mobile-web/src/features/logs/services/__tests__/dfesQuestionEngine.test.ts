@@ -30,7 +30,7 @@ describe('selectDailyQuestion (Phase 5)', () => {
     // through them to the next eligible tier. The priority ORDER itself is
     // still proven, against substituted APPROVED fixtures, in the
     // "Safety / Weather tiers" suite below.
-    it('AGRONOMIST GATE: the real safety + weather entries never fire — a severe-weather day falls through to the next eligible tier', () => {
+    it('SOURCE GATE (founder D-B): the real safety + weather entries never fire — a severe-weather day falls through to the next eligible tier', () => {
         const inputs = base({
             weather: { rainProbNext6h: 80, windKph: 30, hasActiveAlert: true },
             stageContext: { crop: 'grapes', expectedStage: 'flowering' },
@@ -39,7 +39,7 @@ describe('selectDailyQuestion (Phase 5)', () => {
         expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('stage.confirm_current');
     });
 
-    it('AGRONOMIST GATE: high windKph alone selects no spray question — it falls through to the top Gap', () => {
+    it('SOURCE GATE (founder D-B): high windKph alone selects no spray question — it falls through to the top Gap', () => {
         const inputs = base({
             weather: { windKph: 30 },
             scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
@@ -47,7 +47,7 @@ describe('selectDailyQuestion (Phase 5)', () => {
         expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('gap.dose');
     });
 
-    it('AGRONOMIST GATE: high rainProbNext6h alone selects no spray question — it falls through to the top Gap', () => {
+    it('SOURCE GATE (founder D-B): high rainProbNext6h alone selects no spray question — it falls through to the top Gap', () => {
         const inputs = base({
             weather: { rainProbNext6h: 70 },
             scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
@@ -101,15 +101,16 @@ describe('selectDailyQuestion (Phase 5)', () => {
 // copies (same vi.doMock + vi.resetModules() + dynamic-import isolation the
 // Schedule and WeatherReconcile tier suites already use). The "stays inert"
 // half is proven against the real bank in the suite above.
-describe('selectDailyQuestion — Safety / Weather tiers (agronomist-gated in the real bank)', () => {
+describe('selectDailyQuestion — Safety / Weather tiers (source-gated in the real bank)', () => {
     afterEach(() => {
         vi.doUnmock('../dfesQuestionBank');
         vi.resetModules();
     });
 
-    /** Approves the real bank's own safety/weather entries — the ONLY difference
-     *  from production is agronomistApproved, so ordering results can only be
-     *  attributed to priority, not to some other substituted property. */
+    /** The real bank's own safety/weather entries, given SOURCED schedule lines (lane DFES-Q, founder D-B: a source, not the
+     *  agronomist flag, lets an advice question through). The ONLY difference from production is those lines, so ordering
+     *  results can only be attributed to priority, not to some other substituted property. */
+    const SOURCED_LINES = { 'safety.spray_wind_high': ['caution-wind-1'], 'weather.rain_before_spray': ['caution-rain-1'] };
     async function selectWithApprovedSprayQuestions(extra: Partial<DailyQuestionInputs> = {}) {
         vi.resetModules();
         vi.doMock('../dfesQuestionBank', async () => {
@@ -125,7 +126,7 @@ describe('selectDailyQuestion — Safety / Weather tiers (agronomist-gated in th
             };
         });
         const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
-        return selectMocked(base(extra));
+        return selectMocked(base({ lookLinesByKey: SOURCED_LINES, ...extra }));
     }
 
     it('Safety beats Weather beats StageWindow beats Gap (priority order)', async () => {
@@ -165,7 +166,7 @@ describe('selectDailyQuestion — Safety / Weather tiers (agronomist-gated in th
 // following the vi.doMock + vi.resetModules() + dynamic-import pattern
 // already used by dfesTuning.test.ts / AppRouter.feature-gate.test.tsx /
 // MeterDisplay.test.tsx to control a mocked module deterministically per test.
-describe('selectDailyQuestion — hard AgronomistApproved && MarathiApproved gate (CRITICAL)', () => {
+describe('selectDailyQuestion — the approval gate: Marathi-approved copy, and a source for agronomy (CRITICAL)', () => {
     afterEach(() => {
         vi.doUnmock('../dfesQuestionBank');
         vi.resetModules();
@@ -186,7 +187,7 @@ describe('selectDailyQuestion — hard AgronomistApproved && MarathiApproved gat
      *  `question` (all other exports pass through untouched), then runs
      *  `selectDailyQuestion` with a context that would otherwise select the
      *  DOSE gap (single-gap score, no higher-priority trigger, no cooldown). */
-    async function selectWithSubstitutedDoseQuestion(question: DfesQuestion) {
+    async function selectWithSubstitutedDoseQuestion(question: DfesQuestion, extra: Partial<DailyQuestionInputs> = {}) {
         vi.resetModules();
         vi.doMock('../dfesQuestionBank', async () => {
             const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
@@ -197,13 +198,23 @@ describe('selectDailyQuestion — hard AgronomistApproved && MarathiApproved gat
             };
         });
         const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
-        return selectMocked(base({ score: scoreWithGap('DOSE') }));
+        return selectMocked(base({ score: scoreWithGap('DOSE'), ...extra }));
     }
 
-    it('never surfaces a question with agronomistApproved: false, even when it would otherwise be selected', async () => {
-        const unapproved: DfesQuestion = { ...questionShape, agronomistApproved: false, marathiApproved: true };
-        const result = await selectWithSubstitutedDoseQuestion(unapproved);
-        expect(result).toBeNull();
+    it('founder D-B: the agronomist flag no longer gates — a question that states no agronomy with agronomistApproved: false IS eligible', async () => {
+        const noAgronomist: DfesQuestion = { ...questionShape, agronomistApproved: false, marathiApproved: true };
+        const result = await selectWithSubstitutedDoseQuestion(noAgronomist);
+        expect(result).not.toBeNull();
+        expect(result!.question.questionKey).toBe('gap.dose');
+    });
+
+    it('a question that states agronomy is never surfaced without the schedule look lines it came from', async () => {
+        const advice: DfesQuestion = { ...questionShape, questionKey: 'stage.look', agronomistApproved: false, marathiApproved: true };
+        expect(await selectWithSubstitutedDoseQuestion(advice)).toBeNull();
+
+        const sourced = await selectWithSubstitutedDoseQuestion(advice, { lookLinesByKey: { 'stage.look': ['grapes-fp-d12-buds'] } });
+        expect(sourced).not.toBeNull();
+        expect(sourced!.lookLineIds).toEqual(['grapes-fp-d12-buds']);
     });
 
     it('never surfaces a question with marathiApproved: false, even when it would otherwise be selected', async () => {
@@ -342,6 +353,8 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
         const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
         const r = selectMocked(base({
             weather: { windKph: 30 },
+            // Lane DFES-Q: an advice question needs its sourced lines (founder D-B); the clamp under test is independent of that.
+            lookLinesByKey: { 'safety.spray_wind_high': ['caution-wind-1'] },
             recentEvents: [{ questionKey: 'safety.spray_wind_high', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true, dailyLogId: null }],
         }));
         expect(r!.question.questionKey).toBe('safety.spray_wind_high');

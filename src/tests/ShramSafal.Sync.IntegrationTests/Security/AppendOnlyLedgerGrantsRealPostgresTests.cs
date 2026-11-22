@@ -97,6 +97,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.schedule_step_moves",
         // spec plr-d10 lane CMP-D3 (founder D-68 round 2) - 20261113120000_AddLogPracticeReasons: the reason kept on one item of one saved record; a later one supersedes, both stay.
         "ssf.log_practice_reasons",
+        // spec plr-d10 lane DFES-Q (founder D-E) - 20261121032701_AddDfesQuestionContext: each check of a photo given as proof of an observation, one unchangeable row each.
+        "ssf.question_photo_checks",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -309,6 +311,13 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    Down() is DATA-DESTROYING by design: it drops that one column (a rollback loses every group name typed since; the plots stay), and the deploy rollback
         //    plan relies on the snapshot, not on Down(). Safe to revert and re-apply mid-proof (re-Up recreates the column empty).
         "20261120111737_AddPlotGroupName",
+        // ── Reviewed 2026-11-21 (spec: plr-d10 lane DFES-Q, founder D-B / D-D / D-E); Up() and Down() read in full: Up() adds NINE NULLABLE columns to
+        //    ssf.question_events (asked_user_id, prompt_text, prompt_origin, question_kind, source_refs, schedule_card_ref, deviation_reason_code,
+        //    deviation_challenge, photo_attachment_id) and one index on (farm_id, asked_user_id) - that ledger's grants are untouched, it stays append-only
+        //    by privilege - and creates ssf.question_photo_checks (FORCE RLS, its tenant policy) APPEND-ONLY BY PRIVILEGE with its own effective-privilege
+        //    guard (it is on AppendOnlyLedgers above); it grants or revokes nothing on any other ledger. Down() drops the policy, the new table, the index
+        //    and the nine columns - only what Up() added (DATA-DESTROYING for those columns and checks, by design). Safe to revert and re-apply mid-proof.
+        "20261121032701_AddDfesQuestionContext",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -270,6 +270,27 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // agronomist supplies approved Marathi stage-option copy.
     },
     {
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (lane DFES-Q, task 6) - the stage question from a cited look line of Shram
+        // Safal's own schedule for this day of the season (dfesStageQuestion.ts); the words are the line's own question
+        // ({stageAsk}). States agronomy (kind stage_look): allowed only with the line, whose sources the server resolves from the same
+        // schedule. CONTENT GATE: the look lines' Marathi goes on the founder's approval page (design §9.5); inert until ticked.
+        questionKey: 'stage.look', crop: 'grape', triggerType: 'StageWindow', questionType: 'observation',
+        lens: 'Insight', depthLevel: 2, priority: P_STAGE, cooldownDays: 2, answerModes: 'voice',
+        safetyClass: 'informational', anchorDateType: 'stage_start', expectedStageApplicability: 'current_stage',
+        promptMr: '{stageAsk}',
+        agronomistApproved: false, marathiApproved: false,
+    },
+    {
+        // Lane DFES-Q, task 6 (design §9.7) - when no cited line fits the day (or the plot follows no matching schedule), the open
+        // question: it states nothing, so it needs no source (kind stage_open), and it sits low on the ladder so it never pushes out
+        // a missing detail of his record. CONTENT GATE: a DRAFT sentence, inert until the founder ticks it.
+        questionKey: 'stage.open', crop: '*', triggerType: 'StageWindow', questionType: 'observation',
+        lens: 'Insight', depthLevel: 1, priority: P_FOLLOWUP, cooldownDays: 3, answerModes: 'voice',
+        safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',
+        promptMr: 'आज बागेत काय दिसलं?',
+        agronomistApproved: false, marathiApproved: false,
+    },
+    {
         questionKey: 'schedule.category_planned_not_done', crop: '*', triggerType: 'Schedule', questionType: 'gap_fill',
         lens: 'Execution', depthLevel: 1, priority: P_SCHEDULE, cooldownDays: 3, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'current_stage',
@@ -282,6 +303,20 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // true (dfesQuestionEngine.ts's approved() hard gate keeps it out of
         // production selection regardless of the stageQuestions flag).
         promptMr: 'आज ठरलेलं {category} काम झालं का?',
+        agronomistApproved: false, marathiApproved: false,
+    },
+    {
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (lane DFES-Q, task 7; founder D-H 2026-11-21 "Sorry My bad Dfes Must
+        // ask them") - "why wasn't this done?", asked once about a one-time task of HIS OWN schedule whose window has fully passed
+        // with no work of its kind logged on the plot (dfesWhyNot.ts), only to people who plan the farm's work. It states nothing but
+        // what his schedule said, so it needs no source (kind why_not). The answer is his reason and his अडचण; the record never
+        // changes. CONTENT GATE: the sentence is a DRAFT, inert until the founder ticks it on the approval page (marathiApproved
+        // flips then). The eight reasons are the founder's own words (WHY_NOT_REASONS). agronomistApproved stays false: the
+        // new server's gate no longer reads it (D-B), and nothing about this question is agronomy.
+        questionKey: 'schedule.why_not', crop: '*', triggerType: 'Schedule', questionType: 'why_not',
+        lens: 'Execution', depthLevel: 1, priority: P_SCHEDULE, cooldownDays: 3, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',
+        promptMr: 'तुमच्या वेळापत्रकात {missedDate} ला {missedWork} होतं. ते राहिलं, असं दिसतं. काय झालं?',
         agronomistApproved: false, marathiApproved: false,
     },
     {

@@ -40,7 +40,9 @@ public static class DfesQuestionEndpoints
                 request.DepthLevel, request.Priority, request.Cooldown, request.AnswerModes, request.SafetyClass,
                 request.AgronomistApproved, request.MarathiApproved, request.BankVersion, request.QuestionEngineVersion,
                 request.AnswerObservationId, request.ShownAtUtc, request.TriggerReason, request.WeatherContext,
-                request.Response, request.StageConfirmed, request.PhotoSubmitted, request.Skipped);
+                request.Response, request.StageConfirmed, request.PhotoSubmitted, request.Skipped,
+                request.PromptText, request.PromptOrigin, request.LookLineIds, request.ScheduleCardRef,
+                request.DeviationReasonCode, request.DeviationChallenge, request.PhotoAttachmentId);
 
             var result = await handler.HandleAsync(cmd, ct);
             return result.IsSuccess ? Results.Ok(new { id = result.Value }) : ToErrorResult(result.Error);
@@ -80,7 +82,11 @@ public static class DfesQuestionEndpoints
         int DepthLevel, int Priority, int Cooldown, string AnswerModes, string SafetyClass,
         bool AgronomistApproved, bool MarathiApproved, string BankVersion, string QuestionEngineVersion,
         Guid? AnswerObservationId, DateTime? ShownAtUtc, string? TriggerReason, string? WeatherContext,
-        string? Response, bool? StageConfirmed, bool? PhotoSubmitted, bool? Skipped);
+        string? Response, bool? StageConfirmed, bool? PhotoSubmitted, bool? Skipped,
+        // Lane DFES-Q — optional; an older phone's body has none of them and binds unchanged (P11).
+        string? PromptText = null, string? PromptOrigin = null, IReadOnlyList<string>? LookLineIds = null,
+        string? ScheduleCardRef = null, string? DeviationReasonCode = null, string? DeviationChallenge = null,
+        Guid? PhotoAttachmentId = null);
 
     private static IResult ToErrorResult(Error error) =>
         error.Code.Contains("NotFound") ? Results.NotFound(error.Description)

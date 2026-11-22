@@ -157,6 +157,10 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                             weather={ctx.weatherData}
                             // Lane L6b — the founder's designed amber question card (SathiQuestionCard).
                             look="sathi"
+                            // Lane DFES-Q (founder D-D, D-H) - "why wasn't this done?" only for a person who plans the work, and its
+                            // "केलं, पण नोंद केली नाही" opens that day's "त्या दिवसाचं काम सांगा" on the ONE mic.
+                            mayPlanWork={ctx.mayPlanWork ?? ctx.farmRole === 'PrimaryOwner'}
+                            onTellPastDay={dateKey => speakHere({ purpose: 'addToDay', context: { date: dateKey } })}
                             // wave-3.7, founder decision 3 — the tap writes nothing; it stashes the answer and hands
                             // him the SAME microphone (no second recording surface) — lane MIC-1: the ONE mic, with
                             // the question kept in sight; the next result screen settles the answer.

@@ -68,6 +68,9 @@ import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { t as translateForced } from '../../../i18n/translations';
 import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
+import { findMissedCards } from '../services/dfesWhyNot';
+import { computeStageQuestion } from '../services/dfesStageQuestion';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import { computePreviousLog } from '../services/dfesPreviousLog';
 import { computeTodayWork } from '../services/dfesTodayWork';
@@ -80,6 +83,8 @@ import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/stora
 import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
 import SurfaceSection from './shramsathi/SurfaceSection';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { SathiAppreciation } from './SathiAppreciation';
 
 /**
  * Task 4A: project the live WeatherWidget data (DetailedWeather) onto the
@@ -140,6 +145,13 @@ export interface LedgerRecognitionPanelProps {
      * वाढेल" note are not put around it (founder 2026-10-24: never "the number will rise"). Default: unchanged.
      */
     look?: 'card' | 'sathi';
+    /**
+     * Lane DFES-Q (founder D-D, D-H) - true for a person who plans the farm's work (the server's PlanWork answer, as the router's
+     * `mayPlanWork`). Only such a person is asked "why wasn't this done?". Default false: never asked (fail closed).
+     */
+    mayPlanWork?: boolean;
+    /** Lane DFES-Q - opens "त्या दिवसाचं काम सांगा" for a day; handed to the why-not card. */
+    onTellPastDay?: (dateKey: string) => void;
 }
 
 export function LedgerRecognitionPanel({
@@ -153,6 +165,8 @@ export function LedgerRecognitionPanel({
     weather = null,
     onAnswerBySpeaking,
     look = 'card',
+    mayPlanWork = false,
+    onTellPastDay,
 }: LedgerRecognitionPanelProps): React.ReactElement {
     const { engagement } = useFarmerEngagement(farmId);
     const resolvedDate = todayLocalDate ?? new Date().toISOString().slice(0, 10);
@@ -165,6 +179,17 @@ export function LedgerRecognitionPanel({
     const questionsEnabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     const scheduleContext = questionsEnabled
         ? computeScheduleGap(crops, allLogs, plotId, resolvedDate) ?? undefined
+        : undefined;
+    // Lane DFES-Q (founder D-H): SAME gate, plus only a person who plans the work (D-D). Counted against the real India today, never
+    // the saved log's day: a log told for a past day must not make an open task look passed.
+    const missedCards = questionsEnabled && mayPlanWork
+        ? findMissedCards({ crops, history: allLogs, plotId, todayLocalDate: getDateKey() })
+        : undefined;
+    // Lane DFES-Q (task 6): SAME gate - the plot's stage question for the real India today (a log told for a past day must not ask
+    // about that old day's stage). In English mode no look line is asked (no English twin yet).
+    const language = useOptionalLanguage()?.language;
+    const stageQuestion = questionsEnabled
+        ? computeStageQuestion({ crops, plotId, todayLocalDate: getDateKey(), language }) ?? undefined
         : undefined;
     // Task 4A: SAME gate — a flag-OFF (or farm-less) render builds no weather
     // context either, zero extra work.
@@ -210,7 +235,9 @@ export function LedgerRecognitionPanel({
     // log cannot fire a second write (the stash is emptied synchronously inside settle
     // anyway, so this is belt AND braces).
     const savedLogId = savedLog?.id;
-    const spokenText = savedLog?.transcriptSnapshot?.raw;
+    // Lane DFES-Q bug 1: his words are on `fullTranscript`. `transcriptSnapshot` is written by no production path, so reading it
+    // alone dropped every spoken answer; it stays as the fallback for an older log that carries one. Blank is no answer (P4).
+    const spokenText = savedLog?.fullTranscript?.trim() || savedLog?.transcriptSnapshot?.raw?.trim() || undefined;
     useEffect(() => {
         if (!savedLogId || !spokenText) return;
         void settlePendingQuestionAnswer({ transcript: spokenText });
@@ -240,11 +267,16 @@ export function LedgerRecognitionPanel({
             engagement={engagement}
             onAnswerBySpeaking={onAnswerBySpeaking}
             look={look}
+            onTellPastDay={onTellPastDay}
             questionInputs={{
                 crop,
                 todayLocalDate: resolvedDate,
+                // Lane DFES-Q bug 2: the one-a-day guard counts against the real India today, not the saved log's day.
+                askedOnLocalDate: getDateKey(),
                 score: savedLog?.understanding,
                 scheduleContext,
+                missedCards,
+                stageQuestion,
                 weather: weatherContext,
                 weatherReconcileContext,
                 previousLog,
@@ -274,7 +306,14 @@ export function LedgerRecognitionPanel({
                 <SurfaceSection tone="ask" labelKey="dfes.sectionAsk" noteKey="dfes.askRaisesScore" testId="section-ask">
                     {question}
                 </SurfaceSection>
-            ) : question}
+            ) : (
+                <>
+                    {/* Lane DFES-Q: on the result screen Sathi first names each piece of work he logged (hidden until the
+                        founder ticks the wording), then asks the day's one question. */}
+                    {look === 'sathi' && savedLog ? <SathiAppreciation record={savedLog} /> : null}
+                    {question}
+                </>
+            )}
 
             {FEATURE_FLAGS.disciplineSystem && engagement ? (
                 <SurfaceSection tone="streak" labelKey="dfes.sectionStreak" testId="section-streak">

@@ -11,6 +11,7 @@
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import type { SelectedQuestion, RecentQuestionEvent } from './dfesQuestionEngine';
 import { BANK_VERSION, QUESTION_ENGINE_VERSION } from './dfesQuestionBank';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 interface ViteImportMeta { env?: { VITE_AGRISYNC_API_URL?: unknown }; }
 
@@ -40,6 +41,8 @@ export interface RecentQuestionEventDto {
      * to the day cooldown" rather than "asked about no log".
      */
     dailyLogId: string | null;
+    /** Lane DFES-Q (founder D-H) - the schedule task a why-not question was about. Absent from an older server. */
+    scheduleCardRef?: string | null;
 }
 
 /** Response outcome captured after the farmer interacts with (or skips) the question. */
@@ -50,6 +53,11 @@ export interface QuestionOutcome {
     skipped?: boolean | null;
     answerObservationId?: string | null;
     dailyLogId?: string | null;
+    /** Lane DFES-Q - a why-not answer: one of the eight reason codes, and his "अडचण" (verbatim). */
+    deviationReasonCode?: string | null;
+    deviationChallenge?: string | null;
+    /** Lane DFES-Q - the photo he gave as proof of an observation. */
+    photoAttachmentId?: string | null;
 }
 
 export async function recordQuestionEvent(
@@ -70,6 +78,12 @@ export async function recordQuestionEvent(
         triggerReason: selected.triggerReason, weatherContext: selected.weatherContext,
         response: outcome.response ?? null, stageConfirmed: outcome.stageConfirmed ?? null,
         photoSubmitted: outcome.photoSubmitted ?? null, skipped: outcome.skipped ?? null,
+        // Lane DFES-Q - the words shown and where they came from, the look lines a stage question used (the server resolves their
+        // sources; the phone never names a source), and a why-not or photo answer. An older server ignores fields it does not know.
+        promptText: selected.resolvedPromptMr, promptOrigin: selected.promptOrigin ?? 'bank',
+        lookLineIds: selected.lookLineIds ?? [], scheduleCardRef: selected.scheduleCardRef ?? null,
+        deviationReasonCode: outcome.deviationReasonCode ?? null, deviationChallenge: outcome.deviationChallenge ?? null,
+        photoAttachmentId: outcome.photoAttachmentId ?? null,
     };
     const res = await fetch(`${resolveBaseUrl()}/shramsafal/question-events`, {
         method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
@@ -87,11 +101,13 @@ export async function fetchRecentQuestionEvents(farmId: string, sinceDays = 14):
     const now = Date.now();
     return dtos.map(d => ({
         questionKey: d.questionKey,
-        createdAtLocalDate: d.createdAtUtc.slice(0, 10),
+        // Lane DFES-Q bug 2: the farm's day is the India day, never the UTC date (01:30 IST is not yesterday).
+        createdAtLocalDate: getDateKey(d.createdAtUtc),
         ageDays: Math.floor((now - Date.parse(d.createdAtUtc)) / 86_400_000),
         skipped: d.skipped ?? false,
         // wave-3.1 — `?? null`, never `?? undefined`: a legacy row must arrive as an
         // explicit null so wave-3.2's `e.dailyLogId === null` legacy branch can see it.
         dailyLogId: d.dailyLogId ?? null,
+        scheduleCardRef: d.scheduleCardRef ?? null,
     }));
 }

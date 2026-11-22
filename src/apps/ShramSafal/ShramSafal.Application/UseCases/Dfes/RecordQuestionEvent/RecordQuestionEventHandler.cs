@@ -2,7 +2,9 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
@@ -37,8 +39,13 @@ public sealed class RecordQuestionEventHandler(
     IShramSafalRepository repository,
     IDailyRichnessDerivationService dailyRichnessDerivation,
     IClock clock,
-    ILogger<RecordQuestionEventHandler> logger)
+    ILogger<RecordQuestionEventHandler> logger,
+    IQuestionSourceResolver? sourceResolver = null)
 {
+    private static readonly HashSet<string> PromptOrigins = new(StringComparer.Ordinal) { "bank", "pattern", "ai" };
+    private const int MaxPromptTextLength = 600;
+    private const int MaxScheduleCardRefLength = 200;
+
     public async Task<Result<Guid>> HandleAsync(RecordQuestionEventCommand cmd, CancellationToken ct = default)
     {
         if (cmd.CallerUserId == Guid.Empty || cmd.FarmId == Guid.Empty
@@ -47,14 +54,48 @@ public sealed class RecordQuestionEventHandler(
             return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
         }
 
-        // HARD GATE (defense-in-depth): never persist an unapproved question, no
-        // matter what the client sent. The canonical approval list is the reviewed
-        // frontend bank; this backend guard makes the invariant unforgeable.
-        if (!cmd.AgronomistApproved || !cmd.MarathiApproved)
+        // Lane DFES-Q (founder D-B, 2026-11-21): the agronomist flag no longer gates — no agronomist ever reviewed this copy,
+        // and the founder replaced that flag with a SOURCE. Two gates remain, both decided here and not by the phone:
+        //  1. approved copy: text from the bank or a pattern must be Marathi-approved; AI-worded text is checked by the
+        //     server's own guard where it is written, so it carries no Marathi tick.
+        //  2. the source gate: a question that states agronomy (the server decides from the key) is recorded only with sources
+        //     the server resolved from Shram Safal's own published schedule. The phone sends look-line ids, never a source.
+        var origin = cmd.PromptOrigin;
+        if (origin is not null && !PromptOrigins.Contains(origin))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
+        if (origin != "ai" && !cmd.MarathiApproved)
         {
             logger.LogWarning(
-                "Rejected question_event {QuestionKey} for farm {FarmId}: not both-approved (agr={Agr}, mr={Mr}).",
-                LogSafe.Text(cmd.QuestionKey), cmd.FarmId, cmd.AgronomistApproved, cmd.MarathiApproved);
+                "Rejected question_event {QuestionKey} for farm {FarmId}: copy not Marathi-approved (origin={Origin}).",
+                LogSafe.Text(cmd.QuestionKey), cmd.FarmId, LogSafe.Text(origin ?? "bank"));
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
+        var kind = QuestionKinds.ForKey(cmd.QuestionKey);
+        string? sourceRefsJson = null;
+        if (QuestionKinds.StatesAgronomy(kind))
+        {
+            var sources = cmd.LookLineIds is { Count: > 0 } lineIds ? sourceResolver?.Resolve(lineIds) : null;
+            if (sources is not { Count: > 0 })
+            {
+                logger.LogWarning(
+                    "Rejected question_event {QuestionKey} for farm {FarmId}: it states agronomy (kind={Kind}) and no source resolved.",
+                    LogSafe.Text(cmd.QuestionKey), cmd.FarmId, kind);
+                return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+            }
+
+            sourceRefsJson = JsonSerializer.Serialize(
+                sources.Select(s => new { lineId = s.LineId, docId = s.DocId, page = s.Page }));
+        }
+
+        if ((cmd.DeviationReasonCode is not null && !DeviationReasons.IsKnown(cmd.DeviationReasonCode))
+            || cmd.DeviationChallenge?.Length > DeviationReasons.MaxChallengeLength
+            || cmd.PromptText?.Length > MaxPromptTextLength
+            || cmd.ScheduleCardRef?.Length > MaxScheduleCardRefLength)
+        {
             return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
         }
 
@@ -152,7 +193,17 @@ public sealed class RecordQuestionEventHandler(
             answerObservationId: cmd.AnswerObservationId ?? answerObservation?.Id, shownAtUtc: cmd.ShownAtUtc,
             triggerReason: cmd.TriggerReason, weatherContext: cmd.WeatherContext,
             response: cmd.Response, stageConfirmed: cmd.StageConfirmed,
-            photoSubmitted: cmd.PhotoSubmitted, skipped: cmd.Skipped, createdAtUtc: now);
+            photoSubmitted: cmd.PhotoSubmitted, skipped: cmd.Skipped, createdAtUtc: now,
+            context: new QuestionEventContext(
+                AskedUserId: cmd.CallerUserId, // the person asked is the caller, never a value from the body (founder D-D)
+                PromptText: string.IsNullOrWhiteSpace(cmd.PromptText) ? null : cmd.PromptText.Trim(),
+                PromptOrigin: origin,
+                QuestionKind: kind,
+                SourceRefsJson: sourceRefsJson,
+                ScheduleCardRef: string.IsNullOrWhiteSpace(cmd.ScheduleCardRef) ? null : cmd.ScheduleCardRef.Trim(),
+                DeviationReasonCode: cmd.DeviationReasonCode,
+                DeviationChallenge: string.IsNullOrWhiteSpace(cmd.DeviationChallenge) ? null : cmd.DeviationChallenge.Trim(),
+                PhotoAttachmentId: cmd.PhotoAttachmentId));
 
         await repository.AddQuestionEventAsync(entity, ct);
         await repository.SaveChangesAsync(ct);

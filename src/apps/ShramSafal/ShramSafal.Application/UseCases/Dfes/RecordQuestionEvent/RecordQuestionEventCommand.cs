@@ -12,4 +12,13 @@ public sealed record RecordQuestionEventCommand(
     int DepthLevel, int Priority, int Cooldown, string AnswerModes, string SafetyClass,
     bool AgronomistApproved, bool MarathiApproved, string BankVersion, string QuestionEngineVersion,
     Guid? AnswerObservationId, DateTime? ShownAtUtc, string? TriggerReason, string? WeatherContext,
-    string? Response, bool? StageConfirmed, bool? PhotoSubmitted, bool? Skipped);
+    string? Response, bool? StageConfirmed, bool? PhotoSubmitted, bool? Skipped,
+    // Lane DFES-Q (founder D-B, D-D, D-G, 2026-11-21) — all optional; an older phone sends none of them (P11).
+    // There is deliberately NO source field: the phone names the look lines it used and the SERVER resolves their sources.
+    string? PromptText = null,
+    string? PromptOrigin = null,
+    IReadOnlyList<string>? LookLineIds = null,
+    string? ScheduleCardRef = null,
+    string? DeviationReasonCode = null,
+    string? DeviationChallenge = null,
+    Guid? PhotoAttachmentId = null);

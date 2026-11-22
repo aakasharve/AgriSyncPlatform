@@ -112,6 +112,8 @@ vi.mock('../../hooks/useDayUnderstanding', () => ({
 }));
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+    // Lane DFES-Q task 6: the panel reads the language for the stage question.
+    useOptionalLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
 }));
 
 const engagementDto = {

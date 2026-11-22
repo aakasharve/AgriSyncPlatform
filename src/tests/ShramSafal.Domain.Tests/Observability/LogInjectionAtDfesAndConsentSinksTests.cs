@@ -99,7 +99,7 @@ public sealed class LogInjectionAtDfesAndConsentSinksTests
         var logger = new CapturingLogger<RecordQuestionEventHandler>();
         var repo = new QuestionRepo(memberOfFarm: true);
         var handler = BuildQuestionHandler(repo, logger);
-        var cmd = Question(Guid.NewGuid(), hostile) with { AgronomistApproved = false };
+        var cmd = Question(Guid.NewGuid(), hostile) with { MarathiApproved = false };
 
         var result = await handler.HandleAsync(cmd, CancellationToken.None);
 
@@ -111,7 +111,8 @@ public sealed class LogInjectionAtDfesAndConsentSinksTests
 
         AssertOneUnforgeableLine(line);
         // The observer survived the fix: it still says what was rejected, and still names it.
-        Assert.Contains("not both-approved", line.RenderedMessage, StringComparison.Ordinal);
+        // Lane DFES-Q: the agronomist flag no longer gates (founder D-B); the Marathi gate is the rejection path pinned here.
+        Assert.Contains("not Marathi-approved", line.RenderedMessage, StringComparison.Ordinal);
         Assert.Contains("gap.dose", line.RenderedMessage, StringComparison.Ordinal);
     }
 
@@ -198,7 +199,7 @@ public sealed class LogInjectionAtDfesAndConsentSinksTests
         var cases = new (QuestionRepo Repo, RecordQuestionEventCommand Command)[]
         {
             (new QuestionRepo(memberOfFarm: true),
-             Question(Guid.NewGuid(), "gap.dose") with { AgronomistApproved = false }),
+             Question(Guid.NewGuid(), "gap.dose") with { MarathiApproved = false }),
             (new QuestionRepo(memberOfFarm: true),
              Question(Guid.NewGuid(), "gap.dose") with { DailyLogId = AnsweredLogId }),
             (new QuestionRepo(memberOfFarm: true, log: LogFor(Guid.NewGuid())),

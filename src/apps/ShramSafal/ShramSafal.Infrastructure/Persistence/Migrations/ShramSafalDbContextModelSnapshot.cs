@@ -1745,6 +1745,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("answer_observation_id");
 
+                    b.Property<Guid?>("AskedUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("asked_user_id");
+
                     b.Property<string>("BankVersion")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1773,6 +1777,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("depth_level");
 
+                    b.Property<string>("DeviationChallenge")
+                        .HasColumnType("text")
+                        .HasColumnName("deviation_challenge");
+
+                    b.Property<string>("DeviationReasonCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("deviation_reason_code");
+
                     b.Property<string>("ExpectedStage")
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
@@ -1792,6 +1805,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("marathi_approved");
 
+                    b.Property<Guid?>("PhotoAttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("photo_attachment_id");
+
                     b.Property<bool?>("PhotoSubmitted")
                         .HasColumnType("boolean")
                         .HasColumnName("photo_submitted");
@@ -1804,6 +1821,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("priority");
 
+                    b.Property<string>("PromptOrigin")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("prompt_origin");
+
+                    b.Property<string>("PromptText")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_text");
+
                     b.Property<string>("QuestionEngineVersion")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1815,6 +1841,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("question_key");
+
+                    b.Property<string>("QuestionKind")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("question_kind");
 
                     b.Property<string>("QuestionType")
                         .IsRequired()
@@ -1832,6 +1863,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("safety_class");
 
+                    b.Property<string>("ScheduleCardRef")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("schedule_card_ref");
+
                     b.Property<DateTime?>("ShownAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("shown_at_utc");
@@ -1839,6 +1875,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("Skipped")
                         .HasColumnType("boolean")
                         .HasColumnName("skipped");
+
+                    b.Property<string>("SourceRefsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("source_refs");
 
                     b.Property<bool?>("StageConfirmed")
                         .HasColumnType("boolean")
@@ -1866,7 +1906,83 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("FarmId")
                         .HasDatabaseName("ix_question_events_farm_id");
 
+                    b.HasIndex("FarmId", "AskedUserId")
+                        .HasDatabaseName("ix_question_events_farm_asked_user");
+
                     b.ToTable("question_events", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Dfes.QuestionPhotoCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_id");
+
+                    b.Property<decimal?>("Confidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("confidence");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DetailJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detail");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("model");
+
+                    b.Property<Guid>("QuestionEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("question_event_id");
+
+                    b.Property<DateTime>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at_utc");
+
+                    b.Property<int?>("ReadCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("read_count");
+
+                    b.Property<int?>("ReadOutOf")
+                        .HasColumnType("integer")
+                        .HasColumnName("read_out_of");
+
+                    b.Property<int?>("StatedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("stated_count");
+
+                    b.Property<int?>("StatedOutOf")
+                        .HasColumnType("integer")
+                        .HasColumnName("stated_out_of");
+
+                    b.Property<string>("Verdict")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("verdict");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_question_photo_checks_farm_id");
+
+                    b.HasIndex("QuestionEventId")
+                        .HasDatabaseName("ix_question_photo_checks_question_event_id");
+
+                    b.ToTable("question_photo_checks", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.ApplicationInputItem", b =>
@@ -7509,6 +7625,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Provenance")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Dfes.QuestionPhotoCheck", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Dfes.QuestionEvent", null)
+                        .WithMany()
+                        .HasForeignKey("QuestionEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
