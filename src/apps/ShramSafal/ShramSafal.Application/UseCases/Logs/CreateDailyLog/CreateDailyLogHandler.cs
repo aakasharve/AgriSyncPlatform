@@ -155,6 +155,17 @@ public sealed class CreateDailyLogHandler(
             return Result.Failure<DailyLogDto>(outsidePlots);
         }
 
+        // spec: D-184 / security audit F03 (server half) — a whole-farm log (संपूर्ण शेत) names no plot, so the gate above can
+        // never refuse it. A seat that covers only CHOSEN plots has no whole farm to write on: refused with the same code, kept
+        // on his phone and shown (P10), never quietly put on his plots. The owner and every other seat are unchanged. REST and
+        // sync both reach this body (/sync/push resolves this handler raw), so this one check closes both.
+        if (command.Scope == Domain.Logs.DailyLogScope.Farm
+            && await Services.PlotScopeGate.RefuseWholeFarmAsync(
+                repository, command.FarmId, command.OperatorUserId, clock.UtcNow, ct) is { } wholeFarmRefused)
+        {
+            return Result.Failure<DailyLogDto>(wholeFarmRefused);
+        }
+
         // Phase 5 entitlement gate (PaidFeature.WriteDailyLog). Plan §4.5.
         var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
             entitlementPolicy, new UserId(command.OperatorUserId), farmId,

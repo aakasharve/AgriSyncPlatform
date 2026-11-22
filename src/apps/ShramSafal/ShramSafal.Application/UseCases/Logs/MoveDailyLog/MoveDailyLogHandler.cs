@@ -134,8 +134,12 @@ public sealed class MoveDailyLogHandler(
         {
             var notHis = log.PlotIds.Where(p => !his.Contains(p)).ToList();
             var movesDay = command.NewLogDate is { } day && day != log.LogDate;
+            // spec: D-184 / audit F03 (server half) — and "the whole farm" is never his to choose, even for a record that stands
+            // only on his plots: it would put his work on every plot (the create refusal would otherwise be walked around by
+            // making the record on his plot and moving it). Same code as every other plot refusal.
             if ((newPlotIds is not null && newPlotIds.Any(p => !his.Contains(p)))
-                || (notHis.Count > 0 && (command.WholeFarm || movesDay)))
+                || command.WholeFarm
+                || (notHis.Count > 0 && movesDay))
             {
                 logger.LogWarning("move_daily_log for {LogId} refused: it names or reaches a plot outside the sender's plots.", log.Id);
                 return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.PlotScopeForbidden);

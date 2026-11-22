@@ -21,6 +21,8 @@ public static class PlotScopeGate
     /// <summary>
     /// <see cref="ShramSafalErrors.PlotScopeForbidden"/> when <paramref name="userId"/> covers chosen plots on
     /// <paramref name="farmId"/> and any of <paramref name="plotIds"/> is not one of them; otherwise <c>null</c>.
+    /// A call that names NO plot is always <c>null</c> (see <see cref="RefuseWholeFarmAsync"/> for the record that is the
+    /// whole farm's).
     /// </summary>
     public static async Task<Error?> RefuseAsync(
         IShramSafalRepository repository,
@@ -46,6 +48,24 @@ public static class PlotScopeGate
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);
         return scope?.PlotIds is { } his && !named.All(his.Contains) ? ShramSafalErrors.PlotScopeForbidden : null;
     }
+
+    /// <summary>
+    /// spec: D-184 / security audit F03 (server half) — the answer for a record that IS the whole farm's.
+    /// <para><see cref="RefuseAsync(IShramSafalRepository, Guid, IEnumerable{Guid?}, Guid, DateTime, CancellationToken)"/> returns
+    /// <c>null</c> when no plot is named, and that is deliberate: about twenty callers ask it about records that legitimately
+    /// have no plot (a shared or unallocated bill, a reminder whose plot is "not fixed", a farm-level warning), so it must keep
+    /// saying "nothing to refuse". But for a record that is explicitly the WHOLE FARM's (a daily log of scope Farm, or a log
+    /// moved onto the whole farm) "no plot named" is not "nothing": it is every plot, and a seat that covers only CHOSEN plots
+    /// has no say over plots he does not hold. So those two doors ask this instead.</para>
+    /// <para><see cref="ShramSafalErrors.PlotScopeForbidden"/> when <paramref name="userId"/> covers chosen plots on
+    /// <paramref name="farmId"/> — the SAME code every other plot refusal uses, which every phone (old and new) already parks
+    /// visibly (P10). The record is refused, never quietly put on his own plots: that would claim a place he never named
+    /// (P4). <c>null</c> for everyone else: the farm's registrant and every seat on all plots, an own-work seat (§11.7: he may
+    /// log on any plot), and a caller with no seat (the handler's own membership rule answers him, as before).</para>
+    /// </summary>
+    public static async Task<Error?> RefuseWholeFarmAsync(
+        IShramSafalRepository repository, Guid farmId, Guid userId, DateTime atUtc, CancellationToken ct = default) =>
+        await ChosenPlotsAsync(repository, farmId, userId, atUtc, ct) is null ? null : ShramSafalErrors.PlotScopeForbidden;
 
     /// <summary>
     /// The plots <paramref name="userId"/> covers on <paramref name="farmId"/> when his seat covers CHOSEN plots; <c>null</c>
