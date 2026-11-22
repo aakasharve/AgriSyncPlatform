@@ -829,20 +829,28 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
 
     private async Task<List<PushOutcome>> PushManyAsync(Guid who, List<(string RequestId, string MutationType, object Payload)> mutations)
     {
-        var request = new
+        // SEC-1 F04: one push carries at most 200 changes (413 ShramSafal.Sync.BatchTooLarge beyond that). The phone sends at
+        // most 50 per push, so a longer run goes in batches of 50, as the phone sends it. The rule under test here (kept copies
+        // per sender per farm per day) counts across pushes, so the proof is the same.
+        var outcomes = new List<PushOutcome>();
+        foreach (var batch in mutations.Chunk(50))
         {
-            deviceId = $"device-{who:N}",
-            mutations = mutations.Select(m => new { clientRequestId = m.RequestId, mutationType = m.MutationType, payload = m.Payload }).ToArray(),
-        };
-        using var response = await SendAsync(HttpMethod.Post, "/sync/push", who, request);
-        var text = await response.Content.ReadAsStringAsync();
-        response.StatusCode.Should().Be(HttpStatusCode.OK, text);
-        using var doc = JsonDocument.Parse(text);
-        return doc.RootElement.GetProperty("results").EnumerateArray()
-            .Select(result => new PushOutcome(
-                result.GetProperty("status").GetString()!,
-                result.TryGetProperty("errorCode", out var code) && code.ValueKind == JsonValueKind.String ? code.GetString() : null))
-            .ToList();
+            var request = new
+            {
+                deviceId = $"device-{who:N}",
+                mutations = batch.Select(m => new { clientRequestId = m.RequestId, mutationType = m.MutationType, payload = m.Payload }).ToArray(),
+            };
+            using var response = await SendAsync(HttpMethod.Post, "/sync/push", who, request);
+            var text = await response.Content.ReadAsStringAsync();
+            response.StatusCode.Should().Be(HttpStatusCode.OK, text);
+            using var doc = JsonDocument.Parse(text);
+            outcomes.AddRange(doc.RootElement.GetProperty("results").EnumerateArray()
+                .Select(result => new PushOutcome(
+                    result.GetProperty("status").GetString()!,
+                    result.TryGetProperty("errorCode", out var code) && code.ValueKind == JsonValueKind.String ? code.GetString() : null)));
+        }
+
+        return outcomes;
     }
 
     private async Task<bool> GateAsync(Guid farm, Guid user, FarmAuthority authority, DateTime at)
