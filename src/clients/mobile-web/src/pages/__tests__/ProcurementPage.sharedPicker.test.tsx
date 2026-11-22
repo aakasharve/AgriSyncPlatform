@@ -17,6 +17,9 @@ vi.mock('../../services/procurementRepository', () => ({
     procurementRepository: { getExpenses: () => bills.current, saveExpense: vi.fn() },
 }));
 vi.mock('../../features/finance/components/MoneyLensDrawer', () => ({ MoneyLensDrawer: () => null }));
+// The unsent-money card reads the phone's database in the background and has its own test. Here that read would
+// outlive the last test and answer after jsdom is gone ("window is not defined", CI 45054899620).
+vi.mock('../../features/procurement/components/UnsentMoneyCard', () => ({ UnsentMoneyCard: () => null }));
 vi.mock('../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn() } }));
 vi.mock('../../infrastructure/sync/AttachmentUploadWorker', () => ({ attachmentUploadWorker: { triggerNow: vi.fn() } }));
 vi.mock('../../features/finance/financeCommandService', () => ({ financeCommandService: { createMoneyEventFromSource: vi.fn() } }));
