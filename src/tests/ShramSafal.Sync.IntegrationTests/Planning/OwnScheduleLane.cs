@@ -110,7 +110,7 @@ public abstract class OwnScheduleLane(ITestOutputHelper output) : ScheduleCheckL
         await EnsureReviewSeatsAsync();
         var template = ScheduleTemplate.Import(
             Guid.NewGuid(), name, ScheduleOwnerType.Institution, "Test University recommendation", cropKey,
-            new AgriSync.SharedKernel.Contracts.Ids.UserId(PlatformOwner), TenantScope.Public, DateTime.UtcNow, UnequalStages,
+            new AgriSync.SharedKernel.Contracts.Ids.UserId(Importer), TenantScope.Public, DateTime.UtcNow, UnequalStages, // slice 7: made by the importer, approved by the platform owner
             [
                 new ImportedActivity("a", "Pruning", 0, 1, FrequencyMode.OneTime, 1),
                 new ImportedActivity("b", "Drip Irrigation", 41, 99, FrequencyMode.PerWeek, 2),
