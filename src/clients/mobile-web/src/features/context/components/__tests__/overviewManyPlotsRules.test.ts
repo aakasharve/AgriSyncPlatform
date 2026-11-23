@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     CALENDAR_CHIPS_SHOWN, DAY_CARD_FROM, MANY_PLOTS_CARDS_SHOWN, MANY_PLOTS_FROM, MONEY_BARS_SHOWN,
-    dayCountText, foldsManyPlots, hasDayCard, moreRecordsText, moreShownText, plotCountText,
+    GROUP_BY_CROP_FROM, dayCountText, foldsManyPlots, groupsByCrop, hasDayCard, moreRecordsText, moreShownText, plotCountText,
 } from '../plotSelectorRules';
 
 describe('when the overview says the day in one sentence (D-172)', () => {
@@ -28,13 +28,19 @@ describe('when the overview says the day in one sentence (D-172)', () => {
     });
 });
 
-describe('"many plots" (D-173, D-174; founder C1 = B, 2026-11-23: 10 or more)', () => {
-    it('groups from 10 plots: 9 plots are drawn exactly as before', () => {
-        expect(MANY_PLOTS_FROM).toBe(10);
-        expect(foldsManyPlots(9)).toBe(false);
-        expect(foldsManyPlots(10)).toBe(true);
-        expect(foldsManyPlots(15)).toBe(true);
+describe('"more than 15 plots" (D-173, D-174)', () => {
+    it('folds from 16 plots: 15 plots are drawn exactly as before', () => {
+        expect(MANY_PLOTS_FROM).toBe(16);
+        expect(foldsManyPlots(15)).toBe(false);
+        expect(foldsManyPlots(16)).toBe(true);
         expect(foldsManyPlots(100)).toBe(true);
+    });
+
+    it('founder C1 = B (2026-11-23): the plot cards are grouped by crop from 10 plots, 9 are drawn as before', () => {
+        expect(GROUP_BY_CROP_FROM).toBe(10);
+        expect(groupsByCrop(9)).toBe(false);
+        expect(groupsByCrop(10)).toBe(true);
+        expect(groupsByCrop(15)).toBe(true);
     });
 
     it('the caps are the ones the founder picked: 6 cards, 4 calendar chips, 5 money bars', () => {

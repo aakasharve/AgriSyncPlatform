@@ -24,7 +24,7 @@ vi.mock('../../../i18n/LanguageContext', async () => {
 import { buildPlotDayCard } from '../overview/plotDayModel';
 import { PlotDayCards } from '../overview/PlotDayCards';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
-import { MANY_PLOTS_FROM, foldsManyPlots } from '../../context/components/plotSelectorRules';
+import { GROUP_BY_CROP_FROM, groupsByCrop } from '../../context/components/plotSelectorRules';
 import type { CropProfile } from '../../../types';
 import { TODAY, TODAY_KEY, crop, plot } from './reflectFixtures';
 
@@ -58,9 +58,9 @@ afterEach(cleanup);
 
 describe('founder C1 = B: plots grouped by crop from 10 plots', () => {
     it('PlotsGroupedByCrop_AtTenOrMore', () => {
-        expect(MANY_PLOTS_FROM).toBe(10);
-        expect(foldsManyPlots(9)).toBe(false);
-        expect(foldsManyPlots(10)).toBe(true);
+        expect(GROUP_BY_CROP_FROM).toBe(10);
+        expect(groupsByCrop(9)).toBe(false);
+        expect(groupsByCrop(10)).toBe(true);
 
         // 15 plots over 4 crops: every crop is a group with its photo once in the header — the small crops too — and folded.
         draw(ABK);
