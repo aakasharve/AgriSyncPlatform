@@ -23,7 +23,8 @@ namespace ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 /// the read side's place rule for every seat it narrows (fix round 1, review H1: chosen plots AND an own-records seat — the
 /// स्वतःचं काम scope or the कामगार label sees only his own money), then the write rule on the bill's plot. A bill he may not
 /// see is "not found", exactly as a bill of another farm: no figure and no version in the answer.</item>
-/// <item><b>His own bill</b>: approvable by a reviewer as built, behind <see cref="BillApprovalRules"/> (founder D-105 (a)).</item>
+/// <item><b>His own bill</b>: never a reviewer's to approve, only the owner's (founder C3 = C, 2026-11-23), behind
+/// <see cref="BillApprovalRules"/>; refused by name (<see cref="ShramSafalErrors.OwnBillApprovalForbidden"/>).</item>
 /// <item><b>Which version</b>: the one he saw. A bill corrected or moved since is refused with the L4b exact-version code
 /// (<see cref="ShramSafalErrors.LogChangedSinceReview"/>) so the phone shows the new version first. The bill is read under
 /// its row hold, so a correction in flight finishes first and this check sees the version it leaves.</item>
@@ -99,10 +100,10 @@ public sealed class ApproveCostEntryHandler(
             return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
         }
 
-        // D-105 (a), waiting for the founder: may a reviewer approve a bill he entered himself? As built until he answers.
+        // D-105 (a), founder C3 = C (2026-11-23): nobody approves his own bill, the owner may. A named refusal, nothing written.
         if (!BillApprovalRules.MayApproveOwnBill(isPrimaryHolder, entry.CreatedByUserId.Value == caller))
         {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
+            return Result.Failure<CostEntryDto>(ShramSafalErrors.OwnBillApprovalForbidden);
         }
 
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, caller, now, ct);

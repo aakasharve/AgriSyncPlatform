@@ -468,7 +468,8 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 800m, WorkerA));
         (await ReadMoneyAsync(In2Money)).Amount.Should().Be(300m);
         NotFollowed(answer).Should().BeEmpty();
-        (await ReadFlagAsync(In1Money)).Should().BeFalse("no flag is written for money that followed");
+        // Founder 2026-11-23: every bill is checked — the money that followed waits for a reviewer (it never did before).
+        (await ReadFlagAsync(In1Money)).Should().BeTrue("every bill is checked, money an edit corrects too");
     }
 
     [Fact]
@@ -581,12 +582,48 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
         await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-money-in1", CostPayload(In1Money, "other", 500m));
-        (await ReadFlagAsync(In1Money)).Should().BeFalse();
+        // Founder 2026-11-23: the ₹500 bill is set aside on its first save already (every bill is checked).
+        (await ReadFlagAsync(In1Money)).Should().BeTrue();
 
         await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-big", RevisePayload(1, new { schema = 1, inputs = new object[] { Input("in-1", 30000) } }));
 
         (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 30000m, OwnerA));
         (await ReadFlagAsync(In1Money)).Should().BeTrue("₹30,000 waits in the review inbox, exactly as a first save of it would");
+    }
+
+    // ── founder answers 2026-11-23 (arve-owner-bills): "remove the 25000 rule, every bill must be checked" ───────────
+
+    [Fact]
+    public async Task EditMakingMoney_AnyAmount_IsSetAside()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-fa-money-in1", CostPayload(In1Money, "other", 500m));
+        (await ReadFlagAsync(In1Money)).Should().BeTrue("a ₹500 bill is set aside on its first save, the owner's own too");
+        // A row saved under the old ₹25,000 rule carries no flag (rows are never backfilled): its edit must set it aside.
+        await using (var su = new NpgsqlConnection(_superuserConn))
+        {
+            await su.OpenAsync();
+            await ExecAsync(su, "UPDATE ssf.cost_entries SET is_flagged = false, flag_reason = NULL WHERE \"Id\" = @id", ("id", In1Money));
+        }
+
+        // One edit corrects ₹500 to ₹800 and makes a ₹300 line: both small, both wait for a reviewer.
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-fa-edit-small", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 800), new { id = "in-2", productName = "युरिया", cost = 300 } },
+        }));
+
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 800m, OwnerA));
+        (await ReadFlagAsync(In1Money)).Should().BeTrue("money an edit corrects is checked, whatever the amount");
+        (await ReadFlagAsync(In2Money)).Should().BeTrue("money an edit makes is checked, whatever the amount");
+        foreach (var id in new[] { In1Money, In2Money })
+        {
+            (await ScalarAsync("SELECT flag_reason FROM ssf.cost_entries WHERE \"Id\" = @id", id)).Should().Be("Every bill is checked");
+        }
+
+        var pulled = await PullAsync(OwnerA);
+        output.WriteLine($"[EVIDENCE] money after the edit: {string.Join(" | ", pulled.CostEntries.Select(e => $"{e.Id}:{e.Amount}"))}");
     }
 
     // ── fix pass 1 (review 10) — an over-long value drops only the money, never the edit ───────────────────────

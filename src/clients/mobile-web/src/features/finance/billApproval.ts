@@ -8,7 +8,8 @@
  *
  *  - WHO: the server's own rule (`ApproveCostEntryHandler`) — the farm's primary account holder, or a seat holding
  *    "पैशांच्या नोंदी तपासणे व दुरुस्त करणे" (ReviewMoney), read from `/me/context`; fail closed when the server sent no
- *    list (the payout check's rule, `payoutCheckWords.ts`). Everyone else never sees the action.
+ *    list (the payout check's rule, `payoutCheckWords.ts`). Everyone else never sees the action. Never a reviewer's OWN bill
+ *    (founder C3 = C, 2026-11-23): that one waits for the owner or another reviewer, and the line says so.
  *  - WHERE A BILL STANDS: approved for the version it is at now; approved for an OLDER version (corrected since: the stamp
  *    is never carried to the new numbers); or not approved.
  *  - THE APPROVAL is queued (`approve_cost_entry`) so it works with no internet (P10); the server decides when it arrives.
@@ -51,11 +52,41 @@ export function mayApproveBills(farm: Pick<MeFarm, 'role' | 'authorities'> | nul
 export function mayApproveThisBill(
     farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
     scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds'> | null | undefined,
-    bill: Pick<MoneyEvent, 'plotId'>,
+    bill: Pick<MoneyEvent, 'plotId' | 'createdByUserId'>,
+    myUserId: string | null | undefined,
 ): boolean {
-    if (!mayApproveBills(farm)) return false;
-    if (scope?.plotScope !== 'ChosenPlots' || !Array.isArray(scope.plotIds)) return true;
-    return !bill.plotId || scope.plotIds.includes(bill.plotId);
+    return billApprovalSeat(farm, scope, bill, myUserId) === 'may';
+}
+
+/**
+ * spec: plr-d10-founder-answers-2026-11-23 — founder C3 = C: "For now it works like A: nobody approves his own bill, the owner may. A
+ * switch per farm comes after 3 December." The server's ONE named check (`BillApprovalRules.ReviewerMayApproveOwnBill`), mirrored so
+ * the phone never draws a button the server can only refuse (P5). The per-farm switch is not built.
+ */
+export const REVIEWER_MAY_APPROVE_OWN_BILL = false;
+
+/** The server code a reviewer's approval of his own bill is refused with (`ShramSafalErrors.OwnBillApprovalForbidden`). */
+export const OWN_BILL_REFUSED_CODE = 'ShramSafal.OwnBillApproval.Forbidden';
+
+/** May this seat approve this bill: yes; no; or not HIS OWN bill (it waits for the owner or another reviewer). */
+export type BillApprovalSeat = 'may' | 'ownBill' | 'no';
+
+/**
+ * The server's whole rule for one bill: the farm rule, the chosen plots (review L4), and his own bill (C3 = C) - the primary account
+ * holder may approve his own, a reviewer may not. Who he is comes from the signed-in person; when the phone cannot say, a reviewer
+ * gets no button (fail closed: the bill might be his own).
+ */
+export function billApprovalSeat(
+    farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
+    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds'> | null | undefined,
+    bill: Pick<MoneyEvent, 'plotId' | 'createdByUserId'>,
+    myUserId: string | null | undefined,
+): BillApprovalSeat {
+    if (!mayApproveBills(farm)) return 'no';
+    if (scope?.plotScope === 'ChosenPlots' && Array.isArray(scope.plotIds) && bill.plotId && !scope.plotIds.includes(bill.plotId)) return 'no';
+    if (isPrimaryAccountHolderRole(farm?.role) || REVIEWER_MAY_APPROVE_OWN_BILL) return 'may';
+    if (!myUserId) return 'no';
+    return bill.createdByUserId === myUserId ? 'ownBill' : 'may';
 }
 
 export type BillStamp = 'approved' | 'approvedOlder' | 'none';

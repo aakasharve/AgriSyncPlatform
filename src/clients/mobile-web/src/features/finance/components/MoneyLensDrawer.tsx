@@ -6,10 +6,11 @@ import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { SANS } from '../../../shared/components/ui/placeUi';
 import { BUCKET_LABEL, SOURCE_LABEL, categoryLabel, entryState, formatMoneyDate, rupees } from '../moneyLabels';
 import { BillApprovalLine, useBillApprovalOutbox } from './BillApprovalLine';
-import { mayApproveThisBill } from '../billApproval';
+import { billApprovalSeat } from '../billApproval';
 import { useStoredAccessScopes } from '../../../core/session/storedFarmScope';
 import { scopeForFarm } from '../../../infrastructure/storage/accessScopeStore';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { useOptionalAuth } from '../../../app/providers/AuthProvider';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the money drawer behind a tapped amount, in
@@ -48,14 +49,18 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
 
     useBackDismiss(isOpen, onClose);
     const farmContext = useOptionalFarmContext();
+    const auth = useOptionalAuth();
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const [outbox, refreshOutbox] = useBillApprovalOutbox(isOpen);
     const storedScopes = useStoredAccessScopes();
     if (!isOpen) return null;
     // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
-    const mayApproveOn = (bill: EffectiveMoneyEvent) =>
+    // founder C3 = C (2026-11-23) — and never his own bill unless he is the owner: who he is, from the signed-in person.
+    const myUserId = farmContext?.meContext?.me?.userId ?? auth?.session?.userId ?? null;
+    const seatOn = (bill: EffectiveMoneyEvent) =>
         !!farmContext && farmContext.currentFarmId === bill.farmId
-        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
+            ? billApprovalSeat(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill, myUserId)
+            : 'no';
 
     const openFix = (line: EffectiveMoneyEvent) => {
         setSelected(line);
@@ -135,7 +140,8 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
                             </div>
                             <BillApprovalLine
                                 bill={line}
-                                mayApprove={mayApproveOn(line)}
+                                mayApprove={seatOn(line) === 'may'}
+                                ownBill={seatOn(line) === 'ownBill'}
                                 outbox={outbox}
                                 language={language}
                                 onQueued={refreshOutbox}

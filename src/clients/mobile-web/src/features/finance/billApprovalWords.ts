@@ -8,7 +8,7 @@
  */
 import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 import type { MoneyApproval } from './finance.types';
-import { BILL_PRICE_LOCKED_CODE, BILL_VERSION_CONFLICT_CODE } from './billApproval';
+import { BILL_PRICE_LOCKED_CODE, BILL_VERSION_CONFLICT_CODE, OWN_BILL_REFUSED_CODE } from './billApproval';
 
 export type BillLang = 'mr' | 'en';
 
@@ -37,6 +37,13 @@ const WORDS = {
         'श्रमसफलच्या नियमानुसार बिल मालक किंवा त्यांनी परवानगी दिलेली व्यक्ती मंजूर करते.',
         'By ShramSafal rules a bill is approved by the owner or someone they allowed.'),
     withheld: said('—', '—'),
+    // spec: plr-d10-founder-answers-2026-11-23 (C3 = C: nobody approves his own bill, the owner may) — PROPOSED words.
+    ownBill: said(
+        'हे बिल तुम्ही केलं आहे — ते मालक किंवा परवानगी असलेली दुसरी व्यक्ती मंजूर करेल',
+        'You made this bill — the owner or another person they allowed will approve it'),
+    ownBillRefused: said(
+        'मंजुरी झाली नाही — तुम्ही केलेलं बिल मालक किंवा परवानगी असलेली दुसरी व्यक्ती मंजूर करते',
+        'Not approved — a bill you made is approved by the owner or another person they allowed'),
     // lane BILL-1b (founder D-105 (b), 2026-11-08) — PROPOSED words. "Only you, the main owner, can change an approved bill's price.
     // The bill then shows 'changed by owner' to everyone, you included."
     changedByOwner: said('मालकाने बदलला', 'Changed by owner'),
@@ -80,6 +87,7 @@ export function ownerChangeLine(atUtc: string, language: BillLang): string {
 export function refusalLine(errorCode: string | undefined, language: BillLang): string {
     if (errorCode === BILL_VERSION_CONFLICT_CODE) return billWord('changed', language);
     if (errorCode === BILL_PRICE_LOCKED_CODE) return billWord('priceLocked', language);
+    if (errorCode === OWN_BILL_REFUSED_CODE) return billWord('ownBillRefused', language);
     if (errorCode && (errorCode.endsWith('Forbidden') || errorCode.endsWith('NotFound'))) return billWord('refused', language);
     return billWord('failed', language);
 }

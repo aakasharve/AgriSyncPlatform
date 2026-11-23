@@ -23,6 +23,8 @@ describe('moneyLabels', () => {
 
     it('the server\'s review reasons, in Marathi', () => {
         expect(reviewReasonLabel('High amount: >= 25000 INR')).toBe('₹ 25,000 किंवा जास्त रक्कम');
+        // founder 2026-11-23 (arve-owner-bills): every bill is checked — the new reason, while rows already saved keep the old one.
+        expect(reviewReasonLabel('Every bill is checked')).toBe('प्रत्येक बिल तपासले जाते');
         expect(reviewReasonLabel('HIGH_AMOUNT')).toBe('मोठी रक्कम');
         // lane BILL-1 fix round 1 (review M3) — a bill changed after it was approved is looked at again.
         expect(reviewReasonLabel('Changed after approval')).toBe('मंजुरीनंतर बदललं — पुन्हा पाहा');

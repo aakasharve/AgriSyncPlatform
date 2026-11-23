@@ -10,13 +10,40 @@ namespace ShramSafal.Domain.Finance;
 public sealed class CostEntry : Entity<Guid>
 {
     /// <summary>
-    /// The amount at or above which money waits in the review inbox (flagged) — one rule for a first save
-    /// (<c>AddCostEntryHandler</c>), money an edit makes, and a correction an edit makes (lane OF-M fix pass 1, review 6).
+    /// The amount at or above which money that comes IN (a sale, <see cref="MoneyDirection.Income"/>) waits in the review inbox.
+    /// Until 2026-11-23 it was the rule for every entry (lane OF-M fix pass 1, review 6); since the founder's answer only money
+    /// that is not a bill keeps it (<see cref="ReviewReasonFor"/>).
     /// </summary>
     public const decimal ReviewAmountThreshold = 25000m;
 
-    /// <summary>The flag reason that rule writes.</summary>
+    /// <summary>
+    /// The flag reason the amount rule writes. Kept readable for good: rows saved before 2026-11-23 carry it and are never
+    /// rewritten (no backfill), and money that comes in still writes it.
+    /// </summary>
     public const string ReviewAmountReason = "High amount: >= 25000 INR";
+
+    /// <summary>
+    /// spec: plr-d10-founder-answers-2026-11-23 — the founder (arve-owner-bills): "25000 चा नियम काढून टाक प्रत्येक बिल तपासले
+    /// गेले पाहिजे" — remove the ₹25,000 rule, every bill must be checked. The flag reason that rule writes (English, stored;
+    /// the phone says it in its own language).
+    /// </summary>
+    public const string EveryBillReviewReason = "Every bill is checked";
+
+    /// <summary>
+    /// THE one rule for "set aside for checking", asked by every door that makes or corrects money (a first save,
+    /// <c>AddCostEntryHandler</c>; money an edit makes and money an edit corrects, <c>EditMoney</c>): why money of this amount
+    /// and direction waits for a reviewer, or <c>null</c> when it does not.
+    /// <list type="bullet">
+    /// <item>A bill — money that went out, or money whose direction nobody stated (every APK before the field existed sent
+    /// bills that way) — always waits, whatever its amount, the owner's own bill too: his one tap, never an automatic stamp
+    /// (P4: a stamp nobody gave would be a check that never happened).</item>
+    /// <item>Money that came in (a sale) is not a bill: it keeps the amount rule it had (<see cref="ReviewAmountThreshold"/>).</item>
+    /// </list>
+    /// </summary>
+    public static string? ReviewReasonFor(decimal amount, MoneyDirection? direction) =>
+        direction == MoneyDirection.Income
+            ? (amount >= ReviewAmountThreshold ? ReviewAmountReason : null)
+            : EveryBillReviewReason;
 
     private readonly List<Guid> _formerPlotIds = [];
 
@@ -348,7 +375,7 @@ public sealed class CostEntry : Entity<Guid>
 
     /// <summary>
     /// spec: plr-d10 (lane OF-M fix passes 1 and 3) — flag money for the person who reviews money, later than it was made
-    /// (an edit's correction raised it past <see cref="ReviewAmountThreshold"/>, review 6). Lane BILL-1 (F90): the pull
+    /// (an edit corrected it: <see cref="ReviewReasonFor"/>, review 6). Lane BILL-1 (F90): the pull
     /// carries it as <c>needsReview</c> until a stamp covers the bill's current version (<see cref="CostEntryReview"/>) —
     /// never as <c>isFlagged</c>, which 1.0.17 would act on. The amount never changes; its clock moves forward.
     /// </summary>

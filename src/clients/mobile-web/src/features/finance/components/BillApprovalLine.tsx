@@ -47,15 +47,17 @@ export function useBillApprovalOutbox(enabled = true): [BillApprovalOutbox, () =
 
 interface BillApprovalLineProps {
     bill: EffectiveMoneyEvent;
-    /** The server's rule for THIS bill's farm (`mayApproveBills`); false = the stamp only, never the action. */
+    /** The server's rule for THIS bill (`mayApproveThisBill`); false = the stamp only, never the action. */
     mayApprove: boolean;
+    /** founder C3 = C (2026-11-23): a reviewer's OWN bill - no action, and a line saying who approves it. */
+    ownBill?: boolean;
     outbox: BillApprovalOutbox;
     language: BillLang;
     /** After an approval was queued here: read the outbox again. */
     onQueued: () => void;
 }
 
-export const BillApprovalLine: React.FC<BillApprovalLineProps> = ({ bill, mayApprove, outbox, language, onQueued }) => {
+export const BillApprovalLine: React.FC<BillApprovalLineProps> = ({ bill, mayApprove, ownBill = false, outbox, language, onQueued }) => {
     const [sending, setSending] = useState(false);
     const [failed, setFailed] = useState(false);
     const stamp = billStamp(bill);
@@ -123,6 +125,9 @@ export const BillApprovalLine: React.FC<BillApprovalLineProps> = ({ bill, mayApp
                 <p data-testid={`bill-refused-${bill.id}`} className="m-0 text-[13px] font-bold text-rose-800">
                     {refusalLine(refused, language)}
                 </p>
+            )}
+            {ownBill && !mayApprove && approvalIsDue(bill) && !pending && (
+                <p data-testid={`bill-own-${bill.id}`} className="m-0 text-[13px] font-bold text-stone-700">{billWord('ownBill', language)}</p>
             )}
             {failed && (
                 <p className="m-0 text-[13px] font-bold text-rose-800">{billWord('failed', language)}</p>

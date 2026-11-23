@@ -60,8 +60,8 @@ namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 /// <item><b>When</b> — the price check runs before anything is staged; corrections are staged with the new version and
 /// commit with it (P1); new entries right after it, in the same sync transaction. The AI-parse ledger
 /// (<c>CorrectionEvent</c>) is not used (E7).</item>
-/// <item><b>Review</b> — money an edit raises to <see cref="CostEntry.ReviewAmountThreshold"/> or more is flagged exactly
-/// as a first save of it would be (server-side only).</item>
+/// <item><b>Review</b> — money an edit makes or corrects is flagged exactly as a first save of it would be
+/// (<see cref="CostEntry.ReviewReasonFor"/>: every bill, whatever the amount — founder, 2026-11-23; server-side only).</item>
 /// <item><b>History</b> — each correction keeps the entry's first amount, who, when and why, with the standard
 /// <c>CostEntry</c> / <c>Corrected</c> (or <c>Created</c>) audit row; the record gets one <see cref="FollowedAction"/> row
 /// listing what followed and what did not.</item>
@@ -226,10 +226,10 @@ internal sealed class EditMoney(
                 ? FinanceCorrection.Create(idGenerator.New(), entry.Id, entry.Amount, step.Amount, entry.CurrencyCode, CorrectionReason, by, now)
                 : FinanceCorrection.NoLongerSpent(idGenerator.New(), entry.Id, entry.Amount, entry.CurrencyCode, CorrectionReason, by, now);
             entry.MarkCorrected(correction.Id, correction.CorrectedAmount, correction.CurrencyCode, now);
-            // Review 6 — raised past the review amount: flagged exactly as a first save of it would be.
-            if (correction.CorrectedAmount >= CostEntry.ReviewAmountThreshold)
+            // Review 6, and the founder's answer of 2026-11-23 (every bill is checked): flagged exactly as a first save of it would be.
+            if (CostEntry.ReviewReasonFor(correction.CorrectedAmount, entry.Direction) is { } reviewReason)
             {
-                entry.FlagForReview(CostEntry.ReviewAmountReason, now);
+                entry.FlagForReview(reviewReason, now);
             }
 
             await repository.AddFinanceCorrectionAsync(correction, ct);
@@ -471,9 +471,9 @@ internal sealed class EditMoney(
             quantity: line.Quantity,
             unit: line.Unit,
             vendorName: line.VendorName);
-        if (entry.Amount >= CostEntry.ReviewAmountThreshold)
+        if (CostEntry.ReviewReasonFor(entry.Amount, entry.Direction) is { } reviewReason)
         {
-            entry.Flag(CostEntry.ReviewAmountReason);
+            entry.Flag(reviewReason);
         }
 
         return entry;

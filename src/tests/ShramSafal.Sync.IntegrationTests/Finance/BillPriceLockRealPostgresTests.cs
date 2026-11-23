@@ -177,7 +177,7 @@ public sealed class BillPriceLockRealPostgresTests(ITestOutputHelper output) : R
     public async Task E_an_unapproved_bill_the_owner_changes_gets_no_stamp_and_stays_taken_for_review()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        // ₹25,000 or more is set aside for review on its first save.
+        // Every bill is set aside for review on its first save (founder 2026-11-23; it was ₹25,000 or more before).
         await PushAppliedAsync(Owner, "add_cost_entry", "bill1b-e-add", CostPayload(FreshBill, FarmA, PlotA, CycleA, 31234.56m));
         await PushAppliedAsync(Owner, Correct, "bill1b-e-owner", CorrectPayload(FreshBill, 32109.87m));
         await Task.Delay(1150);

@@ -67,7 +67,7 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
         before.GetProperty("billVersion").GetInt32().Should().Be(1, "a bill as first saved is version 1");
         (before.TryGetProperty("approval", out var none) && none.ValueKind != JsonValueKind.Null)
             .Should().BeFalse("nobody approved it yet: no stamp is sent");
-        before.GetProperty("needsReview").GetBoolean().Should().BeFalse("a bill under ₹25,000 is not set aside");
+        before.GetProperty("needsReview").GetBoolean().Should().BeTrue("every bill is checked (founder 2026-11-23), a small one too");
         var cursor = first.GetProperty("nextCursorUtc").GetDateTime();
         await Task.Delay(1150);
 
@@ -326,14 +326,14 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
     public async Task G_the_review_flag_clears_only_for_the_approved_version()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        // ₹25,000 or more is set aside for review on its first save.
+        // Every bill is set aside for review on its first save (founder 2026-11-23; it was ₹25,000 or more before).
         await PushAppliedAsync(Mukadam, "add_cost_entry", "bill1-g-big", CostPayload(BigBill, FarmA, PlotA, CycleA, BigAmount));
         await Task.Delay(1150);
 
         var (_, flagged) = await PullAsync(Owner);
         var row = Bill(flagged, BigBill);
         row.GetProperty("needsReview").GetBoolean().Should().BeTrue("तपासायचे");
-        row.GetProperty("reviewReason").GetString().Should().Contain("25000");
+        row.GetProperty("reviewReason").GetString().Should().Be("Every bill is checked");
 
         var (approved, approvedBody) = await PostAsync(Owner, Route(BigBill), new { billVersion = 1 });
         approved.Should().Be(HttpStatusCode.OK, approvedBody);
@@ -428,6 +428,68 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
         finishedEarly.Should().BeFalse("the approval waits for the correction holding the bill");
         result.ErrorCode.Should().Be(VersionConflict, "it then reads version 2, not the version 1 it was sent for");
         (await StampsAsync(Cost)).Should().BeEmpty("no stamp stands on an older version than the one it was checked against");
+    }
+
+    // ── founder answers 2026-11-23 (C3 = C): nobody approves his own bill; the owner may ─────────────────────────
+
+    private static readonly Guid MukadamOwnBill = Guid.Parse("b1110000-0000-4000-8000-0000000000a1");
+    private const decimal MukadamOwnAmount = 1234.57m;
+    private const string OwnBillRefused = "ShramSafal.OwnBillApproval.Forbidden";
+
+    [Fact]
+    public async Task ReviewerOwnBill_Refused_OwnerOwnBill_Allowed()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney);
+        await PushAppliedAsync(Mukadam, "add_cost_entry", "fa-c3-mukadam-own", CostPayload(MukadamOwnBill, FarmA, PlotA, CycleA, MukadamOwnAmount));
+        var auditsBefore = await AuditRowCountAsync();
+
+        // The reviewer approves the bill he made himself: a named refusal, push and REST, and nothing is written.
+        var pushed = await PushAsync(Mukadam, Mutation, "fa-c3-own-push", Approve(MukadamOwnBill, FarmA, 1));
+        Output.WriteLine($"[EVIDENCE] reviewer approves his own bill -> {pushed.Status} {pushed.ErrorCode}");
+        pushed.Status.Should().NotBe("applied");
+        pushed.ErrorCode.Should().Be(OwnBillRefused);
+        var (rest, restBody) = await PostAsync(Mukadam, Route(MukadamOwnBill), new { billVersion = 1 });
+        rest.Should().Be(HttpStatusCode.Forbidden, restBody);
+        Json(restBody).GetProperty("error").GetString().Should().Be(OwnBillRefused);
+        (await StampsAsync(MukadamOwnBill)).Should().BeEmpty("nothing was approved");
+        (await AuditRowCountAsync()).Should().Be(auditsBefore, "a refused approval writes no row at all");
+        await Task.Delay(1150);
+        Bill((await PullAsync(Owner)).Root, MukadamOwnBill).GetProperty("needsReview").GetBoolean()
+            .Should().BeTrue("it still waits for someone else (every bill is checked)");
+
+        // The owner approves the bill HE made: allowed (the primary account holder may approve his own).
+        var (ownerRest, ownerBody) = await PostAsync(Owner, Route(Cost), new { billVersion = 1 });
+        ownerRest.Should().Be(HttpStatusCode.OK, ownerBody);
+        (await StampsAsync(Cost)).Select(s => s.By).Should().Equal([Owner]);
+    }
+
+    [Fact]
+    public async Task ReviewerOtherBill_Allowed()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney);
+        await PushAppliedAsync(Mukadam, "add_cost_entry", "fa-c3-mukadam-bill", CostPayload(MukadamOwnBill, FarmA, PlotA, CycleA, MukadamOwnAmount));
+
+        // The reviewer approves the owner's bill, and the owner approves the reviewer's bill: someone else's, both allowed.
+        await PushAppliedAsync(Mukadam, Mutation, "fa-c3-other-mukadam", Approve(Cost, FarmA, 1));
+        await PushAppliedAsync(Owner, Mutation, "fa-c3-other-owner", Approve(MukadamOwnBill, FarmA, 1));
+
+        (await StampsAsync(Cost)).Select(s => s.By).Should().Equal([Mukadam]);
+        (await StampsAsync(MukadamOwnBill)).Select(s => s.By).Should().Equal([Owner]);
+        await Task.Delay(1150);
+        var (_, pulled) = await PullAsync(Owner);
+        Bill(pulled, Cost).GetProperty("needsReview").GetBoolean().Should().BeFalse();
+        Bill(pulled, MukadamOwnBill).GetProperty("needsReview").GetBoolean().Should().BeFalse();
+    }
+
+    private async Task<long> AuditRowCountAsync()
+    {
+        await using var db = new NpgsqlConnection(SuperuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT count(*) FROM ssf.audit_events";
+        return (long)(await cmd.ExecuteScalarAsync())!;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────

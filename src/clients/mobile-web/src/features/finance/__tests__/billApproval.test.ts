@@ -21,6 +21,9 @@ import {
     BILL_PRICE_LOCKED_CODE,
     BILL_VERSION_CONFLICT_CODE,
     approvalIsDue,
+    billApprovalSeat,
+    OWN_BILL_REFUSED_CODE,
+    REVIEWER_MAY_APPROVE_OWN_BILL,
     mayApproveThisBill,
     approveBill,
     billStamp,
@@ -80,18 +83,48 @@ describe('fix round 1 (review L4): a chosen-plots reviewer is offered the action
     const reviewer = { role: 'Mukadam', authorities: [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }] } as never;
     const chosen = { farmId: FARM, plotScope: 'ChosenPlots', plotIds: ['plot-a'] } as never;
 
-    it('a bill on his plot, and his own farm-wide bill: yes', () => {
-        expect(mayApproveThisBill(reviewer, chosen, { plotId: 'plot-a' })).toBe(true);
-        expect(mayApproveThisBill(reviewer, chosen, { plotId: undefined })).toBe(true);
+    const other = (plotId?: string) => ({ plotId, createdByUserId: 'u-owner' });
+
+    it('a bill on his plot, and a farm-wide bill: yes', () => {
+        expect(mayApproveThisBill(reviewer, chosen, other('plot-a'), 'u-me')).toBe(true);
+        expect(mayApproveThisBill(reviewer, chosen, other(undefined), 'u-me')).toBe(true);
     });
 
-    it('his own bill on another plot (the pull sends it him, D-28): no button the server can only refuse', () => {
-        expect(mayApproveThisBill(reviewer, chosen, { plotId: 'plot-b' })).toBe(false);
+    it('a bill on another plot (the pull sends him his own there, D-28): no button the server can only refuse', () => {
+        expect(mayApproveThisBill(reviewer, chosen, other('plot-b'), 'u-me')).toBe(false);
     });
 
     it('every other seat: the farm-level rule alone; never without review money', () => {
-        expect(mayApproveThisBill(reviewer, undefined, { plotId: 'plot-b' })).toBe(true);
-        expect(mayApproveThisBill({ role: 'Mukadam', authorities: [{ name: 'SeeMoney' }] } as never, undefined, { plotId: 'plot-a' })).toBe(false);
+        expect(mayApproveThisBill(reviewer, undefined, other('plot-b'), 'u-me')).toBe(true);
+        expect(mayApproveThisBill({ role: 'Mukadam', authorities: [{ name: 'SeeMoney' }] } as never, undefined, other('plot-a'), 'u-me')).toBe(false);
+    });
+});
+
+// spec: plr-d10-founder-answers-2026-11-23 — founder C3 = C: "For now it works like A: nobody approves his own bill, the owner may."
+describe("founder C3 = C: nobody approves his own bill; the owner may (the server's BillApprovalRules)", () => {
+    const reviewer = { role: 'Mukadam', authorities: [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }] } as never;
+    const owner = { role: 'PrimaryOwner', authorities: undefined } as never;
+
+    it("the phone follows the server's one switch, and the refusal is a three-segment Forbidden code", () => {
+        expect(REVIEWER_MAY_APPROVE_OWN_BILL).toBe(false);
+        expect(OWN_BILL_REFUSED_CODE).toBe('ShramSafal.OwnBillApproval.Forbidden');
+        expect(OWN_BILL_REFUSED_CODE.split('.')).toHaveLength(3);
+    });
+
+    it("a reviewer: his own bill waits for someone else (no button), someone else's is his to approve", () => {
+        expect(billApprovalSeat(reviewer, undefined, { plotId: 'p', createdByUserId: 'u-me' }, 'u-me')).toBe('ownBill');
+        expect(mayApproveThisBill(reviewer, undefined, { plotId: 'p', createdByUserId: 'u-me' }, 'u-me')).toBe(false);
+        expect(billApprovalSeat(reviewer, undefined, { plotId: 'p', createdByUserId: 'u-owner' }, 'u-me')).toBe('may');
+    });
+
+    it("the owner approves his own bill and anyone's", () => {
+        expect(billApprovalSeat(owner, undefined, { plotId: 'p', createdByUserId: 'u-owner' }, 'u-owner')).toBe('may');
+        expect(billApprovalSeat(owner, undefined, { plotId: 'p', createdByUserId: 'u-me' }, 'u-owner')).toBe('may');
+    });
+
+    it('who he is not known (no signed-in person): a reviewer gets no button — fail closed', () => {
+        expect(billApprovalSeat(reviewer, undefined, { plotId: 'p', createdByUserId: 'u-owner' }, null)).toBe('no');
+        expect(billApprovalSeat(owner, undefined, { plotId: 'p', createdByUserId: 'u-owner' }, null)).toBe('may');
     });
 });
 

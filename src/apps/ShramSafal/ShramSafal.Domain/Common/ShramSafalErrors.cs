@@ -227,6 +227,15 @@ public static class ShramSafalErrors
     public static readonly Error PictureForbidden = Error.Forbidden(
         "ShramSafal.Picture.Forbidden", "This person may not set this picture.");
 
+    // spec: plr-d10-founder-answers-2026-11-23 (C3 = C): "nobody approves his own bill, the owner may." A reviewer's approval of a
+    // bill he made himself is refused by THIS name, and nothing is written. Three segments, tail "Forbidden": every phone already
+    // parks such a row where he sees it and says "not allowed" (an older phone too), never retrying it for ever (P10, P11). Not
+    // an authority-loss refusal (PushSyncBatchHandler.IsAuthorityRefusal): he holds the authority, the bill is simply his own,
+    // so no copy of the refused approval is kept for the owner either.
+    public static readonly Error OwnBillApprovalForbidden = Error.Forbidden(
+        "ShramSafal.OwnBillApproval.Forbidden",
+        "By ShramSafal's rules a bill is approved by someone other than the person who made it, or by the farm's main owner. Nothing was approved.");
+
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
     // READ refusal: the caller is a member but their role may not read this

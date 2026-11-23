@@ -502,6 +502,12 @@ public static class FinanceEndpoints
             return plotRefusal;
         }
 
+        // spec: plr-d10-founder-answers-2026-11-23 (C3 = C) — his own bill: a 403 that says why, so the phone can say it.
+        if (error.Code == ShramSafalErrors.OwnBillApprovalForbidden.Code)
+        {
+            return Results.Json(new { error = error.Code, message = error.Description }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {
             return Results.Forbid();

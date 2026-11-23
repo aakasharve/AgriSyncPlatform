@@ -48,7 +48,7 @@ public sealed class BillApprovalFixRound1RealPostgresTests(ITestOutputHelper out
     [Theory]
     [InlineData("own-work")]
     [InlineData("worker-label")]
-    public async Task H1_an_own_records_reviewer_may_approve_and_correct_only_his_own_bills(string seat)
+    public async Task H1_an_own_records_reviewer_may_approve_and_correct_no_other_persons_bill_and_not_his_own(string seat)
     {
         await AssertAppRoleIsNotVacuousAsync();
         var reviewer = seat == "own-work" ? Mukadam : Worker;
@@ -96,9 +96,12 @@ public sealed class BillApprovalFixRound1RealPostgresTests(ITestOutputHelper out
         (await CountAsync("SELECT count(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", Cost)).Should().Be(0);
         (await CountAsync("SELECT count(*) FROM ssf.finance_corrections WHERE cost_entry_id = @id", Cost)).Should().Be(0);
 
-        // His own bill stays his to approve (the self-approval rule waits for the founder, D-105; as built until then).
+        // His own bill is not his to approve (founder C3 = C, 2026-11-23: nobody approves his own bill; the owner may) — a named
+        // refusal, and nothing written. It waits for the owner.
         var own = await PushAsync(reviewer, Approve, $"bill1-f1-{seat}-own", ApprovePayload(OwnBill, 1));
-        own.Status.Should().Be("applied", "{0}: {1}", own.ErrorCode, own.ErrorMessage);
+        own.Status.Should().NotBe("applied");
+        own.ErrorCode.Should().Be("ShramSafal.OwnBillApproval.Forbidden");
+        (await CountAsync("SELECT count(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", OwnBill)).Should().Be(0);
     }
 
     // ── L6 ───────────────────────────────────────────────────────────────────────────────
