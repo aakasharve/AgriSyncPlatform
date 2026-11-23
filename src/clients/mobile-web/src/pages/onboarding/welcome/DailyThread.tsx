@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * The three things a farmer speaks into the day's log — did · spent · left —
- * drawn as one connected thread. Shared by the first-run welcome (for a worker
- * or mukadam who skips the owner's voice note) and the post-note thank-you.
+ * drawn as one connected thread. Shown on the thank-you after the welcome
+ * voice note.
  */
 import React from 'react';
 import { Hourglass, IndianRupee, Mic, Sprout } from 'lucide-react';
