@@ -69,6 +69,15 @@ const schedule = z.object({
     isMain: z.boolean(),
     stages: z.array(stageCounts.nullable()),
     order: z.array(orderNote),
+    // schedule mechanism slice 6: a schedule in the task format - its works with no day, no expectation and no stage (absent when none)
+    stageUnknown: stageCounts.nullish().transform(v => v ?? null),
+});
+
+// schedule mechanism slice 6 (SM-12): his own schedule while it is still being built, as its OWN row in the main schedule's stages (absent when none)
+const ownBuilding = z.object({
+    works: count,
+    stages: z.array(stageCounts.nullable()),
+    stageUnknown: stageCounts.nullish().transform(v => v ?? null),
 });
 
 const stage = z.object({
@@ -117,6 +126,7 @@ const plot = z.object({
     schedules: z.array(schedule),
     ownWork: z.array(ownWork),
     notRecognised: z.array(notRecognised),
+    ownBuilding: ownBuilding.nullish().transform(v => v ?? null),
 }).superRefine((p, ctx) => {
     // each schedule's stage list lines up with the plot's stages one for one, or its numbers would be drawn under the wrong stage
     p.schedules.forEach((s, i) => {
@@ -136,6 +146,7 @@ export type FarmCompareDto = z.infer<typeof farmCompare>;
 export type PlotCompareDto = FarmCompareDto['plots'][number];
 export type ScheduleCompareDto = PlotCompareDto['schedules'][number];
 export type StageCompareCountsDto = NonNullable<ScheduleCompareDto['stages'][number]>;
+export type OwnBuildingCompareDto = NonNullable<PlotCompareDto['ownBuilding']>;
 
 /** The answer as the contract says it, or null when it cannot be read (never a half-read screen). */
 export function parseFarmCompare(raw: unknown): FarmCompareDto | null {

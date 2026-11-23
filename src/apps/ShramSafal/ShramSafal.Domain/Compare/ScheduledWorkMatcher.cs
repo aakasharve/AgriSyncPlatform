@@ -6,12 +6,16 @@ namespace ShramSafal.Domain.Compare;
 /// <summary>
 /// One piece of work the farmer RECORDED, on the farm-local day he said it was done
 /// (<c>DailyLog.LogDate</c> — never the moment the phone sent it).
+/// <para>spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - <see cref="ForTaskKey"/>: the key of the schedule work a plan was made from, when that
+/// plan was completed WITH this record (the plan-to-log link, <c>LinkedDailyLogIds</c>). The link is asked first and counts the record for exactly that work,
+/// whatever words it was said in; words decide only for the rest. Whether it counts at all is still <see cref="ScheduledWorkMatcher.CountsAsDone"/>.</para>
 /// </summary>
 public sealed record RecordedWork(
     string ActivityType,
     DateOnly WorkDate,
     ExecutionStatus Status = ExecutionStatus.Completed,
-    bool Disputed = false);
+    bool Disputed = false,
+    string? ForTaskKey = null);
 
 /// <summary>Where one scheduled step stands today.</summary>
 public enum ScheduledWorkState
@@ -44,7 +48,8 @@ public sealed record ScheduledStep(
     string? NutrientKey,
     bool OnceOnly,
     DateOnly? StageFrom,
-    DateOnly? StageTo);
+    DateOnly? StageTo,
+    string? TaskKey = null);
 
 /// <summary>Where one <see cref="ScheduledStep"/> stands today (the planned-activity rule's own states).</summary>
 public sealed record ScheduledStepStatus(ScheduledStep Step, ScheduledWorkState State, int DaysLate);
@@ -103,6 +108,7 @@ public static class ScheduledWorkMatcher
             due.Select(p => p.PlannedDate).ToList(),
             work,
             (s, r) => SameWork(due[s].ActivityName, work[r].ActivityType),
+            linked: null,
             onceOnly: null);
 
         var result = new List<ScheduledWorkStatus>(due.Count);
@@ -140,14 +146,19 @@ public static class ScheduledWorkMatcher
         var stepIdentity = due.Select(IdentityOf).ToList();
         var recordIdentity = work.Select(r => WorkRecogniser.Recognise(r.ActivityType)).ToList();
 
+        // slice 6: a record linked to a work of THESE steps is that work's: it meets its own step first and never meets another by words.
+        var stepKeys = due.Select(s => s.TaskKey).Where(k => k is not null).ToHashSet(StringComparer.Ordinal);
+        bool Reserved(int r) => work[r].ForTaskKey is { } key && stepKeys.Contains(key);
+
         var taken = Core(
             due.Select(s => s.PlannedDate).ToList(),
             work,
-            (s, r) => SameStepWork(due[s], stepIdentity[s], work[r], recordIdentity[r]),
+            (s, r) => !Reserved(r) && SameStepWork(due[s], stepIdentity[s], work[r], recordIdentity[r]),
+            new LinkedPass((s, r) => due[s].TaskKey is { } key && string.Equals(work[r].ForTaskKey, key, StringComparison.Ordinal)),
             new OnceOnlyPass(
                 due.Select(s => s.OnceOnly).ToList(),
                 due.Select(s => (From: s.StageFrom, To: s.StageTo)).ToList(),
-                (s, r) => SameKeyedWork(stepIdentity[s], recordIdentity[r])));
+                (s, r) => !Reserved(r) && SameKeyedWork(stepIdentity[s], recordIdentity[r])));
 
         var result = new List<ScheduledStepStatus>(due.Count);
         for (var s = 0; s < due.Count; s++)
@@ -229,6 +240,9 @@ public static class ScheduledWorkMatcher
         return same.Matched && !string.Equals(same.ReasonKey, "same-name", StringComparison.Ordinal);
     }
 
+    /// <summary>slice 6: which record is LINKED to which step (a plan of the step's work completed with it).</summary>
+    private sealed record LinkedPass(Func<int, int, bool> Linked);
+
     private sealed record OnceOnlyPass(
         IReadOnlyList<bool> OnceOnly,
         IReadOnlyList<(DateOnly? From, DateOnly? To)> Windows,
@@ -242,10 +256,26 @@ public static class ScheduledWorkMatcher
         IReadOnlyList<DateOnly> stepDays,
         IReadOnlyList<RecordedWork> work,
         Func<int, int, bool> same,
+        LinkedPass? linked,
         OnceOnlyPass? onceOnly)
     {
         var stepTaken = new bool[stepDays.Count];
         var recordTaken = new bool[work.Count];
+
+        // Pass 0 (slice 6) - the explicit link first: each step takes the earliest unused record linked to its work, whatever its words or day.
+        if (linked is not null)
+        {
+            for (var s = 0; s < stepDays.Count; s++)
+            {
+                for (var r = 0; r < work.Count; r++)
+                {
+                    if (recordTaken[r] || !linked.Linked(s, r)) continue;
+                    stepTaken[s] = true;
+                    recordTaken[r] = true;
+                    break;
+                }
+            }
+        }
 
         // Pass 1 - on time, closest pairs first (ties: the earlier step, then the earlier record).
         var pairs = new List<(int Step, int Record, int Distance)>();

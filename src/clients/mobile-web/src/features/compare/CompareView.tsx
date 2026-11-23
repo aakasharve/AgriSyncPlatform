@@ -9,6 +9,7 @@
  * The phone never recounts a stage, never clips a window and never decides what "matched" means. Numbers are the server's; the few sums the
  * phone adds are named in `compareFacts.ts`. Two colours only: green and grey. "अजून नोंद नाही", never "राहिलं" / "काम झालं नाही".
  */
+import { OwnBuildingRow } from './OwnBuildingRow';
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, WifiOff } from 'lucide-react';
 import type { CropProfile, FarmerProfile } from '../../types';
@@ -186,6 +187,10 @@ export const CompareView: React.FC<CompareViewProps> = ({ result, plot, farmId, 
                 </div>
             )}
             {body}
+            {/* schedule mechanism slice 6 (SM-12): his own schedule still being built, its own row under the same stage line (server numbers only) */}
+            {plot?.ownBuilding && stage && plot.stages.length > 0 && (
+                <OwnBuildingRow row={plot.ownBuilding} stageIndex={stageIndex} plotStageCount={plot.stages.length} lang={lang} />
+            )}
             {sheet}
         </div>
     );

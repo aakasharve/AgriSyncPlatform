@@ -26,6 +26,9 @@ public sealed record ScheduleDefinition(
 /// the engine may use: it expands to nothing (P4, never a guess from its words). <see cref="Part"/> is one of
 /// <c>irrigation | nutrition | spray | work</c>. <see cref="Role"/> / <see cref="NutrientKey"/> / <see cref="OperationKey"/>,
 /// when stored, overrule what the title alone says.
+/// <para>spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - <see cref="TaskKey"/>: the permanent key of the task-format work this activity was written
+/// from (null for the old format); a record LINKED to that key (a plan of the work completed with it) counts for exactly this activity, whatever its words.
+/// <see cref="StageUnknown"/>: a work with no day, no expectation and no stage of its own: it sits in no window and counts only its linked records.</para>
 /// </summary>
 public sealed record ScheduleActivityDef(
     Guid ActivityId,
@@ -38,7 +41,9 @@ public sealed record ScheduleActivityDef(
     int? EndDay,
     FrequencyMode? FrequencyMode,
     int? IntervalDays,
-    Guid? AfterActivityId);
+    Guid? AfterActivityId,
+    string? TaskKey = null,
+    bool StageUnknown = false);
 
 /// <summary>A stage as dates (both ends included).</summary>
 public sealed record StageWindow(string Name, DateOnly From, DateOnly To);
@@ -64,7 +69,8 @@ public sealed record StageActivityPlan(
     int? IntervalDays,
     IReadOnlyList<DateOnly>? Dates,
     int? TimesInStage,
-    Guid? AfterActivityId);
+    Guid? AfterActivityId,
+    string? TaskKey = null);
 
 /// <summary>A schedule the plot follows, with its own day zero.</summary>
 public sealed record FollowedSchedule(short Slot, ScheduleDefinition Schedule, DateOnly DayZero);
@@ -103,11 +109,16 @@ public sealed record StageCount(
 /// <summary>The schedule stores that <see cref="FirstActivityId"/> comes before <see cref="ThenActivityId"/>, and the later work was recorded first (or alone).</summary>
 public sealed record OrderNote(Guid FirstActivityId, Guid ThenActivityId, DateOnly? FirstDay, DateOnly ThenDay);
 
+/// <param name="StageUnknown">
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - the works of this schedule that hold no day, no expectation and no stage (<see cref="ScheduleActivityDef.StageUnknown"/>):
+/// they ask no number (Asked null) and count only the records LINKED to them (a plan of that work completed with a record). Null when the schedule has none.
+/// </param>
 public sealed record ScheduleFollowResult(
     short Slot,
     Guid TemplateId,
     IReadOnlyList<StageCount> Stages,
-    IReadOnlyList<OrderNote> Order);
+    IReadOnlyList<OrderNote> Order,
+    StageCount? StageUnknown = null);
 
 /// <summary>A recognised record of work none of the followed schedules asks in that window. <see cref="RecordIndex"/> points into the caller's list.</summary>
 public sealed record OwnWorkItem(int RecordIndex, string StageName, IReadOnlyList<string> MatchedWords);

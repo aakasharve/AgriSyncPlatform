@@ -41,11 +41,23 @@ namespace ShramSafal.Application.Services;
 /// </list>
 /// Doses are not compared. No quantity, no amber, no "differed" - a record is yes or no (R33).
 /// </summary>
+/// <remarks>
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6, "नोंद and तुलना close the loop"; approved spec SM-12) - a plan made from a work of his own schedule
+/// and completed WITH a record counts that record against exactly that work (<see cref="ScheduleTaskLines.Links"/>; words only for the rest). A schedule in the task
+/// format counts its "after" and "when seen" works once their date is known, and keeps the rest as words under their stage or "stage unknown"
+/// (<see cref="ScheduleTaskLines.Lines"/>). An own schedule still being built is its OWN row (<see cref="OwnBuildingCompareDto"/>) counted in the मुख्य stages,
+/// which do not change; once made main it is a followed schedule like any other. A stage that ends on a sign stays open past its expected end until the next
+/// stage begins (<see cref="ScheduleDefinitionMapper.StageHolding"/>), as the stage line holds it. Cost: the farm's own works and their plans are read ONCE for the
+/// farm (none at all when it has no own work), the answers about signs once per plot-season that has own works, and each followed version in the task format
+/// once with its tasks.
+/// </remarks>
 public sealed class FarmCompareService(
     IShramSafalRepository repository,
     ScheduleRequirement requirement,
     IClock clock,
-    ILogPracticeReasonStore reasons)
+    ILogPracticeReasonStore reasons,
+    IOwnScheduleStore ownStore,
+    IScheduleFeedStore feedStore)
 {
     private static readonly string[] PartOrder = ["irrigation", "nutrition", "spray", "work"];
 
@@ -104,6 +116,10 @@ public sealed class FarmCompareService(
             }
         }
 
+        // slice 6: the farm's own works and the plans made from them (ONE read each, none without own work), each followed version in the task format with its
+        // tasks, and the answers about signs of each plot-season that has own works.
+        var loops = await LoopsAsync(farmId, plans, ct);
+
         var tasksByPlot = new Dictionary<Guid, IReadOnlyList<LogTask>>();
         foreach (var plan in plans.Where(p => p.Counts))
         {
@@ -118,7 +134,7 @@ public sealed class FarmCompareService(
 
         // Pass 2 (in memory): count, filter by what the reader may see, build each plot's answer with its own work still pending the money check.
         var drafts = plans
-            .Select(plan => Finish(plan, tasksByPlot.GetValueOrDefault(plan.PlotId) ?? [], logs, scope, visibility, callerUserId, today))
+            .Select(plan => Finish(plan, loops.Of(plan.PlotId), tasksByPlot.GetValueOrDefault(plan.PlotId) ?? [], logs, scope, visibility, callerUserId, today))
             .ToList();
 
         // ONE money-word check for every record whose words may be withheld (D-66): not his own, he does not hear wages.
@@ -163,6 +179,16 @@ public sealed class FarmCompareService(
             : null;
         var orderedStages = mainDef?.Stages.OrderBy(s => s.StartDay).ThenBy(s => s.EndDay).ToList() ?? [];
         var windows = mainDef is null ? new List<StageWindow>() : ScheduleFollowEngine.StageWindows(mainDef, mainDayZero).ToList();
+
+        // slice 6: a stage that ends on a sign stays open past its expected end until the next stage begins (the stage line's own rule): its window reaches today.
+        if (mainDef is not null && ScheduleDefinitionMapper.StageHolding(mainDef, mainDayZero, today) is { } holding)
+        {
+            var at = windows.FindIndex(w => w.Name == holding.Window.Name && w.From == holding.Window.From);
+            if (at >= 0 && holding.Window.To > windows[at].To)
+            {
+                windows[at] = holding.Window;
+            }
+        }
 
         var stages = windows
             .Select((w, i) =>
@@ -246,7 +272,7 @@ public sealed class FarmCompareService(
     }
 
     private static Draft Finish(
-        PlotPlan plan, IReadOnlyList<LogTask> tasks, IReadOnlyDictionary<Guid, DailyLog> logs,
+        PlotPlan plan, SeasonLoop loop, IReadOnlyList<LogTask> tasks, IReadOnlyDictionary<Guid, DailyLog> logs,
         FarmReadScope scope, RecordVisibility visibility, Guid callerUserId, DateOnly today)
     {
         var shell = new PlotCompareDto(
@@ -254,19 +280,36 @@ public sealed class FarmCompareService(
             plan.OrderedStages.Count == 0 ? null : plan.OrderedStages.Max(s => s.EndDay), plan.Stages, [], [], []);
         var mainDayZero = plan.MainDayZero.DayNumber;
 
+        var building = loop.Building(plan);
         if (!plan.Counts)
         {
             return new Draft(
-                shell with { Schedules = plan.Definitions.Select(d => Describe(d.Sub, d.Template, plan.Main, [], [])).ToList() },
+                shell with
+                {
+                    Schedules = plan.Definitions.Select(d => Describe(d.Sub, d.Template, plan.Main, [], [])).ToList(),
+                    OwnBuilding = building is null ? null : new OwnBuildingCompareDto(building.Count, new StageCompareCountsDto?[plan.Windows.Count], null),
+                },
                 [],
                 mainDayZero);
         }
 
-        var records = LoadRecords(tasks, logs);
+        // slice 6: what really happened to each own work (recorded, sign seen) and which record each completed plan names.
+        var logDays = logs.Values.ToDictionary(l => l.Id, l => l.LogDate);
+        var facts = ScheduleTaskLines.Facts(loop.Plans, logDays, loop.Events);
+        var links = ScheduleTaskLines.Links(loop.Plans, tasks, logDays);
+        var records = LoadRecords(tasks, logs, links);
         var recorded = records.Select(r => r.Work).ToList();
         var follow = plan.Definitions
-            .Select(d => new FollowedSchedule(d.Sub.Slot ?? -1, d.Def, d.Sub.ReferenceDate ?? plan.Season.StartDate))
+            .Select(d => new FollowedSchedule(d.Sub.Slot ?? -1, loop.WithTasks(d.Sub, d.Template, d.Def, d.Sub.ReferenceDate ?? plan.Season.StartDate, facts), d.Sub.ReferenceDate ?? plan.Season.StartDate))
             .ToList();
+        var ownDayZero = plan.Definitions.Select(d => d.Sub).Where(s => s.ReferenceDate is not null).OrderBy(s => s.Slot ?? short.MaxValue).FirstOrDefault()?.ReferenceDate
+            ?? plan.Season.StartDate;
+        if (building is not null)
+        {
+            var lines = ScheduleTaskLines.Lines(building, new HashSet<string>(), plan.OrderedStages, ownDayZero, facts, stageZeroMayBeOpen: true);
+            follow.Add(new FollowedSchedule(-2, new ScheduleDefinition(Guid.Empty, string.Empty, [], lines), ownDayZero));
+        }
+
         StageWindow? only = plan.OnlyIndex is { } at ? plan.Windows[at] : null;
         var full = ScheduleFollowEngine.Follow(follow, plan.Windows, recorded, today, only);
 
@@ -283,27 +326,7 @@ public sealed class FarmCompareService(
         for (var s = 0; s < plan.Definitions.Count; s++)
         {
             var (sub, template, def) = plan.Definitions[s];
-            var counts = new StageCompareCountsDto?[plan.Windows.Count];
-            var computed = full.Schedules[s].Stages;
-            if (plan.OnlyIndex is { } onlyAt)
-            {
-                // the engine counted ONE window: the one asked for
-                if (computed.Count > 0 && computed[0].State != StageState.Ahead)
-                {
-                    counts[onlyAt] = ToCounts(computed[0]);
-                }
-            }
-            else
-            {
-                // the engine counts every window, in the windows' own order: counts attach by position, never by the stage's name (P008)
-                for (var k = 0; k < computed.Count && k < counts.Length; k++)
-                {
-                    if (computed[k].State != StageState.Ahead)
-                    {
-                        counts[k] = ToCounts(computed[k]);
-                    }
-                }
-            }
+            var counts = CountsByStage(plan, full.Schedules[s].Stages);
 
             // An order note is kept only when it is the very same note without the records he may not see.
             var notes = full.Schedules[s].Order
@@ -317,7 +340,14 @@ public sealed class FarmCompareService(
                     n.ThenDay.DayNumber - plan.MainDayZero.DayNumber))
                 .ToList();
 
-            schedules.Add(Describe(sub, template, plan.Main, counts, notes));
+            schedules.Add(Describe(sub, template, plan.Main, counts, notes, full.Schedules[s].StageUnknown is { } unknown ? ToCounts(unknown) : null));
+        }
+
+        OwnBuildingCompareDto? ownRow = null;
+        if (building is not null)
+        {
+            var own = full.Schedules[plan.Definitions.Count];
+            ownRow = new OwnBuildingCompareDto(building.Count, CountsByStage(plan, own.Stages), own.StageUnknown is { } unknown ? ToCounts(unknown) : null);
         }
 
         var pendings = new List<Pending>();
@@ -331,7 +361,33 @@ public sealed class FarmCompareService(
             pendings.Add(new Pending(records[item.RecordIndex].Log!, records[item.RecordIndex], null, item));
         }
 
-        return new Draft(shell with { Schedules = schedules }, pendings, mainDayZero);
+        return new Draft(shell with { Schedules = schedules, OwnBuilding = ownRow }, pendings, mainDayZero);
+    }
+
+    /// <summary>One schedule's counts lined up with the plot's stages: by POSITION in the windows, never by the stage's name (P008); an ahead stage carries none.</summary>
+    private static StageCompareCountsDto?[] CountsByStage(PlotPlan plan, IReadOnlyList<StageCount> computed)
+    {
+        var counts = new StageCompareCountsDto?[plan.Windows.Count];
+        if (plan.OnlyIndex is { } onlyAt)
+        {
+            // the engine counted ONE window: the one asked for
+            if (computed.Count > 0 && computed[0].State != StageState.Ahead)
+            {
+                counts[onlyAt] = ToCounts(computed[0]);
+            }
+        }
+        else
+        {
+            for (var k = 0; k < computed.Count && k < counts.Length; k++)
+            {
+                if (computed[k].State != StageState.Ahead)
+                {
+                    counts[k] = ToCounts(computed[k]);
+                }
+            }
+        }
+
+        return counts;
     }
 
     private sealed record Loaded(RecordedWork Work, DailyLog? Log);
@@ -340,15 +396,112 @@ public sealed class FarmCompareService(
     /// This season's tasks and the days of their records. A task whose log is not on this farm's list falls back to the farm-local day it was
     /// recorded on and is never visible to a reader (no record to judge, so none to show).
     /// </summary>
-    private static List<Loaded> LoadRecords(IReadOnlyList<LogTask> tasks, IReadOnlyDictionary<Guid, DailyLog> logs) =>
+    private static List<Loaded> LoadRecords(
+        IReadOnlyList<LogTask> tasks, IReadOnlyDictionary<Guid, DailyLog> logs, IReadOnlyDictionary<Guid, string> links) =>
         tasks
             .OrderBy(t => t.OccurredAtUtc)
             .ThenBy(t => t.Id)
             .Select(t => logs.TryGetValue(t.DailyLogId, out var log)
                 ? new Loaded(new RecordedWork(t.ActivityType, log.LogDate, t.ExecutionStatus,
-                    log.CurrentVerificationStatus == VerificationStatus.Disputed), log)
-                : new Loaded(new RecordedWork(t.ActivityType, FarmLocalDay.From(t.OccurredAtUtc), t.ExecutionStatus), null))
+                    log.CurrentVerificationStatus == VerificationStatus.Disputed, links.GetValueOrDefault(t.Id)), log)
+                : new Loaded(new RecordedWork(t.ActivityType, FarmLocalDay.From(t.OccurredAtUtc), t.ExecutionStatus, ForTaskKey: links.GetValueOrDefault(t.Id)), null))
             .ToList();
+
+    /// <summary>slice 6: what the loop needs for the whole farm, read once (see the remarks on the class).</summary>
+    private async Task<FarmLoops> LoopsAsync(Guid farmId, IReadOnlyList<PlotPlan> plans, CancellationToken ct)
+    {
+        if (plans.Count == 0)
+        {
+            return FarmLoops.None;
+        }
+
+        var items = await ownStore.GetOfFarmsAsync([farmId], ct);
+        var plansOfItems = items.Count == 0 ? [] : await feedStore.GetPlansOfItemsAsync(items.Select(i => i.Id).ToList(), ct);
+
+        var versions = new Dictionary<Guid, ScheduleTemplate>();
+        foreach (var id in plans.SelectMany(p => p.Definitions).Where(d => d.Template.HasTaskFormat == true).Select(d => d.Template.Id).Distinct())
+        {
+            if (await repository.GetScheduleTemplateWithTasksByIdAsync(id, ct) is { } version)
+            {
+                versions[id] = version;
+            }
+        }
+
+        var seasons = new Dictionary<Guid, SeasonLoop>();
+        foreach (var plan in plans)
+        {
+            var mine = items.Where(i => i.PlotId == plan.PlotId && i.CropCycleId == plan.Season.CycleId && (Guid)i.FarmId == farmId).ToList();
+            var ids = mine.Select(i => i.Id).ToHashSet();
+            var events = mine.Count == 0 ? [] : await feedStore.GetEventsAsync(plan.PlotId, plan.Season.CycleId, ct);
+            seasons[plan.PlotId] = new SeasonLoop(
+                mine, plansOfItems.Where(p => p.OwnItemId is { } id && ids.Contains(id)).ToList(), events, versions);
+        }
+
+        return new FarmLoops(seasons, versions);
+    }
+
+    private sealed record FarmLoops(IReadOnlyDictionary<Guid, SeasonLoop> Seasons, IReadOnlyDictionary<Guid, ScheduleTemplate> Versions)
+    {
+        public static readonly FarmLoops None = new(new Dictionary<Guid, SeasonLoop>(), new Dictionary<Guid, ScheduleTemplate>());
+
+        public SeasonLoop Of(Guid plotId) => Seasons.GetValueOrDefault(plotId) ?? new SeasonLoop([], [], [], Versions);
+    }
+
+    /// <summary>One plot-season's own works, the plans made from them, the answers about their signs, and the farm's followed versions in the task format.</summary>
+    private sealed record SeasonLoop(
+        IReadOnlyList<OwnScheduleItem> Items,
+        IReadOnlyList<PlannedWork> Plans,
+        IReadOnlyList<ScheduleTaskEvent> Events,
+        IReadOnlyDictionary<Guid, ScheduleTemplate> Versions)
+    {
+        /// <summary>
+        /// The own schedule still being built, as task sources: its active works, when none of the schedules the plot follows was frozen from them (once made
+        /// main it is a followed schedule like any other). Null when there is none.
+        /// </summary>
+        public IReadOnlyList<ScheduleTaskSource>? Building(PlotPlan plan)
+        {
+            var active = Items.Where(i => i.State == OwnScheduleItemState.Active).ToList();
+            if (active.Count == 0)
+            {
+                return null;
+            }
+
+            var followed = plan.Definitions.Select(d => d.Template.Id).ToHashSet();
+            return Items.Any(i => i.MainVersionId is { } v && followed.Contains(v))
+                ? null
+                : active.Select(i => new ScheduleTaskSource(i.Id, i.Content)).ToList();
+        }
+
+        /// <summary>
+        /// A followed version in the task format, with its works added as lines: the works it already wrote as stored activities take their task key; the
+        /// others become lines of their own. Only a version frozen from HIS works (his own place) reads his plans' links and sign answers (their keys are its
+        /// keys); any other version counts its extra lines by words (a work taken from it is the next slice).
+        /// </summary>
+        public ScheduleDefinition WithTasks(
+            ScheduleSubscription sub, ScheduleTemplateDto template, ScheduleDefinition def, DateOnly dayZero, IReadOnlyDictionary<string, ScheduleTaskFacts> facts)
+        {
+            if (!Versions.TryGetValue(template.Id, out var version) || version.Tasks.Count == 0)
+            {
+                return def;
+            }
+
+            var his = sub.Origin == ScheduleOrigin.Own;
+            var keyOf = version.ProjectedTaskKeyByActivity();
+            var stages = version.Stages.OrderBy(s => s.StartDay).ThenBy(s => s.EndDay).ToList();
+            var extra = ScheduleTaskLines.Lines(
+                version.Tasks.Select(t => new ScheduleTaskSource(t.Id, t.Content)).ToList(),
+                keyOf.Values.ToHashSet(StringComparer.Ordinal),
+                stages,
+                dayZero,
+                his ? facts : new Dictionary<string, ScheduleTaskFacts>(),
+                stageZeroMayBeOpen: his);
+            var activities = def.Activities
+                .Select(a => his && keyOf.TryGetValue(a.ActivityId, out var key) ? a with { TaskKey = key } : a)
+                .Concat(his ? extra : extra.Select(a => a with { TaskKey = null }))
+                .ToList();
+            return def with { Activities = activities };
+        }
+    }
 
     private static bool MaySee(DailyLog? log, RecordVisibility visibility, FarmReadScope scope, Guid readerUserId) =>
         log is not null
@@ -423,7 +576,7 @@ public sealed class FarmCompareService(
 
     private static ScheduleCompareDto Describe(
         ScheduleSubscription sub, ScheduleTemplateDto template, ScheduleSubscription? main,
-        IReadOnlyList<StageCompareCountsDto?> stages, IReadOnlyList<OrderNoteDto> order)
+        IReadOnlyList<StageCompareCountsDto?> stages, IReadOnlyList<OrderNoteDto> order, StageCompareCountsDto? stageUnknown = null)
     {
         var isOwn = sub.Origin == ScheduleOrigin.Own;
         return new ScheduleCompareDto(
@@ -435,7 +588,8 @@ public sealed class FarmCompareService(
             (sub.Origin ?? ScheduleOrigin.Outside).ToString(),
             main is not null && sub.Id == main.Id,
             stages,
-            order);
+            order,
+            stageUnknown);
     }
 
     private static StageCompareCountsDto ToCounts(StageCount count)

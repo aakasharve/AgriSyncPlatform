@@ -26,12 +26,16 @@ import type {
     PlannedWorkStatusName, ReminderCategoryName, ScheduleSignAnswerName,
 } from '../../../infrastructure/storage/plannedWorkRow';
 import type { PlannedWorkVerb } from './plannedWorkCommands';
+import { ownItemIdFor } from '../../scheduler/ownSchedule/ownWorkPlan';
 
 /** The queue statuses that ARE live local intent: waiting, being sent, or retry-capped but still his statement. */
 const LIVE_INTENT_STATUSES: ReadonlySet<MutationQueueStatus> = new Set<MutationQueueStatus>(['PENDING', 'SENDING', 'FAILED']);
 
 /** A change the server refused and parked on the conflict page. */
 const PARKED: MutationQueueStatus = 'REJECTED_USER_REVIEW';
+
+/** A change the server applied (its row is kept in the outbox until the pull brings the server's own row). */
+const ANSWERED: MutationQueueStatus = 'APPLIED';
 
 export interface LocalPlannedWork {
     id: string;
@@ -93,6 +97,8 @@ export interface LocalPlannedWork {
     expectedTo?: string | null;
     waiting?: boolean | null;
     signAnswer?: ScheduleSignAnswerName | null;
+    /** Schedule mechanism slice 6 - the server's code for a refused plan of an own work (the work says why in words); null otherwise. */
+    refusedCode?: string | null;
 }
 
 export interface LocalPlannedWorkPlot {
@@ -281,5 +287,77 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
         }
     }
 
+    await addQueuedOwnPlans(db, farmId, items);
     return [...items.values()].filter(item => item.farmId === farmId);
+}
+
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6, P10) - a plan of an own work queued on this phone ("plan", then who) shows at once in the plan
+ * list, labelled "फोनवर ठेवलं", until the server's plan comes down; a refused one (parked) is shown refused with its code, never as open work. The words are
+ * the own work's name as this phone knows it (nothing is invented); a work another phone already planned is the server's plan, not a second one.
+ */
+async function addQueuedOwnPlans(db: ReturnType<typeof getDatabase>, farmId: string, items: Map<string, LocalPlannedWork>): Promise<void> {
+    const rows = (await db.mutationQueue
+        .where('mutationType').equals(SyncMutationName.OwnscheduleItemPlan)
+        .filter(row => LIVE_INTENT_STATUSES.has(row.status) || row.status === PARKED || row.status === ANSWERED)
+        .toArray())
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0));
+    for (const row of rows) {
+        const p = (row.payload ?? {}) as Record<string, unknown>;
+        const id = str(p.plannedWorkId);
+        const plotId = str(p.plotId);
+        const cropCycleId = str(p.cropCycleId);
+        const taskKey = str(p.taskKey);
+        if (p.farmId !== farmId || !id || !plotId || !cropCycleId || !taskKey || items.has(id)) continue;
+        const ownItemId = ownItemIdFor(cropCycleId, taskKey);
+        const parked = row.status === PARKED;
+        // Answered by the server but its plan not pulled yet: still his plan (never "plan it" again in that gap), no longer waiting on the phone.
+        const answered = row.status === ANSWERED;
+        if (!parked && [...items.values()].some(i => i.ownItemId === ownItemId && i.status !== 'Done' && i.status !== 'Cancelled')) continue;
+        const assignee = str(p.assigneeUserId);
+        items.set(id, {
+            id,
+            farmId,
+            title: (await db.ownScheduleItems.get(ownItemId))?.task.name ?? (await queuedOwnWorkName(db, cropCycleId, taskKey)) ?? '',
+            scope: 'Plot',
+            plotIds: [plotId],
+            plannedDate: null,
+            looseWhen: null,
+            plannedTime: null,
+            assigneeUserId: assignee,
+            crewText: null,
+            expectedHeadcount: null,
+            quantityText: null,
+            payMode: null,
+            note: str(p.note),
+            status: assignee ? 'Assigned' : 'Open',
+            sourceKind: null,
+            sourcePlotId: null,
+            sourceDailyLogId: null,
+            recordedOn: str(p.recordedOn) ?? '',
+            createdByUserId: null,
+            modifiedAtUtc: null,
+            source: 'queue',
+            keptOnPhone: !parked && !answered,
+            pendingSteps: parked || answered ? [] : ['create'],
+            refused: parked,
+            refusedCode: parked ? row.errorCode ?? null : null,
+            plots: [{ plotId, status: 'Pending', confirmationState: null }],
+            confirmationState: null,
+            ownItemId,
+            scheduleTaskKey: taskKey,
+            occurrence: null,
+        });
+    }
+}
+
+/** The name of an own work saved on this phone and not yet answered (its newest queued save), or null. */
+async function queuedOwnWorkName(db: ReturnType<typeof getDatabase>, cropCycleId: string, taskKey: string): Promise<string | null> {
+    const saves = await db.mutationQueue.where('mutationType').equals(SyncMutationName.OwnscheduleItemSave).toArray();
+    const mine = saves
+        .filter(r => (r.payload as { cropCycleId?: unknown } | null)?.cropCycleId === cropCycleId
+            && (r.payload as { task?: { taskKey?: unknown } } | null)?.task?.taskKey === taskKey)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const name = (mine[0]?.payload as { task?: { name?: unknown } } | undefined)?.task?.name;
+    return typeof name === 'string' && name.length > 0 ? name : null;
 }

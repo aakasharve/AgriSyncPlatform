@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ShramSafal.Application.Contracts.Dtos;
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (lane CMP-D2; D-68, D-83 = 1, D-86 note / R33, R34, R12, R10, R28, P4, P11)
@@ -31,7 +33,20 @@ public sealed record PlotCompareDto(
     IReadOnlyList<CompareStageDto> Stages,
     IReadOnlyList<ScheduleCompareDto> Schedules,
     IReadOnlyList<OwnWorkDto> OwnWork,
-    IReadOnlyList<NotRecognisedDto> NotRecognised);
+    IReadOnlyList<NotRecognisedDto> NotRecognised,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OwnBuildingCompareDto? OwnBuilding = null);
+
+/// <summary>
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6; approved spec SM-12) - the plot's OWN schedule while it is still being built (its works saved one at
+/// a time, not yet made main), as its own row. Counted by the same engine in the मुख्य schedule's stages (the stage line does not change), from the server only.
+/// <see cref="Works"/> is how many works it holds now. <see cref="Stages"/> lines up with the plot's stages one for one (null = no numbers, as for any schedule);
+/// <see cref="StageUnknown"/> holds the works that have no day, no expectation and no stage yet (no number asked; only records linked to them count), or null.
+/// Absent (not written) when the plot has no own schedule being built, so a phone that does not know it reads the answer it always read.
+/// </summary>
+public sealed record OwnBuildingCompareDto(
+    int Works,
+    IReadOnlyList<StageCompareCountsDto?> Stages,
+    StageCompareCountsDto? StageUnknown);
 
 /// <summary>One stage of the मुख्य schedule: <c>passed | current | ahead</c>, its days on the plot's count, and the days left (current only).</summary>
 public sealed record CompareStageDto(string Name, string State, int StartDay, int EndDay, int? DaysLeft);
@@ -50,7 +65,9 @@ public sealed record ScheduleCompareDto(
     string Origin,
     bool IsMain,
     IReadOnlyList<StageCompareCountsDto?> Stages,
-    IReadOnlyList<OrderNoteDto> Order);
+    IReadOnlyList<OrderNoteDto> Order,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - a schedule in the task format: its works with no day, no expectation and no stage. Not written when none.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StageCompareCountsDto? StageUnknown = null);
 
 /// <summary>
 /// One schedule's numbers in one stage. <see cref="Asked"/> / <see cref="NotYet"/> / <see cref="Done"/> total ONLY the works whose days the schedule

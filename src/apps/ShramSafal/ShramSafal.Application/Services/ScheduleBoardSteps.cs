@@ -4,6 +4,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Crops;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
 
@@ -56,6 +57,33 @@ public sealed record BoardScheduleSteps(Guid SubscriptionId, string ScheduleName
 public sealed class BoardScheduleSource
 {
     public static readonly BoardScheduleSource None = new([], new Dictionary<Guid, ScheduleTemplateDto>(), []);
+
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - his own versions in the task format (with their tasks) and the plans made from his own works:
+    // a step written from a work carries that work's key, and a record a plan of the work was completed with counts for exactly that step. Empty = today's board.
+    private IReadOnlyDictionary<Guid, ScheduleTemplate> ownVersions = new Dictionary<Guid, ScheduleTemplate>();
+    private IReadOnlyList<OwnScheduleItem> ownItems = [];
+    private IReadOnlyList<PlannedWork> ownPlans = [];
+
+    internal BoardScheduleSource WithLoop(
+        IReadOnlyDictionary<Guid, ScheduleTemplate> versions, IReadOnlyList<OwnScheduleItem> items, IReadOnlyList<PlannedWork> plans)
+    {
+        ownVersions = versions;
+        ownItems = items;
+        ownPlans = plans;
+        return this;
+    }
+
+    /// <summary>
+    /// slice 6: which recorded task of this plot-season each plan made from his own works was completed with (log task id -> the work's key). Empty when he
+    /// has no own work there.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> LinksFor(Guid plotId, Guid cropCycleId, IReadOnlyList<LogTask> tasks, IReadOnlyDictionary<Guid, DateOnly> logDays)
+    {
+        var ids = ownItems.Where(i => i.PlotId == plotId && i.CropCycleId == cropCycleId).Select(i => i.Id).ToHashSet();
+        return ids.Count == 0
+            ? new Dictionary<Guid, string>()
+            : ScheduleTaskLines.Links(ownPlans.Where(p => p.OwnItemId is { } id && ids.Contains(id)), tasks, logDays);
+    }
 
     private readonly IReadOnlyList<ScheduleSubscription> active;
     private readonly IReadOnlyDictionary<Guid, ScheduleTemplateDto> templates;
@@ -135,6 +163,10 @@ public sealed class BoardScheduleSource
 
             var definition = ScheduleDefinitionMapper.From(template);
             var dayZero = sub.ReferenceDate ?? cycle.StartDate;
+            // slice 6: a step his own version wrote from one of his works carries the work's key (the plan of that work and this step are one line).
+            var keyOf = sub.Origin == ScheduleOrigin.Own && ownVersions.TryGetValue(template.Id, out var version)
+                ? version.ProjectedTaskKeyByActivity()
+                : new Dictionary<Guid, string>();
             var steps = new List<BoardStep>();
             foreach (var expected in ScheduleFollowEngine.Expand(definition, dayZero))
             {
@@ -151,7 +183,8 @@ public sealed class BoardScheduleSource
                         expected.NutrientKey,
                         expected.OnceOnly,
                         window?.From,
-                        window?.To),
+                        window?.To,
+                        keyOf.GetValueOrDefault(expected.ActivityId)),
                     sub.Id,
                     template.Name,
                     expected.ActivityId,
@@ -194,7 +227,10 @@ public sealed class BoardScheduleSource
 public sealed class ScheduleBoardSteps(
     IShramSafalRepository repository,
     GetScheduleTemplatesHandler templates,
-    IScheduleStepMoveStore moves)
+    IScheduleStepMoveStore moves,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - optional so every existing construction compiles; without them the board is today's.
+    IOwnScheduleStore? ownStore = null,
+    IScheduleFeedStore? feedStore = null)
 {
     public async Task<BoardScheduleSource> LoadAsync(
         IReadOnlyCollection<Guid> farmIds, Guid callerUserId, CancellationToken ct = default)
@@ -225,6 +261,27 @@ public sealed class ScheduleBoardSteps(
                 active.Select(s => s.FarmId.Value).Distinct().ToList(), DateTime.UnixEpoch, ct))
             .DistinctBy(f => (Guid)f.Id)
             .ToDictionary(f => (Guid)f.Id, f => f.OwnerUserId.Value);
-        return new BoardScheduleSource(active, byId, rows, farmOwners);
+        var source = new BoardScheduleSource(active, byId, rows, farmOwners);
+
+        // slice 6: his own versions in the task format, and the plans made from his own works (ONE read each; none when no plot follows his own version).
+        var ownFollowed = active.Where(s => s.Origin == ScheduleOrigin.Own && byId.TryGetValue(s.ScheduleTemplateId.Value, out var t) && t.HasTaskFormat == true)
+            .Select(s => s.ScheduleTemplateId.Value).Distinct().ToList();
+        if (ownStore is null || feedStore is null || ownFollowed.Count == 0)
+        {
+            return source;
+        }
+
+        var versions = new Dictionary<Guid, ScheduleTemplate>();
+        foreach (var id in ownFollowed)
+        {
+            if (await repository.GetScheduleTemplateWithTasksByIdAsync(id, ct) is { } version)
+            {
+                versions[id] = version;
+            }
+        }
+
+        var items = await ownStore.GetOfFarmsAsync(active.Select(s => s.FarmId.Value).Distinct().ToList(), ct);
+        var plans = items.Count == 0 ? [] : await feedStore.GetPlansOfItemsAsync(items.Select(i => i.Id).ToList(), ct);
+        return source.WithLoop(versions, items, plans);
     }
 }
