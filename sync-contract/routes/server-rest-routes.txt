@@ -91,8 +91,10 @@ GET /shramsafal/reference/deviation-reason-codes
 GET /shramsafal/reference/input-library
 GET /shramsafal/reference/schedule-templates
 GET /shramsafal/reference/schedule-templates/{id:guid}
+GET /shramsafal/reference/schedule-templates/{id:guid}/tasks
 GET /shramsafal/reports/farm-week/{farmId:guid}
 GET /shramsafal/schedule-templates/checks/waiting
+GET /shramsafal/schedule-templates/{id:guid}/check-view
 GET /shramsafal/schedule-templates/{rootId}/lineage
 GET /shramsafal/security/tenant-dek
 GET /shramsafal/test-instances
@@ -205,6 +207,7 @@ POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/migrate
 POST /shramsafal/question-events
 POST /shramsafal/schedule-templates
 POST /shramsafal/schedule-templates/import
+POST /shramsafal/schedule-templates/import/format-2
 POST /shramsafal/schedule-templates/{id:guid}/check
 POST /shramsafal/schedule-templates/{id}/clone
 POST /shramsafal/schedule-templates/{id}/edit
