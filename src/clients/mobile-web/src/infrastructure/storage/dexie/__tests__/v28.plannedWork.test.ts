@@ -59,7 +59,7 @@ describe("Dexie v28 - the farm's tasks and reminders", () => {
         expect(db.verno).toBeGreaterThanOrEqual(28);
         const store = db.table('plannedWork');
         expect(store.schema.primKey.name).toBe('id');
-        expect(store.schema.indexes.map(i => i.name)).toEqual(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc']);
+        expect(store.schema.indexes.map(i => i.name)).toEqual(expect.arrayContaining(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc'])); // v31 (schedule slice 5) adds ownItemId
         // v27 (lane L8b-2) keeps its store, unchanged.
         expect(db.table('scheduleSubscriptions').schema.indexes.map(i => i.name)).toEqual(['farmId', 'plotId', 'cropCycleId', 'state']);
         db.close();

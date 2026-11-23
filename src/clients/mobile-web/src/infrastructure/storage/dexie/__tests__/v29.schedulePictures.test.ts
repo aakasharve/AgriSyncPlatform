@@ -62,7 +62,7 @@ describe('Dexie v29 - the pictures of schedule makers', () => {
         expect(store.schema.primKey.name).toBe('pictureId');
         expect(store.schema.indexes.map(i => i.name)).toEqual(['kind', 'fetchedAt']);
         // v28 (lane L8c-1) keeps its store, unchanged.
-        expect(db.table('plannedWork').schema.indexes.map(i => i.name)).toEqual(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc']);
+        expect(db.table('plannedWork').schema.indexes.map(i => i.name)).toEqual(expect.arrayContaining(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc'])); // v31 (schedule slice 5) adds ownItemId
         db.close();
     });
 

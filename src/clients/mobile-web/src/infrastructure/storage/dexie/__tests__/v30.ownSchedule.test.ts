@@ -56,9 +56,9 @@ afterEach(async () => { await Dexie.delete(NAME); });
 
 describe('Dexie v30 - a plot-season own schedule (server cache)', () => {
     it('is the current version and declares the two stores with their keys', () => {
-        expect(DATABASE_VERSION).toBe(30);
+        expect(DATABASE_VERSION).toBeGreaterThanOrEqual(30); // v31 (schedule slice 5) follows; its own test pins the number
         const db = new AgriLogDatabase(NAME);
-        expect(db.verno).toBe(30);
+        expect(db.verno).toBeGreaterThanOrEqual(30);
         const items = db.table('ownScheduleItems');
         expect(items.schema.primKey.name).toBe('id');
         expect(items.schema.indexes.map(i => i.name)).toEqual(['farmId', 'plotId', 'cropCycleId', '[cropCycleId+taskKey]', 'state']);
@@ -82,8 +82,8 @@ describe('Dexie v30 - a plot-season own schedule (server cache)', () => {
 
         const db = new AgriLogDatabase(NAME);
         await db.open();
-        expect(db.verno).toBe(30);
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'ownScheduleItemRevisions', 'ownScheduleItems'].sort());
+        expect(db.verno).toBeGreaterThanOrEqual(30);
+        expect(db.tables.map(t => t.name)).toEqual(expect.arrayContaining([...before, 'ownScheduleItemRevisions', 'ownScheduleItems']));
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect((await db.plannedWork.get('task-1'))?.status).toBe('Open');
         expect(await db.mutationQueue.count()).toBe(1);

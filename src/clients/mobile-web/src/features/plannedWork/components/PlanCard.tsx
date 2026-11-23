@@ -15,6 +15,9 @@
  * and reads no role or authority). It calls `openApprovalReview` with the newest linked record the one list still holds (or none), and that is all:
  * the card never approves or doubts anything; the one review sheet does.
  *
+ * Schedule mechanism slice 5: a plan made from the farmer's own schedule (`ownItemId`) also carries "माझ्या शेड्यूलमधून", its waiting state and the day it was
+ * expected, and for a "when seen" work the question about its sign with three answers (ScheduleFeedLines). Every other card is unchanged.
+ *
  * Marathi mode shows Marathi only and English mode English only (names through `shared/names/namesIn`).
  */
 import React from 'react';
@@ -27,9 +30,13 @@ import { parkedWords, type ParkedStep } from '../data/plannedWorkParked';
 import { crewLine, isReminderTask, trailStage, TRAIL_STATUSES } from '../planCardModel';
 import { whenView } from '../planDates';
 import { plannedWorkWords } from '../plannedWorkWords';
+import { ScheduleFeedLines } from './ScheduleFeedLines';
 
 const MR_FONT = "'Noto Sans Devanagari', sans-serif";
 const EN_FONT = "'DM Sans', sans-serif";
+
+/** The phone's own day as YYYY-MM-DD (the farm-local day an answer about a sign is given on). */
+const localDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const fontFor = (language: string | null | undefined): string => (language === 'en' ? EN_FONT : MR_FONT);
 
@@ -142,6 +149,10 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                 <p className="m-0 mt-1 text-[12px] font-bold text-stone-600" data-testid="plan-card-source">
                     {[words.spokenFrom, task.sourcePlotId ? plotNames?.get(task.sourcePlotId) : null, recordedDay].filter((x): x is string => !!x).join(' · ')}
                 </p>
+            )}
+            {task.ownItemId && (
+                // Schedule mechanism slice 5: a plan made from his own schedule says so, why it waits, the day it was expected, and asks about a sign.
+                <ScheduleFeedLines task={task} language={language} today={localDay(today)} />
             )}
             {crew && <p className="m-0 mt-1 text-[13px] font-extrabold text-stone-800" data-testid="plan-card-crew">{crew}</p>}
             {details.length > 0 && (

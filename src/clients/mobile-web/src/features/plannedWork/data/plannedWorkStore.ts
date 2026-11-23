@@ -23,7 +23,7 @@ import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieD
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import type {
     PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName, PlannedWorkSourceKindName,
-    PlannedWorkStatusName, ReminderCategoryName,
+    PlannedWorkStatusName, ReminderCategoryName, ScheduleSignAnswerName,
 } from '../../../infrastructure/storage/plannedWorkRow';
 import type { PlannedWorkVerb } from './plannedWorkCommands';
 
@@ -85,6 +85,14 @@ export interface LocalPlannedWork {
     makerAlwaysShown?: boolean | null;
     /** Lane REM-1 (D-84 = 1) - the card says: made from a record kept for chosen people, it stays with that record's people. */
     fromChosenPeopleRecord?: boolean | null;
+    /** Schedule mechanism slice 5 - a plan made from his own schedule: its own work, key, occurrence, EXPECTED window, waiting state and sign answer. From the server only. */
+    ownItemId?: string | null;
+    scheduleTaskKey?: string | null;
+    occurrence?: number | null;
+    expectedFrom?: string | null;
+    expectedTo?: string | null;
+    waiting?: boolean | null;
+    signAnswer?: ScheduleSignAnswerName | null;
 }
 
 export interface LocalPlannedWorkPlot {
@@ -149,6 +157,17 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         wordsWithheld: row.wordsWithheld ?? null,
         makerAlwaysShown: row.makerAlwaysShown ?? null,
         fromChosenPeopleRecord: row.fromChosenPeopleRecord ?? null,
+        ...(row.ownItemId
+            ? {
+                ownItemId: row.ownItemId,
+                scheduleTaskKey: row.scheduleTaskKey ?? null,
+                occurrence: row.occurrence ?? null,
+                expectedFrom: row.expectedFrom ?? null,
+                expectedTo: row.expectedTo ?? null,
+                waiting: row.waiting ?? null,
+                signAnswer: row.signAnswer ?? null,
+            }
+            : {}),
     };
 }
 
