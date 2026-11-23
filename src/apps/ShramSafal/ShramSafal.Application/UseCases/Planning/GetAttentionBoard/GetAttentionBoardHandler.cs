@@ -149,7 +149,11 @@ public sealed class GetAttentionBoardHandler(
                     if (plotSchedules.Any(sch => sch.Steps.Any(st => st.Step.PlannedDate <= today || st.OriginalDate <= today)) || local.Any(p => p.PlannedDate <= today))
                     {
                         var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
-                        var recorded = ToRecordedWork(executed, logFacts);
+                        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - a record a plan of his own work was completed with counts for
+                        // exactly that work's step (the plan and its step are one line); words decide only for the rest.
+                        var links = scheduleSource.LinksFor(
+                            plot.Id, latestCycle.Id, executed.ToList(), logFacts.ToDictionary(f => f.Key, f => f.Value.WorkDate));
+                        var recorded = ToRecordedWork(executed, logFacts, links);
 
                         // Proof ("शेवटची फवारणी ‹N› दिवसांपूर्वी") is read only from records this reader may see (PRV): a record kept from him
                         // clears a step for him, but its day never reaches him.
@@ -446,11 +450,12 @@ public sealed class GetAttentionBoardHandler(
     /// </summary>
     private static List<RecordedWork> ToRecordedWork(
         IEnumerable<LogTask> executed,
-        IReadOnlyDictionary<Guid, (DateOnly WorkDate, bool Disputed, Guid OperatorUserId)> logFacts) =>
+        IReadOnlyDictionary<Guid, (DateOnly WorkDate, bool Disputed, Guid OperatorUserId)> logFacts,
+        IReadOnlyDictionary<Guid, string>? links = null) =>
         executed
             .Select(t => logFacts.TryGetValue(t.DailyLogId, out var f)
-                ? new RecordedWork(t.ActivityType, f.WorkDate, t.ExecutionStatus, f.Disputed)
-                : new RecordedWork(t.ActivityType, FarmLocalDay.From(t.OccurredAtUtc), t.ExecutionStatus))
+                ? new RecordedWork(t.ActivityType, f.WorkDate, t.ExecutionStatus, f.Disputed, links?.GetValueOrDefault(t.Id))
+                : new RecordedWork(t.ActivityType, FarmLocalDay.From(t.OccurredAtUtc), t.ExecutionStatus, ForTaskKey: links?.GetValueOrDefault(t.Id)))
             .ToList();
 
     private async Task<Dictionary<Guid, int>> GetMissingTestCountsByPlotAsync(

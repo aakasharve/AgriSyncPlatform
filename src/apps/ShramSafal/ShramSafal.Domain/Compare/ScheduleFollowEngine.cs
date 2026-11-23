@@ -58,6 +58,11 @@ public static class ScheduleFollowEngine
         var plan = new List<StageActivityPlan>();
         foreach (var activity in schedule.Activities)
         {
+            if (activity.StageUnknown)
+            {
+                continue; // slice 6: a work with no day, no expectation and no stage sits in no window
+            }
+
             if (HasStoredDays(activity))
             {
                 var dates = StoredDates(activity, dayZero).Where(d => d >= window.From && d <= window.To).ToList();
@@ -68,7 +73,7 @@ public static class ScheduleFollowEngine
 
                 plan.Add(new StageActivityPlan(
                     activity.ActivityId, activity.Part!, activity.Title, activity.OperationKey,
-                    activity.FrequencyMode, activity.IntervalDays, dates, dates.Count, activity.AfterActivityId));
+                    activity.FrequencyMode, activity.IntervalDays, dates, dates.Count, activity.AfterActivityId, activity.TaskKey));
             }
             else
             {
@@ -77,7 +82,7 @@ public static class ScheduleFollowEngine
                 {
                     plan.Add(new StageActivityPlan(
                         activity.ActivityId, activity.Part ?? string.Empty, activity.Title, activity.OperationKey,
-                        activity.FrequencyMode, activity.IntervalDays, null, null, activity.AfterActivityId));
+                        activity.FrequencyMode, activity.IntervalDays, null, null, activity.AfterActivityId, activity.TaskKey));
                 }
             }
         }
@@ -99,8 +104,16 @@ public static class ScheduleFollowEngine
         var own = new List<OwnWorkItem>();
         var notRecognised = new List<NotRecognisedItem>();
 
-        foreach (var window in counted)
+        // slice 6: where each LINKED record counts, per schedule - the window that holds the line of its work (by key): the one holding the record's own day
+        // when the line is there too, else the earliest window with that line. Once per schedule, never in two windows (a repeating line spans several).
+        var linkedRecords = records
+            .Where(r => r.Work.ForTaskKey is not null && r.Work.WorkDate <= today && ScheduledWorkMatcher.CountsAsDone(r.Work))
+            .ToList();
+        var linkTarget = followed.Select(f => LinkTargets(f, counted, linkedRecords)).ToList();
+
+        for (var w = 0; w < counted.Count; w++)
         {
+            var window = counted[w];
             var state = window.To < today ? StageState.Passed : window.From <= today ? StageState.Current : StageState.Ahead;
             int? daysLeft = state == StageState.Current ? window.To.DayNumber - today.DayNumber : null;
 
@@ -124,7 +137,8 @@ public static class ScheduleFollowEngine
 
                 if (state != StageState.Ahead)
                 {
-                    Place(lines, done, said, anyLineAsks);
+                    var linkedHere = linkedRecords.Where(r => linkTarget[s].TryGetValue(r.Index, out var at) && at == w).ToList();
+                    Place(lines, KeysOf(f.Schedule), done, linkedHere, said, anyLineAsks);
                 }
 
                 perSchedule[s].Add(Total(window.Name, state, daysLeft, lines));
@@ -132,11 +146,16 @@ public static class ScheduleFollowEngine
 
             foreach (var r in done)
             {
+                if (anyLineAsks[r.Index])
+                {
+                    continue; // a schedule asks it (by its words, or by the link to its work)
+                }
+
                 if (r.Identity is null)
                 {
                     notRecognised.Add(new NotRecognisedItem(r.Index, window.Name));
                 }
-                else if (!anyLineAsks[r.Index])
+                else
                 {
                     own.Add(new OwnWorkItem(r.Index, window.Name, r.Identity.MatchedWords));
                 }
@@ -147,7 +166,8 @@ public static class ScheduleFollowEngine
         for (var s = 0; s < followed.Count; s++)
         {
             var f = followed[s];
-            results.Add(new ScheduleFollowResult(f.Slot, f.Schedule.TemplateId, perSchedule[s], OrderNotes(f.Schedule, records, today)));
+            results.Add(new ScheduleFollowResult(
+                f.Slot, f.Schedule.TemplateId, perSchedule[s], OrderNotes(f.Schedule, records, today), StageUnknownCount(f.Schedule, records, today)));
         }
 
         return new PlotFollowResult(results, own, notRecognised);
@@ -219,9 +239,110 @@ public static class ScheduleFollowEngine
              .OrderBy(l => l.Plan.ActivityId)
              .ToList();
 
-    private static void Place(List<Line> lines, List<Rec> done, List<Rec> said, bool[] anyLineAsks)
+    /// <summary>slice 6: for one schedule, the window (index into <paramref name="windows"/>) each linked record counts in; a record whose work this schedule does not hold is absent.</summary>
+    private static Dictionary<int, int> LinkTargets(FollowedSchedule f, IReadOnlyList<StageWindow> windows, IReadOnlyList<Rec> linkedRecords)
     {
-        var placeable = done.Where(r => r.Identity is not null).ToList();
+        var target = new Dictionary<int, int>();
+        if (linkedRecords.Count == 0)
+        {
+            return target;
+        }
+
+        var keysByWindow = windows
+            .Select(window => StagePlan(f.Schedule, f.DayZero, window).Select(p => p.TaskKey).Where(k => k is not null).ToHashSet(StringComparer.Ordinal))
+            .ToList();
+        foreach (var r in linkedRecords)
+        {
+            var key = r.Work.ForTaskKey!;
+            var own = -1;
+            var first = -1;
+            for (var i = 0; i < windows.Count; i++)
+            {
+                if (!keysByWindow[i].Contains(key))
+                {
+                    continue;
+                }
+
+                if (first < 0)
+                {
+                    first = i;
+                }
+
+                if (r.Work.WorkDate >= windows[i].From && r.Work.WorkDate <= windows[i].To)
+                {
+                    own = i;
+                    break;
+                }
+            }
+
+            if ((own >= 0 ? own : first) is var at && at >= 0)
+            {
+                target[r.Index] = at;
+            }
+        }
+
+        return target;
+    }
+
+    private static IReadOnlySet<string> KeysOf(ScheduleDefinition schedule) =>
+        schedule.Activities.Select(a => a.TaskKey).Where(k => k is not null).Select(k => k!).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 6) - the works with no day, no expectation and no stage: no number is asked (P4), and each counts
+    /// only the records LINKED to it that count as done and were made by today. Null when the schedule has no such work.
+    /// </summary>
+    private static StageCount? StageUnknownCount(ScheduleDefinition schedule, List<Rec> records, DateOnly today)
+    {
+        var unknown = schedule.Activities.Where(a => a.StageUnknown).ToList();
+        if (unknown.Count == 0)
+        {
+            return null;
+        }
+
+        var counts = unknown
+            .Select(a => new ActivityCount(
+                a.ActivityId,
+                a.Part ?? string.Empty,
+                a.Title,
+                null,
+                a.TaskKey is null
+                    ? 0
+                    : records.Count(r => string.Equals(r.Work.ForTaskKey, a.TaskKey, StringComparison.Ordinal)
+                        && r.Work.WorkDate <= today && ScheduledWorkMatcher.CountsAsDone(r.Work)),
+                null,
+                0,
+                0))
+            .ToList();
+        return new StageCount(string.Empty, StageState.Current, null, null, null, null, counts);
+    }
+
+    private static void Place(List<Line> lines, IReadOnlySet<string> scheduleKeys, List<Rec> done, List<Rec> linkedByDay, List<Rec> said, bool[] anyLineAsks)
+    {
+        // slice 6 - the explicit link first: a record linked to a work of THIS schedule is that work's, whatever its words (even words nobody can read) and
+        // whatever its day. It counts on that work's line in the window that holds the line, once, and never on another line of this schedule by its words.
+        var linked = new HashSet<int>();
+        foreach (var r in done.Where(r => r.Work.ForTaskKey is { } key && scheduleKeys.Contains(key)))
+        {
+            linked.Add(r.Index);
+            anyLineAsks[r.Index] = true; // a work of his schedule, never "own work" of this window
+        }
+
+        var lineKeys = lines.Select(l => l.Plan.TaskKey).Where(k => k is not null).ToHashSet(StringComparer.Ordinal);
+        foreach (var r in linkedByDay.Where(r => lineKeys.Contains(r.Work.ForTaskKey!)).OrderBy(r => r.Work.WorkDate).ThenBy(r => r.Index))
+        {
+            var line = lines.First(l => string.Equals(l.Plan.TaskKey, r.Work.ForTaskKey, StringComparison.Ordinal));
+
+            if (!line.Stored || line.Left > 0)
+            {
+                line.Done++;
+            }
+            else
+            {
+                line.More++;
+            }
+        }
+
+        var placeable = done.Where(r => r.Identity is not null && !linked.Contains(r.Index)).ToList();
         var ordered = placeable.Where(r => IsKeyed(r.Identity!)).OrderBy(r => r.Work.WorkDate).ThenBy(r => r.Index)
             .Concat(placeable.Where(r => !IsKeyed(r.Identity!)).OrderBy(r => r.Work.WorkDate).ThenBy(r => r.Index));
 
@@ -254,7 +375,7 @@ public static class ScheduleFollowEngine
         }
 
         // "said not done": per same-work line, capped at what that line has not yet
-        foreach (var r in said.Where(r => r.Identity is not null))
+        foreach (var r in said.Where(r => r.Identity is not null && !(r.Work.ForTaskKey is { } key && scheduleKeys.Contains(key))))
         {
             var target = Candidates(lines, r.Identity!)
                 .Where(l => l.Stored && l.Left - l.Said > 0)
