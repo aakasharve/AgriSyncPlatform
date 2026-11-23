@@ -72,7 +72,8 @@ export const RESULT_STR = {
     // PROPOSED (Marathi) — the line under a confirmed recording. Claims only his WORDS (the transcript on the log):
     // the clip row is processing_30d, so the preview's "तुमचं बोलणं आणि शब्द जपले आहेत" promised a recording kept
     // for good that is not.
-    keptSafe: 'तुमचे शब्द जपले आहेत',
+    // spec: plr-d10-founder-answers-2026-11-23 — the founder's words (MR21).
+    keptSafe: 'तुमचे शब्द समजून घेतले आहेत',
     // PROPOSED (Marathi) — new wording written for this screen.
     unclearTitle: 'हे साथीला नीट समजलं नाही',
     confirmFailed: 'आत्ता पक्कं करता आलं नाही — पुन्हा दाबा',
@@ -80,7 +81,8 @@ export const RESULT_STR = {
     // PROPOSED (Marathi) — lane OF-S: the day chip's move could not be made (pressing again is safe).
     dayNotMoved: 'दिवस आत्ता बदलता आला नाही — पुन्हा दाबा.',
     // PROPOSED (Marathi) — a part he mentioned that the server could not find in his words: "not sure", never "not said".
-    unsurePart: 'नक्की समजलं नाही',
+    // spec: plr-d10-founder-answers-2026-11-23 — the founder's words (MR23).
+    unsurePart: 'स्पष्ट समजू शकले नाही',
 } as const;
 
 /** The same lines, widened (a function stays a function). */
@@ -128,12 +130,12 @@ export const RESULT_STR_EN: ResultStr = {
     wrote: 'Shram Sathi wrote',
     newTag: 'New',
     typedTag: 'Typed',
-    keptSafe: 'Your words are kept',
+    keptSafe: 'Your words were understood', // PROPOSED (English) — the twin of the founder's MR21
     unclearTitle: 'Sathi did not understand this well',
     confirmFailed: 'Could not confirm just now — tap again',
     wholeFarm: 'Whole farm',
     dayNotMoved: 'Could not change the day just now — press again.', // PROPOSED (English) — lane OF-S
-    unsurePart: 'Not sure',
+    unsurePart: 'Could not understand clearly', // PROPOSED (English) — the twin of the founder's MR23
 };
 
 /**

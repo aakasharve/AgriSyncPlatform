@@ -147,13 +147,13 @@ describe('ResultHero — the meter leads', () => {
         expect(p.onTellMore).toHaveBeenCalledWith('machinery');
     });
 
-    it('a part he said but the server could not verify reads "नक्की समजलं नाही" — never "सांगितलं नाही", never a 0 (round 3)', () => {
+    it('a part he said but the server could not verify reads "स्पष्ट समजू शकले नाही" — never "सांगितलं नाही", never a 0 (round 3)', () => {
         flags.understandingMeter = false;
         const p = props({ missing: ['machinery'], unsure: ['labour'] });
         render(<ResultHero {...p} />);
         const labour = screen.getByTestId('vr-part-labour');
         expect(labour.getAttribute('data-told')).toBe('unsure');
-        expect(labour.textContent).toContain('नक्की समजलं नाही');
+        expect(labour.textContent).toContain('स्पष्ट समजू शकले नाही');
         expect(labour.textContent).not.toContain('सांगितलं नाही');
         expect(labour.textContent).not.toMatch(/[0०]/);
         fireEvent.click(labour); // not a "say it again" button: it would record the same thing twice

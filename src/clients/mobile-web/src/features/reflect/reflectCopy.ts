@@ -123,8 +123,8 @@ const mr: ReflectCopy = {
     toldBy: 'सांगितलं:',
     moreToTell: 'अजून सांगा:',
     speak: 'बोला',
-    // PROPOSED (Marathi)
-    farmCardLine: 'कोणत्याही एका प्लॉटचं नसलेलं काम',
+    // spec: plr-d10-founder-answers-2026-11-23 — the founder's words (MR48; his "प्लॉटची" read as "प्लॉटशी").
+    farmCardLine: 'असे काम जे कोणत्याही एका प्लॉटशी निगडित नाही तर पूर्ण शेताशी निगडित आहे',
     // PROPOSED (Marathi) — today's: the founder's screen 1; another day's: new.
     dayViewHint: (isToday: boolean) => (isToday ? 'आजचं सगळं काम — बोलल्याप्रमाणे विभागून' : 'या दिवसाचं सगळं काम — बोलल्याप्रमाणे विभागून'),
     // PROPOSED (Marathi) — the founder's screen 1.
@@ -188,7 +188,7 @@ const en: ReflectCopy = {
     toldBy: 'Told by:', // PROPOSED (English)
     moreToTell: 'Tell more:', // PROPOSED (English)
     speak: 'Speak', // PROPOSED (English)
-    farmCardLine: 'Work not for any one plot', // PROPOSED (English)
+    farmCardLine: 'Work not tied to any one plot, but to the whole farm', // PROPOSED (English) — the twin of the founder's MR48
     dayViewHint: (isToday: boolean) => (isToday ? "All of today's work — sorted as it was told" : "All of this day's work — sorted as it was told"), // PROPOSED (English)
     timesTitle: 'What was told when', // PROPOSED (English)
     timesKey: 'Green dot = confirmed · grey = not confirmed', // PROPOSED (English)

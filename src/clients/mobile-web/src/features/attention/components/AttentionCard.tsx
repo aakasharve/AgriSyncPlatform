@@ -39,12 +39,14 @@ const RANK_EDGE: Record<AttentionRankName, { edge: string; tone: Tone }> = {
 };
 const UNKNOWN_EDGE: { edge: string; tone: Tone } = { edge: 'border-l-stone-300', tone: 'stone' };
 
-// The server's health score names (`HealthScore.cs`), in Marathi. PROPOSED (Marathi)
-const HEALTH_MR: Record<string, string> = {
-    Excellent: 'तब्येत: उत्तम',
-    Good: 'तब्येत: चांगली',
-    NeedsAttention: 'तब्येत: लक्ष द्या',
-    Critical: 'तब्येत: गंभीर',
+// The server's health score names (`HealthScore.cs`), in Marathi: the plot's crop state, one sentence each.
+// spec: plr-d10-founder-answers-2026-11-23 — Excellent is the founder's own words (MR44); the other three follow the same style so the
+// card reads as one (PROPOSED Marathi).
+export const HEALTH_MR: Record<string, string> = {
+    Excellent: 'पिकाची स्थिती चांगली आहे',
+    Good: 'पिकाची स्थिती ठीक आहे',
+    NeedsAttention: 'पिकाच्या स्थितीकडे लक्ष द्या',
+    Critical: 'पिकाची स्थिती गंभीर आहे',
 };
 
 const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction, actionLabel, openComplianceSignalCount, onComplianceChipTap }) => {
