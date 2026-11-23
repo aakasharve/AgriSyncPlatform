@@ -42,6 +42,7 @@ import { resultDayStr, resultStr, useResultStr } from '../voiceResult/resultStri
 import { scrollBelowHeader } from '../voiceResult/scrollBelowHeader';
 import type { LogSyncState } from '../voiceResult/useRecordingTrust';
 import IdleCloseBar from './IdleCloseBar';
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import SavedGiven from './SavedGiven';
 import SavedPartsGrid from './SavedPartsGrid';
 import SavedScreenLower from './SavedScreenLower';
@@ -208,6 +209,9 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
 
             <IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
                 onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />
+            {/* Room under the sticky bar: at the very end of the page the bar rests here, so "आजचा आढावा बघा" and the last
+                rows scroll fully above it and above the app's bottom bar (seen on localhost: they sat under both). */}
+            <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: BOTTOM_BAR_CLEARANCE }} />
             {card && kit && <ProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
         </div>
     );

@@ -136,6 +136,8 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
             input, durationMs, scope: logScope, crops, profile: farmerProfile,
             setStatus, setHistory, setVoiceResult,
             setLastSaved: (ids, summary) => { setLastSavedLogIds(ids); setLastSavedLogSummary(summary); },
+            // `&queued=1`: behave as a phone whose save queued the record, so the 30 s self-close can be seen (dev only).
+            simulateQueued: typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('queued') === '1',
         });
     }, [setHistory, logScope, crops, farmerProfile]);
 

@@ -105,6 +105,17 @@ describe('VoiceJourney — ticks live, only on real events', () => {
     });
 });
 
+describe('VoiceJourney — the heading says it is saved', () => {
+    it('reads the journey title until the save completes, then "जतन झालं ✓" (seen even when the list is taller than the screen)', () => {
+        view();
+        expect(screen.getByTestId('vj-title')).toHaveTextContent('साथी तुमचं काम लावून ठेवतोय');
+        act(() => noteVoiceJourney({ kind: 'kept', input: 'audio', durationMs: 5_000 }));
+        expect(screen.getByTestId('vj-title')).not.toHaveTextContent('जतन झालं');
+        finish();
+        expect(screen.getByTestId('vj-title')).toHaveTextContent('जतन झालं ✓');
+    });
+});
+
 describe('VoiceJourney — the finished list is held for 1.2 s', () => {
     it('saved, then the result screen replaces it: a still copy stays 1.2 s with every tick and chip, then goes', () => {
         const { unmount } = view();

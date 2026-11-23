@@ -45,6 +45,11 @@ export interface PreviewVoiceJourneyInput {
     draft?: AgriLogResponse;
     /** Test seam: the pause between events. */
     wait?: (ms: number) => Promise<void>;
+    /**
+     * Dev preview only (`?preview=oversight&queued=1`): mark the logs as queued for the server, as the real save does on a
+     * phone with a sync queue, so the saved screen's 30 s self-close can be seen. Default false: nothing is queued here.
+     */
+    simulateQueued?: boolean;
     /** Test seam: the clock. */
     now?: () => number;
 }
@@ -52,7 +57,7 @@ export interface PreviewVoiceJourneyInput {
 const sleep = (ms: number): Promise<void> => new Promise(resolve => { setTimeout(resolve, ms); });
 
 /** One summary row per log, as the real save fills it — with `syncQueued: null`, because nothing was queued here. */
-const summaryOf = (logs: readonly DailyLog[]): LastSavedLogSummaryItem[] => logs.map(log => {
+const summaryOf = (logs: readonly DailyLog[], queued: boolean): LastSavedLogSummaryItem[] => logs.map(log => {
     const sel = log.context?.selection?.[0];
     return {
         logId: log.id,
@@ -61,7 +66,7 @@ const summaryOf = (logs: readonly DailyLog[]): LastSavedLogSummaryItem[] => logs
         plotId: sel?.selectedPlotIds?.[0],
         plotName: sel?.selectedPlotNames?.[0] ?? '',
         count: 1,
-        syncQueued: null,
+        syncQueued: queued ? true : null,
     };
 });
 
@@ -87,7 +92,7 @@ export async function runPreviewVoiceJourney(run: PreviewVoiceJourneyInput): Pro
     const ids = logs.map(l => l.id);
     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
     run.setVoiceResult({ logIds: ids, clipId: null, key: `preview|${now()}`, unclear, written: logs, ...(run.input === 'text' && { typed: true }) });
-    run.setLastSaved(ids, summaryOf(logs));
+    run.setLastSaved(ids, summaryOf(logs, run.simulateQueued === true));
     noteVoiceJourney({ kind: 'written', logIds: ids }, now());
     // The real save queues the logs for sync (a Dexie write) between the phone write and 'success', so the finished list
     // is drawn once before the result screen replaces it (and is then held, `holdOnScreen`). This pause stands in for it.

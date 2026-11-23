@@ -10,6 +10,7 @@
  * under `motion-safe`. The one haptic is `hapticFeedback.success` when the save REALLY completed ("जतन झालं"). The
  * finished list is held on screen for 1.2 s (`holdOnScreen`, review H6) — the result screen then replaces it.
  */
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Check } from 'lucide-react';
 import type { CropProfile, FarmerProfile, LogScope } from '../../../../types';
@@ -66,7 +67,7 @@ const Chips: React.FC<{ chips: JourneyChip[] }> = ({ chips }) => (
 const StepRow: React.FC<{ step: JourneyStep; n: string; waiting: string }> = ({ step, n, waiting }) => {
     const label = step.state === 'done' ? 'text-stone-900' : step.state === 'active' ? 'text-emerald-900' : 'text-stone-400';
     return (
-        <li className="flex gap-3" data-testid={`vj-step-${step.key}`} data-state={step.state}>
+        <li className="flex gap-3" data-testid={`vj-step-${step.key}`} data-state={step.state} style={{ scrollMarginBottom: BOTTOM_BAR_CLEARANCE }}>
             <Marker step={step} n={n} />
             <div className="min-w-0 flex-1 pt-1">
                 <p className={`m-0 text-[17px] font-extrabold leading-snug ${label}`}>{step.label}</p>
@@ -102,6 +103,11 @@ export const VoiceJourney: React.FC<VoiceJourneyProps> = ({ crops, farmerProfile
         if (!view.complete || savedSaid.current) return;
         savedSaid.current = true;
         hapticFeedback.success();
+        // The finished list can be taller than the screen: bring the "जतन झालं" tick into view (seen on a 390x844 screen).
+        try {
+            const steps = root.current?.querySelectorAll<HTMLElement>('[data-testid^="vj-step-"]');
+            steps?.[steps.length - 1]?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
+        } catch { /* an old WebView without smooth scrolling: the list stays where it is */ }
         logger.info('voice_v2.journey.saved', { steps: drawn });
     }, [view.complete, drawn]);
     // Replaced by the result screen: the finished list stays a moment longer (only right after "जतन झालं").
@@ -127,7 +133,8 @@ export const VoiceJourney: React.FC<VoiceJourneyProps> = ({ crops, farmerProfile
                         className="pointer-events-none absolute inset-0 h-full w-full object-contain object-bottom motion-safe:animate-plr-bob" />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <h2 className="m-0 text-[20px] font-extrabold leading-snug text-stone-900">{words.journeyTitle}</h2>
+                    {/* Done: the heading itself says "जतन झालं ✓", so the save is seen even when the list is taller than the screen. */}
+                    <h2 className={`m-0 text-[20px] font-extrabold leading-snug ${view.complete ? 'text-emerald-800' : 'text-stone-900'}`} data-testid="vj-title">{view.complete ? `${words.stepSaved} ✓` : words.journeyTitle}</h2>
                     <p className="m-0 mt-0.5 text-[15px] leading-snug text-stone-600">{words.journeySub}</p>
                 </div>
             </div>
