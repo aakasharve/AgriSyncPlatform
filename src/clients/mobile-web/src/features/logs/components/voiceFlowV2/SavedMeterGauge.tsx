@@ -27,7 +27,7 @@ import { usePlotDayUnderstanding } from '../../hooks/usePlotDayUnderstanding';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import { PARTS, type PartKey } from '../voiceResult/resultModel';
 import { useResultStr } from '../voiceResult/resultStrings';
-import { MicGlyph, SANS } from './savedBits';
+import { SANS } from './savedBits';
 import { savedWords } from './savedWords';
 
 /** The server's stored classification for a day he said had no work. Compared, never computed. */
@@ -84,12 +84,9 @@ export interface SavedMeterGaugeProps {
     plotId: string | null;
     savedLogId: string | null;
     missing: readonly PartKey[];
-    onTellMore: (part: PartKey) => void;
-    /** The next recording (the server's line names no part). */
-    onAddAnother: () => void;
 }
 
-export const SavedMeterGauge: React.FC<SavedMeterGaugeProps> = ({ farmId, dayDate, plotId, savedLogId, missing, onTellMore, onAddAnother }) => {
+export const SavedMeterGauge: React.FC<SavedMeterGaugeProps> = ({ farmId, dayDate, plotId, savedLogId, missing }) => {
     const RS = useResultStr();
     const language = useOptionalLanguage()?.language;
     const SW = savedWords(language);
@@ -115,17 +112,13 @@ export const SavedMeterGauge: React.FC<SavedMeterGaugeProps> = ({ farmId, dayDat
                 {score == null && <span className="sr-only" data-testid="vr2-meter-pending">{noWork ? RS.noWorkDay : RS.meterPending}</span>}
             </div>
             {noWork && <p className="m-0 text-center text-[13px] font-bold text-stone-700">{RS.noWorkDay}</p>}
+            {/* Founder 2026-11-23: no second mic here — the ONE mic is the bottom bar's "आणखी सांगा". The question stays as plain words. */}
             {ask && (
-                <button type="button" onClick={() => (serverLine || !next ? onAddAnother() : onTellMore(next))} data-testid="vr2-meter-next"
-                    data-part={serverLine ? undefined : next} data-source={serverLine ? 'server' : 'untold-part'}
-                    className="flex w-full items-center gap-2.5 rounded-2xl border-2 border-[#F3D27A] bg-[#FFFDF3] px-2.5 py-[9px] text-left text-[#1C1917] active:scale-[0.985]">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white shadow-[0_4px_10px_rgba(15,107,58,0.3)]"
-                        style={{ background: 'radial-gradient(circle at 35% 30%,#3ccf78,#0F6B3A)' }}><MicGlyph size={20} /></span>
-                    <span className="min-w-0 flex-1 text-[14.5px] font-extrabold leading-[1.3]">
-                        {ask[0]}
-                        {ask[1] && <small className="block text-[11.5px] font-semibold text-[#5F6B63]">{ask[1]}</small>}
-                    </span>
-                </button>
+                <p className="m-0 w-full rounded-2xl border-2 border-[#F3D27A] bg-[#FFFDF3] px-3 py-2 text-[14.5px] font-extrabold leading-[1.3] text-[#1C1917]"
+                    data-testid="vr2-meter-next" data-part={serverLine ? undefined : next} data-source={serverLine ? 'server' : 'untold-part'}>
+                    {ask[0]}
+                    {ask[1] && <small className="block text-[11.5px] font-semibold text-[#5F6B63]">{ask[1]}</small>}
+                </p>
             )}
         </>
     );

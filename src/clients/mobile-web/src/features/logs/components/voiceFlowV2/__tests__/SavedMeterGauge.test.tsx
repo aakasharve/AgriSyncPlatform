@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 const { state } = vi.hoisted(() => ({ state: { farm: null as number | null, plot: null as number | null, classification: null as string | null, hint: null as string | null } }));
 vi.mock('../../../hooks/useDayUnderstanding', () => ({
@@ -30,8 +30,7 @@ vi.mock('../../../../../i18n/LanguageContext', async () => {
 import SavedMeterGauge, { type SavedMeterGaugeProps } from '../SavedMeterGauge';
 
 const props = (over: Partial<SavedMeterGaugeProps> = {}): SavedMeterGaugeProps => ({
-    farmId: 'farm-1', dayDate: '2026-10-26', plotId: 'plot-1', savedLogId: 'L-1', missing: ['machinery', 'observation'],
-    onTellMore: vi.fn(), onAddAnother: vi.fn(), ...over,
+    farmId: 'farm-1', dayDate: '2026-10-26', plotId: 'plot-1', savedLogId: 'L-1', missing: ['machinery', 'observation'], ...over,
 });
 
 afterEach(() => { cleanup(); Object.assign(state, { farm: null, plot: null, classification: null, hint: null }); });
@@ -66,26 +65,22 @@ describe('SavedMeterGauge — the server number only', () => {
         expect(screen.queryByTestId('vr2-meter-needle')).toBeNull();
     });
 
-    it('the question is the server\'s own line when there is one; its mic is the next recording; no "→ N/10"', () => {
+    it('the question is the server\'s own line when there is one, as plain words: no second mic, no "→ N/10" (founder 2026-11-23)', () => {
         state.plot = 7; state.hint = 'शेतात काय दिसलं ते सांगा';
-        const p = props();
-        render(<SavedMeterGauge {...p} />);
+        render(<SavedMeterGauge {...props()} />);
         const next = screen.getByTestId('vr2-meter-next');
         expect(next.textContent).toContain('शेतात काय दिसलं ते सांगा');
         expect(next.getAttribute('data-source')).toBe('server');
         expect(next.textContent).not.toMatch(/→/);
-        fireEvent.click(next);
-        expect(p.onAddAnother).toHaveBeenCalledTimes(1);
-        expect(p.onTellMore).not.toHaveBeenCalled();
+        expect(next.tagName).not.toBe('BUTTON');
+        expect(next.querySelector('svg')).toBeNull();
     });
 
-    it('without a server line: the first untold part, whose mic opens the mic for THAT part', () => {
-        const p = props();
-        render(<SavedMeterGauge {...p} />);
+    it('without a server line: it names the first untold part, as plain words', () => {
+        render(<SavedMeterGauge {...props()} />);
         const next = screen.getByTestId('vr2-meter-next');
         expect(next.getAttribute('data-part')).toBe('machinery');
-        fireEvent.click(next);
-        expect(p.onTellMore).toHaveBeenCalledWith('machinery');
+        expect(next.tagName).not.toBe('BUTTON');
     });
 
     it('nothing untold and no server line: no question', () => {

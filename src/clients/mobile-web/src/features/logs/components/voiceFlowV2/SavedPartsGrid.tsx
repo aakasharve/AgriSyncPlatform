@@ -62,7 +62,6 @@ export const SavedPartsGrid: React.FC<SavedPartsGridProps> = ({ day, onTellMore 
                                     <span className={NAME}>{name}</span>
                                     <span className={`${VALUE} text-[#B4232A]`}>{RS.noneYet}</span>
                                 </span>
-                                <span className="shrink-0 text-[15px]" aria-hidden="true">🎤</span>
                             </button>
                         );
                     }

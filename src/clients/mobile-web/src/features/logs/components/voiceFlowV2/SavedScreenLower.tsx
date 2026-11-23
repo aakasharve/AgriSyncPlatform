@@ -23,7 +23,6 @@ import type { DayView, RecordingView } from '../voiceResult/resultModel';
 import { useResultStr, type ResultStr } from '../voiceResult/resultStrings';
 import { SANS } from './savedBits';
 import SavedEarlier from './SavedEarlier';
-import SavedWords from './SavedWords';
 import { savedWords } from './savedWords';
 
 /** The plots one log of this recording is about, as named on the farm (the result screen's own rule). */
@@ -61,8 +60,6 @@ export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
     const severalPlots = day.current.length > 1;
     return (
         <>
-            <SavedWords transcript={primary.transcript} wordsWithheld={primary.wordsWithheld} entries={day.current.flatMap(r => r.entries)} unclear={p.unclear} />
-
             {p.questionPanel && <div data-testid="vr2-question">{p.questionPanel}</div>}
             {p.extras}
 
@@ -88,19 +85,17 @@ export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
             <SavedEarlier earlier={day.earlier} onDay={p.onDay} clips={p.clips} playingId={p.playingId} lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} />
 
             <button type="button" onClick={p.onOpenDetail} data-testid="vr2-open-detail" style={{ fontFamily: SANS, background: 'linear-gradient(135deg,#1E56E6,#3B82F6)' }}
-                className="flex min-h-[76px] w-full items-center gap-3 rounded-[20px] px-3.5 py-3 text-left text-white shadow-[0_8px_20px_rgba(30,86,230,0.28)] active:scale-[0.99]">
-                <span className="grid h-[46px] w-[46px] flex-none place-items-center rounded-full bg-white/[0.18]">
+                className="flex min-h-[60px] w-full items-center gap-3 rounded-[18px] px-3.5 py-2.5 text-left text-white active:scale-[0.99]">
+                <span className="grid h-[38px] w-[38px] flex-none place-items-center rounded-full bg-white/[0.18]">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                         <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" />
                     </svg>
                 </span>
                 <span className="min-w-0 flex-1">
-                    <b className="block text-[20px] font-bold leading-[1.25]">{W.detailButton}</b>
-                    <small className="block text-[12.5px] opacity-[0.92]">{W.detailSub}</small>
+                    <b className="block text-[18px] font-bold leading-[1.25]">{W.detailButton}</b>
                 </span>
                 <span className="ml-auto text-[30px] leading-none" aria-hidden="true">›</span>
             </button>
-            <p className="m-0 px-2.5 py-1 text-center text-[12px] text-[#5F6B63]" data-testid="vr2-foot" style={{ fontFamily: SANS }}>{RS.foot}</p>
         </>
     );
 };

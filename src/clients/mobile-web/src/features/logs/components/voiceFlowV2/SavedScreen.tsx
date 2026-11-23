@@ -44,12 +44,12 @@ import type { LogSyncState } from '../voiceResult/useRecordingTrust';
 import IdleCloseBar from './IdleCloseBar';
 import { Bd, SANS, Tick } from './savedBits';
 import SavedClip from './SavedClip';
+import SavedWords from './SavedWords';
 import SavedGiven from './SavedGiven';
 import SavedMeterGauge from './SavedMeterGauge';
 import SavedPartsGrid from './SavedPartsGrid';
 import SavedProductCard from './SavedProductCard';
 import SavedScreenLower from './SavedScreenLower';
-import { savedWords } from './savedWords';
 
 /** The design's `.hstrip .chip`. */
 const CHIP = 'inline-block whitespace-nowrap rounded-full border border-[#DDE3DA] bg-white px-[11px] py-1 text-[13px] font-extrabold text-[#1C1917]';
@@ -119,7 +119,6 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const RS = useResultStr();
     if (!primary) return null;
-    const SW = savedWords(language);
     const copy = resultCopy(language);
     const DS = resultDayStr(language);
     const nd = (text: string): string => digitsFor(text, language);
@@ -177,16 +176,14 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#1E9E5A] motion-safe:animate-plr-rise"><Tick size={24} /></span>
                     <div className="min-w-0">
                         <b className="block text-[22px] font-bold leading-[1.2] text-[#0F6B3A]" data-testid="vr2-saved-title" data-sync={p.sync}>{savedClaimOf(p.sync, RS)}</b>
-                        <small className="block text-[12.5px] font-bold text-[#5F6B63]">{primary.who.you ? SW.selfTold : SW.otherTold(primary.who.name)}</small>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-1 self-stretch" data-testid="vr2-badges">
-                    <Bd tone="dark">{RS.justNow}</Bd>
-                    {primary.timeLabel && <Bd>{primary.timeLabel}</Bd>}
-                    <Bd tone="who" testId="vr2-latest-who" you={primary.who.you}>{primary.who.name}</Bd>
+                {/* One quiet line instead of a badge row (founder 2026-11-23: nothing repeated — the title already says it is kept). */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 self-stretch text-[12.5px] font-bold text-[#5F6B63]" data-testid="vr2-badges">
+                    <span data-testid="vr2-latest-who" data-you={primary.who.you ? 'yes' : 'no'}>{primary.who.name}</span>
+                    {primary.timeLabel && <span aria-hidden="true">·</span>}
+                    {primary.timeLabel && <span>{primary.timeLabel}</span>}
                     {primary.typed && <Bd tone="amber" testId="vr2-latest-typed">{copy.typedTag}</Bd>}
-                    <Bd tone="green" testId="vr2-remembered">{RS.remembered}</Bd>
-                    {p.sync === 'onServer' && <Bd tone="blue" testId="vr2-on-server">{RS.onServer}</Bd>}
                     {p.sync === 'needsFix' && <Bd tone="amber" testId="vr2-needs-fix">{RS.needsFix}</Bd>}
                     {p.confirmed
                         ? <Bd tone="dark" testId="vr2-confirmed-badge">{RS.confirmedBadge}</Bd>
@@ -194,21 +191,23 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 </div>
                 {severalNote && <div className="self-stretch empty:hidden">{severalNote}</div>}
                 {primary.legacyPartial && <div className="self-stretch"><LegacyNote testId="vr2-legacy-note" /></div>}
-                {primary.typed ? <div className="self-stretch"><TypedNote /></div> : (
-                    <div className="self-stretch" data-testid="vr2-listen">
-                        <SavedClip clipKey={clip?.id ?? null} durationSec={clip ? p.lengthOf(primary.id) : null} playing={p.playingId === primary.id} big
-                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" />
-                    </div>
-                )}
                 {FEATURE_FLAGS.understandingMeter && (
                     <SavedMeterGauge farmId={p.farmId} dayDate={primary.log.date} plotId={plotIds.length === 1 ? plotIds[0] : null} savedLogId={primary.id}
-                        missing={day.missing} onTellMore={p.onTellMore} onAddAnother={p.onAddAnother} />
+                        missing={day.missing} />
                 )}
             </section>
             {speakerDone && (
                 <p className="m-0 rounded-[14px] border border-[#DDE3DA] bg-white px-3 py-[9px] text-[14px] font-bold text-[#44403C]" data-testid="vr2-speaker-done">{copy.speakerDone}</p>
             )}
 
+            {/* Founder 2026-11-23, the order: the meter (above), then his words, then the chemicals and nutrients, then the other parts. */}
+            <SavedWords transcript={primary.transcript} wordsWithheld={primary.wordsWithheld} entries={day.current.flatMap(r => r.entries)} unclear={p.unclear}
+                player={primary.typed ? <TypedNote /> : (
+                    <div data-testid="vr2-listen">
+                        <SavedClip clipKey={clip?.id ?? null} durationSec={clip ? p.lengthOf(primary.id) : null} playing={p.playingId === primary.id}
+                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" />
+                    </div>
+                )} />
             <SavedGiven day={day} kit={kit} verdicts={verdicts} onOpen={kit ? (item, logId) => setCard({ item, logId }) : () => undefined} />
             <SavedPartsGrid day={day} onTellMore={p.onTellMore} />
 

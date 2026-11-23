@@ -115,16 +115,19 @@ export interface SavedWordsProps {
     wordsWithheld: boolean;
     entries: readonly PartEntry[];
     unclear: readonly string[];
+    /** His recording's player (or the typed note), at the top of his words (founder 2026-11-23: meter, then his text). */
+    player?: React.ReactNode;
 }
 
-export const SavedWords: React.FC<SavedWordsProps> = ({ transcript, wordsWithheld, entries, unclear }) => {
+export const SavedWords: React.FC<SavedWordsProps> = ({ transcript, wordsWithheld, entries, unclear, player }) => {
     const RS = useResultStr();
     const copy = resultCopy(useOptionalLanguage()?.language);
     const [focus, setFocus] = useState<PartKey | null>(null);
     const runs = markTranscript(transcript, entries);
-    if (!wordsWithheld && runs.length === 0 && unclear.length === 0) return null;
+    if (!wordsWithheld && runs.length === 0 && unclear.length === 0 && !player) return null;
     return (
         <RbSec testId="vr2-words" title={copy.yourWords}>
+            {player && <div className="mb-2">{player}</div>}
             {wordsWithheld ? <MoneyWordsWithheldCard testId="vr-words-withheld" /> : runs.length > 0 && <TintedWords runs={runs} focus={focus} />}
             <WhyTiles runs={runs} entries={entries} focus={focus} onFocus={setFocus} />
             {unclear.length > 0 && (
