@@ -31,7 +31,7 @@ import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { dayRel, dayShort } from '../dayPick/dayWords';
 import type { RingNodeData } from '../shramsathi/understandingRing';
-import { BlockerRow, LegacyNote, TypedNote } from '../voiceResult/DayParts';
+import { LegacyNote, TypedNote } from '../voiceResult/DayParts';
 import { dayLinesOf, lineKeyOfVerdict } from '../voiceResult/DaySummaryLines';
 import { MixBanner, tankVerdictsOf } from '../voiceResult/MixBox';
 import type { ProductAnswerKit } from '../voiceResult/ProductCard';
@@ -211,11 +211,6 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
 
             <SavedGiven day={day} kit={kit} verdicts={verdicts} onOpen={kit ? (item, logId) => setCard({ item, logId }) : () => undefined} />
             <SavedPartsGrid day={day} onTellMore={p.onTellMore} />
-            {day.blockersNow.length > 0 && (
-                <div className="space-y-1.5" data-testid="vr2-blockers">
-                    {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
-                </div>
-            )}
 
             <SavedScreenLower day={day} primary={primary} onDay={onDay} unclear={p.unclear} clips={p.clips} playingId={p.playingId}
                 lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}

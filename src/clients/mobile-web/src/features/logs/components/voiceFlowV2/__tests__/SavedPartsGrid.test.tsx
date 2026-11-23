@@ -45,10 +45,27 @@ const dayOf = (language: 'mr' | 'en') => {
 afterEach(() => { cleanup(); lng.v = 'mr'; });
 
 describe('SavedPartsGrid — the eight parts with his values', () => {
-    it('draws all eight parts, in the parts\' order', () => {
+    it('draws all eight parts, in the parts\' order, then अडथळा (founder 2026-11-23)', () => {
         render(<SavedPartsGrid day={dayOf('mr')} onTellMore={vi.fn()} />);
         const tiles = [...screen.getByTestId('vr2-parts').querySelectorAll('[data-told]')];
-        expect(tiles.map(t => t.getAttribute('data-testid'))).toEqual(PARTS.map(p => `vr2-part-${p.key}`));
+        expect(tiles.map(t => t.getAttribute('data-testid'))).toEqual([...PARTS.map(p => `vr2-part-${p.key}`), 'vr2-part-blockers']);
+    });
+
+    it('अडथळा not told: a plain grey tile, never red, not counted, not a button', () => {
+        const day = { ...dayOf('mr'), blockersNow: [] };
+        render(<SavedPartsGrid day={day} onTellMore={vi.fn()} />);
+        const tile = screen.getByTestId('vr2-part-blockers');
+        expect(tile.getAttribute('data-told')).toBe('no');
+        expect(tile.tagName).not.toBe('BUTTON');
+        expect(tile.textContent).toContain('अडथळा');
+        expect(tile.className).not.toContain('E5484D');
+    });
+
+    it('अडथळा told: shows the stoppage as recorded', () => {
+        const day = { ...dayOf('mr'), blockersNow: [{ id: 'b1', logId: 'l', value: 'पावसामुळे फवारणी थांबली', verified: true }] };
+        render(<SavedPartsGrid day={day} onTellMore={vi.fn()} />);
+        expect(screen.getByTestId('vr2-part-blockers').getAttribute('data-told')).toBe('yes');
+        expect(screen.getByTestId('vr2-part-value-blockers').textContent).toBe('पावसामुळे फवारणी थांबली');
     });
 
     it('a told part shows what he said, in Marathi digits', () => {

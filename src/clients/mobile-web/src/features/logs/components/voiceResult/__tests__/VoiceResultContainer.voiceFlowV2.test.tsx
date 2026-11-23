@@ -204,7 +204,9 @@ describe('voice flow v2 — the saved screen first', () => {
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
         const p = props();
         mount(p);
-        await waitFor(() => expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy());
+        // The sync state is read from the phone's database (fake IndexedDB): under a full parallel run it can take more than
+        // waitFor's default 1 s, so this waits longer. What is checked is unchanged.
+        await waitFor(() => expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy(), { timeout: 8000 });
         expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-state')).toBe('off');
         act(() => { vi.advanceTimersByTime(120_000); });
         expect(p.onAutoClose).not.toHaveBeenCalled();

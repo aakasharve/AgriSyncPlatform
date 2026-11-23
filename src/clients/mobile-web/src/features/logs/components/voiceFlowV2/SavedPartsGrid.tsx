@@ -21,6 +21,7 @@ import { entryText, partNameIn } from '../voiceResult/partNames';
 import { PARTS, type DayView, type PartKey } from '../voiceResult/resultModel';
 import { useResultStr } from '../voiceResult/resultStrings';
 import { RbSec, Tick } from './savedBits';
+import { CategoryIcon } from '../shramsathi/understandingRing/CategoryIcon';
 
 /** The design's `.b8t` frame, and its icon tile (`.bi`). */
 const TILE = 'flex min-h-[58px] min-w-0 items-center gap-[7px] rounded-[14px] px-2 py-1.5 text-left text-[#1C1917]';
@@ -90,8 +91,46 @@ export const SavedPartsGrid: React.FC<SavedPartsGridProps> = ({ day, onTellMore 
                         </span>
                     );
                 })}
+                <BlockerTile day={day} language={language} />
             </div>
         </RbSec>
+    );
+};
+
+/**
+ * Founder 2026-11-23: "add Disturbance - अडथळा". What stopped or hindered the work (rain, power, workers who did not come) as
+ * one more tile, from the recording's own stoppage entries (`day.blockersNow`), shown as recorded. Not told: a plain grey tile,
+ * never the red "सांगितलं नाही" — a day without a disturbance is a normal day (the ring's rule since 2026-10-25), so it is not
+ * counted in "८ पैकी N भरले" and asks for nothing.
+ */
+const BlockerTile: React.FC<{ day: DayView; language: string | undefined }> = ({ day, language }) => {
+    const W = voiceFlowWords(language);
+    const entries = day.blockersNow;
+    const shown = entries.find(e => e.verified) ?? entries[0];
+    if (!shown) {
+        return (
+            <span data-testid="vr2-part-blockers" data-told="no" className={`${TILE} border border-dashed border-stone-300 bg-stone-50`}>
+                <span className={ICON}><CategoryIcon name="blockers" size={20} /></span>
+                <span className="min-w-0 flex-1">
+                    <span className={NAME}>{W.blockerTitle}</span>
+                    <span className={`${VALUE} font-bold text-stone-500`}>{W.blockerNone}</span>
+                </span>
+            </span>
+        );
+    }
+    const unsure = !shown.verified;
+    return (
+        <span data-testid="vr2-part-blockers" data-told={unsure ? 'unsure' : 'yes'}
+            className={`${TILE} ${unsure ? 'border-2 border-amber-300 bg-amber-50' : ''}`} style={unsure ? undefined : { background: '#FFE4D6' }}>
+            <span className={ICON}><CategoryIcon name="blockers" size={20} /></span>
+            <span className="min-w-0 flex-1">
+                <span className={NAME}>{W.blockerTitle}</span>
+                <span className={VALUE} data-testid="vr2-part-value-blockers">{shown.value ?? shown.quote ?? ''}</span>
+                {entries.length > 1 && <span className="block text-[11.5px] font-bold text-[#57534E]">{digitsFor(`+${entries.length - 1}`, language)}</span>}
+            </span>
+            {unsure ? <HelpCircle size={18} className="shrink-0 text-amber-600" aria-hidden="true" />
+                : <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#16A34A]" aria-hidden="true"><Tick size={11} /></span>}
+        </span>
     );
 };
 

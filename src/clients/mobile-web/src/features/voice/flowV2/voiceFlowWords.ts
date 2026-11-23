@@ -51,6 +51,8 @@ export interface VoiceFlowWords {
     givenHint: string;
     partsTitle: string;
     partsCount: (filled: number, total: number) => string;
+    blockerTitle: string;
+    blockerNone: string;
     detailButton: string;
     detailSub: string;
     closesIn: (seconds: number) => string;
@@ -98,6 +100,8 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     givenHint: 'दाबा आणि घटक बघा', // PROPOSED (Marathi)
     partsTitle: 'साथीने कुठे काय भरलं', // PROPOSED (Marathi)
     partsCount: (filled: number, total: number) => `${digitsFor(String(total), 'mr')} पैकी ${digitsFor(String(filled), 'mr')} भरले`, // PROPOSED (Marathi)
+    blockerTitle: 'अडथळा', // FOUNDER (2026-11-23, "Disturbance - अडथळा")
+    blockerNone: 'काही सांगितलं नाही', // PROPOSED (Marathi)
     // spec V2-6: "शेतीचा आढावा" is already ReflectPage's name; this button opens THIS recording's detail page.
     detailButton: 'आजचा आढावा बघा', // PROPOSED (Marathi)
     detailSub: 'आजचं सगळं सविस्तर: औषध, घटक, आवाज', // PROPOSED (Marathi)
@@ -146,6 +150,8 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     givenHint: 'Tap to see what is inside', // PROPOSED (English)
     partsTitle: 'What Sathi filled in', // PROPOSED (English)
     partsCount: (filled: number, total: number) => `${filled} of ${total} filled`, // PROPOSED (English)
+    blockerTitle: 'Disturbance', // FOUNDER (2026-11-23)
+    blockerNone: 'Nothing told', // PROPOSED (English)
     detailButton: 'See today in detail', // PROPOSED (English)
     detailSub: 'Everything of today: sprays, ingredients, voice', // PROPOSED (English)
     closesIn: (n: number) => `Closes in ${n} seconds`, // PROPOSED (English)
