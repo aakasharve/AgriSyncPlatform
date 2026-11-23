@@ -39,6 +39,7 @@ import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceDraftSink, VoiceRecordingRef } from '../../features/voice/useVoiceRecorder.types';
 import { archiveIdForRecording, linkClipToLog } from '../../infrastructure/voice/clipLogLink';
 import { logger } from '../../infrastructure/observability/Logger';
+import { noteVoiceJourney, type VoiceJourneyEvent } from '../../infrastructure/voice/voiceJourneySignal';
 import { emitClosureSubmitted } from '../../core/telemetry/eventEmitters';
 import { isAutoSavableVoiceDraft, primaryLogOf } from '../helpers/autoSavedVoiceLog';
 import { bindDraftDecline, draftDay } from '../../features/voice/draftFacts';
@@ -101,6 +102,11 @@ const partsFilled = (d: AgriLogResponse): number => [
 /** The AI wants this save on a plot he did not pick: only the review form may do that, in front of him. */
 const movesThePlot = (d: AgriLogResponse): boolean => !!(d.suggestedContext?.cropId && d.suggestedContext?.plotId);
 
+/** spec voice-flow-v2-2026-11-23 — tells the v2 step list a real moment. Display only: it can never reach the save. */
+const say = (event: VoiceJourneyEvent): void => {
+    try { noteVoiceJourney(event); } catch { /* display only */ }
+};
+
 export const recordingKey = (r: VoiceRecordingRef): string => `${r.clipId ?? '-'}|${r.recordedAtUtc}`;
 
 // The log of a recording that carries his words — moved to the helper (PLR-D10 I27 stamps the recording on it too).
@@ -116,9 +122,11 @@ export function useVoiceAutoSave({
 
     const sink: VoiceDraftSink = useCallback(async (draft: AgriLogResponse, provenance: LogProvenance | undefined, recording: VoiceRecordingRef) => {
         if (logIntent === 'labour') return false;
+        say({ kind: 'understood', draft });
         // Lane OF (D-58) — handed back, the screen that shows it says why (his words and what was understood stay).
-        if (!isAutoSavableVoiceDraft(draft)) { bindDraftDecline(draft, 'unclear', recording); return false; }
-        if (movesThePlot(draft)) { bindDraftDecline(draft, 'otherPlot', recording); return false; }
+        if (!isAutoSavableVoiceDraft(draft)) { say({ kind: 'placeChecked', result: 'unclear' }); bindDraftDecline(draft, 'unclear', recording); return false; }
+        if (movesThePlot(draft)) { say({ kind: 'placeChecked', result: 'otherPlot' }); bindDraftDecline(draft, 'otherPlot', recording); return false; }
+        say({ kind: 'placeChecked', result: 'same' });
         const startedAt = Date.now();
         const key = recordingKey(recording);
         const seen = handled.current.get(key);
@@ -144,6 +152,7 @@ export function useVoiceAutoSave({
                     const clipId = primary && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
                     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
                     setVoiceResult({ logIds: logs.map(l => l.id), clipId, key, unclear, written: logs, ...(typed && { typed: true }) });
+                    say({ kind: 'written', logIds: logs.map(l => l.id) });
                 },
             });
             if (saved) {

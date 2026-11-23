@@ -10,6 +10,7 @@ import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } fr
 import { resolveApiBaseUrl } from '../api/transport';
 import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceDay, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
 import { noteVoiceNotesChanged } from '../sync/waitingVoiceNotes';
+import { noteVoiceJourney } from '../voice/voiceJourneySignal';
 import { correctionParseContext } from './correctionParseContext';
 import { parseStreamConsumer } from './ParseStreamConsumer';
 import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
@@ -371,6 +372,8 @@ export class BackendAiClient implements VoiceParserPort {
     ) {
         const material = await this.resolveVoiceUploadMaterial(input, farmId, userId);
         await this.persistProcessingVoiceClip(material, farmId, scope, 'parsing');
+        // spec voice-flow-v2-2026-11-23 — the v2 step list's "आवाज जतन केला": the clip row is now on this phone. Display only.
+        try { noteVoiceJourney({ kind: 'kept', input: 'audio', durationMs: material.inputRawDurationMs ?? material.inputSpeechDurationMs }); } catch { /* display only */ }
 
         try {
             const result = await agriSyncClient.parseVoiceLog(
@@ -416,6 +419,8 @@ export class BackendAiClient implements VoiceParserPort {
         scope: LogScope,
     ) {
         const transcript = safeTrim(input.content, 'input.content');
+        // spec voice-flow-v2-2026-11-23 — the v2 step list's "तुम्ही लिहिलेलं मिळालं". Display only.
+        try { noteVoiceJourney({ kind: 'kept', input: 'text' }); } catch { /* display only */ }
         // Lane AI-2 — the same words typed as a change to two different entries are two different requests: the
         // server returns a stored answer for a repeated key, so the entry being corrected is part of the hash.
         const correctionOf = (parseContext as { correctionOf?: unknown }).correctionOf;
