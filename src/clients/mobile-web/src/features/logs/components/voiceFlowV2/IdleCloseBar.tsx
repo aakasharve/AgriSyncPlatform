@@ -1,0 +1,71 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: voice-flow-v2-2026-11-23 (Task 10; amendment M4) — the saved screen's bottom bar (the founder-approved look, `rbar2`):
+ * the big round mic on the left ("आणखी सांगा", the existing next recording), and on the right "३० सेकंदात बंद होईल" with a
+ * draining bar, or "थांबवलं" while something holds the clock. The clock lives in THIS leaf (`useIdleClose`): the text changes
+ * once a second and the bar moves by a CSS transition, so the screen above is never re-rendered by it.
+ *
+ * Sticky at the bar's room (`BOTTOM_BAR_CLEARANCE`, rule FOOT-1): it never sits under the app's bottom bar. When the caller
+ * turns the close off (`offReason`), no countdown is shown — only the mic.
+ */
+import React, { useEffect, type RefObject } from 'react';
+import { Mic } from 'lucide-react';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
+import { logger } from '../../../../infrastructure/observability/Logger';
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
+import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
+import { useResultStr } from '../voiceResult/resultStrings';
+import { useIdleClose } from './useIdleClose';
+
+const SANS = "'Noto Sans Devanagari', sans-serif";
+const SECONDS = 30;
+
+export interface IdleCloseBarProps {
+    rootRef: RefObject<HTMLElement | null>;
+    /** Why the clock is held now ('clip', 'product', 'day'); null = not held by the screen. */
+    pauseReason: string | null;
+    /** Polled: an overlay is open (the app's back stack). */
+    overlayOpen?: () => boolean;
+    /** Why there is no auto-close at all; null = it closes itself. */
+    offReason: string | null;
+    onClose: () => void;
+    onAddAnother: () => void;
+}
+
+export const IdleCloseBar: React.FC<IdleCloseBarProps> = ({ rootRef, pauseReason, overlayOpen, offReason, onClose, onAddAnother }) => {
+    const RS = useResultStr();
+    const W = voiceFlowWords(useOptionalLanguage()?.language);
+    const off = offReason !== null;
+    const { secondsLeft, paused } = useIdleClose({ seconds: SECONDS, pauseReason, overlayOpen, disabled: off, onClose, rootRef });
+    useEffect(() => {
+        if (offReason) logger.info('voice_v2.saved.auto_close_off', { component: 'SavedScreen', action: 'idle_close_off', reason: offReason });
+    }, [offReason]);
+    const share = paused ? 1 : Math.max(0, Math.min(1, secondsLeft / SECONDS));
+    return (
+        <div data-testid="vr2-idle-bar" data-state={off ? 'off' : paused ? 'paused' : 'running'}
+            className="sticky z-20 -mx-4 mt-3 flex items-center gap-3 border-t border-stone-200 bg-surface-100 px-4 py-2"
+            style={{ bottom: BOTTOM_BAR_CLEARANCE, fontFamily: SANS }}>
+            <div className="flex shrink-0 flex-col items-center gap-0.5">
+                <button type="button" onClick={onAddAnother} data-testid="vr2-add-another" aria-label={RS.addAnother}
+                    className="grid h-[72px] w-[72px] place-items-center rounded-full bg-emerald-700 text-white shadow-[0_8px_20px_rgba(4,120,87,0.35)] ring-4 ring-white active:scale-95">
+                    <Mic size={32} aria-hidden="true" />
+                </button>
+                <span className="text-[12px] font-extrabold text-emerald-900" aria-hidden="true">{RS.addAnother}</span>
+            </div>
+            {!off && (
+                <div className="min-w-0 flex-1" data-testid="vr2-idle-left">
+                    <div className="text-[14px] font-extrabold text-stone-900">{paused ? W.paused : W.closesIn(secondsLeft)}</div>
+                    <div className="text-[12px] font-semibold text-stone-600">{paused ? W.pausedSub : W.closesSub}</div>
+                    <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-stone-200" aria-hidden="true">
+                        <i className={`block h-full rounded-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear ${paused ? 'bg-stone-400' : 'bg-amber-500'}`}
+                            style={{ width: `${Math.round(share * 100)}%` }} />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default IdleCloseBar;

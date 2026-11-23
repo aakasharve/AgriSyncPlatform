@@ -53,6 +53,12 @@ const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
 export interface SavedScreenBackProps {
     /** Leave the post-save surface. Wired to `handleReset` in mainView. */
     onBack: () => void;
+    /**
+     * spec: voice-flow-v2-2026-11-23 (amendment M5) — a step back INSIDE the surface (the detail page → the saved screen), asked
+     * first. Returns true when it took the step: the surface stays, and so does this bar's history entry (re-pushed after a
+     * hardware / browser back), so the next back still lands here. Absent = exactly the bar as it was.
+     */
+    onStepBack?: () => boolean;
 }
 
 function hasBackTrap(): boolean {
@@ -60,7 +66,7 @@ function hasBackTrap(): boolean {
     return Boolean(state && state[BACK_TRAP]);
 }
 
-export function SavedScreenBack({ onBack }: SavedScreenBackProps): React.ReactElement {
+export function SavedScreenBack({ onBack, onStepBack }: SavedScreenBackProps): React.ReactElement {
     const { t } = useLanguage();
 
     // `handleReset` is a fresh function object on every AppRouter render, so it
@@ -68,18 +74,29 @@ export function SavedScreenBack({ onBack }: SavedScreenBackProps): React.ReactEl
     // on every render. The ref keeps the listener pointed at the latest one.
     const onBackRef = React.useRef(onBack);
     onBackRef.current = onBack;
+    const onStepRef = React.useRef(onStepBack);
+    onStepRef.current = onStepBack;
 
     React.useEffect(() => {
         if (typeof window === 'undefined') return undefined;
         if (!hasBackTrap()) {
             window.history.pushState({ [BACK_TRAP]: true }, '');
         }
-        const onPop = () => { onBackRef.current(); };
+        const onPop = () => {
+            // A step inside the surface consumed this back: put our entry back so the next back is ours again.
+            if (onStepRef.current?.()) {
+                if (!hasBackTrap()) window.history.pushState({ [BACK_TRAP]: true }, '');
+                return;
+            }
+            onBackRef.current();
+        };
         window.addEventListener('popstate', onPop);
         return () => { window.removeEventListener('popstate', onPop); };
     }, []);
 
     const handleClick = () => {
+        // A step inside the surface (M5): the surface stays, so its history entry is kept (no pop).
+        if (onStepBack?.()) return;
         // Leave first, so the control can never feel dead while we wait for the
         // asynchronous pop. Unmounting removes the listener, so the pop below
         // cannot fire onBack a second time — it only reclaims our own entry.
