@@ -60,6 +60,11 @@ export const OWN_SCHEDULE_LIMIT_REACHED_CODE = 'ShramSafal.OwnScheduleLimitReach
 /** spec: plr-d10 lane L8b-3 - the plot-season follows several schedules and the request named none. PERMANENT. */
 export const SCHEDULE_CHOICE_NEEDED_CODE = 'ShramSafal.ScheduleChoiceNeeded';
 
+/** spec: schedule mechanism slice 3 - the schedule mechanism is not switched on for this farm (an ownschedule.* change waited while it was turned off). PERMANENT. */
+export const SCHEDULE_MECHANISM_OFF_CODE = 'ShramSafal.ScheduleMechanismOff';
+/** spec: schedule mechanism slice 3 - an own-schedule change the server cannot apply as sent. PERMANENT. */
+export const OWN_SCHEDULE_INVALID_CODE = 'ShramSafal.OwnScheduleInvalid';
+
 export interface RejectedMutationView {
     mutationId: string;
     mutationType: string;
@@ -254,6 +259,17 @@ export class ConflictResolutionService {
         }
         if (errorCode === SCHEDULE_CHOICE_NEEDED_CODE) {
             return 'कोणतं शेड्यूल ते निवडा';
+        }
+        // spec: schedule mechanism slice 3 - the switch was turned off for this farm while the change waited / the work cannot be saved as it is. PROPOSED (Marathi)
+        if (errorCode === SCHEDULE_MECHANISM_OFF_CODE) {
+            return lang === 'en'
+                ? 'Your own schedule is not switched on for this farm yet. This change was not sent.'
+                : 'या शेतासाठी स्वतःचं शेड्यूल अजून सुरू झालेलं नाही. हा बदल पाठवला गेला नाही.';
+        }
+        if (errorCode === OWN_SCHEDULE_INVALID_CODE) {
+            return lang === 'en'
+                ? 'This work could not be saved as it is. Open it and fill it again.'
+                : 'हे काम असं जतन होऊ शकलं नाही. काम उघडून पुन्हा भरा.';
         }
         // B006 - another phone switched this plot's schedule first. PROPOSED (Marathi)
         if (errorCode === SCHEDULE_CHANGED_ELSEWHERE_CODE) {

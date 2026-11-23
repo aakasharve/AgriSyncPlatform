@@ -685,21 +685,11 @@ public interface IShramSafalRepository
 
     /// <summary>
     /// spec: plr-d10 schedule slice 3 - which of these versions are written in the task format (they hold at least one task). One cheap read, so a listing of
-    /// many versions need not load every task. The default loads each version (correct for an in-memory repository); the EF repository overrides it.
+    /// many versions need not load every task. The default answers NONE - exactly the listing of every repository before the task format (a fake that holds no
+    /// task-format version, or cannot load versions at all, keeps working); the EF repository overrides it.
     /// </summary>
-    async Task<IReadOnlySet<Guid>> GetScheduleTemplateIdsWithTasksAsync(IReadOnlyCollection<Guid> templateIds, CancellationToken ct = default)
-    {
-        var found = new HashSet<Guid>();
-        foreach (var id in templateIds.Distinct())
-        {
-            if (await GetScheduleTemplateWithTasksByIdAsync(id, ct) is { Tasks.Count: > 0 })
-            {
-                found.Add(id);
-            }
-        }
-
-        return found;
-    }
+    Task<IReadOnlySet<Guid>> GetScheduleTemplateIdsWithTasksAsync(IReadOnlyCollection<Guid> templateIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
 
     /// <summary>
     /// Returns <c>true</c> if the user has at least one <c>Active</c>

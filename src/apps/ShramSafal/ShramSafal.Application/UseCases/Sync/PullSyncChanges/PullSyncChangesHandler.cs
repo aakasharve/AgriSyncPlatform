@@ -826,8 +826,18 @@ public sealed class PullSyncChangesHandler(
         // spec: plr-d10 schedule slice 3 - the own works, only for a phone that asks for the new format and only on farms the switch is on for (a farm that is
         // off has none: the switch refuses every write of them). The plots he reads only. Phase-1 style like the switch read: a failure fails the pull.
         IReadOnlyList<OwnScheduleItemDto>? ownScheduleItems = null;
+        IReadOnlyList<OwnScheduleItemRevisionDto>? ownScheduleItemRevisions = null;
         if (query.ScheduleFormat is >= 2 && scheduleMechanismFarms.Count > 0)
         {
+            ownScheduleItemRevisions = (await ownScheduleStore.GetRevisionsOfFarmsAsync(scheduleMechanismFarms, ct))
+                .Where(r => window.ScopeOf((Guid)r.FarmId) is { } scope && scope.CoversPlot(r.PlotId))
+                .Select(r => new OwnScheduleItemRevisionDto(
+                    r.Id, r.ItemId, (Guid)r.FarmId, r.PlotId, r.CropCycleId, r.TaskKey, r.RevisionNumber,
+                    r.Action == Domain.Planning.OwnScheduleItemAction.Saved ? "saved" : "removed",
+                    r.State == Domain.Planning.OwnScheduleItemState.Active ? "active" : "removed",
+                    System.Text.Json.JsonDocument.Parse(r.Content.ToCanonicalJson()).RootElement.Clone(),
+                    r.ContentHash, r.ByUserId.Value, r.AtUtc))
+                .ToList();
             ownScheduleItems = (await ownScheduleStore.GetOfFarmsAsync(scheduleMechanismFarms, ct))
                 .Where(i => window.ScopeOf((Guid)i.FarmId) is { } scope && scope.CoversPlot(i.PlotId))
                 .Select(i => new OwnScheduleItemDto(
@@ -932,7 +942,8 @@ public sealed class PullSyncChangesHandler(
                 ? null
                 : new SyncCapabilitiesDto(new ScheduleMechanismCapabilityDto(scheduleMechanismFarms)),
             // slice 3 - his own schedules' works (new-format phones only, switch-on farms only; never a key otherwise).
-            OwnScheduleItems: ownScheduleItems);
+            OwnScheduleItems: ownScheduleItems,
+            OwnScheduleItemRevisions: ownScheduleItemRevisions);
 
         return Result.Success(response);
     }

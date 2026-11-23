@@ -219,11 +219,27 @@ public sealed class ScheduleMechanismSwitchRealPostgresTests(ITestOutputHelper o
         JsonNode.DeepEquals(Same(after), Same(before)).Should().BeTrue("every other part of the pull is the same");
 
         // The new phone's query: `scheduleFormat=2` is a query parameter (no new header, so CORS is untouched). It is accepted, an
-        // unreadable value is ignored, and neither changes what the pull carries in this slice.
+        // unreadable value is ignored, and neither changes what the pull carries - except (slice 3) that a phone asking for format 2 or more, on a farm the
+        // switch is on for, is also sent the works of its own schedules and their history (`ownScheduleItems` / `ownScheduleItemRevisions`, empty here).
         foreach (var query in new[] { "&scheduleFormat=2", "&scheduleFormat=abc", "&scheduleFormat=", "&scheduleFormat=99999999999999" })
         {
             var asked = await Pull1017Async(query);
             FarmsOn(asked).Should().Equal(new[] { FarmA }, $"'{query}' is read leniently: the answer is the same");
+            var asksFormat2 = query == "&scheduleFormat=2"; // the other three are unreadable (a number too big for the query is too)
+            foreach (var key in new[] { "ownScheduleItems", "ownScheduleItemRevisions" })
+            {
+                if (asksFormat2)
+                {
+                    asked[key]!.AsArray().Count.Should().Be(0, $"'{query}': no own work exists in this proof");
+                }
+                else
+                {
+                    asked.ContainsKey(key).Should().BeFalse($"'{query}' does not ask for the new format");
+                }
+
+                asked.Remove(key);
+            }
+
             JsonNode.DeepEquals(Same(asked), Same(before)).Should().BeTrue($"'{query}' changes nothing else");
         }
     }

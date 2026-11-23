@@ -227,10 +227,11 @@ public sealed class SchedulePictureAttacherTests
     {
         // P11: append only, never rename or remove - release 1.0.17 reads named fields only and ignores the rest
         var parameters = typeof(ScheduleTemplateDto).GetConstructors().Single().GetParameters();
-        var last = parameters.TakeLast(3).Select(p => p.Name).ToArray();
+        // spec: plr-d10 schedule slice 3 appended HasTaskFormat after them (append only): the three picture fields keep their places, just before it.
+        var last = parameters.TakeLast(4).Select(p => p.Name).ToArray();
 
-        last.Should().Equal("PictureId", "PictureSha256", "PictureKind");
-        parameters.TakeLast(3).Should().OnlyContain(p => p.IsOptional);
+        last.Should().Equal("PictureId", "PictureSha256", "PictureKind", "HasTaskFormat");
+        parameters.TakeLast(4).Should().OnlyContain(p => p.IsOptional);
         parameters.Select(p => p.Name).Should().Contain(["Id", "OwnerUserId", "MadeByUserId", "MadeAtUtc", "PreviousVersionId", "DraftStages"]);
     }
 

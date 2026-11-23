@@ -15,16 +15,26 @@ export async function pushSyncBatch(t: HttpTransport, request: SyncPushRequest):
  * EMPTY (`farms=`) — a phone that holds no farm (all purged, or new) is then sent every farm it may read from the
  * start. `undefined` = the caller does not say (nothing is sent). Additive: an older server ignores it.
  */
+/** The schedule format this build reads (slice 3: the task format). */
+export const SCHEDULE_FORMAT = 2;
+
+const normalizedCursorOrEmpty = (sinceCursorIso?: string): string | undefined => normalizeSyncCursorForApi(sinceCursorIso) || undefined;
+
 export async function pullSyncChanges(
     t: HttpTransport,
     sinceCursorIso?: string,
     heldFarmIds?: readonly string[],
 ): Promise<SyncPullResponse> {
-    const normalizedCursor = normalizeSyncCursorForApi(sinceCursorIso);
+    const normalizedCursor = normalizedCursorOrEmpty(sinceCursorIso);
     const farms = heldFarmIds === undefined ? undefined : heldFarmIds.join(',');
-    const params = normalizedCursor || farms !== undefined
-        ? { ...(normalizedCursor ? { since: normalizedCursor } : {}), ...(farms !== undefined ? { farms } : {}) }
-        : undefined;
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - `scheduleFormat=2`: this build reads the schedule task format, so the server may send the
+    // works of a plot-season's own schedule (`ownScheduleItems`, only for farms the switch is on for). A query, not a header: CORS needs nothing new. An older
+    // server ignores it; a 1.0.17 phone never sends it and is sent exactly what it was sent before.
+    const params = {
+        ...(normalizedCursor ? { since: normalizedCursor } : {}),
+        ...(farms !== undefined ? { farms } : {}),
+        scheduleFormat: SCHEDULE_FORMAT,
+    };
     const response = await t.http.get<SyncPullResponse>('/sync/pull', { params });
     return response.data;
 }

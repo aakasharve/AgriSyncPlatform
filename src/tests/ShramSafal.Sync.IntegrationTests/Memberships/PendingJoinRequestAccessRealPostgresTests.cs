@@ -672,6 +672,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // each with a p_user_select_* policy written ALREADY narrowed (m.status = 3). Down() drops both tables with their policies.
         "p_user_select_input_use_facts",
         "p_user_select_input_use_ingredients",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - 20261123040137_AddOwnScheduleItems creates ssf.own_schedule_items and
+        // ssf.own_schedule_item_revisions, each with a p_user_select_* policy written ALREADY narrowed (m.status = 3). Down() drops both tables with their policies.
+        "p_user_select_own_schedule_items",
+        "p_user_select_own_schedule_item_revisions",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

@@ -73,14 +73,14 @@ describe('MU-3 fix 1 — the phone', () => {
 
         const get = vi.fn().mockResolvedValue({ data: {} });
         await pullSyncChanges({ http: { get } } as unknown as HttpTransport, '2026-11-01T06:00:00.123Z', held);
-        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: `${FARM_A},${FARM_B}` } });
+        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: `${FARM_A},${FARM_B}`, scheduleFormat: 2 } });
         get.mockClear();
         // Fix 2 (N5): a phone holding no farm still says so (`farms=`); only a caller that says nothing sends nothing.
         await pullSyncChanges({ http: { get } } as unknown as HttpTransport, undefined, []);
-        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { farms: '' } });
+        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { farms: '', scheduleFormat: 2 } });
         get.mockClear();
         await pullSyncChanges({ http: { get } } as unknown as HttpTransport, undefined);
-        expect(get).toHaveBeenCalledWith('/sync/pull', { params: undefined });
+        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { scheduleFormat: 2 } } /* schedule slice 3: every pull says which schedule format it reads */);
     });
 
     it('F11: the money doors read the stored answer; /me/context only before the first pull; a paused farm opens none', () => {

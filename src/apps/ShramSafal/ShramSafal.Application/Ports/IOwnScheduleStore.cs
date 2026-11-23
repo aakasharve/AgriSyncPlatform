@@ -20,6 +20,9 @@ public interface IOwnScheduleStore
     /// <summary>Every work of these farms (active and removed), NOT tracked: the pull's read, under the reader's user scope.</summary>
     Task<IReadOnlyList<OwnScheduleItem>> GetOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
 
+    /// <summary>Every revision of the works of these farms, NOT tracked, oldest first: the pull's read (the phone's copy of each work's history).</summary>
+    Task<IReadOnlyList<OwnScheduleItemRevision>> GetRevisionsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
+
     /// <summary>The (plot, crop season) pairs of these farms that hold at least one ACTIVE work (the planning gate's fact, SM-7).</summary>
     Task<IReadOnlySet<(Guid PlotId, Guid CropCycleId)>> SeasonsWithWorkAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
 

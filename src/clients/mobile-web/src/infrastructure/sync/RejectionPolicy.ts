@@ -188,6 +188,12 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     'ScheduleImportStageDays',
     'ScheduleImportStages',
     'ScheduleImportRepeat',
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the schedule mechanism's NEW changes (ownschedule.*):
+    //   ScheduleMechanismOff - the switch is not on for this farm (turned off while the change waited). The same bytes get the same answer until someone
+    //                          turns it on, so it parks with its words instead of burning five charged retries and parking in FAILED unseen.
+    //   OwnScheduleInvalid   - a work that does not hold together, a key never saved, a make-main with no work or no stage: command shape, for ever.
+    'ScheduleMechanismOff',
+    'OwnScheduleInvalid',
 ];
 
 const PERMANENT_SET = new Set(

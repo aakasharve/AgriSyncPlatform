@@ -39,6 +39,23 @@ internal sealed class OwnScheduleStore(ShramSafalDbContext context) : IOwnSchedu
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<OwnScheduleItemRevision>> GetRevisionsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = farmIds.Select(id => new AgriSync.SharedKernel.Contracts.Ids.FarmId(id)).ToList();
+        return await context.OwnScheduleItemRevisions
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.FarmId))
+            .OrderBy(r => r.AtUtc)
+            .ThenBy(r => r.ItemId)
+            .ThenBy(r => r.RevisionNumber)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlySet<(Guid PlotId, Guid CropCycleId)>> SeasonsWithWorkAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
     {
         if (farmIds.Count == 0)

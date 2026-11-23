@@ -138,7 +138,27 @@ public sealed record SyncPullResponseDto(
     // its newest revision number), for the farms of this pull the switch is on for and the plots this person reads; FULL on every pull (a few works per season).
     // Sent ONLY to a phone that asks for the new format (scheduleFormat=2): NEVER A KEY otherwise, so a 1.0.17 phone's pull is byte for byte what it was (P11).
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<OwnScheduleItemDto>? OwnScheduleItems = null);
+    IReadOnlyList<OwnScheduleItemDto>? OwnScheduleItems = null,
+    // spec: plr-d10 schedule slice 3 - every save and removal of those works (their append-only history), oldest first, under the same rule: new-format phones,
+    // switch-on farms, the plots he reads; FULL on every pull; never a key otherwise.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnScheduleItemRevisionDto>? OwnScheduleItemRevisions = null);
+
+/// <summary>spec: plr-d10 schedule slice 3 - one save or removal of one own work, as the server keeps it (append-only). <see cref="Action"/> is <c>saved</c> or <c>removed</c>.</summary>
+public sealed record OwnScheduleItemRevisionDto(
+    Guid Id,
+    Guid ItemId,
+    Guid FarmId,
+    Guid PlotId,
+    Guid CropCycleId,
+    string TaskKey,
+    int RevisionNumber,
+    string Action,
+    string State,
+    System.Text.Json.JsonElement Task,
+    string ContentHash,
+    Guid ByUserId,
+    DateTime AtUtc);
 
 /// <summary>
 /// spec: plr-d10 schedule slice 3 - one work of a plot-season's own schedule as the server holds it now: the phone's server cache (P10: the server is the truth;

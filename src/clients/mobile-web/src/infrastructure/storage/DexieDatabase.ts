@@ -19,6 +19,7 @@ import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent'
 import type { ScheduleSubscriptionRow } from './scheduleSubscriptionRow';
 import type { PlannedWorkRow } from './plannedWorkRow';
 import type { SchedulePictureRow } from './schedulePictureRow';
+import type { OwnScheduleItemRevisionRow, OwnScheduleItemRow } from './ownScheduleItemRow';
 import { applyV1 } from './dexie/versions/v1';
 import { applyV2 } from './dexie/versions/v2';
 import { applyV3 } from './dexie/versions/v3';
@@ -48,6 +49,7 @@ import { applyV26 } from './dexie/versions/v26';
 import { applyV27 } from './dexie/versions/v27';
 import { applyV28 } from './dexie/versions/v28';
 import { applyV29 } from './dexie/versions/v29';
+import { applyV30 } from './dexie/versions/v30';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -116,7 +118,7 @@ export interface PendingInterpretationDexieRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 29; // lane SCH-ID-P — adds the schedulePictures store (the pictures of schedule makers); see versions/v29.ts. v28: lane L8c-1 — adds the plannedWork store (the farm's tasks and reminders; v27 is L8b-2's scheduleSubscriptions); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+export const DATABASE_VERSION = 30; // schedule mechanism slice 3 — adds the ownScheduleItems and ownScheduleItemRevisions stores (a plot-season's own schedule while it is built: server cache); see versions/v30.ts. v29: lane SCH-ID-P — adds the schedulePictures store (the pictures of schedule makers); see versions/v29.ts. v28: lane L8c-1 — adds the plannedWork store (the farm's tasks and reminders; v27 is L8b-2's scheduleSubscriptions); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /**
  * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
  *
@@ -235,6 +237,11 @@ export class AgriLogDatabase extends Dexie {
     /** spec: lane SCH-ID-P (v29) — the pictures of schedule makers this phone holds (a person's photo, a schedule's picture, an institution's logo), keyed by the server's picture id. */
     schedulePictures!: Table<SchedulePictureRow, string>;
 
+    /** spec: schedule mechanism slice 3 (v30) — a plot-season's own schedule while it is built: the works as the server holds them (server cache, P10). */
+    ownScheduleItems!: Table<OwnScheduleItemRow, string>;
+    /** spec: schedule mechanism slice 3 (v30) — every save and removal of those works, as the server keeps them (append-only on the server). */
+    ownScheduleItemRevisions!: Table<OwnScheduleItemRevisionRow, string>;
+
     /**
      * dfes-companion-2026-07-11 (Phase 4) — durable voice captures pending AI
      * interpretation. The STORE is created by `applyV23`, which this branch
@@ -303,6 +310,7 @@ export class AgriLogDatabase extends Dexie {
         applyV27(this);
         applyV28(this);
         applyV29(this);
+        applyV30(this);
     }
 }
 

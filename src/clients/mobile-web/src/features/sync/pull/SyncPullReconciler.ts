@@ -25,6 +25,7 @@ import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscripti
 import { reconcilePlanningState } from './reconcilers/planningStateReconciler';
 import { reconcileScheduleMechanism } from './reconcilers/scheduleMechanismReconciler';
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
+import { reconcileOwnScheduleItems } from './reconcilers/ownScheduleItemsReconciler';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
 import { reconcileInputIdentityAnswers } from './reconcilers/inputIdentityReconciler';
@@ -115,6 +116,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.scheduleSubscriptions,
         // lane L8c-1 - the farm's tasks and reminders (and a task taken from this person leaves with the withdrawn list).
         db.plannedWork, db.mutationQueue,
+        // schedule mechanism slice 3 - a plot-season's own schedule while it is built (server cache, replaced whole when the pull carries it).
+        db.ownScheduleItems, db.ownScheduleItemRevisions,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(
@@ -139,6 +142,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the farms the schedule mechanism is switched on for, stored whole in appMeta (an ABSENT key is
         // an answer here: off - the server omits it when the switch is off for every farm, and an older server never sends it).
         await reconcileScheduleMechanism(db, payload, receivedAtUtc);
+        // slice 3 - the works of each plot-season's own schedule and their history, as the server holds them (an absent key leaves them).
+        await reconcileOwnScheduleItems(db, payload);
         await reconcileAttentionBoard(db, payload);
         // lane MU-3 (plan step 4a) — keep only what the server lets this person read: after every other
         // reconciler, so what this pull just wrote is scanned too. An older server sends no scopes: no-op.

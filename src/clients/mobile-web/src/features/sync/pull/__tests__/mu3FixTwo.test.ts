@@ -164,8 +164,9 @@ describe('MU-3 fix 2 — the phone', () => {
         const get = vi.fn().mockResolvedValue({ data: {} });
         const t = { http: { get } } as unknown as HttpTransport;
         await pullSyncChanges(t, '2026-11-01T06:00:00.123Z', []);
-        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: '' } });
+        // schedule mechanism slice 3: this build also says which schedule format it reads (scheduleFormat=2), on every pull.
+        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: '', scheduleFormat: 2 } });
         await pullSyncChanges(t, '2026-11-01T06:00:00.123Z');
-        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z' } });
+        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', scheduleFormat: 2 } });
     });
 });

@@ -449,7 +449,7 @@ public sealed class OwnScheduleRealPostgresTests(ITestOutputHelper output) : Sch
         await OkAsync(SaveAsync(Owner, plot, cycle, Task("t1", "खुरपणी", DayTiming(14))));
 
         var (oldBody, _) = await PullAsync(Owner);
-        oldBody.Should().NotContain("ownScheduleItems", "a phone that does not ask for the new format is sent exactly what it was sent before");
+        oldBody.Should().NotContain("ownScheduleItem", "a phone that does not ask for the new format is sent exactly what it was sent before");
 
         var (_, root) = await NewPhonePullAsync(Owner);
         var items = ArrayOf(root, "ownScheduleItems");
@@ -458,6 +458,8 @@ public sealed class OwnScheduleRealPostgresTests(ITestOutputHelper output) : Sch
         item.GetProperty("revision").GetInt32().Should().Be(1);
         item.GetProperty("state").GetString().Should().Be("active");
         item.GetProperty("task").GetProperty("name").GetString().Should().Be("खुरपणी");
+        ArrayOf(root, "ownScheduleItemRevisions").Should().ContainSingle(r => r.GetProperty("itemId").GetGuid() == item.GetProperty("id").GetGuid()
+            && r.GetProperty("revisionNumber").GetInt32() == 1 && r.GetProperty("action").GetString() == "saved");
 
         // A worker of the farm with no schedule authority still reads them (planning shows them); farm B's owner never does.
         var (otherBody, _) = await NewPhonePullAsync(OwnerB);

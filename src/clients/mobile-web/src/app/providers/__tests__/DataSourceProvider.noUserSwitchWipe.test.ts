@@ -80,6 +80,16 @@ const ALLOWED_DEXIE_CLEARS: ReadonlyArray<{ file: string; table: string; why: st
         why: 'server-computed board, replaced wholesale on every pull',
     },
     {
+        file: 'features/sync/pull/reconcilers/ownScheduleItemsReconciler.ts',
+        table: 'ownScheduleItems',
+        why: 'schedule slice 3: server cache of own-schedule works, replaced wholesale when the pull carries the key (queued changes live in the queue, never here)',
+    },
+    {
+        file: 'features/sync/pull/reconcilers/ownScheduleItemsReconciler.ts',
+        table: 'ownScheduleItemRevisions',
+        why: 'schedule slice 3: server cache of their revisions, replaced wholesale when the pull carries the key',
+    },
+    {
         file: 'infrastructure/storage/DexieCropsRepository.ts',
         table: 'crops',
         why: 'replaceAll semantics inside one transaction — cleared and re-written together',
