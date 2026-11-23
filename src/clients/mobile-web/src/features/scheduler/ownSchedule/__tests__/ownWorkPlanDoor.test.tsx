@@ -113,6 +113,18 @@ describe('the plan door on माझं शेड्यूल (slice 6)', () => 
         });
     });
 
+    it('answered by the server but not pulled yet: still planned (no second plan button), no longer "kept on the phone"', async () => {
+        await seedServerWork(TIE);
+        await planOwnWork(PLACE, 'tie', 1, null);
+        const row = (await plans())[0];
+        await getDatabase().mutationQueue.update(row.id!, { status: 'APPLIED' } as never);
+        const items = await getLocalPlannedWork(PLACE.farmId);
+        expect(items[0]).toMatchObject({ keptOnPhone: false, refused: false, pendingSteps: [] });
+        list();
+        expect(await screen.findByTestId('own-list-planned-tie')).toHaveTextContent(OWN_WORK_PLAN_WORDS.mr.planned);
+        expect(screen.queryByTestId('own-list-plan-tie')).toBeNull();
+    });
+
     it('a person is offered only to a seat that may hand work over (SM-10), and choosing him queues his id', async () => {
         await seedServerWork(TIE);
         list({ mayAssign: true, assignees: [{ userId: MUKADAM, displayName: 'राजू', role: 'Mukadam' } as never], myUserId: ME });

@@ -34,6 +34,9 @@ const LIVE_INTENT_STATUSES: ReadonlySet<MutationQueueStatus> = new Set<MutationQ
 /** A change the server refused and parked on the conflict page. */
 const PARKED: MutationQueueStatus = 'REJECTED_USER_REVIEW';
 
+/** A change the server applied (its row is kept in the outbox until the pull brings the server's own row). */
+const ANSWERED: MutationQueueStatus = 'APPLIED';
+
 export interface LocalPlannedWork {
     id: string;
     farmId: string;
@@ -296,7 +299,7 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
 async function addQueuedOwnPlans(db: ReturnType<typeof getDatabase>, farmId: string, items: Map<string, LocalPlannedWork>): Promise<void> {
     const rows = (await db.mutationQueue
         .where('mutationType').equals(SyncMutationName.OwnscheduleItemPlan)
-        .filter(row => LIVE_INTENT_STATUSES.has(row.status) || row.status === PARKED)
+        .filter(row => LIVE_INTENT_STATUSES.has(row.status) || row.status === PARKED || row.status === ANSWERED)
         .toArray())
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0));
     for (const row of rows) {
@@ -308,6 +311,8 @@ async function addQueuedOwnPlans(db: ReturnType<typeof getDatabase>, farmId: str
         if (p.farmId !== farmId || !id || !plotId || !cropCycleId || !taskKey || items.has(id)) continue;
         const ownItemId = ownItemIdFor(cropCycleId, taskKey);
         const parked = row.status === PARKED;
+        // Answered by the server but its plan not pulled yet: still his plan (never "plan it" again in that gap), no longer waiting on the phone.
+        const answered = row.status === ANSWERED;
         if (!parked && [...items.values()].some(i => i.ownItemId === ownItemId && i.status !== 'Done' && i.status !== 'Cancelled')) continue;
         const assignee = str(p.assigneeUserId);
         items.set(id, {
@@ -333,8 +338,8 @@ async function addQueuedOwnPlans(db: ReturnType<typeof getDatabase>, farmId: str
             createdByUserId: null,
             modifiedAtUtc: null,
             source: 'queue',
-            keptOnPhone: !parked,
-            pendingSteps: parked ? [] : ['create'],
+            keptOnPhone: !parked && !answered,
+            pendingSteps: parked || answered ? [] : ['create'],
             refused: parked,
             refusedCode: parked ? row.errorCode ?? null : null,
             plots: [{ plotId, status: 'Pending', confirmationState: null }],
