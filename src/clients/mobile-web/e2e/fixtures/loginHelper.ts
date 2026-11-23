@@ -155,7 +155,7 @@ export async function loginViaPassword(
     // First-run WelcomeScreen (shramsafal_welcome_seen) renders once after login,
     // before the permission gate. Click through it, then re-evaluate the landing.
     if (landing === 'welcome') {
-        await page.getByTestId('welcome-continue').click();
+        await skipWelcome(page);
         landing = await waitForLoginLanding(page);
     }
     if (landing === 'permissions') {
@@ -167,10 +167,26 @@ export async function loginViaPassword(
     await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * First-run welcome. An owner gets the founder's voice note, which starts by
+ * itself: skip it through the "please listen" sheet. A worker or mukadam gets
+ * the light greeting with one continue button.
+ */
+async function skipWelcome(page: Page): Promise<void> {
+    const storySkip = page.getByTestId('welcome-story-skip').first();
+    if (await storySkip.isVisible().catch(() => false)) {
+        await storySkip.click();
+        await page.getByTestId('welcome-skip-confirm').click();
+        return;
+    }
+    await page.getByTestId('welcome-continue').click();
+}
+
 async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'welcome'> {
     const deadline = Date.now() + 30_000;
     const homeGreeting = page.getByTestId(HOME_READY_TESTID);
     const welcomeContinue = page.getByTestId('welcome-continue');
+    const welcomeStory = page.getByTestId('welcome-story-skip');
     const skipBtn = page.getByTestId('onboarding-skip');
     const alert = page.getByRole('alert').first();
 
@@ -180,6 +196,10 @@ async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' |
         }
 
         if (await welcomeContinue.isVisible().catch(() => false)) {
+            return 'welcome';
+        }
+
+        if (await welcomeStory.first().isVisible().catch(() => false)) {
             return 'welcome';
         }
 
