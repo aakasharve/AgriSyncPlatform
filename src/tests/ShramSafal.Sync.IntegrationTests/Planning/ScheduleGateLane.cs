@@ -174,7 +174,7 @@ public abstract class ScheduleGateLane(ITestOutputHelper output) : ScheduleCheck
     /// <summary>
     /// A schedule row that STORES its days with stages and works of the test's own choosing (SeedStoredRowAsync fixes the stages),
     /// made through the production import rule. <paramref name="owner"/> Institution is a checked-able Outside row; the maker is the
-    /// platform owner unless told otherwise.
+    /// importer unless told otherwise (slice 7: a maker never approves his own version, so the platform owner who approves it is not its maker).
     /// </summary>
     protected async Task<ScheduleTemplate> SeedStoredRowWithStagesAsync(
         string name, IReadOnlyList<StageDefinition> stages, IReadOnlyList<ImportedActivity> activities,
@@ -182,7 +182,7 @@ public abstract class ScheduleGateLane(ITestOutputHelper output) : ScheduleCheck
     {
         var template = ScheduleTemplate.Import(
             Guid.NewGuid(), name, ScheduleOwnerType.Institution, "SCH-GATE test recommendation", "grape",
-            new AgriSync.SharedKernel.Contracts.Ids.UserId(maker ?? PlatformOwner), scope, DateTime.UtcNow, stages, activities, out var problem);
+            new AgriSync.SharedKernel.Contracts.Ids.UserId(maker ?? Importer), scope, DateTime.UtcNow, stages, activities, out var problem);
         problem.Should().BeNull();
         await using var db = NewSuperuserContext();
         db.ScheduleTemplates.Add(template!);
