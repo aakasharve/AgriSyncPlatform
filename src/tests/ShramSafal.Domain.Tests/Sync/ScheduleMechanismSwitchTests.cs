@@ -118,12 +118,25 @@ public sealed class ScheduleMechanismSwitchTests
     [Fact]
     public async Task The_shipped_reserved_set_refuses_nothing_that_exists_today()
     {
-        // Slice 1 ships the gate with its set empty; the production constructor must therefore refuse no mutation name.
+        // Slice 1 shipped the gate with its set empty; slice 3 reserves its three own-schedule names. Every OTHER name of the catalog is refused by nothing
+        // here and costs no read of the flag (the repository throws if it is read).
         var sw = new ScheduleMechanismSwitch(new ThrowingRepo());
+        ScheduleMechanismSwitch.ReservedMutationNames.Should().BeEquivalentTo(["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main"]);
 
-        foreach (var name in SyncMutationCatalog.Names)
+        foreach (var name in SyncMutationCatalog.Names.Where(n => !ScheduleMechanismSwitch.ReservedMutationNames.Contains(n)))
         {
             (await sw.RefusalForPushAsync(name, Payload($$"""{"farmId":"{{FarmOne}}"}"""))).Should().BeNull($"{name} is an existing mutation");
+        }
+    }
+
+    [Fact]
+    public async Task The_three_own_schedule_names_are_refused_when_no_switch_row_exists()
+    {
+        // spec: plr-d10 schedule slice 3 - with the switch off (no row) every reserved name is refused, for any farm.
+        var sw = new ScheduleMechanismSwitch(new FlagRepo(null));
+        foreach (var name in ScheduleMechanismSwitch.ReservedMutationNames)
+        {
+            (await sw.RefusalForPushAsync(name, Payload($$"""{"farmId":"{{FarmOne}}"}""")))!.Code.Should().Be("ShramSafal.ScheduleMechanismOff", name);
         }
     }
 

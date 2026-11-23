@@ -74,6 +74,10 @@ export { PlannedWorkCompletePayload } from './plannedwork_complete.zod';
 export { PlannedWorkReopenPayload } from './plannedwork_reopen.zod';
 // lane CMP-D3 (founder D-68 round 2): a reason kept on an existing record of work (logreason.set).
 export { LogReasonSetPayload } from './logreason_set.zod';
+// slice 3 (schedule mechanism): a farmer's own schedule built one work at a time, and "make main" (ownschedule.*).
+export { OwnScheduleItemSavePayload } from './ownschedule_item_save.zod';
+export { OwnScheduleItemRemovePayload } from './ownschedule_item_remove.zod';
+export { OwnScheduleMakeMainPayload } from './ownschedule_make_main.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly

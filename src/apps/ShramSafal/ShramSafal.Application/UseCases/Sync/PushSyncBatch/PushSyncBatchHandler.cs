@@ -192,7 +192,11 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - a reason kept on one item of a saved record (logreason.set): an append-only overlay, never an edit.
     ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler setLogPracticeReasonHandler,
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - the farm-scoped switch; the reserved NEW mutation names are refused for a farm it is off for.
-    ScheduleMechanismSwitch scheduleMechanismSwitch)
+    ScheduleMechanismSwitch scheduleMechanismSwitch,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - a farmer's own schedule built one work at a time, and "हेच मुख्य करा" (ownschedule.*).
+    ShramSafal.Application.UseCases.Planning.OwnSchedule.SaveOwnScheduleItemHandler saveOwnScheduleItemHandler,
+    ShramSafal.Application.UseCases.Planning.OwnSchedule.RemoveOwnScheduleItemHandler removeOwnScheduleItemHandler,
+    ShramSafal.Application.UseCases.Planning.OwnSchedule.MakeOwnScheduleMainHandler makeOwnScheduleMainHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1098,8 +1102,8 @@ public sealed class PushSyncBatchHandler(
     {
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - the schedule mechanism's NEW mutation names are refused, whole and before
         // anything else looks at them, for a farm the `schedule_mechanism` switch is not on for (or a payload that names no single readable farm). It sits
-        // ABOVE the catalog guard on purpose: a reserved name is refused as "off" whether or not the catalog knows it yet. The set is empty until slice 2
-        // fills it, so every mutation that exists today passes through here without a read.
+        // ABOVE the catalog guard on purpose: a reserved name is refused as "off" whether or not the catalog knows it yet. Slice 3 reserves the three
+        // ownschedule.* names; every mutation a released phone sends is not reserved and passes through here without a read.
         if (await scheduleMechanismSwitch.RefusalForPushAsync(mutationType, payload, ct) is { } switchedOff)
         {
             return MutationExecutionOutcome.Failure(switchedOff.Code, switchedOff.Description);
@@ -1255,6 +1259,14 @@ public sealed class PushSyncBatchHandler(
                 return await HandleScheduleEditAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "schedule.clone":
                 return await HandleScheduleCloneAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 schedule slice 3 - the farmer's own schedule, one work at a time, and "हेच मुख्य करा". Reserved names: refused above for a farm the
+            // switch is not on for.
+            case "ownschedule.item.save":
+                return await HandleOwnScheduleItemSaveAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "ownschedule.item.remove":
+                return await HandleOwnScheduleItemRemoveAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "ownschedule.make_main":
+                return await HandleOwnScheduleMakeMainAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3270,6 +3282,136 @@ public sealed class PushSyncBatchHandler(
             ct);
 
         return ToOutcome(result);
+    }
+
+    // ── spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) — a farmer's OWN schedule, one work at a time ───────────────────────────────────
+    // The payload names the farm, so its scope is opened from it (a farm the sender is no Active member of is refused with no farm GUC ever set) and the
+    // caller's user scope is set with it (the frozen version's task rows are written under row security keyed on the user). Who may, which plot and season
+    // (E4: the plot must be the farm's, the season the plot's) and the owner (from the farm row, never a field) are the handlers'. The sender is the
+    // authenticated person. Every refusal parks visibly on the phone (P10). The three allow-lists are one line each: allowlist-parity.test.ts parses them.
+
+    private static ShramSafal.Application.UseCases.Planning.OwnSchedule.OwnScheduleCaller OwnScheduleCallerOf(
+        string deviceId, string clientRequestId, Guid actorUserId, string actorRole, string? appVersion) =>
+        new(actorUserId, actorRole, clientRequestId, string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion, deviceId);
+
+    private async Task<MutationExecutionOutcome> HandleOwnScheduleItemSaveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "task"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "ownschedule.item.save payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<OwnScheduleItemSavePayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.Task.ValueKind != JsonValueKind.Object)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for ownschedule.item.save.");
+        }
+
+        if (!Domain.Planning.ScheduleTaskContent.TryParseWire(request.Task.GetRawText(), out var task, out var problem))
+        {
+            var invalid = Domain.Common.ShramSafalErrors.OwnScheduleInvalid(problem!.Code, problem.Message);
+            return MutationExecutionOutcome.Failure(invalid.Code, invalid.Description);
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await saveOwnScheduleItemHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnSchedule.SaveOwnScheduleItemCommand(
+                request.FarmId, request.PlotId, request.CropCycleId, task!, OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleOwnScheduleItemRemoveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "taskKey"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "ownschedule.item.remove payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<OwnScheduleItemRemovePayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for ownschedule.item.remove.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await removeOwnScheduleItemHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnSchedule.RemoveOwnScheduleItemCommand(
+                request.FarmId, request.PlotId, request.CropCycleId, request.TaskKey ?? string.Empty,
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleOwnScheduleMakeMainAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "name", "stageLine"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "ownschedule.make_main payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<OwnScheduleMakeMainPayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty
+            || (request.StageLine?.Any(s => s is null) ?? false)
+            || !OwnScheduleStageLineHasOnlyKnownKeys(payload))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for ownschedule.make_main.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await makeOwnScheduleMainHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnSchedule.MakeOwnScheduleMainCommand(
+                request.FarmId,
+                request.PlotId,
+                request.CropCycleId,
+                request.Name,
+                request.StageLine?.Select(s => new Domain.Planning.OwnScheduleStage(s.Name, s.StartDay, s.EndDay, s.StartSign, s.EndSign)).ToList(),
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    /// <summary>The stage line is strict too (F5): an entry with a key the contract does not name is refused, never silently dropped.</summary>
+    private static bool OwnScheduleStageLineHasOnlyKnownKeys(JsonElement payload)
+    {
+        foreach (var property in payload.EnumerateObject())
+        {
+            if (!property.Name.Equals("stageLine", StringComparison.OrdinalIgnoreCase) || property.Value.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var stage in property.Value.EnumerateArray())
+            {
+                if (stage.ValueKind != JsonValueKind.Object || !PayloadHasOnly(stage, "name", "startDay", "endDay", "startSign", "endSign"))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /// <summary>The role string the batch carries, as the schedule-template handlers read it (audit and the scope role gate); unknown reads as Worker.</summary>

@@ -556,6 +556,19 @@
 //     both tables and proves the request Completes and the rows are untouched.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.own_schedule_items and ssf.own_schedule_item_revisions (plr-d10 schedule mechanism, slice 3) — KEEP. One own_schedule_items row is one work of a
+//     plot-season's OWN schedule while it is built (the current truth); one revision row is one save or removal of it (append-only by privilege). Both carry
+//     owner_user_id (the farm's owner at the time of the write, a PERSON's opaque id), and the items created_by_user_id / updated_by_user_id, the revisions
+//     by_user_id (who typed it, opaque ids). KEEP, exactly as ssf.schedule_tasks above and ssf.farms.owner_user_id: opaque ids with no name beside them; the work
+//     is the farm's plan of work. Doctrine P6: anonymise the person, never the work - erasing a typist (a मुकादम who saved a work for the owner) must not take the
+//     owner's schedule away; erasing the owner leaves the farm's season plan in place for whoever farms it next. DISCLOSED: the free words of a work (its name,
+//     why, steps, warnings, what to look at, the question) are a grower's words about a crop practice, kept like observation_events text
+//     (D-FREETEXT-PRESERVE-2026-06-29); the task format has no field for a person's name. The revisions table is APPEND-ONLY BY PRIVILEGE and the items table
+//     grants no DELETE, so no scrub is wired. EXPORTED: ExportWorker writes /own_schedule_items.json (his works and every revision). Proven through the WHOLE
+//     worker: ErasureWorkerOwnScheduleRealPostgresTests runs the real worker with rows in both tables, for the owner and for the typist, and proves the request
+//     Completes and the rows are untouched.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
 //     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
 //     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with

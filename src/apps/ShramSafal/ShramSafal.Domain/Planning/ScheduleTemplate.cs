@@ -268,6 +268,16 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         ScheduleMadeFor? madeFor = null)
     {
         _ = newStage; // the stage label of a version that has stages is its first stage
+
+        // spec: plr-d10 schedule slice 3 (carry-over 2; trap "a whole edit mints new ids, drops 'after' and clears origin") - this overload writes a version
+        // from stages and activities only. On a version in the task format it would drop every task, every 'after', every origin and every stage sign, so it
+        // is refused: such a version changes through the own schedule store (FreezeOwn), which carries them. Needs the source loaded WITH its tasks.
+        if (IsInTaskFormat)
+        {
+            problem = new("ScheduleTaskFormatEdit", "This schedule is written in the task format; it is changed through its own works, never by a whole edit that would drop them.");
+            return null;
+        }
+
         problem = CheckStages(stages);
         if (problem is not null)
         {

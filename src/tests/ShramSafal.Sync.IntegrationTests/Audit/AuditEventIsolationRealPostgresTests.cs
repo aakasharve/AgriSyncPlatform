@@ -1437,6 +1437,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // It never touches ssf.audit_events, its policies or its grants. Down() refuses while any row of the new format exists (none does in this proof) and otherwise
         // drops exactly what Up() added. Safe mid-proof.
         "20261123020241_AddScheduleTaskFormat",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - Up() and Down() read in full: Up() creates ssf.own_schedule_items and
+        // ssf.own_schedule_item_revisions only (FORCE RLS on their own farm_id, an owner/place trigger, SELECT + INSERT + UPDATE on the items and SELECT + INSERT on the
+        // revisions for the app role). It never touches ssf.audit_events, its policies or its grants. Down() refuses while any own work or revision exists (none does
+        // in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261123040137_AddOwnScheduleItems",
     ];
 
     /// <summary>

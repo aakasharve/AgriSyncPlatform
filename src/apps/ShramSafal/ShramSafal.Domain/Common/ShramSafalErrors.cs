@@ -298,6 +298,13 @@ public static class ShramSafalErrors
         "ShramSafal.ScheduleMechanismOff",
         "The schedule mechanism is not switched on for this farm. Nothing was saved.");
 
+    /// <summary>
+    /// spec: plr-d10 schedule slice 3 - an own-schedule change that cannot be applied as sent (a work that does not hold together, a key that was never saved, a
+    /// make-main with no stage). Permanent: the same bytes are refused again. The words name the rule; nothing was saved.
+    /// </summary>
+    public static Error OwnScheduleInvalid(string rule, string words) =>
+        Error.Validation("ShramSafal.OwnScheduleInvalid", $"{rule}: {words} Nothing was saved.");
+
     // PLR-D10 I23 / N6 (founder D-16, 2026-10-26): "Future attendance must not be recorded as
     // completed work. Future work belongs in planning." An attendance mark dated after the farm's
     // India date is refused. THREE SEGMENTS for the same reason as LabourAssignmentConflict below:

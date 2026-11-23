@@ -207,6 +207,54 @@ public sealed class ExportWorker(
                     .ToListAsync(ct).ConfigureAwait(false),
                 ct).ConfigureAwait(false);
 
+            // own_schedule_items (schedule mechanism slice 3): the works of HIS own schedule (the plot-seasons of farms he owns: owner_user_id) and every work he
+            // wrote on another owner's farm, each with its full history (every revision). The work is the canonical task JSON, exactly as stored. Admin
+            // context, so row security does not hide the farm rows; the filter is the person. (Versions frozen by "make main" are schedule_templates rows: not
+            // exported, as no schedule version is today.)
+            var ownWorks = await admin.OwnScheduleItems
+                .Where(i => i.OwnerUserId == userKey || i.CreatedByUserId == userKey || i.UpdatedByUserId == userKey)
+                .OrderBy(i => i.CreatedAtUtc)
+                .ToListAsync(ct).ConfigureAwait(false);
+            var ownWorkIds = ownWorks.Select(i => i.Id).ToList();
+            var ownRevisions = await admin.OwnScheduleItemRevisions
+                .Where(r => ownWorkIds.Contains(r.ItemId) || r.ByUserId == userKey)
+                .OrderBy(r => r.AtUtc)
+                .ToListAsync(ct).ConfigureAwait(false);
+            await WriteJsonEntryAsync(zip, "own_schedule_items.json",
+                new
+                {
+                    works = ownWorks.Select(i => new
+                    {
+                        i.Id,
+                        FarmId = (Guid)i.FarmId,
+                        i.PlotId,
+                        i.CropCycleId,
+                        i.TaskKey,
+                        State = i.State.ToString(),
+                        i.Revision,
+                        i.Origin,
+                        Task = i.Content.ToCanonicalJson(),
+                        i.ContentHash,
+                        i.MainVersionId,
+                        i.CreatedAtUtc,
+                        i.UpdatedAtUtc,
+                    }),
+                    revisions = ownRevisions.Select(r => new
+                    {
+                        r.Id,
+                        r.ItemId,
+                        r.TaskKey,
+                        r.RevisionNumber,
+                        Action = r.Action.ToString(),
+                        State = r.State.ToString(),
+                        Task = r.Content.ToCanonicalJson(),
+                        r.ContentHash,
+                        ByUserId = r.ByUserId.Value,
+                        r.AtUtc,
+                    }),
+                },
+                ct).ConfigureAwait(false);
+
             // pictures (SCH-ID-S, founder D-146): HIS picture (his own face or chosen image) and the schedule pictures HE set - the files and a
             // line of metadata each (kind, date, size, type, hash). Never another person's picture, never an institution logo (not his data).
             // Admin context: the table's read policy is open, the filter is the person. Idempotent and read-only.
@@ -513,6 +561,7 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         - `/cross_border_transfers.json` — outbound calls to non-India processors made on your data
         - `/dpa_registry.json` — the data-processing agreements covering AgriSync's vendors
         - `/pictures/` — the picture you set for yourself and any picture you chose for one of your schedules, with a metadata file
+        - `/own_schedule_items.json` — the works of your own schedule (and any you wrote on another farm), each with every change made to it
         - `/transcripts/` — speech-to-text outputs (Phase 08 placeholder)
         - `/parsed/` — structured parses derived from your voice (Phase 08 placeholder)
         - `/voice/` — raw voice clips (deferred until Phase 07)

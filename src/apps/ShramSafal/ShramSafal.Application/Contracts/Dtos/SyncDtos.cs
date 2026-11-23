@@ -133,7 +133,31 @@ public sealed record SyncPullResponseDto(
     // off the pull's bytes are exactly what they were (P11); the phone reads an absent key as off. Additive and last: 1.0.17 parses the pull with no schema
     // and never reads it.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    SyncCapabilitiesDto? Capabilities = null);
+    SyncCapabilitiesDto? Capabilities = null,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the works of each plot-season's OWN schedule still being built (active and removed, each with
+    // its newest revision number), for the farms of this pull the switch is on for and the plots this person reads; FULL on every pull (a few works per season).
+    // Sent ONLY to a phone that asks for the new format (scheduleFormat=2): NEVER A KEY otherwise, so a 1.0.17 phone's pull is byte for byte what it was (P11).
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnScheduleItemDto>? OwnScheduleItems = null);
+
+/// <summary>
+/// spec: plr-d10 schedule slice 3 - one work of a plot-season's own schedule as the server holds it now: the phone's server cache (P10: the server is the truth;
+/// the phone's queued saves are intent until applied). <see cref="Task"/> is the canonical task JSON; <see cref="State"/> is <c>active</c> or <c>removed</c>;
+/// <see cref="MainVersionId"/> is the version the season's works were last frozen into by "हेच मुख्य करा" (null while it is only being built).
+/// </summary>
+public sealed record OwnScheduleItemDto(
+    Guid Id,
+    Guid FarmId,
+    Guid PlotId,
+    Guid CropCycleId,
+    string TaskKey,
+    int Revision,
+    string State,
+    System.Text.Json.JsonElement Task,
+    string ContentHash,
+    string? Origin,
+    Guid? MainVersionId,
+    DateTime UpdatedAtUtc);
 
 /// <summary>
 /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the pull's <c>capabilities</c>: one key per capability, each present only when it

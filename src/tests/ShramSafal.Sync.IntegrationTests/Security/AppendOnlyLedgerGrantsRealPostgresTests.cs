@@ -323,6 +323,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    ssf.schedule_template_stages. It GRANTs and REVOKEs on those two new tables only; no ledger this suite asserts about is touched. Down() REFUSES while
         //    any task, challenge or stage sign exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies mid-proof.
         "20261123020241_AddScheduleTaskFormat",
+        // ── Reviewed 2026-11-23 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, slice 3); Up() and Down() read in full: Up() creates ssf.own_schedule_items and
+        //    ssf.own_schedule_item_revisions (FORCE RLS on their own farm_id, an owner/place trigger). It GRANTs SELECT, INSERT, UPDATE and REVOKEs DELETE, TRUNCATE on the
+        //    items, GRANTs SELECT, INSERT and REVOKEs UPDATE, DELETE, TRUNCATE on the revisions - those two new tables only; no ledger this suite asserts about is touched.
+        //    Down() REFUSES while any own work or revision exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
+        "20261123040137_AddOwnScheduleItems",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

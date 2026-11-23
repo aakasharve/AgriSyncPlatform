@@ -35,8 +35,10 @@ public sealed class DfesQuestionContextMigrationRealPostgresTests(Xunit.Abstract
     /// The migrations after this one whose Down() was read in full and leaves everything asserted here alone.
     /// 20261123020241_AddScheduleTaskFormat (plr-d10 schedule slice 2): two new tables and two nullable columns on schedule_template_stages; Down() refuses while any row
     /// of them exists (none does in this proof) and otherwise drops exactly what Up() added. It touches no question table.
+    /// 20261123040137_AddOwnScheduleItems (plr-d10 schedule slice 3): two new tables (own works and their revisions) and their trigger function; Down() refuses while any
+    /// row of them exists (none does in this proof) and otherwise drops exactly what Up() added. It touches no question table.
     /// </summary>
-    private static readonly string[] ReviewedLaterMigrations = ["20261123020241_AddScheduleTaskFormat"];
+    private static readonly string[] ReviewedLaterMigrations = ["20261123020241_AddScheduleTaskFormat", "20261123040137_AddOwnScheduleItems"];
     private const string AppRole = "agrisync_app";
 
     private static readonly string[] NewColumns =

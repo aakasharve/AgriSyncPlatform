@@ -298,6 +298,11 @@ public static class DependencyInjection
         // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.
         services.AddScoped<ShramSafal.Application.Services.ScheduleBoardSteps>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.MoveScheduleStep.MoveScheduleStepHandler>();
+        // spec: plr-d10 schedule slice 3 - a farmer's own schedule built one work at a time, and "हेच मुख्य करा".
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.OwnScheduleMainSwitch>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.SaveOwnScheduleItemHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.RemoveOwnScheduleItemHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.MakeOwnScheduleMainHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

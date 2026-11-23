@@ -38,13 +38,20 @@ describe('mutation-types.json', () => {
   // 48 -> 48 on 2026-11-11 (lane REM-1, founder D-78 / D-84 = 1): no new mutation (the reminder settings are REST only, never queued: R21); the pull's
   // `plannedWork` rows gain the additive fields createdByName, category, mayPlayVoice, wordsWithheld, makerAlwaysShown, fromChosenPeopleRecord; 1.14.0 -> 1.15.0.
   // 48 -> 49 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set - a reason kept on an existing record of work; 1.15.0 -> 1.16.0.
-  it('declares 49 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(49);
+  // 49 -> 52 on 2026-11-23 (schedule mechanism slice 3): ownschedule.item.save / .item.remove / .make_main - a farmer's own schedule built one work at a
+  // time and "make main"; NEW names (sinceVersion 1.0.18), refused by the switch for a farm it is not on for; 1.16.0 -> 1.17.0.
+  it('declares 52 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(52);
   });
 
-  it('is contract version 1.16.0 and names logreason.set', () => {
-    expect(json.version).toBe('1.16.0');
+  it('is contract version 1.17.0 and names the three own-schedule mutations as new', () => {
+    expect(json.version).toBe('1.17.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
+    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main']) {
+      const entry = json.mutationTypes.find((m) => m.name === name);
+      expect(entry, name).toBeDefined();
+      expect(entry!.sinceVersion).toBe('1.0.18');
+    }
   });
 
   it('has unique mutation names', () => {

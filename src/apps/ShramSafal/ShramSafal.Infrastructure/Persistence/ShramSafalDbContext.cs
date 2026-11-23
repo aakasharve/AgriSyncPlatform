@@ -207,6 +207,12 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // privilege (migration AddScheduleStepMoves); FORCE-RLS on its own farm_id (F8).
     public DbSet<ShramSafal.Domain.Planning.ScheduleStepMove> ScheduleStepMoves => Set<ShramSafal.Domain.Planning.ScheduleStepMove>();
 
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the works of a farmer's own schedule while it is built (current truth, one row per
+    // crop season and task key) and their append-only history. FORCE-RLS on their own farm_id (F8); migration AddOwnScheduleItems.
+    public DbSet<ShramSafal.Domain.Planning.OwnScheduleItem> OwnScheduleItems => Set<ShramSafal.Domain.Planning.OwnScheduleItem>();
+
+    public DbSet<ShramSafal.Domain.Planning.OwnScheduleItemRevision> OwnScheduleItemRevisions => Set<ShramSafal.Domain.Planning.OwnScheduleItemRevision>();
+
     // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule: one current row per person or schedule. FORCE-RLS: writes only
     // under the setter's own user scope, reads open to every user scope and gated by the application (PictureViewer); migration AddPictures.
     public DbSet<ShramSafal.Domain.Pictures.Picture> Pictures => Set<ShramSafal.Domain.Pictures.Picture>();

@@ -626,6 +626,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // farm_join_requests object, no seat. Down() refuses while any row of the new format exists (none does in this proof) and otherwise drops exactly what Up()
         // added. Safe mid-proof.
         "20261123020241_AddScheduleTaskFormat",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - Up() and Down() read in full: Up() creates ssf.own_schedule_items and
+        // ssf.own_schedule_item_revisions (FORCE RLS on their own farm_id, an owner/place trigger). Their read policies READ ssf.farms and ssf.farm_memberships in the
+        // Active-only form (m.status = 3) from birth; the trigger reads ssf.farms and ssf.crop_cycles. It alters no existing policy, no farm_memberships or
+        // farm_join_requests object, no seat. Down() refuses while any own work exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261123040137_AddOwnScheduleItems",
     ];
 
     /// <summary>

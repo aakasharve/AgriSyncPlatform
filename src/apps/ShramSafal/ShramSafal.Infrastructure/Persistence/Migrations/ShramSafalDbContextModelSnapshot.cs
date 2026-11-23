@@ -5465,6 +5465,219 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.OwnScheduleItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("MainVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("main_version_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("origin");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<short>("StageIndex")
+                        .HasColumnType("smallint")
+                        .HasColumnName("stage_index");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.Property<string>("TimerKind")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("timer_kind");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_own_schedule_items_farm");
+
+                    b.HasIndex("CropCycleId", "TaskKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_own_schedule_items_season_key");
+
+                    b.HasIndex("PlotId", "CropCycleId")
+                        .HasDatabaseName("ix_own_schedule_items_plot_season");
+
+                    b.ToTable("own_schedule_items", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_own_schedule_items_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_own_schedule_items_kind", "kind IN ('irrigation', 'nutrition', 'spray', 'work', 'observe')");
+
+                            t.HasCheckConstraint("ck_own_schedule_items_revision", "revision >= 1");
+
+                            t.HasCheckConstraint("ck_own_schedule_items_state", "state IN (0, 1)");
+
+                            t.HasCheckConstraint("ck_own_schedule_items_timer", "timer_kind IN ('none', 'day', 'after', 'sign')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.OwnScheduleItemRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<short>("Action")
+                        .HasColumnType("smallint")
+                        .HasColumnName("action");
+
+                    b.Property<DateTime>("AtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at_utc");
+
+                    b.Property<Guid>("ByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("by_user_id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_own_schedule_item_revisions_farm");
+
+                    b.HasIndex("ItemId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_own_schedule_item_revisions_item_number");
+
+                    b.ToTable("own_schedule_item_revisions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_own_schedule_item_revisions_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_own_schedule_item_revisions_number", "revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_own_schedule_item_revisions_state", "state IN (0, 1) AND action IN (0, 1)");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedActivity", b =>
                 {
                     b.Property<Guid>("Id")

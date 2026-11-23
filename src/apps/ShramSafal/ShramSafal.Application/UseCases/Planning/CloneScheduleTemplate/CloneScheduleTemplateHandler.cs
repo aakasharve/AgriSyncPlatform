@@ -54,7 +54,7 @@ public sealed class CloneScheduleTemplateHandler(
         }
 
         // Step 3: load source template
-        var source = await repository.GetScheduleTemplateByIdAsync(command.SourceTemplateId, ct);
+        var source = await repository.GetScheduleTemplateWithTasksByIdAsync(command.SourceTemplateId, ct);
         if (source is null)
         {
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);

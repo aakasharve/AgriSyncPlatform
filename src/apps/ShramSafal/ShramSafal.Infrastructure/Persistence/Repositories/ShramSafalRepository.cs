@@ -1017,6 +1017,35 @@ internal sealed class ShramSafalRepository(
             .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == templateId, ct);
 
+    // spec: plr-d10 schedule slice 3 (carry-over 1) - the same row WITH its task-format tasks and challenges, so a copy or a next version carries them.
+    public async Task<ScheduleTemplate?> GetScheduleTemplateWithTasksByIdAsync(Guid templateId, CancellationToken ct = default) =>
+        await db.ScheduleTemplates
+            .Include(t => t.Activities)
+            .Include(t => t.StageRows)
+            .Include(t => t.Tasks)
+            .Include(t => t.Challenges)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+
+    // spec: plr-d10 schedule slice 3 - which versions hold a task (one read; the listing does not load the tasks themselves). Under row security: a version
+    // whose tasks the reader may not see reads as holding none, which is the answer he may have.
+    public async Task<IReadOnlySet<Guid>> GetScheduleTemplateIdsWithTasksAsync(IReadOnlyCollection<Guid> templateIds, CancellationToken ct = default)
+    {
+        if (templateIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var ids = templateIds.Distinct().ToList();
+        var found = await db.ScheduleTasks
+            .AsNoTracking()
+            .Where(t => ids.Contains(t.ScheduleTemplateId))
+            .Select(t => t.ScheduleTemplateId)
+            .Distinct()
+            .ToListAsync(ct);
+        return found.ToHashSet();
+    }
+
     public async Task AddScheduleCheckAsync(ScheduleCheck check, CancellationToken ct = default)
     {
         await db.ScheduleChecks.AddAsync(check, ct);

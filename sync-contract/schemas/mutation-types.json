@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.16.0",
-  "lastUpdated": "2026-11-13",
+  "version": "1.17.0",
+  "lastUpdated": "2026-11-23",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
@@ -51,6 +51,9 @@
     { "name": "plannedwork.cancel",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCancel" },
     { "name": "plannedwork.complete",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkComplete" },
     { "name": "plannedwork.reopen",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkReopen" },
-    { "name": "logreason.set",          "ownerAggregate": "LogPracticeReason", "sinceVersion": "1.0.18", "payloadSchema": "LogReasonSet" }
+    { "name": "logreason.set",          "ownerAggregate": "LogPracticeReason", "sinceVersion": "1.0.18", "payloadSchema": "LogReasonSet" },
+    { "name": "ownschedule.item.save",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemSave" },
+    { "name": "ownschedule.item.remove", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemRemove" },
+    { "name": "ownschedule.make_main",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleMakeMain" }
   ]
 }

@@ -8,11 +8,17 @@ namespace ShramSafal.Domain.Compare;
 /// A schedule as the engine reads it: its stages and its activities with the days the schedule STORES. Plain Domain
 /// input (no Application type, E2); SCH-GATE's mapper builds it from the stored fields later.
 /// </summary>
+/// <param name="EndsOnSign">
+/// spec: plr-d10 schedule slice 3 - for each stage of <paramref name="Stages"/> (same place in the list), whether it ENDS ON A SIGN: its end day is then an
+/// expectation and the stage stays open until its sign (the stage line holds it past that day, see <c>ScheduleDefinitionMapper.StageHolding</c>).
+/// <c>null</c> (every schedule before the task format) = no stage ends on a sign: exactly the old windows.
+/// </param>
 public sealed record ScheduleDefinition(
     Guid TemplateId,
     string Name,
     IReadOnlyList<StageDefinition> Stages,
-    IReadOnlyList<ScheduleActivityDef> Activities);
+    IReadOnlyList<ScheduleActivityDef> Activities,
+    IReadOnlyList<bool>? EndsOnSign = null);
 
 /// <summary>
 /// One activity of a schedule. <see cref="EndDay"/> / <see cref="FrequencyMode"/> / <see cref="IntervalDays"/> null = not

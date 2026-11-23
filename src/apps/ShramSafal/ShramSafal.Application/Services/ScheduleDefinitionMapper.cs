@@ -27,9 +27,12 @@ public static class ScheduleDefinitionMapper
     {
         ArgumentNullException.ThrowIfNull(template);
         var stored = template.HasStoredDays == true;
-        IReadOnlyList<StageDefinition> stages = stored
-            ? template.Stages.Select(s => new StageDefinition(s.Name, s.StartDay, s.EndDay)).ToList()
-            : [];
+        // spec: plr-d10 schedule slice 3 - a version in the task format lists its stage line even when no work stores a day (DraftStages), with its signs.
+        var line = stored
+            ? template.Stages
+            : template.HasTaskFormat == true ? (template.Stages.Count > 0 ? template.Stages : template.DraftStages ?? []) : [];
+        IReadOnlyList<StageDefinition> stages = line.Select(s => new StageDefinition(s.Name, s.StartDay, s.EndDay)).ToList();
+        IReadOnlyList<bool>? endsOnSign = line.Any(s => s.EndSign is not null) ? line.Select(s => s.EndSign is not null).ToList() : null;
 
         var activities = template.Activities
             .Select((a, index) =>
@@ -52,7 +55,7 @@ public static class ScheduleDefinitionMapper
             })
             .ToList();
 
-        return new ScheduleDefinition(template.Id, template.Name, stages, activities);
+        return new ScheduleDefinition(template.Id, template.Name, stages, activities, endsOnSign);
     }
 
     /// <summary>
@@ -63,7 +66,7 @@ public static class ScheduleDefinitionMapper
     public static ScheduleDefinition FromRow(ScheduleTemplate row)
     {
         ArgumentNullException.ThrowIfNull(row);
-        if (!row.HasStoredDays)
+        if (!row.HasStoredDays && !row.HasStageLine)
         {
             return new ScheduleDefinition(row.Id, row.Name, [], []);
         }
@@ -73,23 +76,42 @@ public static class ScheduleDefinitionMapper
                 a.Id, a.ActivityName, a.Part?.Trim().ToLowerInvariant(), a.OperationKey, a.Role, a.NutrientKey,
                 a.OffsetDays, a.EndDay, a.StoredFrequencyMode, a.StoredIntervalDays, a.AfterActivityId))
             .ToList();
-        return new ScheduleDefinition(row.Id, row.Name, row.Stages.ToList(), activities);
+        var stageRows = row.StageRows.OrderBy(s => s.OrderIndex).ToList();
+        IReadOnlyList<bool>? endsOnSign = stageRows.Any(s => s.EndSign is not null) ? stageRows.Select(s => s.EndSign is not null).ToList() : null;
+        return new ScheduleDefinition(row.Id, row.Name, row.Stages.ToList(), activities, endsOnSign);
     }
 
     /// <summary>
     /// The stage of the मुख्य schedule that holds <paramref name="day"/> (the first by start day, then end day - the order the engine's
     /// windows use), with its dates; <c>null</c> when the schedule stores no stages or the day is in none (before day 0, after the last stage).
     /// </summary>
+    /// <remarks>
+    /// spec: plr-d10 schedule slice 3 - a stage that ENDS ON A SIGN (<see cref="ScheduleDefinition.EndsOnSign"/>) stays open until its sign: past its expected end
+    /// day it still holds every day up to the day before the next stage's expected start (the last stage: every day after). Its window then ends on the asked day
+    /// (no day is invented past it). A sign seen is a task event of a later slice; until then the next stage's expected days decide where it begins.
+    /// </remarks>
     public static (StageDefinition Stage, StageWindow Window)? StageHolding(ScheduleDefinition main, DateOnly mainDayZero, DateOnly day)
     {
         ArgumentNullException.ThrowIfNull(main);
-        var ordered = main.Stages.OrderBy(s => s.StartDay).ThenBy(s => s.EndDay).ToList();
+        var ordered = main.Stages
+            .Select((s, i) => (Stage: s, Sign: main.EndsOnSign is { } signs && i < signs.Count && signs[i]))
+            .OrderBy(x => x.Stage.StartDay)
+            .ThenBy(x => x.Stage.EndDay)
+            .ToList();
         var windows = ScheduleFollowEngine.StageWindows(main, mainDayZero);
         for (var i = 0; i < windows.Count; i++)
         {
             if (day >= windows[i].From && day <= windows[i].To)
             {
-                return (ordered[i], windows[i]);
+                return (ordered[i].Stage, windows[i]);
+            }
+        }
+
+        for (var i = windows.Count - 1; i >= 0; i--)
+        {
+            if (ordered[i].Sign && day > windows[i].To && (i == windows.Count - 1 || day < windows[i + 1].From))
+            {
+                return (ordered[i].Stage, windows[i] with { To = day });
             }
         }
 

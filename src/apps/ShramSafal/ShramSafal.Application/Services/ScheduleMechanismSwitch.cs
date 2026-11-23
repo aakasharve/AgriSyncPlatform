@@ -26,9 +26,9 @@ namespace ShramSafal.Application.Services;
 /// 32-character spelling, or <c>all</c>.</item>
 /// </list>
 ///
-/// <para><b>The push gate.</b> <see cref="ReservedMutationNames"/> is the set of NEW mutation names that exist only for the mechanism. It is
-/// EMPTY in slice 1 (no such mutation exists yet) and slice 2 fills it, one name at a time, in the same change that adds the name to both
-/// <c>SyncMutationCatalog</c> files, <c>mutation-types.json</c> and both contract tests. Strict push rule: NEW names only, never a new key in an
+/// <para><b>The push gate.</b> <see cref="ReservedMutationNames"/> is the set of NEW mutation names that exist only for the mechanism. It was
+/// empty in slices 1 and 2 (slice 2 added no mutation); slice 3 reserves its three own-schedule names. Every later slice adds its names here in the
+/// same change that adds them to both <c>SyncMutationCatalog</c> files, <c>mutation-types.json</c> and both contract tests. Strict push rule: NEW names only, never a new key in an
 /// old payload - a name a released phone already sends cannot be gated, and a test (<c>Every_reserved_name_is_a_new_catalog_name</c>) holds that.
 /// A reserved name is refused with <see cref="ShramSafalErrors.ScheduleMechanismOff"/> when the switch is off for the farm its payload names, and
 /// also when the payload names no single readable farm: with no farm the switch cannot be shown to be on, so the answer is no.</para>
@@ -48,10 +48,15 @@ public sealed class ScheduleMechanismSwitch
     private const string FarmIdProperty = "farmId";
 
     /// <summary>
-    /// The NEW mutation names that exist only for the schedule mechanism and are refused for a farm it is off for. EMPTY in slice 1;
-    /// slice 2 adds its names here and to both catalogs. Never an existing mutation name (a released phone sends those).
+    /// The NEW mutation names that exist only for the schedule mechanism and are refused for a farm it is off for. Slice 3: a farmer's own schedule
+    /// built one work at a time (<c>ownschedule.item.save</c> / <c>ownschedule.item.remove</c>) and "हेच मुख्य करा" (<c>ownschedule.make_main</c>); each payload
+    /// names its <c>farmId</c>. Never an existing mutation name (a released phone sends those; <c>Every_reserved_name_is_a_new_catalog_name</c> holds that).
     /// </summary>
-    public static readonly IReadOnlySet<string> ReservedMutationNames = ImmutableHashSet.Create<string>(StringComparer.Ordinal);
+    public static readonly IReadOnlySet<string> ReservedMutationNames = ImmutableHashSet.Create(
+        StringComparer.Ordinal,
+        "ownschedule.item.save",
+        "ownschedule.item.remove",
+        "ownschedule.make_main");
 
     private readonly IShramSafalRepository repository;
     private readonly IReadOnlySet<string> reservedNames;

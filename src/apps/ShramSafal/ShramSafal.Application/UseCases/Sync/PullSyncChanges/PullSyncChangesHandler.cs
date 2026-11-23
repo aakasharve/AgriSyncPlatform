@@ -31,7 +31,9 @@ public sealed class PullSyncChangesHandler(
     IPictureStore pictureStore,
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - which of this pull's farms the schedule mechanism is switched on for.
     ScheduleMechanismSwitch scheduleMechanismSwitch,
-    ILogger<PullSyncChangesHandler> logger)
+    ILogger<PullSyncChangesHandler> logger,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the works of each plot-season's own schedule still being built.
+    IOwnScheduleStore ownScheduleStore)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
     // DegradedComponent.ComponentName. Frontend keys on these.
@@ -821,6 +823,21 @@ public sealed class PullSyncChangesHandler(
         // `capabilities` key at all, so the pull is byte for byte what it was.
         var scheduleMechanismFarms = await scheduleMechanismSwitch.OnFarmsAsync(window.FarmIds, ct);
 
+        // spec: plr-d10 schedule slice 3 - the own works, only for a phone that asks for the new format and only on farms the switch is on for (a farm that is
+        // off has none: the switch refuses every write of them). The plots he reads only. Phase-1 style like the switch read: a failure fails the pull.
+        IReadOnlyList<OwnScheduleItemDto>? ownScheduleItems = null;
+        if (query.ScheduleFormat is >= 2 && scheduleMechanismFarms.Count > 0)
+        {
+            ownScheduleItems = (await ownScheduleStore.GetOfFarmsAsync(scheduleMechanismFarms, ct))
+                .Where(i => window.ScopeOf((Guid)i.FarmId) is { } scope && scope.CoversPlot(i.PlotId))
+                .Select(i => new OwnScheduleItemDto(
+                    i.Id, (Guid)i.FarmId, i.PlotId, i.CropCycleId, i.TaskKey, i.Revision,
+                    i.State == Domain.Planning.OwnScheduleItemState.Active ? "active" : "removed",
+                    System.Text.Json.JsonDocument.Parse(i.Content.ToCanonicalJson()).RootElement.Clone(),
+                    i.ContentHash, i.Origin, i.MainVersionId, i.UpdatedAtUtc))
+                .ToList();
+        }
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -913,7 +930,9 @@ public sealed class PullSyncChangesHandler(
             // slice 1 (the switch) - the farms the schedule mechanism is on for (FULL every pull; additive and last, P11; never a key when none).
             Capabilities: scheduleMechanismFarms.Count == 0
                 ? null
-                : new SyncCapabilitiesDto(new ScheduleMechanismCapabilityDto(scheduleMechanismFarms)));
+                : new SyncCapabilitiesDto(new ScheduleMechanismCapabilityDto(scheduleMechanismFarms)),
+            // slice 3 - his own schedules' works (new-format phones only, switch-on farms only; never a key otherwise).
+            OwnScheduleItems: ownScheduleItems);
 
         return Result.Success(response);
     }

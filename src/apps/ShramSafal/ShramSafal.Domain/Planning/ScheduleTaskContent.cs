@@ -98,6 +98,49 @@ public sealed record ScheduleTaskContent(
     /// <summary>SHA-256 (lower-case hex) of the canonical JSON: it changes when ANY field of the task changes.</summary>
     public string ContentHash() => ScheduleTaskJson.Sha256Hex(ToCanonicalJson());
 
+    // spec: plr-d10 schedule slice 3 - the strict reader for a task a phone sends (ownschedule.item.save): the canonical names, and a key the format does not
+    // know is a refusal (F5: the push is strict, so a nested object is too), never silently dropped.
+    private static readonly JsonSerializerOptions WireOptions = new(ScheduleTaskJson.Options)
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        // The five required parts (key, name, kind, timing, basis) must be SENT: an absent kind or basis would otherwise read as the first word of its list.
+        RespectRequiredConstructorParameters = true,
+        RespectNullableAnnotations = true,
+    };
+
+    /// <summary>
+    /// Reads a task as a phone sends it (the canonical JSON names, camelCase, snake_case words) and checks it (<see cref="Check"/>). <c>false</c> and the
+    /// reason for text that is not a task, a key the format does not know, or a task that does not hold together. Never refuses for a missing OPTIONAL part (P9).
+    /// </summary>
+    public static bool TryParseWire(string json, out ScheduleTaskContent? content, out ScheduleTaskProblem? problem)
+    {
+        content = null;
+        try
+        {
+            content = JsonSerializer.Deserialize<ScheduleTaskContent>(json, WireOptions)?.Normalized();
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or ArgumentException or InvalidOperationException)
+        {
+            problem = new("ScheduleTaskWire", "The task is not in the task format.");
+            return false;
+        }
+
+        if (content is null)
+        {
+            problem = new("ScheduleTaskWire", "The task is missing.");
+            return false;
+        }
+
+        problem = content.Check();
+        if (problem is not null)
+        {
+            content = null;
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Whether the task holds together. <c>null</c> = fine. Never refuses a task for a missing OPTIONAL part (P9).</summary>
     public ScheduleTaskProblem? Check()
     {

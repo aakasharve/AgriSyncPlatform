@@ -30,7 +30,7 @@ public static class MainScheduleFactsReader
                 string.Equals(template.Check?.State, nameof(ScheduleCheckState.Checked), StringComparison.Ordinal),
                 scope,
                 template.OwnerUserId,
-                HasStages: template.HasStoredDays == true && template.Stages.Count > 0);
+                HasStages: HasStageLine(template));
         }
 
         return id => byId.GetValueOrDefault(id.Value);
@@ -46,7 +46,8 @@ public static class MainScheduleFactsReader
         var byId = new Dictionary<Guid, MainScheduleFacts>();
         foreach (var id in ids)
         {
-            var row = await repository.GetScheduleTemplateByIdAsync(id, ct);
+            // spec: plr-d10 schedule slice 3 - WITH its tasks: a version of only "after" and "sign" works stores no day of a work and still has a stage line.
+            var row = await repository.GetScheduleTemplateWithTasksByIdAsync(id, ct);
             if (row is null)
             {
                 continue;
@@ -57,9 +58,18 @@ public static class MainScheduleFactsReader
                 ScheduleCheck.StateOf(checks.Where(c => c.ScheduleTemplateId == id)) == ScheduleCheckState.Checked,
                 row.TenantScope,
                 row.OwnerUserId?.Value,
-                HasStages: row.HasStoredDays && row.Stages.Count > 0);
+                HasStages: row.HasStageLine);
         }
 
         return id => byId.GetValueOrDefault(id.Value);
     }
+
+    /// <summary>
+    /// The listing's answer to "does this row have a stage line a plot can follow?": it stores its days and lists stages (the old rule, unchanged), or - spec:
+    /// plr-d10 schedule slice 3 - it is written in the task format and has stages (listed in <c>Stages</c>, or in <c>DraftStages</c> when no work stores a day). The
+    /// same answer as <see cref="ScheduleTemplate.HasStageLine"/> on the row.
+    /// </summary>
+    public static bool HasStageLine(ScheduleTemplateDto template) =>
+        (template.HasStoredDays == true && template.Stages.Count > 0)
+        || (template.HasTaskFormat == true && (template.Stages.Count > 0 || (template.DraftStages?.Count ?? 0) > 0));
 }

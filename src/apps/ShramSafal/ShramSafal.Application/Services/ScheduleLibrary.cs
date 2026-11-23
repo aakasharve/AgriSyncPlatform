@@ -108,7 +108,9 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
             mode = ScheduleListingMode.Reviewer;
         }
 
-        return GetScheduleTemplatesHandler.Listing(visible, checks, mode);
+        // spec: plr-d10 schedule slice 3 - which visible versions are written in the task format (one read): their stage line and its signs are listed.
+        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(visible.Select(r => r.Id).ToList(), ct);
+        return GetScheduleTemplatesHandler.Listing(visible, checks, mode, withTasks);
     }
 
     /// <summary>
@@ -135,7 +137,8 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         IReadOnlyList<ScheduleCheck> checks = input.Count == 0
             ? []
             : await repository.GetScheduleChecksAsync(input.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
-        return GetScheduleTemplatesHandler.Listing(input, checks, ScheduleListingMode.Pool).Where(t => ids.Contains(t.Id)).ToList();
+        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(input.Select(r => r.Id).ToList(), ct);
+        return GetScheduleTemplatesHandler.Listing(input, checks, ScheduleListingMode.Pool, withTasks).Where(t => ids.Contains(t.Id)).ToList();
     }
 
     private static async Task<(List<ScheduleTemplate> Visible, IReadOnlyList<ScheduleCheck> Checks, ScheduleViewer Viewer)> ReadAsync(
@@ -156,7 +159,8 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct)
     {
         var (visible, checks, viewer) = await ReadAsync(repository, rows, callerUserId, ct);
-        return (visible, viewer, GetScheduleTemplatesHandler.Listing(visible, checks, ScheduleListingMode.Pool));
+        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(visible.Select(r => r.Id).ToList(), ct);
+        return (visible, viewer, GetScheduleTemplatesHandler.Listing(visible, checks, ScheduleListingMode.Pool, withTasks));
     }
 
     /// <summary>A Public row that stores its days and is neither Checked nor Withdrawn: a farm caller is never shown it.</summary>

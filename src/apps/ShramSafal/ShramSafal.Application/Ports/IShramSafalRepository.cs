@@ -676,6 +676,32 @@ public interface IShramSafalRepository
     Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default);
 
     /// <summary>
+    /// spec: plr-d10 schedule slice 3 (carry-over 1) - one schedule version WITH its task-format tasks and challenges (and its stages and activities), TRACKED.
+    /// <see cref="GetScheduleTemplateByIdAsync"/> does not include them, so a copy or a next version made from its answer would silently carry none. The default
+    /// (F7: never an abstract member) is that answer: an in-memory repository keeps the whole object, tasks included; the EF repository overrides it.
+    /// </summary>
+    Task<ScheduleTemplate?> GetScheduleTemplateWithTasksByIdAsync(Guid templateId, CancellationToken ct = default)
+        => GetScheduleTemplateByIdAsync(templateId, ct);
+
+    /// <summary>
+    /// spec: plr-d10 schedule slice 3 - which of these versions are written in the task format (they hold at least one task). One cheap read, so a listing of
+    /// many versions need not load every task. The default loads each version (correct for an in-memory repository); the EF repository overrides it.
+    /// </summary>
+    async Task<IReadOnlySet<Guid>> GetScheduleTemplateIdsWithTasksAsync(IReadOnlyCollection<Guid> templateIds, CancellationToken ct = default)
+    {
+        var found = new HashSet<Guid>();
+        foreach (var id in templateIds.Distinct())
+        {
+            if (await GetScheduleTemplateWithTasksByIdAsync(id, ct) is { Tasks.Count: > 0 })
+            {
+                found.Add(id);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Returns <c>true</c> if the user has at least one <c>Active</c>
     /// <see cref="FarmMembership"/> with <c>Role >= SecondaryOwner</c>.
     /// Used to gate Team / Licensed / Public template mutations.

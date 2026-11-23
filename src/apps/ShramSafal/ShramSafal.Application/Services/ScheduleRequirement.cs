@@ -40,7 +40,10 @@ public sealed record PlanningFacts(
     Func<ScheduleTemplateDto, ScheduleOrigin?> OriginOf,
     // spec: plr-d10 lane CMP-OWN - the OWNER of this plot's farm (null = not known, e.g. no such farm): the MainSchedule pick calls a followed schedule
     // "his own" only when its owner_user_id column equals it (D-136). REQUIRED, so a loader that forgets it does not compile.
-    Guid? PlotFarmOwnerUserId);
+    Guid? PlotFarmOwnerUserId,
+    // spec: plr-d10 schedule slice 3 (SM-7 = yes, from one work) - the plot's CURRENT season holds at least one active work of his own schedule still being built
+    // (ssf.own_schedule_items). Such a schedule satisfies "a schedule is needed after the trial" (D-76) and is NEVER main by being saved (review focus 2).
+    bool HasOwnWork = false);
 
 /// <summary>
 /// What the planning gate says about one plot (the plan's record, plus the season it was judged on - open point 6).
@@ -84,7 +87,9 @@ public sealed class ScheduleRequirement(
     IShramSafalRepository repository,
     ISubscriptionReader subscriptions,
     GetScheduleTemplatesHandler templates,
-    IClock clock)
+    IClock clock,
+    // spec: plr-d10 schedule slice 3 - the works of his own schedule still being built (the planning gate counts one, SM-7).
+    IOwnScheduleStore ownWork)
 {
     // ---- the decision (pure) ---------------------------------------------------------------------------------
 
@@ -104,7 +109,8 @@ public sealed class ScheduleRequirement(
         var followsAllowed = followed.Any(s => s.Origin != ScheduleOrigin.Own)
             || followed.Any(s => s.Origin == ScheduleOrigin.Own
                                  && byId.TryGetValue(s.ScheduleTemplateId.Value, out var own)
-                                 && own.HasStoredDays == true);
+                                 && (own.HasStoredDays == true || MainScheduleFactsReader.HasStageLine(own)))
+            || facts.HasOwnWork;
 
         var checkedCrops = ScheduleLibrary.CheckedOutsideCropsOf(facts.Listing);
         var canFollowSomething = facts.Listing.Any(t =>
@@ -143,7 +149,8 @@ public sealed class ScheduleRequirement(
         IReadOnlyDictionary<Guid, ScheduleTemplateDto> byId)
     {
         var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing), facts.PlotFarmOwnerUserId);
-        if (main is null || !byId.TryGetValue(main.ScheduleTemplateId.Value, out var template) || template.HasStoredDays != true)
+        if (main is null || !byId.TryGetValue(main.ScheduleTemplateId.Value, out var template)
+            || (template.HasStoredDays != true && !MainScheduleFactsReader.HasStageLine(template)))
         {
             return null;
         }
@@ -194,8 +201,9 @@ public sealed class ScheduleRequirement(
         var library = listing.Value ?? [];
         var (standing, extension) = await StandingOfAsync(farm.OwnerAccountId, now, ct);
         var originFor = await OriginsAsync(library, callerUserId, ct);
+        var hasOwnWork = season is not null && (await ownWork.SeasonsWithWorkAsync([farmId], ct)).Contains((plotId, season.CycleId));
         return Result.Success(new PlanningFacts(
-            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value));
+            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value, hasOwnWork));
     }
 
     /// <summary>
@@ -252,9 +260,12 @@ public sealed class ScheduleRequirement(
         var library = listing.Value ?? [];
         var (standing, extension) = await StandingOfAsync(farm.OwnerAccountId, now, ct);
         var originFor = (await OriginsAsync(library, callerUserId, ct))(farm.OwnerUserId.Value);
+        var withOwnWork = await ownWork.SeasonsWithWorkAsync([farmId], ct);
         foreach (var id in wanted)
         {
-            result[id] = new PlanningFacts(id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor, farm.OwnerUserId.Value);
+            result[id] = new PlanningFacts(
+                id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor, farm.OwnerUserId.Value,
+                seasonOf[id] is { } s && withOwnWork.Contains((id, s.CycleId)));
         }
 
         return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
@@ -304,6 +315,7 @@ public sealed class ScheduleRequirement(
 
         var standings = new Dictionary<Guid, (TrialStanding? Standing, bool Extension)>();
         var originFor = await OriginsAsync(listing, callerUserId, ct);
+        var withOwnWork = await ownWork.SeasonsWithWorkAsync(farmIds, ct);
         var states = new List<PlotPlanningState>(plots.Count);
         foreach (var plot in plots)
         {
@@ -321,7 +333,8 @@ public sealed class ScheduleRequirement(
             var season = CurrentSeason(cyclesByPlot.GetValueOrDefault(plot.Id) ?? []);
             states.Add(Decide(new PlanningFacts(
                 plot.Id, season, now, standing.Standing, standing.Extension,
-                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value)));
+                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value,
+                season is not null && withOwnWork.Contains((plot.Id, season.CycleId)))));
         }
 
         return states;

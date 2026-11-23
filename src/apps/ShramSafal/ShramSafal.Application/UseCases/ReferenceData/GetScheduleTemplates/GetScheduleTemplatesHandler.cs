@@ -115,7 +115,8 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
     public static IReadOnlyList<ScheduleTemplateDto> Listing(
         IReadOnlyList<ScheduleTemplate> rows,
         IReadOnlyList<ScheduleCheck>? checks = null,
-        ScheduleListingMode mode = ScheduleListingMode.Farm)
+        ScheduleListingMode mode = ScheduleListingMode.Farm,
+        IReadOnlySet<Guid>? withTasks = null)
     {
         ArgumentNullException.ThrowIfNull(rows);
         var samples = SamplesOf(ReferenceDataCatalog.ScheduleTemplates);
@@ -125,7 +126,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             return samples;
         }
 
-        var mapped = MapFromDb(rows, checks ?? []);
+        var mapped = MapFromDb(rows, checks ?? [], withTasks);
         var rowById = rows.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
         var all = mapped.Where(d => rowById.ContainsKey(d.Id)).ToList();
 
@@ -264,7 +265,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
     }
 
     private static IReadOnlyList<ScheduleTemplateDto> MapFromDb(
-        IReadOnlyList<ScheduleTemplate> templates, IReadOnlyList<ScheduleCheck> checks)
+        IReadOnlyList<ScheduleTemplate> templates, IReadOnlyList<ScheduleCheck> checks, IReadOnlySet<Guid>? withTasks = null)
     {
         // spec: plr-d10 lane SCH-A (Task 1) - a row that STORES its days is listed exactly as stored (R3: no equal split,
         // no repeat guessed from the name); the guesses below stay for the other rows only (P11). The equal-split stage
@@ -290,7 +291,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
 
                 if (template.HasStoredDays)
                 {
-                    return WithProvenance(MapStored(template, check, ownerType, rowTag), template);
+                    return WithTaskFormat(WithProvenance(MapStored(template, check, ownerType, rowTag), template), template, withTasks);
                 }
 
                 // D6: a row that names its crop (SCH-OWN) is listed under that crop's name - never one read from its title.
@@ -327,7 +328,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                 // M004 ruling (SCH-OWN-c, R-c10; P11): an own version with stages but no works still lists Stages [] and TotalDays 0 - release 1.0.17 lists
                 // any template with a stage and treats OwnScheduleEmpty (unknown to it) as retryable, so a stages-only entry would make it churn to the
                 // retry cap on adopt. The stored stages reach NEW phones through DraftStages (WithProvenance).
-                return WithProvenance(
+                return WithTaskFormat(WithProvenance(
                     new ScheduleTemplateDto(
                         template.Id,
                         template.Name,
@@ -342,7 +343,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                         RowVersionTag: rowTag,
                         HasStoredDays: false,
                         Scope: template.TenantScope.ToString()),
-                    template);
+                    template), template, withTasks);
             })
             .OrderBy(template => template.CropType, StringComparer.OrdinalIgnoreCase)
             .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
@@ -374,6 +375,27 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                 ? template.Stages.Select(stage => new StageDefinitionDto(stage.Name, stage.StartDay, stage.EndDay)).ToList()
                 : null,
         };
+    }
+
+    /// <summary>
+    /// spec: plr-d10 schedule slice 3 - a version written in the task format (it holds a task: <paramref name="withTasks"/>) says so (<c>HasTaskFormat</c>), and its
+    /// stage line carries the signs its stages start or end on (<c>Stages</c> when it stores its days the old way, else <c>DraftStages</c>, which a 1.0.17 phone
+    /// never reads: its <c>Stages</c> stay [] for a version whose works an old phone cannot hold, M004). Every other row is returned unchanged, byte for byte.
+    /// </summary>
+    private static ScheduleTemplateDto WithTaskFormat(ScheduleTemplateDto dto, ScheduleTemplate template, IReadOnlySet<Guid>? withTasks)
+    {
+        if (withTasks is null || !withTasks.Contains(template.Id) || template.StageRows.Count == 0)
+        {
+            return dto;
+        }
+
+        var line = template.StageRows
+            .OrderBy(s => s.OrderIndex)
+            .Select(s => new StageDefinitionDto(s.Name, s.StartDay, s.EndDay, s.StartSign, s.EndSign))
+            .ToList();
+        return template.HasStoredDays
+            ? dto with { HasTaskFormat = true, Stages = line }
+            : dto with { HasTaskFormat = true, DraftStages = line };
     }
 
     private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto? check, string? ownerType, string rowTag)

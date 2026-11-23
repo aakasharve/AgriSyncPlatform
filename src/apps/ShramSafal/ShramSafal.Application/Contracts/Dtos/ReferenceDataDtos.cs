@@ -1,9 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace ShramSafal.Application.Contracts.Dtos;
 
+// spec: plr-d10 schedule slice 3 - StartSign / EndSign: additive, optional and NEVER written when absent (every stage before the task format has none), so a stage
+// line reads byte for byte as before; a 1.0.17 phone reads named fields only. EndSign set = the stage ends on a sign and EndDay is its EXPECTED end.
 public sealed record StageDefinitionDto(
     string Name,
     int StartDay,
-    int EndDay);
+    int EndDay,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? StartSign = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EndSign = null);
 
 public sealed record TemplateActivityDto(
     string Name,
@@ -75,7 +81,10 @@ public sealed record ScheduleTemplateDto(
     // picture to this reader (the phone draws its letter badge); they are only ever set together.
     Guid? PictureId = null,
     string? PictureSha256 = null,
-    string? PictureKind = null);
+    string? PictureKind = null,
+    // spec: plr-d10 schedule slice 3 - additive at the END, optional and never written when absent (P11): true for a version written in the task format (it
+    // holds a task). Its stage line is then a line a plot can follow even when no work stores a day ("after" and "sign" works), and its stages carry their signs.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? HasTaskFormat = null);
 
 public sealed record CropTypeDto(
     string Name,
