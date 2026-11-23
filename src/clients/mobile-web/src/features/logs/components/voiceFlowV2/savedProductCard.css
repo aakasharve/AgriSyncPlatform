@@ -1,0 +1,52 @@
+/*
+ * spec: voice-flow-v2-2026-11-23 (design-fidelity pass F3) — the saved screen's product card in the approved design's look
+ * (sathi-ring.src.html `.sheet`, `.pcard`): the result screen's own `ProductCard` (its facts, its हो / नाही / फोटो and every answer
+ * rule unchanged) re-drawn only inside `.vr2-pcard`. The flag-off screen never mounts this wrapper, so it is untouched.
+ * Hooks are the card's own test ids; a hook that disappears only loses its look, never its behaviour.
+ */
+.vr2-pcard [data-testid="vr-product-card"] {
+  border-radius: 24px 24px 0 0;
+  padding: 16px 16px 18px;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, .18);
+  color: #1C1917;
+}
+.vr2-pcard [data-testid="vr-product-card"] > div[aria-hidden="true"]:first-child { display: none; }
+.vr2-pcard [data-testid="vr-card-name"] { font-size: 22px; font-weight: 700; }
+.vr2-pcard [data-testid="vr-card-type"] {
+  font-size: 12px; font-weight: 800; border-radius: 999px; padding: 1px 9px;
+  background: #fff; box-shadow: inset 0 0 0 1px currentColor;
+}
+.vr2-pcard [data-type="insecticide"] [data-testid="vr-card-type"] { color: #9D174D; }
+.vr2-pcard [data-type="fungicide"] [data-testid="vr-card-type"] { color: #075985; }
+.vr2-pcard [data-type="fertilizer"] [data-testid="vr-card-type"] { color: #5B21B6; }
+/* the facts: plain rows under a hairline, label column 118 px */
+.vr2-pcard [data-testid="vr-card-facts"] {
+  margin-top: 8px; padding: 0; border: 0; border-top: 1px solid #DDE3DA; border-radius: 0; background: transparent;
+}
+.vr2-pcard [data-testid="vr-card-facts"] > div { gap: 10px; padding: 7px 0; border-bottom: 1px solid #DDE3DA; }
+.vr2-pcard [data-testid="vr-card-facts"] > div > span:first-child { width: 118px; font-size: 13px; font-weight: 700; color: #5F6B63; }
+.vr2-pcard [data-testid="vr-card-facts"] > div > span:last-child { font-size: 15px; font-weight: 800; color: #1C1917; }
+/* what each ingredient does */
+.vr2-pcard [data-testid="vr-card-does"] {
+  margin-top: 8px; padding: 8px 10px; border: 1px solid #DDE3DA; border-radius: 14px; box-shadow: none;
+}
+.vr2-pcard [data-testid="vr-card-does"] > div + div { margin-top: 6px; padding-top: 6px; border-top-color: #DDE3DA; }
+.vr2-pcard [data-testid="vr-card-does"] > div > div:first-child { font-size: 15px; font-weight: 700; }
+.vr2-pcard [data-testid="vr-card-does"] > div > div:nth-child(2) { font-size: 14px; line-height: 1.5; font-weight: 400; color: #1C1917; }
+.vr2-pcard [data-testid="vr-card-does"] [data-src] {
+  font-size: 11px; font-weight: 800; color: #075985; background: #F0F9FF; box-shadow: inset 0 0 0 1px #BAE6FD; border-radius: 6px; padding: 0 6px;
+}
+/* the question and the three answers */
+.vr2-pcard [data-testid="vr-card-question"] { margin-top: 10px; font-size: 15.5px; font-weight: 800; }
+.vr2-pcard [data-testid="vr-answer-yes"],
+.vr2-pcard [data-testid="vr-answer-no"],
+.vr2-pcard [data-testid="vr-answer-photo"] { min-height: 46px; border-radius: 999px; font-size: 16px; font-weight: 800; }
+.vr2-pcard [data-testid="vr-answer-yes"] { background: #0F6B3A; }
+.vr2-pcard [data-testid="vr-answer-no"] { border: 2px solid #DDE3DA; color: #1C1917; }
+.vr2-pcard [data-testid="vr-answer-photo"] { border: 2px solid #16A34A; color: #0F6B3A; }
+.vr2-pcard [data-testid="vr-card-source"] { margin-top: 8px; font-size: 12px; font-weight: 600; color: #5F6B63; }
+/* the card's own close (its words say what closing means for this viewer): the design's `.pclose2` */
+.vr2-pcard [data-testid="vr-card-close"] {
+  min-height: 44px; margin-top: 8px; border-radius: 999px; border: 1.5px solid #DDE3DA; background: #fff;
+  font-size: 14.5px; font-weight: 800; color: #5F6B63;
+}

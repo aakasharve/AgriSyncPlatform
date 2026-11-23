@@ -2,52 +2,57 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: voice-flow-v2-2026-11-23 (Task 11; amendments H2, H3, H7, M4) — the ONE saved screen he sees first after he speaks, built
- * only from the result screen's existing pieces (the founder-approved look, `savedc`). Presentational: the container owns the
- * audio, the sync read-out and the answers. Top to bottom:
+ * spec: voice-flow-v2-2026-11-23 (Task 11; amendments H2, H3, H7, M4; design-fidelity pass F3) — the ONE saved screen he sees
+ * first after he speaks, drawn as the approved design draws it (sathi-ring.src.html: `.hstrip`, `.spk`, `.mcard.savedc`, `.recrow`,
+ * `.clip.big`, the dial, `.mnext`). Presentational: the container owns the audio, the sync read-out and the answers. Top to bottom:
  *   1. the red mix banner (the verdicts derived on read, as on the result screen); place, day (the existing move-day chip) and
  *      how many times he told it today; who told it today;
- *   2. ONE card: the title says only what the sync state says (P10) — "लक्षात ठेवलं ✓" while it is on this phone, the server's
- *      claim only once the server acknowledged it; the badges; his voice, big ("तुमचा आवाज ऐका"), or the typed note; the meter
- *      (the SERVER's score only, its own parts left to this screen: `ResultHero parts={false}`, P4);
- *   3. "तुम्ही काय दिलं" (`SavedGiven`), the eight parts (`SavedPartsGrid`), what stopped the work;
- *   4. his words, the question, the speaker's line, the extras, "बदला", the earlier recordings, the detail button
+ *   2. ONE cream card: the title says only what the sync state says (P10) — "लक्षात ठेवलं ✓" while it is on this phone, the server's
+ *      claim only once the server acknowledged it; who told it; the badges; his voice, big ("तुमचा आवाज ऐका"), or the typed note;
+ *      the dial (the SERVER's score only, `SavedMeterGauge`, P4) and the first untold part to tell;
+ *   3. for someone who does not check products, the speaker's line; "तुम्ही काय दिलं" (`SavedGiven`), the eight parts
+ *      (`SavedPartsGrid`), what stopped the work;
+ *   4. his words and why Sathi understood them, the question, the extras, "बदला", the earlier recordings, the detail button
  *      (`SavedScreenLower`);
  *   5. the bottom bar: the big mic and the 30-second self-close (`IdleCloseBar`), held while a clip plays, the product card or
  *      the day sheet or any overlay is open, and off when the container says so.
  * No "पक्कं आहे" here (it stays on the detail page), no projected number, no save call.
  */
 import React, { useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, MapPin } from 'lucide-react';
+import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { openOverlayCount } from '../../../../core/navigation/backStack';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
 import { SHIPPABLE_RULES, type MixRule } from '../../../../domain/inputs/mixVerdict';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { dayRel, dayShort } from '../dayPick/dayWords';
 import type { RingNodeData } from '../shramsathi/understandingRing';
-import ClipPlayer from '../voiceResult/ClipPlayer';
-import { BlockerRow, LegacyNote, TimePill, TypedNote, TypedTag, WhoChip } from '../voiceResult/DayParts';
+import { BlockerRow, LegacyNote, TypedNote } from '../voiceResult/DayParts';
 import { dayLinesOf, lineKeyOfVerdict } from '../voiceResult/DaySummaryLines';
 import { MixBanner, tankVerdictsOf } from '../voiceResult/MixBox';
-import ProductCard, { type ProductAnswerKit } from '../voiceResult/ProductCard';
+import type { ProductAnswerKit } from '../voiceResult/ProductCard';
 import type { ProductItem } from '../voiceResult/productModel';
-import ResultHero from '../voiceResult/ResultHero';
 import { resultCopy } from '../voiceResult/resultCopy';
 import type { DayView, PartKey, RecordingView } from '../voiceResult/resultModel';
 import { resultDayStr, resultStr, useResultStr } from '../voiceResult/resultStrings';
 import { scrollBelowHeader } from '../voiceResult/scrollBelowHeader';
 import type { LogSyncState } from '../voiceResult/useRecordingTrust';
 import IdleCloseBar from './IdleCloseBar';
-import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
+import { Bd, SANS, Tick } from './savedBits';
+import SavedClip from './SavedClip';
 import SavedGiven from './SavedGiven';
+import SavedMeterGauge from './SavedMeterGauge';
 import SavedPartsGrid from './SavedPartsGrid';
+import SavedProductCard from './SavedProductCard';
 import SavedScreenLower from './SavedScreenLower';
+import { savedWords } from './savedWords';
 
-const SANS = "'Noto Sans Devanagari', sans-serif";
+/** The design's `.hstrip .chip`. */
+const CHIP = 'inline-block whitespace-nowrap rounded-full border border-[#DDE3DA] bg-white px-[11px] py-1 text-[13px] font-extrabold text-[#1C1917]';
 
 export interface SavedScreenProps {
     day: DayView;
@@ -102,7 +107,6 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const primary: RecordingView | undefined = day.current.find(r => !!r.transcript) ?? day.current[0];
     const [card, setCard] = useState<{ item: ProductItem; logId: string } | null>(null);
     const root = useRef<HTMLDivElement>(null);
-    const wordsRef = useRef<HTMLDivElement>(null);
     const kit = p.answerKit;
     const rules = p.mixRules ?? SHIPPABLE_RULES;
     // The day's tank verdicts, derived on read from the records on this screen (as `VoiceResultScreen` does); nothing is stored.
@@ -115,7 +119,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const RS = useResultStr();
     if (!primary) return null;
-    const W = voiceFlowWords(language);
+    const SW = savedWords(language);
     const copy = resultCopy(language);
     const DS = resultDayStr(language);
     const nd = (text: string): string => digitsFor(text, language);
@@ -141,59 +145,69 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const pauseReason = p.playingId ? 'clip' : card ? 'product' : p.pickingDay ? 'day' : null;
     const dayText = nd(dayRel(primary.log.date, getDateKey(), language));
 
+    const severalNote = severalPlots ? null : <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />;
+    const addedEntries = day.current.flatMap(r => r.entries);
+    const speakerDone = !!kit && !kit.canCheck && addedEntries.some(e => e.products?.items.some(i => !!i.ref));
+
     return (
         <div ref={root} className="space-y-3 pt-1" style={{ fontFamily: SANS }} data-testid="vr2-saved">
             <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
-            <div className="flex flex-wrap items-center gap-2" data-testid="vr2-head">
-                <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr2-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="vr2-head">
+                <span className={CHIP} data-testid="vr2-place"><span aria-hidden="true">📍 </span>{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
                 {p.onChangeDay ? (
-                    <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800"><CalendarDays size={16} aria-hidden="true" />{dayText}</button>
+                    <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className={`${CHIP} border-[#94A3B8]`}><span aria-hidden="true">📅 </span>{dayText} ▾</button>
                 ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm font-extrabold text-stone-700" data-testid="vr2-day"><CalendarDays size={16} aria-hidden="true" />{dayText}</span>
+                    <span className={CHIP} data-testid="vr2-day"><span aria-hidden="true">📅 </span>{dayText}</span>
                 )}
-                <span className="text-xs font-bold text-stone-600" data-testid="vr2-count">{onDay ? (count > 1 ? nd(DS.count(count, onDay)) : DS.first(onDay)) : count > 1 ? nd(RS.todayCount(count)) : RS.firstToday}</span>
+                <span className="text-[12px] font-bold text-[#5F6B63]" data-testid="vr2-count">{onDay ? (count > 1 ? nd(DS.count(count, onDay)) : DS.first(onDay)) : count > 1 ? nd(RS.todayCount(count)) : RS.firstToday}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-2.5 py-1.5" data-testid="vr2-speakers">
-                <span className="text-[12px] font-extrabold text-stone-700">{onDay ? DS.who(onDay) : RS.todayWho}:</span>
+            <div className="flex flex-wrap items-center gap-[5px] rounded-[14px] border border-[#DDE3DA] bg-white px-2.5 py-1.5" data-testid="vr2-speakers">
+                <span className="text-[12px] font-extrabold text-[#5F6B63]">{onDay ? DS.who(onDay) : RS.todayWho}:</span>
                 {day.speakers.map(s => (
                     <span key={`${s.you}-${s.name}`} data-you={s.you ? 'yes' : 'no'}
-                        className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${s.you ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
+                        className={`rounded-full border px-[9px] py-px text-[12px] font-extrabold ${s.you ? 'border-[#86EFAC] bg-[#F0FDF4] text-[#14532D]' : 'border-[#93C5FD] bg-[#EFF6FF] text-[#1E3A8A]'}`}>
                         {s.name} · {nd(RS.times(s.times))}
                     </span>
                 ))}
             </div>
 
-            <section className="space-y-2.5 rounded-3xl border-2 border-emerald-600 bg-white p-3" data-testid="vr2-saved-card">
-                <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white motion-safe:animate-plr-rise"><Check size={24} strokeWidth={3} aria-hidden="true" /></span>
-                    <b className="text-[21px] font-extrabold leading-tight text-emerald-900" data-testid="vr2-saved-title" data-sync={p.sync}>{savedClaimOf(p.sync, RS)}</b>
+            <section className="flex flex-col items-center gap-2 rounded-[22px] border-[1.5px] border-[#F0DFA6] p-3" data-testid="vr2-saved-card"
+                style={{ background: 'linear-gradient(180deg,#FFFBEA,#FFF6D8)' }}>
+                <div className="flex items-center gap-3 self-stretch rounded-2xl border-[1.5px] border-[#B7E4C7] bg-[#E9F8EE] px-3 py-2.5">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#1E9E5A] motion-safe:animate-plr-rise"><Tick size={24} /></span>
+                    <div className="min-w-0">
+                        <b className="block text-[22px] font-bold leading-[1.2] text-[#0F6B3A]" data-testid="vr2-saved-title" data-sync={p.sync}>{savedClaimOf(p.sync, RS)}</b>
+                        <small className="block text-[12.5px] font-bold text-[#5F6B63]">{primary.who.you ? SW.selfTold : SW.otherTold(primary.who.name)}</small>
+                    </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold" data-testid="vr2-badges">
-                    <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-white">{RS.justNow}</span>
-                    <TimePill label={primary.timeLabel} strong />
-                    <WhoChip who={primary.who} testId="vr2-latest-who" />
-                    {primary.typed && <TypedTag testId="vr2-latest-typed" />}
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800" data-testid="vr2-remembered">{RS.remembered}</span>
-                    {p.sync === 'onServer' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-800" data-testid="vr2-on-server">{RS.onServer}</span>}
-                    {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr2-needs-fix">{RS.needsFix}</span>}
+                <div className="flex flex-wrap gap-1 self-stretch" data-testid="vr2-badges">
+                    <Bd tone="dark">{RS.justNow}</Bd>
+                    {primary.timeLabel && <Bd>{primary.timeLabel}</Bd>}
+                    <Bd tone="who" testId="vr2-latest-who" you={primary.who.you}>{primary.who.name}</Bd>
+                    {primary.typed && <Bd tone="amber" testId="vr2-latest-typed">{copy.typedTag}</Bd>}
+                    <Bd tone="green" testId="vr2-remembered">{RS.remembered}</Bd>
+                    {p.sync === 'onServer' && <Bd tone="blue" testId="vr2-on-server">{RS.onServer}</Bd>}
+                    {p.sync === 'needsFix' && <Bd tone="amber" testId="vr2-needs-fix">{RS.needsFix}</Bd>}
                     {p.confirmed
-                        ? <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr2-confirmed-badge">{RS.confirmedBadge}</span>
-                        : <span className="rounded-full border border-stone-300 bg-stone-50 px-2.5 py-1 text-stone-700" data-testid="vr2-not-confirmed-badge">{RS.notConfirmed}</span>}
+                        ? <Bd tone="dark" testId="vr2-confirmed-badge">{RS.confirmedBadge}</Bd>
+                        : <Bd testId="vr2-not-confirmed-badge">{RS.notConfirmed}</Bd>}
                 </div>
-                {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
-                {primary.legacyPartial && <LegacyNote testId="vr2-legacy-note" />}
-                {primary.typed ? <TypedNote /> : clip && (
-                    <div data-testid="vr2-listen">
-                        <div className="text-[15px] font-extrabold text-stone-900">{W.listenTitle}</div>
-                        <div className="mb-1.5 text-[12.5px] font-semibold text-stone-600">{W.listenSub}</div>
-                        <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
-                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" nativeDigits={language !== 'en'} />
+                {severalNote && <div className="self-stretch empty:hidden">{severalNote}</div>}
+                {primary.legacyPartial && <div className="self-stretch"><LegacyNote testId="vr2-legacy-note" /></div>}
+                {primary.typed ? <div className="self-stretch"><TypedNote /></div> : (
+                    <div className="self-stretch" data-testid="vr2-listen">
+                        <SavedClip clipKey={clip?.id ?? null} durationSec={clip ? p.lengthOf(primary.id) : null} playing={p.playingId === primary.id} big
+                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" />
                     </div>
                 )}
-                <ResultHero farmId={p.farmId} dayDate={primary.log.date} plotId={plotIds.length === 1 ? plotIds[0] : null} savedLogId={primary.id}
-                    recordingKey={p.recordingKey} nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore}
-                    onReadMore={() => scrollBelowHeader(wordsRef.current)} onSettled={() => undefined} typed={primary.typed} parts={false} />
+                {FEATURE_FLAGS.understandingMeter && (
+                    <SavedMeterGauge farmId={p.farmId} dayDate={primary.log.date} plotId={plotIds.length === 1 ? plotIds[0] : null} savedLogId={primary.id}
+                        missing={day.missing} onTellMore={p.onTellMore} onAddAnother={p.onAddAnother} />
+                )}
             </section>
+            {speakerDone && (
+                <p className="m-0 rounded-[14px] border border-[#DDE3DA] bg-white px-3 py-[9px] text-[14px] font-bold text-[#44403C]" data-testid="vr2-speaker-done">{copy.speakerDone}</p>
+            )}
 
             <SavedGiven day={day} kit={kit} verdicts={verdicts} onOpen={kit ? (item, logId) => setCard({ item, logId }) : () => undefined} />
             <SavedPartsGrid day={day} onTellMore={p.onTellMore} />
@@ -204,15 +218,15 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
             )}
 
             <SavedScreenLower day={day} primary={primary} onDay={onDay} unclear={p.unclear} clips={p.clips} playingId={p.playingId}
-                progress={p.progress} lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}
-                questionPanel={p.questionPanel} extras={p.extras} answerKit={kit} onOpenDetail={p.onOpenDetail} wordsRef={wordsRef} />
+                lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}
+                questionPanel={p.questionPanel} extras={p.extras} onOpenDetail={p.onOpenDetail} />
 
             <IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
                 onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />
             {/* Room under the sticky bar: at the very end of the page the bar rests here, so "आजचा आढावा बघा" and the last
                 rows scroll fully above it and above the app's bottom bar (seen on localhost: they sat under both). */}
             <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: BOTTOM_BAR_CLEARANCE }} />
-            {card && kit && <ProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
+            {card && kit && <SavedProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
         </div>
     );
 };
