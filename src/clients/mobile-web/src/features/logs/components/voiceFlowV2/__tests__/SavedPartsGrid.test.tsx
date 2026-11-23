@@ -69,7 +69,7 @@ describe('SavedPartsGrid — the eight parts with his values', () => {
         expect(machinery.tagName).toBe('BUTTON');
         expect(machinery.getAttribute('data-told')).toBe('no');
         expect(machinery.textContent).toContain('सांगितलं नाही');
-        expect(machinery.className).toContain('red');
+        expect(machinery.className).toContain('border-[#E5484D]'); // the design's red (`--miss`)
         fireEvent.click(machinery);
         expect(onTellMore).toHaveBeenCalledWith('machinery');
         expect(onTellMore).toHaveBeenCalledTimes(1);

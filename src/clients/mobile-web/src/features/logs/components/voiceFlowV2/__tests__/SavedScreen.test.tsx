@@ -103,7 +103,8 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 describe('SavedScreen — what he sees first', () => {
     it('the sections come in the approved order', () => {
         render(<SavedScreen {...props()} />);
-        const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-given', 'vr2-parts', 'vr2-words', 'vr2-question', 'vr2-speaker-done',
+        // F3: the approved design's order — the speaker's line right under the card, the question after his words.
+        const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-speaker-done', 'vr2-given', 'vr2-parts', 'vr2-words', 'vr2-question',
             'extras-slot', 'vr2-edit', 'vr2-earlier', 'vr2-open-detail', 'vr2-idle-bar'];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `${order[i - 1]} before ${order[i]}`).toBe(true);
     });
@@ -145,8 +146,28 @@ describe('SavedScreen — what he sees first', () => {
         expect(card.getByTestId('vr2-latest-who').textContent).toContain('सुनील');
         expect(card.getByTestId('vr2-play')).toBeTruthy();
         expect(card.getByTestId('vr2-listen').textContent).toContain('तुमचा आवाज ऐका');
-        expect(card.getByTestId('vr-hero')).toBeTruthy();
         expect(card.queryByTestId('vr-parts')).toBeNull();
+        // F3: the meter is the saved card's own dial, drawn only with the meter flag (as the result screen's meter is).
+        expect(card.queryByTestId('vr2-meter')).toBeNull();
+    });
+
+    it('with the meter flag the card holds the dial; no server score = the pending words, no needle, no number', () => {
+        flags.understandingMeter = true;
+        try {
+            render(<SavedScreen {...props({ farmId: null })} />);
+            const card = within(screen.getByTestId('vr2-saved-card'));
+            expect(card.getByTestId('vr2-meter').getAttribute('data-state')).toBe('pending');
+            expect(card.queryByTestId('vr2-meter-needle')).toBeNull();
+            expect(card.getByTestId('vr2-meter-pending').textContent).toBeTruthy();
+        } finally {
+            flags.understandingMeter = false;
+        }
+    });
+
+    it('no clip on this phone: the listen frame says so and offers no ▶', () => {
+        render(<SavedScreen {...props({ clips: new Map() })} />);
+        expect(screen.getByTestId('vr2-play-none')).toBeTruthy();
+        expect(screen.queryByTestId('vr2-play')).toBeNull();
     });
 
     it('a typed recording: the typed note, no player', () => {
@@ -175,7 +196,7 @@ describe('SavedScreen — what he sees first', () => {
     it('his words are open, with the why-tiles and the unclear lines', () => {
         render(<SavedScreen {...props()} />);
         const words = within(screen.getByTestId('vr2-words'));
-        expect(words.getByTestId('vr-words-fold').getAttribute('data-open')).toBe('yes');
+        expect(words.getByTestId('vr2-words-text').textContent).toContain('दहा मजूर आले');
         expect(words.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
         expect(words.getByTestId('vr2-unclear').textContent).toContain('मागच्या बाजूचं उद्या बघू');
     });
@@ -190,7 +211,7 @@ describe('SavedScreen — what he sees first', () => {
 
     it('the earlier recordings are in one fold, counted', () => {
         render(<SavedScreen {...props()} />);
-        expect(screen.getByTestId('vr2-earlier-title').textContent).toBe('आधीची बोलणी (१)');
+        expect(screen.getByTestId('vr2-earlier-title').textContent).toBe('आजची आधीची बोलणी (१)');
         expect(screen.getByTestId(`vr-earlier-${EARLIER.id}`)).toBeTruthy();
         expect(screen.getByTestId('vr2-speakers').textContent).toContain('रमेश');
     });

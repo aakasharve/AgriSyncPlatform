@@ -2,24 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: voice-flow-v2-2026-11-23 (Task 10; amendment M4) — the saved screen's bottom bar (the founder-approved look, `rbar2`):
- * the big round mic on the left ("आणखी सांगा", the existing next recording), and on the right "३० सेकंदात बंद होईल" with a
- * draining bar, or "थांबवलं" while something holds the clock. The clock lives in THIS leaf (`useIdleClose`): the text changes
+ * spec: voice-flow-v2-2026-11-23 (Task 10; amendment M4; design-fidelity pass F3) — the saved screen's bottom bar, drawn as the
+ * approved design draws it (`.rbar2`, `.bigmic`, `.pb.rev`): the big round green mic on the left ("आणखी सांगा", the existing next
+ * recording), and on the right "३० सेकंदात बंद होईल" with a draining amber bar, or "थांबवलं" while something holds the clock. The clock lives in THIS leaf (`useIdleClose`): the text changes
  * once a second and the bar moves by a CSS transition, so the screen above is never re-rendered by it.
  *
  * Sticky at the bar's room (`BOTTOM_BAR_CLEARANCE`, rule FOOT-1): it never sits under the app's bottom bar. When the caller
  * turns the close off (`offReason`), no countdown is shown — only the mic.
  */
 import React, { useEffect, type RefObject } from 'react';
-import { Mic } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { logger } from '../../../../infrastructure/observability/Logger';
 import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { useResultStr } from '../voiceResult/resultStrings';
+import { MicGlyph, SANS } from './savedBits';
 import { useIdleClose } from './useIdleClose';
-
-const SANS = "'Noto Sans Devanagari', sans-serif";
 const SECONDS = 30;
 
 export interface IdleCloseBarProps {
@@ -45,21 +43,20 @@ export const IdleCloseBar: React.FC<IdleCloseBarProps> = ({ rootRef, pauseReason
     const share = paused ? 1 : Math.max(0, Math.min(1, secondsLeft / SECONDS));
     return (
         <div data-testid="vr2-idle-bar" data-state={off ? 'off' : paused ? 'paused' : 'running'}
-            className="sticky z-20 -mx-4 mt-3 flex items-center gap-3 border-t border-stone-200 bg-surface-100 px-4 py-2"
+            className="sticky z-20 -mx-4 mt-3 flex items-center gap-3 border-t border-[#DDE3DA] bg-white px-3.5 pb-3.5 pt-2.5"
             style={{ bottom: BOTTOM_BAR_CLEARANCE, fontFamily: SANS }}>
-            <div className="flex shrink-0 flex-col items-center gap-0.5">
-                <button type="button" onClick={onAddAnother} data-testid="vr2-add-another" aria-label={RS.addAnother}
-                    className="grid h-[72px] w-[72px] place-items-center rounded-full bg-emerald-700 text-white shadow-[0_8px_20px_rgba(4,120,87,0.35)] ring-4 ring-white active:scale-95">
-                    <Mic size={32} aria-hidden="true" />
-                </button>
-                <span className="text-[12px] font-extrabold text-emerald-900" aria-hidden="true">{RS.addAnother}</span>
-            </div>
+            <button type="button" onClick={onAddAnother} data-testid="vr2-add-another" aria-label={RS.addAnother}
+                className="flex flex-none flex-col items-center gap-[3px] active:scale-95">
+                <span className="grid h-[58px] w-[58px] place-items-center rounded-full text-white shadow-[0_6px_16px_rgba(15,107,58,0.35)]"
+                    style={{ background: 'radial-gradient(circle at 35% 30%,#3ccf78,#0F6B3A)' }}><MicGlyph size={26} /></span>
+                <span className="whitespace-nowrap text-[11.5px] font-extrabold text-[#0F6B3A]" aria-hidden="true">{RS.addAnother}</span>
+            </button>
             {!off && (
                 <div className="min-w-0 flex-1" data-testid="vr2-idle-left">
-                    <div className="text-[14px] font-extrabold text-stone-900">{paused ? W.paused : W.closesIn(secondsLeft)}</div>
-                    <div className="text-[12px] font-semibold text-stone-600">{paused ? W.pausedSub : W.closesSub}</div>
-                    <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-stone-200" aria-hidden="true">
-                        <i className={`block h-full rounded-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear ${paused ? 'bg-stone-400' : 'bg-amber-500'}`}
+                    <div className="text-[13px] font-extrabold text-[#1C1917]">{paused ? W.paused : W.closesIn(secondsLeft)}</div>
+                    <div className="text-[11.5px] font-semibold text-[#5F6B63]">{paused ? W.pausedSub : W.closesSub}</div>
+                    <div className="mt-1.5 h-[5px] overflow-hidden rounded-[5px] bg-[#DDE3DA]" aria-hidden="true">
+                        <i className="block h-full bg-[#F59E0B] motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear"
                             style={{ width: `${Math.round(share * 100)}%` }} />
                     </div>
                 </div>
