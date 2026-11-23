@@ -18,6 +18,7 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+import { VoiceJourney } from '../../features/logs/components/voiceFlowV2/VoiceJourney';
 import { ShramSathiUnderstanding as ShramSathiUnderstandingLine } from './mainViewComponents';
 import type { AppRouterContext } from './routeContext';
 import type { RecorderFlowV2 } from '../../features/voice/components/recorder/flowV2Types';
@@ -94,6 +95,8 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, ar
 
 /** THE waiting screen after he speaks (founder-approved; its component is not touched here). */
 export const renderProcessingScreen = (ctx: AppRouterContext): React.ReactNode => {
+    // spec voice-flow-v2-2026-11-23 (Task 6) — the calm step list, each tick a real event. OFF: today's screen below.
+    if (FEATURE_FLAGS.voiceFlowV2) return <VoiceJourney crops={ctx.crops} farmerProfile={ctx.farmerProfile} logScope={ctx.logScope} />;
     const { liveCaption, voiceStreamingPhase } = ctx;
     return FEATURE_FLAGS.dailyLoop ? (
         /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —
