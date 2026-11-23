@@ -58,6 +58,18 @@ export interface PlannedWorkDto {
     wordsWithheld?: boolean | null;
     makerAlwaysShown?: boolean | null;
     fromChosenPeopleRecord?: boolean | null;
+    /**
+     * Schedule mechanism slice 5 (additive, P11): a plan made from the farmer's OWN schedule by his second act ("plan", then who). The own work it is linked to
+     * (stable identity: own item + task key, never a step id), which occurrence, the window it was EXPECTED in (YYYY-MM-DD), whether it WAITS (nothing due yet:
+     * a sign not seen, or the work it follows not recorded) and the latest answer about its sign. Absent on every other plan and from an older server.
+     */
+    scheduleTaskKey?: string | null;
+    ownItemId?: string | null;
+    occurrence?: number | null;
+    expectedFrom?: string | null;
+    expectedTo?: string | null;
+    waiting?: boolean | null;
+    signAnswer?: string | null;
 }
 
 /** One person the caller may give work to (GET /shramsafal/farms/{farmId}/planned-work/assignees). */

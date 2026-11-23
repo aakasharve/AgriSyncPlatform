@@ -93,7 +93,10 @@ public sealed class MoveDailyLogHandler(
     // The day aggregates (DFES) of the OLD and the NEW day are recomputed after the move, the same non-blocking
     // side-car the create path runs. Optional so direct-construction tests compile; without it nothing is recomputed.
     IDailyRichnessDerivationService? dailyRichnessDerivation = null,
-    DbContext? dbContext = null)
+    DbContext? dbContext = null,
+    // spec: schedule slice 5 (review focus 3) - a record that closed a plan from the own schedule moved to another day: the works that follow it move
+    // with it (history kept). Optional so direct-construction tests compile; without it nothing follows.
+    ShramSafal.Application.UseCases.Planning.PlannedWork.ScheduleFeed? scheduleFeed = null)
     : IHandler<MoveDailyLogCommand, MoveDailyLogResultDto>
 {
     /// <summary>The audit action of the one ledger row a move writes.</summary>
@@ -420,6 +423,23 @@ public sealed class MoveDailyLogHandler(
         }
 
         await repository.SaveChangesAsync(ct);
+
+        // spec: schedule slice 5 (review focus 3) - read AFTER the save, so the follower sees the record's new day. Same transaction as the move (the push's).
+        if (dayChanges && scheduleFeed is not null)
+        {
+            var followed = await scheduleFeed.RecomputeForLogAsync(
+                (Guid)log.FarmId,
+                log.Id,
+                "record:moved",
+                new ShramSafal.Application.UseCases.Planning.PlannedWork.PlannedWorkCaller(
+                    command.ActorUserId, command.ActorRole ?? "unknown", command.ClientRequestId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                now,
+                ct);
+            if (followed.Count > 0)
+            {
+                await repository.SaveChangesAsync(ct);
+            }
+        }
 
         logger.LogInformation(
             "move_daily_log moved {LogId} from {FromDay} to {ToDay} ({Scope}); version {FromVersion} -> {ToVersion}; {Rows} work row(s) followed.",

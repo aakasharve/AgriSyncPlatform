@@ -50,7 +50,17 @@ public sealed record PlannedWorkDto(
     bool? MayPlayVoice = null,
     bool? WordsWithheld = null,
     bool? MakerAlwaysShown = null,
-    bool? FromChosenPeopleRecord = null)
+    bool? FromChosenPeopleRecord = null,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - a plan made from the farmer's OWN schedule: the work it is linked to (stable identity: own
+    // item + task key, never a step id), which occurrence, the window it was EXPECTED in, whether it WAITS (nothing due yet), and the latest answer about its
+    // sign (seen / not_yet / unsure). Additive and last (P11): absent on every other plan; an older phone never reads them.
+    string? ScheduleTaskKey = null,
+    Guid? OwnItemId = null,
+    int? Occurrence = null,
+    string? ExpectedFrom = null,
+    string? ExpectedTo = null,
+    bool? Waiting = null,
+    string? SignAnswer = null)
 {
     /// <summary>
     /// The task with only the plot rows in <paramref name="visiblePlots"/> (what this reader may see).
@@ -83,6 +93,24 @@ public sealed record PlannedWorkDto(
         PlannedWork work, IReadOnlyCollection<Guid> visiblePlots, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?>? statusOf = null)
     {
         Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?> standing = statusOf ?? (_ => null);
+        var dto = Base(work, visiblePlots, standing);
+        return work.OwnItemId is null
+            ? dto
+            : dto with
+            {
+                ScheduleTaskKey = work.ScheduleTaskKey,
+                OwnItemId = work.OwnItemId,
+                Occurrence = work.Occurrence,
+                ExpectedFrom = work.ExpectedFrom?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                ExpectedTo = work.ExpectedTo?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                Waiting = work.IsWaiting,
+                SignAnswer = work.SignAnswer is { } answer ? ScheduleSignAnswers.ToWire(answer) : null,
+            };
+    }
+
+    private static PlannedWorkDto Base(
+        PlannedWork work, IReadOnlyCollection<Guid> visiblePlots, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?> standing)
+    {
         return new(
             work.Id,
             (Guid)work.FarmId,

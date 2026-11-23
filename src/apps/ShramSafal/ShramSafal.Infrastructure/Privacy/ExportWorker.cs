@@ -255,6 +255,27 @@ public sealed class ExportWorker(
                 },
                 ct).ConfigureAwait(false);
 
+            // schedule_task_events (schedule mechanism slice 5): every answer HE gave about the sign of an own work (seen / not yet / unsure) and the day he looked.
+            // Admin context; the filter is the person. No free words are held.
+            var signAnswers = await admin.ScheduleTaskEvents
+                .Where(e => e.RecordedByUserId == userId)
+                .OrderBy(e => e.RecordedAtUtc)
+                .ToListAsync(ct).ConfigureAwait(false);
+            await WriteJsonEntryAsync(zip, "schedule_task_events.json",
+                signAnswers.Select(e => new
+                {
+                    e.Id,
+                    FarmId = (Guid)e.FarmId,
+                    e.PlotId,
+                    e.CropCycleId,
+                    e.OwnItemId,
+                    e.TaskKey,
+                    Answer = ShramSafal.Domain.Planning.ScheduleSignAnswers.ToWire(e.Answer),
+                    e.ObservedOn,
+                    e.RecordedAtUtc,
+                }),
+                ct).ConfigureAwait(false);
+
             // pictures (SCH-ID-S, founder D-146): HIS picture (his own face or chosen image) and the schedule pictures HE set - the files and a
             // line of metadata each (kind, date, size, type, hash). Never another person's picture, never an institution logo (not his data).
             // Admin context: the table's read policy is open, the filter is the person. Idempotent and read-only.
@@ -562,6 +583,7 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         - `/dpa_registry.json` — the data-processing agreements covering AgriSync's vendors
         - `/pictures/` — the picture you set for yourself and any picture you chose for one of your schedules, with a metadata file
         - `/own_schedule_items.json` — the works of your own schedule (and any you wrote on another farm), each with every change made to it
+        - `/schedule_task_events.json` — every answer you gave about a sign in a schedule (seen, not yet, not sure) and the day you looked
         - `/transcripts/` — speech-to-text outputs (Phase 08 placeholder)
         - `/parsed/` — structured parses derived from your voice (Phase 08 placeholder)
         - `/voice/` — raw voice clips (deferred until Phase 07)

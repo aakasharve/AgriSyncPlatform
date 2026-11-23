@@ -50,6 +50,7 @@ import { applyV27 } from './dexie/versions/v27';
 import { applyV28 } from './dexie/versions/v28';
 import { applyV29 } from './dexie/versions/v29';
 import { applyV30 } from './dexie/versions/v30';
+import { applyV31 } from './dexie/versions/v31';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -118,7 +119,7 @@ export interface PendingInterpretationDexieRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 30; // schedule mechanism slice 3 — adds the ownScheduleItems and ownScheduleItemRevisions stores (a plot-season's own schedule while it is built: server cache); see versions/v30.ts. v29: lane SCH-ID-P — adds the schedulePictures store (the pictures of schedule makers); see versions/v29.ts. v28: lane L8c-1 — adds the plannedWork store (the farm's tasks and reminders; v27 is L8b-2's scheduleSubscriptions); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+export const DATABASE_VERSION = 31; // schedule mechanism slice 5 — adds the plannedWork.ownItemId index (plans made from an own work); see versions/v31.ts. v30: schedule mechanism slice 3 — adds the ownScheduleItems and ownScheduleItemRevisions stores (a plot-season's own schedule while it is built: server cache); see versions/v30.ts. v29: lane SCH-ID-P — adds the schedulePictures store (the pictures of schedule makers); see versions/v29.ts. v28: lane L8c-1 — adds the plannedWork store (the farm's tasks and reminders; v27 is L8b-2's scheduleSubscriptions); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /**
  * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
  *
@@ -311,6 +312,7 @@ export class AgriLogDatabase extends Dexie {
         applyV28(this);
         applyV29(this);
         applyV30(this);
+        applyV31(this);
     }
 }
 

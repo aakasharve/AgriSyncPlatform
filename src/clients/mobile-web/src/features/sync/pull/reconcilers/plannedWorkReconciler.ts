@@ -32,7 +32,7 @@ import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCa
 import { isReadableScope } from '../../../../infrastructure/storage/accessScopeStore';
 import type {
     PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName,
-    PlannedWorkSourceKindName, PlannedWorkSourceName, PlannedWorkStatusName, ReminderCategoryName,
+    PlannedWorkSourceKindName, PlannedWorkSourceName, PlannedWorkStatusName, ReminderCategoryName, ScheduleSignAnswerName,
 } from '../../../../infrastructure/storage/plannedWorkRow';
 
 const STATUSES: readonly PlannedWorkStatusName[] = ['Open', 'Assigned', 'Seen', 'Accepted', 'Done', 'Cancelled'];
@@ -108,6 +108,25 @@ export function plannedWorkRowFromDto(dto: PlannedWorkDto | null | undefined): P
         wordsWithheld: flag(dto.wordsWithheld),
         makerAlwaysShown: flag(dto.makerAlwaysShown),
         fromChosenPeopleRecord: flag(dto.fromChosenPeopleRecord),
+        // Schedule mechanism slice 5 (additive, P11): only a plan from the own schedule carries them; anything else stays absent.
+        ...scheduleLink(dto),
+    };
+}
+
+const SIGN_ANSWERS: readonly ScheduleSignAnswerName[] = ['seen', 'not_yet', 'unsure'];
+
+/** The own-schedule link of a plan, or nothing at all (an ordinary plan and an older server's row keep no new field). */
+function scheduleLink(dto: PlannedWorkDto): Partial<PlannedWorkRow> {
+    const ownItemId = text(dto.ownItemId);
+    if (!ownItemId) return {};
+    return {
+        ownItemId,
+        scheduleTaskKey: text(dto.scheduleTaskKey),
+        occurrence: typeof dto.occurrence === 'number' ? dto.occurrence : null,
+        expectedFrom: text(dto.expectedFrom),
+        expectedTo: text(dto.expectedTo),
+        waiting: flag(dto.waiting),
+        signAnswer: known(SIGN_ANSWERS, dto.signAnswer),
     };
 }
 
@@ -126,6 +145,8 @@ const STEPS: readonly string[] = [
     SyncMutationName.PlannedworkCreate, SyncMutationName.PlannedworkEdit, SyncMutationName.PlannedworkSeen,
     SyncMutationName.PlannedworkAccept, SyncMutationName.PlannedworkCancel, SyncMutationName.PlannedworkComplete,
     SyncMutationName.PlannedworkReopen,
+    // Schedule mechanism slice 5: "plan", then who, on an own work - its payload names the plan's id like the steps above.
+    SyncMutationName.OwnscheduleItemPlan,
 ];
 /** A queue row is finished (nothing owed to the server) once it was applied or the farmer discarded it. */
 const FINISHED = new Set(['APPLIED', 'REJECTED_DROPPED']);

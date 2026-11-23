@@ -287,7 +287,7 @@ public sealed class CancelPlannedWorkHandler(IShramSafalRepository repository, I
 /// Nothing here creates or touches a job card, a cost entry, an attendance or a labour row (D-24a, P4): the step moves the
 /// task's own rows and writes one audit row.
 /// </summary>
-public sealed class CompletePlannedWorkHandler(IShramSafalRepository repository, IClock clock)
+public sealed class CompletePlannedWorkHandler(IShramSafalRepository repository, IClock clock, ScheduleFeed? scheduleFeed = null)
 {
     public async Task<Result<PlannedWorkDto>> HandleAsync(CompletePlannedWorkCommand command, CancellationToken ct = default)
     {
@@ -419,6 +419,12 @@ public sealed class CompletePlannedWorkHandler(IShramSafalRepository repository,
                 return Result.Success(await PlannedWorkDoor.DtoAsync(repository, work, seat, ct));
         }
 
+        // spec: schedule slice 5 - a plan from the own schedule done with a log is that work's record: the works that follow it move (one save).
+        if (scheduleFeed is not null && work.OwnItemId is not null)
+        {
+            await scheduleFeed.RecomputeForPlanAsync(work, "record:completed", command.Caller, now, ct);
+        }
+
         await PlannedWorkDoor.AuditAsync(repository, work, "Completed", command.Caller, ct);
         return await PlannedWorkDoor.SaveAsync(repository, work, seat, ct);
     }
@@ -430,7 +436,7 @@ public sealed class CompletePlannedWorkHandler(IShramSafalRepository repository,
 /// (<see cref="ShramSafalErrors.PlannedWorkInvalid"/> without one). A task that is not Done has nothing to reopen
 /// (<see cref="ShramSafalErrors.PlannedWorkStateChanged"/>). The history is the audit row: the step and the reason.
 /// </summary>
-public sealed class ReopenPlannedWorkHandler(IShramSafalRepository repository, IClock clock)
+public sealed class ReopenPlannedWorkHandler(IShramSafalRepository repository, IClock clock, ScheduleFeed? scheduleFeed = null)
 {
     public async Task<Result<PlannedWorkDto>> HandleAsync(ReopenPlannedWorkCommand command, CancellationToken ct = default)
     {
@@ -467,6 +473,12 @@ public sealed class ReopenPlannedWorkHandler(IShramSafalRepository repository, I
         if (step != PlannedWorkStep.Applied)
         {
             return Result.Failure<PlannedWorkDto>(ShramSafalErrors.PlannedWorkStateChanged);
+        }
+
+        // spec: schedule slice 5 (review focus 3) - the record is taken back: the works that followed it return to their expectation, with history kept.
+        if (scheduleFeed is not null && work.OwnItemId is not null)
+        {
+            await scheduleFeed.RecomputeForPlanAsync(work, "record:reopened", command.Caller, now, ct);
         }
 
         await PlannedWorkDoor.AuditAsync(repository, work, "Reopened", command.Caller, ct, command.Reason!.Trim());

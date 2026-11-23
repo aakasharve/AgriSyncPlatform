@@ -117,6 +117,34 @@ public sealed class PlannedWork : Entity<Guid>
     /// </summary>
     public DateTime? ReminderAudienceChangedAtUtc { get; private set; }
 
+    // ---- spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5): a plan made from the farmer's OWN schedule by his second act ("plan", then who) ----
+
+    /// <summary>The task key of the own work this plan was made from (with <see cref="OwnItemId"/>: a STABLE identity, never a step id), or null.</summary>
+    public string? ScheduleTaskKey { get; private set; }
+
+    /// <summary>The own work (<c>ssf.own_schedule_items</c>) this plan was made from, or null for every other plan.</summary>
+    public Guid? OwnItemId { get; private set; }
+
+    /// <summary>Which occurrence of the own work this is (1 = the first; a repeating work makes one open occurrence at a time), or null.</summary>
+    public int? Occurrence { get; private set; }
+
+    /// <summary>
+    /// The day the schedule last said the work is due (null = nothing is due yet: a WAITING plan). Kept apart from <see cref="PlannedDate"/> so a day the
+    /// farmer chose by hand survives a recompute that did not change what the schedule says; a real event that changes it moves the plan.
+    /// </summary>
+    public DateOnly? ScheduleDueOn { get; private set; }
+
+    /// <summary>The window the work is EXPECTED in (the plan as written). Expected and actual are both kept: an event moves the plan, never this.</summary>
+    public DateOnly? ExpectedFrom { get; private set; }
+
+    public DateOnly? ExpectedTo { get; private set; }
+
+    /// <summary>The latest answer about the work's sign ("when seen" works only), or null when nobody has answered.</summary>
+    public ScheduleSignAnswer? SignAnswer { get; private set; }
+
+    /// <summary>A plan from the own schedule with nothing due yet and no day chosen: it waits (for the sign, or for the work it follows to be recorded).</summary>
+    public bool IsWaiting => OwnItemId is not null && !IsClosed && PlannedDate is null && LooseWhen is null;
+
     public IReadOnlyList<PlannedWorkPlot> Plots => plots;
 
     public bool IsClosed => Status is PlannedWorkStatus.Done or PlannedWorkStatus.Cancelled;
@@ -190,6 +218,117 @@ public sealed class PlannedWork : Entity<Guid>
         task.Apply(details, nowUtc);
         task.Status = task.AssigneeUserId is null ? PlannedWorkStatus.Open : PlannedWorkStatus.Assigned;
         return task;
+    }
+
+    /// <summary>The fixed namespace of the plan id a phone mints for one occurrence of one own work. Never changes.</summary>
+    public static readonly Guid ScheduleIdNamespace = Guid.Parse("5f1c7e20-93a4-4b8d-8e65-2d0a4c9b7f31");
+
+    /// <summary>
+    /// The id two phones mint for the same occurrence of the same own work, so a plan made offline on both is one plan (the server also finds an open plan
+    /// of the work by its link and answers with it, whatever id is sent).
+    /// </summary>
+    public static Guid ScheduleIdFor(Guid ownItemId, int occurrence)
+    {
+        if (ownItemId == Guid.Empty || occurrence < 1)
+        {
+            throw new ArgumentException("An own work and an occurrence of 1 or more are required.");
+        }
+
+        return Finance.MoneyEntryIdentity.V5(ScheduleIdNamespace, $"{ownItemId.ToString("D").ToLowerInvariant()}:{occurrence}");
+    }
+
+    /// <summary>
+    /// The farmer's second act on one own work: "plan", then who (approved spec: saving an own work makes no plan). The plan is on the work's plot, worded with
+    /// its name, linked by the work's stable identity, dated when the schedule gives a due day and otherwise WAITING, with the expected window kept beside.
+    /// Its source is <see cref="PlannedWorkSource.Schedule"/>.
+    /// </summary>
+    public static PlannedWork CreateFromSchedule(
+        Guid id,
+        FarmId farmId,
+        string title,
+        Guid plotId,
+        Guid? assigneeUserId,
+        string? note,
+        Guid ownItemId,
+        string taskKey,
+        int occurrence,
+        ScheduleResolution resolution,
+        ScheduleSignAnswer? signAnswer,
+        DateOnly recordedOn,
+        Guid createdByUserId,
+        DateTime nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(resolution);
+        if (ownItemId == Guid.Empty || occurrence < 1 || !ScheduleTaskContent.IsValidKey(taskKey) || plotId == Guid.Empty)
+        {
+            throw new ArgumentException("A plan from the own schedule names its work, key, plot and an occurrence of 1 or more.");
+        }
+
+        var due = resolution.Due?.From;
+        var details = new PlannedWorkDetails(
+            title, PlannedWorkScope.Plot, [plotId], due, null, null, assigneeUserId, null, null, null, null, note);
+        var work = Create(id, farmId, details, PlannedWorkSource.Schedule, null, recordedOn, createdByUserId, nowUtc, sourcePlotId: plotId);
+        work.OwnItemId = ownItemId;
+        work.ScheduleTaskKey = taskKey;
+        work.Occurrence = occurrence;
+        work.ScheduleDueOn = due;
+        work.ExpectedFrom = resolution.Expected?.From;
+        work.ExpectedTo = resolution.Expected?.To;
+        work.SignAnswer = signAnswer;
+        return work;
+    }
+
+    /// <summary>
+    /// What the schedule says now about this plan's own work (a sign was seen, the work it follows was recorded, corrected or taken back). Only an OPEN plan
+    /// follows; a closed one is history. When the due day the schedule gives CHANGED, the plan moves to it (null = back to waiting); a day the farmer chose
+    /// by hand is kept while the schedule says the same thing. The expected window and the sign's answer are refreshed. The status never changes here: a
+    /// sign seen is not "done", and no record is never "not done". Returns true when anything changed (the caller writes the history row).
+    /// </summary>
+    public bool FollowSchedule(ScheduleResolution resolution, ScheduleSignAnswer? signAnswer, DateTime nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(resolution);
+        if (OwnItemId is null || IsClosed)
+        {
+            return false;
+        }
+
+        var changed = false;
+        var due = resolution.Due?.From;
+        if (due != ScheduleDueOn)
+        {
+            ScheduleDueOn = due;
+            PlannedDate = due;
+            if (due is null)
+            {
+                PlannedTime = null;
+            }
+            else
+            {
+                LooseWhen = null;
+            }
+
+            changed = true;
+        }
+
+        if (ExpectedFrom != resolution.Expected?.From || ExpectedTo != resolution.Expected?.To)
+        {
+            ExpectedFrom = resolution.Expected?.From;
+            ExpectedTo = resolution.Expected?.To;
+            changed = true;
+        }
+
+        if (SignAnswer != signAnswer)
+        {
+            SignAnswer = signAnswer;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            Touch(nowUtc);
+        }
+
+        return changed;
     }
 
     /// <summary>

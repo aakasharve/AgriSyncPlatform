@@ -631,6 +631,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // Active-only form (m.status = 3) from birth; the trigger reads ssf.farms and ssf.crop_cycles. It alters no existing policy, no farm_memberships or
         // farm_join_requests object, no seat. Down() refuses while any own work exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261123040137_AddOwnScheduleItems",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - Up() and Down() read in full: Up() adds nullable link columns, partial indexes, CHECKs and a
+        // link trigger to ssf.planned_work (the trigger reads ssf.own_schedule_items), and creates ssf.schedule_task_events (FORCE RLS on its own farm_id, a place
+        // trigger reading ssf.own_schedule_items); its read policy READS ssf.farms and ssf.farm_memberships in the Active-only form (m.status = 3) from birth. It alters
+        // no existing policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any linked plan or answer exists (none does in this
+        // proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261123071136_AddScheduleFeed",
     ];
 
     /// <summary>
@@ -676,6 +682,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // ssf.own_schedule_item_revisions, each with a p_user_select_* policy written ALREADY narrowed (m.status = 3). Down() drops both tables with their policies.
         "p_user_select_own_schedule_items",
         "p_user_select_own_schedule_item_revisions",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - 20261123071136_AddScheduleFeed creates ssf.schedule_task_events with a p_user_select_* policy
+        // written ALREADY narrowed (m.status = 3). Down() drops the table with its policy.
+        "p_user_select_schedule_task_events",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

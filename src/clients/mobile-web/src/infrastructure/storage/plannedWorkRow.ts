@@ -16,6 +16,9 @@ export type PlannedWorkSourceKindName = 'Typed' | 'PlanForm' | 'Spoken' | 'Lefto
 /** Lane REM-1 (D-79): the three sources of a reminder, by the server's names. */
 export type ReminderCategoryName = 'FromPlanning' | 'FromSchedule' | 'FromLogs';
 
+/** Schedule mechanism slice 5: an answer about the sign of a "when seen" work (the server's wire words). */
+export type ScheduleSignAnswerName = 'seen' | 'not_yet' | 'unsure';
+
 /** The owner's word on the logs a task (or one of its plots) was done with (lane L8c-3; the server computes it from the logs). */
 export type PlannedWorkConfirmationName = 'Confirmed' | 'Disputed' | 'Waiting';
 
@@ -76,6 +79,18 @@ export interface PlannedWorkRow {
     wordsWithheld?: boolean | null;
     makerAlwaysShown?: boolean | null;
     fromChosenPeopleRecord?: boolean | null;
+    /**
+     * Schedule mechanism slice 5 (Dexie v31 indexes `ownItemId`; the rest are plain fields) - a plan made from the farmer's own schedule: the own work (stable
+     * identity: own item + task key), the occurrence, the EXPECTED window, whether it waits, and the latest sign answer. Absent (undefined) on every other plan,
+     * on a row from before the slice and from an older server: absent never means "no" (P11).
+     */
+    ownItemId?: string | null;
+    scheduleTaskKey?: string | null;
+    occurrence?: number | null;
+    expectedFrom?: string | null;
+    expectedTo?: string | null;
+    waiting?: boolean | null;
+    signAnswer?: ScheduleSignAnswerName | null;
     /**
      * Lane L8c-4 (D-78 = 1) - a spoken reminder MADE ON THIS PHONE from a log he just saved, shown at once under the id the server
      * will give it (`spokenTaskId`), until the pull brings the server's row, which replaces this one (same id: never doubled). Absent

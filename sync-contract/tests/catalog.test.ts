@@ -40,14 +40,16 @@ describe('mutation-types.json', () => {
   // 48 -> 49 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set - a reason kept on an existing record of work; 1.15.0 -> 1.16.0.
   // 49 -> 52 on 2026-11-23 (schedule mechanism slice 3): ownschedule.item.save / .item.remove / .make_main - a farmer's own schedule built one work at a
   // time and "make main"; NEW names (sinceVersion 1.0.18), refused by the switch for a farm it is not on for; 1.16.0 -> 1.17.0.
-  it('declares 52 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(52);
+  // 52 -> 54 on 2026-11-23 (schedule mechanism slice 5): ownschedule.item.plan ("plan", then who, on one own work) and schedule.task_event (an answer
+  // about a work's sign); NEW names (sinceVersion 1.0.18), never a new key on an old payload, refused by the switch for a farm it is off for; 1.17.0 -> 1.18.0.
+  it('declares 54 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(54);
   });
 
-  it('is contract version 1.17.0 and names the three own-schedule mutations as new', () => {
-    expect(json.version).toBe('1.17.0');
+  it('is contract version 1.18.0 and names the own-schedule and feed mutations as new', () => {
+    expect(json.version).toBe('1.18.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
-    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main']) {
+    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event']) {
       const entry = json.mutationTypes.find((m) => m.name === name);
       expect(entry, name).toBeDefined();
       expect(entry!.sinceVersion).toBe('1.0.18');

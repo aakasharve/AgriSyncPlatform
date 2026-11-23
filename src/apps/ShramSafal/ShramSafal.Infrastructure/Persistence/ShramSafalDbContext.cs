@@ -213,6 +213,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
 
     public DbSet<ShramSafal.Domain.Planning.OwnScheduleItemRevision> OwnScheduleItemRevisions => Set<ShramSafal.Domain.Planning.OwnScheduleItemRevision>();
 
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - the answers about the sign of an own work (seen / not yet / unsure). APPEND-ONLY by privilege;
+    // FORCE-RLS on its own farm_id (F8); migration AddScheduleFeed.
+    public DbSet<ShramSafal.Domain.Planning.ScheduleTaskEvent> ScheduleTaskEvents => Set<ShramSafal.Domain.Planning.ScheduleTaskEvent>();
+
     // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule: one current row per person or schedule. FORCE-RLS: writes only
     // under the setter's own user scope, reads open to every user scope and gated by the application (PictureViewer); migration AddPictures.
     public DbSet<ShramSafal.Domain.Pictures.Picture> Pictures => Set<ShramSafal.Domain.Pictures.Picture>();

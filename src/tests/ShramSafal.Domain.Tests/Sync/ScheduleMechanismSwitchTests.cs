@@ -121,7 +121,8 @@ public sealed class ScheduleMechanismSwitchTests
         // Slice 1 shipped the gate with its set empty; slice 3 reserves its three own-schedule names. Every OTHER name of the catalog is refused by nothing
         // here and costs no read of the flag (the repository throws if it is read).
         var sw = new ScheduleMechanismSwitch(new ThrowingRepo());
-        ScheduleMechanismSwitch.ReservedMutationNames.Should().BeEquivalentTo(["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main"]);
+        ScheduleMechanismSwitch.ReservedMutationNames.Should().BeEquivalentTo(
+            ["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main", "ownschedule.item.plan", "schedule.task_event"]);
 
         foreach (var name in SyncMutationCatalog.Names.Where(n => !ScheduleMechanismSwitch.ReservedMutationNames.Contains(n)))
         {

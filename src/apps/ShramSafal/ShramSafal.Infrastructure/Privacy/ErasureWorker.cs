@@ -569,6 +569,16 @@
 //     Completes and the rows are untouched.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.schedule_task_events and the slice-5 columns of ssf.planned_work (plr-d10 schedule mechanism, slice 5) - KEEP. One schedule_task_events row is one
+//     answer about the sign of an own work (seen / not yet / unsure) with the day it was looked at; it carries recorded_by_user_id (who answered, an opaque id)
+//     and NO free words. The planned_work columns (own_item_id, schedule_task_key, occurrence, schedule_due_on, expected_from / expected_to, sign_answer) carry
+//     no person at all: they link a plan to the farm's own work and hold dates the schedule gave. KEEP, as ssf.own_schedule_items above: an opaque id with no
+//     name beside it, and the answer is the farm's record of its crop (P6: anonymise the person, never the work - erasing the worker who said "seen" must not move
+//     the owner's plans back). The answers table is APPEND-ONLY BY PRIVILEGE, so no scrub is wired. EXPORTED: ExportWorker writes /schedule_task_events.json
+//     (every answer he gave). Proven through the WHOLE worker: ErasureWorkerScheduleFeedRealPostgresTests runs the real worker with an answer and a linked plan,
+//     for the person who answered, and proves the request Completes and the rows are untouched.
+//     KEEP - conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
 //     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
 //     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with

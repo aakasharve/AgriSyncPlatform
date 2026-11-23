@@ -77,7 +77,10 @@ public static class ReminderVisibility
             return null;
         }
 
-        var teamChosen = AudienceAllows(seat, settings.AudienceOf(ReminderCategories.Of(task)));
+        // spec: schedule slice 5 (SM-11, team default): a plan made from the farmer's OWN schedule is seen by the owner and the assignee (the base above), not by
+        // the whole plot team by default - the schedule-steps choice (default PlotTeam) is about the board's steps, never widens such a plan. The owner's own
+        // always-show mark for a maker still counts (it is his explicit choice, not a default).
+        var teamChosen = task.OwnItemId is null && AudienceAllows(seat, settings.AudienceOf(ReminderCategories.Of(task)));
         var marked = alwaysShow.Contains(task.CreatedByUserId);
         return teamChosen || marked ? CoveredRows(seat, task) : null;
     }
