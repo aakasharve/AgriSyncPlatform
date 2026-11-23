@@ -131,6 +131,7 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     useEffect(() => {
         if (!loaded || !farmId || !userId) return;
         const fresh = items.filter(t => t.assigneeUserId === userId && !isReminderTask(t, userId) && t.status === 'Assigned' && !t.refused
+            && !(t.source === 'queue' && t.ownItemId) // slice 6: a plan of his own work still on this phone is not on the server yet
             && !t.pendingSteps.includes('seen') && !parked.has(t.id) && !sentSeen.current.has(t.id));
         if (fresh.length === 0) return;
         fresh.forEach(t => sentSeen.current.add(t.id));
@@ -234,6 +235,7 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                 <section data-testid="own-work-section">
                     {ownWork.place
                         ? <OwnWorkList place={ownWork.place} language={ownLanguage} onOpenConflicts={onOpenConflicts}
+                            planning={mayPlan ? { mayAssign, assignees: mayAssign ? assignees.assignees : NO_ASSIGNEES, myUserId: userId ?? null } : undefined}
                             onAdd={() => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey: null }); } }}
                             onEdit={taskKey => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey }); } }} />
                         : ownWork.reason !== 'loading' && (
