@@ -13,7 +13,8 @@ public sealed record AuthResponseBody(
 
 /// <summary>
 /// Response body returned ONLY to native (Android) clients that send
-/// <c>X-Client-Platform: android</c>. Carries the raw refresh token so
+/// <c>X-Client-Platform: android</c> and do not come from a configured web origin
+/// (see <c>NativeClientDetection</c>). Carries the raw refresh token so
 /// the Capacitor app can persist it in the Android Keystore.
 /// Web clients receive <see cref="AuthResponseBody"/> (token-less) and rely
 /// on the HttpOnly cookie set in the same response.

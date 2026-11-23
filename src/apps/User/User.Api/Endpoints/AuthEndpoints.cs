@@ -79,7 +79,7 @@ public static class AuthEndpoints
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
             // token-less body; the HttpOnly cookie set above is authoritative for them.
-            return IsNativeClient(context)
+            return NativeClientDetection.IsNativeClient(context)
                 ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
                 : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
         })
@@ -114,7 +114,7 @@ public static class AuthEndpoints
                 // LB-1: native (Android) clients receive the refresh token in the body so the
                 // Capacitor app can persist it in the Android Keystore. Web clients get the
                 // token-less body; the HttpOnly cookie set above is authoritative for them.
-                return IsNativeClient(context)
+                return NativeClientDetection.IsNativeClient(context)
                     ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
                     : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
             }
@@ -205,7 +205,7 @@ public static class AuthEndpoints
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
             // token-less body; the HttpOnly cookie set above is authoritative for them.
-            if (IsNativeClient(context))
+            if (NativeClientDetection.IsNativeClient(context))
             {
                 return Results.Ok(new
                 {
@@ -244,11 +244,11 @@ public static class AuthEndpoints
         {
             // Web: read refresh token from HttpOnly cookie.
             // Android/native: token comes in the request body ONLY when cookie absent
-            //                 AND the request identifies itself as native (X-Client-Platform: android).
+            //                 AND the request is a native one (see NativeClientDetection).
             var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
             var resolvedToken = !string.IsNullOrWhiteSpace(cookieToken)
                 ? cookieToken
-                : (IsNativeClient(context) && !string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
+                : (NativeClientDetection.IsNativeClient(context) && !string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
 
             if (resolvedToken is null)
             {
@@ -275,7 +275,7 @@ public static class AuthEndpoints
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
             // token-less body; the HttpOnly cookie set above is authoritative for them.
-            return IsNativeClient(context)
+            return NativeClientDetection.IsNativeClient(context)
                 ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
                 : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
         })
@@ -309,7 +309,7 @@ public static class AuthEndpoints
             var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
             var refreshToken = !string.IsNullOrWhiteSpace(cookieToken)
                 ? cookieToken
-                : (IsNativeClient(context) && !string.IsNullOrWhiteSpace(request!.RefreshToken) ? request.RefreshToken : null);
+                : (NativeClientDetection.IsNativeClient(context) && !string.IsNullOrWhiteSpace(request!.RefreshToken) ? request.RefreshToken : null);
             if (refreshToken is null)
             {
                 return Results.Unauthorized();
@@ -361,7 +361,7 @@ public static class AuthEndpoints
             var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
             var refreshToken = !string.IsNullOrWhiteSpace(cookieToken)
                 ? cookieToken
-                : (IsNativeClient(context) ? request?.RefreshToken : null);
+                : (NativeClientDetection.IsNativeClient(context) ? request?.RefreshToken : null);
 
             // Revoke only the current device session. Idempotent — unknown/null token is a safe no-op.
             await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(refreshToken), ct);
@@ -419,17 +419,6 @@ public static class AuthEndpoints
 
         return endpoints;
     }
-
-    /// <summary>
-    /// Returns true when the request originates from a native Android client.
-    /// Android sends <c>X-Client-Platform: android</c>; any other value (or
-    /// absence of the header) is treated as a web request (cookie-only path).
-    /// </summary>
-    private static bool IsNativeClient(HttpContext ctx) =>
-        string.Equals(
-            ctx.Request.Headers["X-Client-Platform"].FirstOrDefault(),
-            "android",
-            StringComparison.OrdinalIgnoreCase);
 
     private static DeviceSessionRequest BuildDeviceSession(
         HttpContext context, bool rememberDevice, string? deviceId, string? deviceName, string? platform)
