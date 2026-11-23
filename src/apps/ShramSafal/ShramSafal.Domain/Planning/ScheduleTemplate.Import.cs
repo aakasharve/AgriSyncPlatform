@@ -20,6 +20,20 @@ public sealed record ImportedActivity(
 /// <summary>A refused import: a stable code, and the words that say why (English for the staff console).</summary>
 public sealed record ScheduleImportProblem(string Code, string Message);
 
+/// <summary>
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7, "Reference schedules in the format") - a whole reference schedule in FORMAT 2 (the task
+/// format), as the platform reviewer loads it: who it comes from, the source as written, the crop, the stage line (stored days, in day order, each with the
+/// sign it starts or ends on) and every task and challenge in the canonical task format. The days are STORED days (shown - 1); nothing is shifted here.
+/// </summary>
+public sealed record ReferenceScheduleImport(
+    string Name,
+    ScheduleOwnerType OwnerType,
+    string? SourceLabel,
+    string? CropKey,
+    IReadOnlyList<OwnScheduleStage> Stages,
+    IReadOnlyList<ScheduleTaskContent> Tasks,
+    IReadOnlyList<ScheduleChallengeContent> Challenges);
+
 public sealed partial class ScheduleTemplate
 {
     public static readonly IReadOnlyList<string> Roles = ["fungicide", "insecticide", "herbicide", "pgr", "nutrient"];
@@ -191,6 +205,186 @@ public sealed partial class ScheduleTemplate
         }
 
         return template;
+    }
+
+    /// <summary>The most tasks, and the most challenges, one reference version may hold (the grape year holds 160 and 84).</summary>
+    public const int MaxReferenceTasks = 600;
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - the CHAIN a library row belongs to: every version of one reference schedule names the
+    /// same chain (version 1 names itself). Null on every row made before the slice (the deployed binary never writes it; a reader never needs it).
+    /// </summary>
+    public Guid? ChainId { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - imports a reference schedule in FORMAT 2 as a library row (Public; its maker is the platform
+    /// reviewer who loads it). <paramref name="previous"/> null = version 1 of a new chain (today always); else the NEXT version of that library row (loaded WITH its
+    /// tasks): version + 1, the same chain and crop, and no safety or pre-harvest gap of a task may shrink (<see cref="ScheduleSafetyGaps.CheckVersion"/>). Either way
+    /// the new row starts UNCHECKED: a check names one row and one version, never the chain.
+    /// <list type="bullet">
+    /// <item>The tasks and challenges are written whole and once (<see cref="SetTasks"/>), with the stage signs.</item>
+    /// <item><b>For old phones</b>: every DAY task the old rules can hold is ALSO written as a stored activity (the same projection as "हेच मुख्य करा"), so release
+    /// 1.0.17 reads it once the row is checked. A dayless, "after" or "sign" task, a day before the start day and a day past the last stage stay in the format only:
+    /// an old phone is never shown a day nobody stated.</item>
+    /// </list>
+    /// Returns null and the reason when a rule refuses it; nothing is raised then.
+    /// </summary>
+    public static ScheduleTemplate? ImportReference(
+        Guid id,
+        ScheduleTemplate? previous,
+        ReferenceScheduleImport input,
+        UserId makerUserId,
+        DateTime createdAtUtc,
+        out ScheduleTaskProblem? problem)
+    {
+        problem = null;
+        ArgumentNullException.ThrowIfNull(input);
+        if (id == Guid.Empty || makerUserId.IsEmpty)
+        {
+            problem = new("ScheduleImportFormat", "A reference schedule needs its id and the person who loads it.");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Trim().Length > MaxNameLength)
+        {
+            problem = new("ScheduleImportName", $"The schedule needs a name of at most {MaxNameLength} characters.");
+            return null;
+        }
+
+        if (input.SourceLabel is { } label && label.Trim().Length > MaxSourceLabelLength)
+        {
+            problem = new("ScheduleImportSource", $"The source label may be at most {MaxSourceLabelLength} characters.");
+            return null;
+        }
+
+        if (input.CropKey is { } crop && crop.Trim().Length > MaxCropKeyLength)
+        {
+            problem = new("ScheduleImportCrop", $"The crop key may be at most {MaxCropKeyLength} characters.");
+            return null;
+        }
+
+        var tasks = input.Tasks ?? [];
+        var challenges = input.Challenges ?? [];
+        if (tasks.Count == 0)
+        {
+            problem = new("ScheduleImportTasks", "A reference schedule in the task format needs at least one task.");
+            return null;
+        }
+
+        if (tasks.Count > MaxReferenceTasks || challenges.Count > MaxReferenceTasks)
+        {
+            problem = new("ScheduleImportTasks", $"A reference schedule holds at most {MaxReferenceTasks} tasks and {MaxReferenceTasks} challenges.");
+            return null;
+        }
+
+        var stages = input.Stages ?? [];
+        if (stages.Count == 0)
+        {
+            problem = new("ScheduleImportStages", "A schedule needs at least one stage.");
+            return null;
+        }
+
+        problem = CheckOwnStages(stages);
+        if (problem is not null)
+        {
+            return null;
+        }
+
+        // A task names its stage by its place in the line ORDERED BY DAY; a line sent out of day order is refused, never re-ordered behind the tasks' backs.
+        for (var i = 1; i < stages.Count; i++)
+        {
+            if (stages[i].StartDay < stages[i - 1].StartDay || (stages[i].StartDay == stages[i - 1].StartDay && stages[i].EndDay < stages[i - 1].EndDay))
+            {
+                problem = new("ScheduleImportStageOrder", "The stages are listed in day order (a task names its stage by its place in that order).");
+                return null;
+            }
+        }
+
+        if (previous is not null)
+        {
+            if (previous.TenantScope != TenantScope.Public || !previous.IsInTaskFormat)
+            {
+                problem = new("ScheduleImportPrevious", "A next version follows a library schedule that is itself in the task format.");
+                return null;
+            }
+
+            if (!string.Equals(previous.CropKey?.Trim(), input.CropKey?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                problem = new("ScheduleImportPrevious", "A next version is for the same crop as the version before.");
+                return null;
+            }
+
+            if (ScheduleSafetyGaps.CheckVersion(previous._tasks.Select(t => t.Content), tasks.Where(t => t is not null)) is { } gap)
+            {
+                problem = gap;
+                return null;
+            }
+        }
+
+        var definitions = stages.Select(s => new StageDefinition(s.Name.Trim(), s.StartDay, s.EndDay)).ToList();
+        var template = new ScheduleTemplate(
+            id,
+            input.Name.Trim(),
+            definitions[0].Name,
+            createdAtUtc,
+            makerUserId,
+            TenantScope.Public,
+            version: previous is null ? 1 : previous.Version + 1,
+            previousVersionId: previous?.Id,
+            derivedFromTemplateId: null,
+            definitions)
+        {
+            OwnerType = input.OwnerType,
+            SourceLabel = string.IsNullOrWhiteSpace(input.SourceLabel) ? null : input.SourceLabel.Trim(),
+            CropKey = string.IsNullOrWhiteSpace(input.CropKey) ? null : input.CropKey.Trim(),
+            ChainId = previous is null ? id : previous.ChainId ?? previous.Id,
+        };
+
+        if (!template.SetTasks(tasks, challenges, out problem))
+        {
+            return null;
+        }
+
+        var signs = stages
+            .Select((s, i) => new ScheduleStageSign(i, Words(s.StartSign), Words(s.EndSign)))
+            .Where(s => s.StartSign is not null || s.EndSign is not null)
+            .ToList();
+        if (!template.SetStageSigns(signs, out problem))
+        {
+            return null;
+        }
+
+        template.ProjectDayTasks(definitions);
+
+        if (previous is not null)
+        {
+            template.Raise(new ScheduleTemplateEditedEvent(Guid.NewGuid(), createdAtUtc, id, previous.Id, template.Version, makerUserId));
+        }
+
+        return template;
+
+        static string? Words(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - the content hash of this VERSION in the task format: SHA-256 over the stage line (names, stored
+    /// days, signs, in order) and every task and challenge by key with its own content hash (which covers every field of it). A check is recorded against this hash,
+    /// so a tick can never stand for content the checker did not see. Needs the tasks loaded. Null for a version that is not in the task format.
+    /// </summary>
+    public string? TaskFormatHash()
+    {
+        if (!IsInTaskFormat)
+        {
+            return null;
+        }
+
+        var payload = new
+        {
+            stages = _stages.OrderBy(s => s.OrderIndex).Select(s => new { s.Name, s.StartDay, s.EndDay, s.StartSign, s.EndSign }).ToList(),
+            tasks = _tasks.OrderBy(t => t.TaskKey, StringComparer.Ordinal).Select(t => new { key = t.TaskKey, hash = t.ContentHash }).ToList(),
+            challenges = _challenges.OrderBy(c => c.ChallengeKey, StringComparer.Ordinal).Select(c => new { key = c.ChallengeKey, hash = c.ContentHash }).ToList(),
+        };
+        return ScheduleTaskJson.Sha256Hex(System.Text.Json.JsonSerializer.Serialize(payload, ScheduleTaskJson.Options));
     }
 
     /// <summary>

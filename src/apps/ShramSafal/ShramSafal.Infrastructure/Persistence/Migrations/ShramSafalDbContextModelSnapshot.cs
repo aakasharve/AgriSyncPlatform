@@ -6204,6 +6204,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("checked_at_utc");
 
+                    b.PrimitiveCollection<string[]>("CheckedChallengeKeys")
+                        .HasColumnType("text[]")
+                        .HasColumnName("checked_challenge_keys");
+
+                    b.PrimitiveCollection<string[]>("CheckedTaskKeys")
+                        .HasColumnType("text[]")
+                        .HasColumnName("checked_task_keys");
+
                     b.Property<string>("CheckerDisplayName")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -6213,6 +6221,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CheckerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("checker_user_id");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
 
                     b.Property<string>("Decision")
                         .IsRequired()
@@ -6461,6 +6474,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ChainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chain_id");
+
                     b.Property<string>("Climate")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
@@ -6545,6 +6562,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnName("version");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChainId")
+                        .HasDatabaseName("ix_schedule_templates_chain_id");
 
                     b.HasIndex("OwnerUserId")
                         .HasDatabaseName("ix_schedule_templates_owner_user_id")

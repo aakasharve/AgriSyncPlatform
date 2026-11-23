@@ -387,6 +387,8 @@ const REFUSALS: ReadonlyArray<{ match: (code: string) => boolean; mr: string; en
     { match: c => c.endsWith('ScheduleCopy.Conflict'), mr: 'ही प्रत आधीच बनवलेली आहे.', en: 'This copy has already been made.' }, // Marathi = the server's own twin
     { match: c => c.endsWith('ScheduleMadeFor'), mr: 'ही निवड यादीत नाही.', en: 'This choice is not in the list.' },
     { match: c => c.endsWith('ScheduleImportOperationKey'), mr: 'कामाची ओळख बरोबर नाही.', en: "The work's identity is not right." },
+    // spec: plr-d10 schedule slice 7 - PROPOSED; Marathi = the server's own twin (ScheduleTemplateEndpoints.MarathiWords).
+    { match: c => c.endsWith('ScheduleTaskFormatEdit'), mr: 'हे शेड्यूल नव्या पद्धतीत आहे; हा बदल जतन झाला नाही.', en: 'This schedule is in the new format; this change was not saved.' },
     { match: c => c.endsWith('ScheduleImportOutsideStages'), mr: 'कामाचे दिवस स्टेजच्या दिवसांत बसत नाहीत.', en: "The work's days do not fit inside the stages." }, // PROPOSED
     { match: c => /ScheduleImport[A-Za-z]*$/.test(c), mr: 'स्टेज किंवा कामाचे दिवस बरोबर नाहीत. तपासा.', en: 'The days of a stage or a work are not right. Check them.' }, // PROPOSED
 ];

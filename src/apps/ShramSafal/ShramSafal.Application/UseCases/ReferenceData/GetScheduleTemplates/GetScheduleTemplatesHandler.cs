@@ -160,7 +160,9 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         foreach (var d in all)
         {
             var row = rowById[d.Id];
-            var isSample = IsOutsideRow(row) && !row.HasStoredDays;
+            // spec: plr-d10 schedule slice 7 - a version in the task format is NEVER a sample, even when none of its tasks stores a day (a dayless task never
+            // makes an adoptable sample): it is an Outside row like any stored one, listed to a farm caller only once checked.
+            var isSample = IsOutsideRow(row) && !row.HasStoredDays && !(withTasks?.Contains(row.Id) ?? false);
             if (Listed(d, row, isSample))
             {
                 listed.Add(isSample ? WithCheck(d, ScheduleCheckState.NotChecked) : d);
@@ -260,7 +262,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         }
 
         return outside
-            .FirstOrDefault(t => (t.Check is null || t.Check.State == nameof(ScheduleCheckState.NotChecked)) && t.HasStoredDays != true)
+            .FirstOrDefault(t => (t.Check is null || t.Check.State == nameof(ScheduleCheckState.NotChecked)) && t.HasStoredDays != true && t.HasTaskFormat != true)
             ?.Id;
     }
 
@@ -272,7 +274,8 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         // list is worked out from the thin rows alone, so a stored row never changes what a thin row reads.
         // spec: plr-d10 lane SCH-OWN (D6) - a person's own schedule that stores no days (made empty) is NOT a thin row: it feeds no equal-split stage
         // list (that would invent stages for it and for every other row of its crop, P4), and 1.0.17 drops stage-less templates it cannot place.
-        var thin = templates.Where(template => !template.HasStoredDays && template.OwnerUserId is null).ToList();
+        // spec: plr-d10 schedule slice 7 - nor is a version in the task format a thin row (its stages are stored, and an equal split would invent days for it, P4).
+        var thin = templates.Where(template => !template.HasStoredDays && template.OwnerUserId is null && !(withTasks?.Contains(template.Id) ?? false)).ToList();
         var stageDefinitionsByCrop = BuildStageDefinitionsByCrop(thin);
         var totalDaysByCrop = stageDefinitionsByCrop.ToDictionary(
             pair => pair.Key,
@@ -285,7 +288,8 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             {
                 var rowChecks = checksByRow.GetValueOrDefault(template.Id) ?? [];
                 // spec: plr-d10 lane SCH-OWN (D-82 = 3) - no check applies to a farm's own schedule: its entry carries none (never "not checked yet").
-                var check = template.OwnerUserId is null ? ToCheckDto(template, rowChecks) : null;
+                var inTaskFormat = withTasks?.Contains(template.Id) ?? false;
+                var check = template.OwnerUserId is null ? ToCheckDto(template, rowChecks, inTaskFormat) : null;
                 var ownerType = template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null;
                 var rowTag = $"v{template.Version}";
 
@@ -296,7 +300,9 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
 
                 // D6: a row that names its crop (SCH-OWN) is listed under that crop's name - never one read from its title.
                 var cropType = Services.ScheduleLibrary.CropTypeNameFor(template.CropKey) ?? DeriveCropType(template.Name);
-                var emptyOwn = template.OwnerUserId is not null;
+                // slice 7: a task-format version with no stored work lists Stages [] and TotalDays 0 for 1.0.17 (it drops a template with no stage, so it never
+                // shows or adopts one it cannot follow - the M004 ruling); a new phone reads its stage line from DraftStages (WithTaskFormat).
+                var emptyOwn = template.OwnerUserId is not null || inTaskFormat;
                 IReadOnlyList<StageDefinitionDto> stageDefinitions = emptyOwn
                     ? []
                     : stageDefinitionsByCrop.TryGetValue(cropType, out var stages)
@@ -465,10 +471,10 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
     };
 
     /// <summary>A row's state for the library: its LATEST decision, else NotChecked. Only a row that stores its days can carry one.</summary>
-    private static ScheduleCheckDto ToCheckDto(ScheduleTemplate template, IReadOnlyList<ScheduleCheck> rowChecks)
+    private static ScheduleCheckDto ToCheckDto(ScheduleTemplate template, IReadOnlyList<ScheduleCheck> rowChecks, bool inTaskFormat = false)
     {
         var notChecked = new ScheduleCheckDto(nameof(ScheduleCheckState.NotChecked), null, null, null);
-        if (!template.HasStoredDays)
+        if (!template.HasStoredDays && !inTaskFormat)
         {
             return notChecked;
         }

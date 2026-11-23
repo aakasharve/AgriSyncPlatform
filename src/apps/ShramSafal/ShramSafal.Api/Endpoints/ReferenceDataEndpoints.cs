@@ -59,6 +59,27 @@ public static class ReferenceDataEndpoints
         })
         .WithName("GetScheduleTemplateById");
 
+        // spec: plr-d10 schedule slice 7 - one listed schedule in the TASK FORMAT, only for a phone that declares it reads it (scheduleFormat=2, a query, so CORS
+        // needs no new header). A NEW route: the listing above keeps the shape release 1.0.17 parses. Without the declaration: 400 with words.
+        referenceGroup.MapGet("/schedule-templates/{id:guid}/tasks", async (
+            Guid id,
+            string? scheduleFormat,
+            ClaimsPrincipal user,
+            GetScheduleTaskFormatHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var format = ShramSafal.Application.UseCases.Sync.PullSyncChanges.PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat);
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(callerUserId, id, format, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetScheduleTaskFormat");
+
         referenceGroup.MapGet("/crop-types", async (
             ClaimsPrincipal user,
             GetCropTypesHandler handler,

@@ -101,15 +101,16 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     {
         ArgumentNullException.ThrowIfNull(rows);
         var (visible, checks, _) = await ReadAsync(repository, rows, callerUserId, ct);
+
+        // spec: plr-d10 schedule slice 3 - which visible versions are written in the task format (one read): their stage line and its signs are listed.
+        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(visible.Select(r => r.Id).ToList(), ct);
         var mode = ScheduleListingMode.Farm;
-        if (entitlements is not null && callerUserId != Guid.Empty && HasRowHiddenFromFarm(visible, checks)
+        if (entitlements is not null && callerUserId != Guid.Empty && HasRowHiddenFromFarm(visible, checks, withTasks)
             && await entitlements.MayCheckSchedulesAsync(new UserId(callerUserId), ct))
         {
             mode = ScheduleListingMode.Reviewer;
         }
 
-        // spec: plr-d10 schedule slice 3 - which visible versions are written in the task format (one read): their stage line and its signs are listed.
-        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(visible.Select(r => r.Id).ToList(), ct);
         return GetScheduleTemplatesHandler.Listing(visible, checks, mode, withTasks);
     }
 
@@ -136,7 +137,7 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
 
         IReadOnlyList<ScheduleCheck> checks = input.Count == 0
             ? []
-            : await repository.GetScheduleChecksAsync(input.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
+            : await repository.GetScheduleChecksAsync(input.Where(CanCarryCheck).Select(r => r.Id).ToList(), ct);
         var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(input.Select(r => r.Id).ToList(), ct);
         return GetScheduleTemplatesHandler.Listing(input, checks, ScheduleListingMode.Pool, withTasks).Where(t => ids.Contains(t.Id)).ToList();
     }
@@ -151,9 +152,15 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         // latest decision of each visible row that stores its days. A row that stores none can have no check (R3).
         IReadOnlyList<ScheduleCheck> checks = visible.Count == 0
             ? []
-            : await repository.GetScheduleChecksAsync(visible.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
+            : await repository.GetScheduleChecksAsync(visible.Where(CanCarryCheck).Select(r => r.Id).ToList(), ct);
         return (visible, checks, viewer);
     }
+
+    /// <summary>
+    /// A row a check can name: one that stores its days, or (slice 7) one with a stored stage line - a version in the task format, whose dayless tasks never store a
+    /// day. Rows loaded without their tasks cannot tell the second kind apart, so its checks are read too; a row nobody could check simply has none.
+    /// </summary>
+    private static bool CanCarryCheck(ScheduleTemplate r) => r.HasStoredDays || r.StageRows.Count > 0;
 
     private static async Task<(List<ScheduleTemplate> Visible, ScheduleViewer Viewer, IReadOnlyList<ScheduleTemplateDto> Pool)> PoolAsync(
         IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct)
@@ -164,11 +171,11 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     }
 
     /// <summary>A Public row that stores its days and is neither Checked nor Withdrawn: a farm caller is never shown it.</summary>
-    private static bool HasRowHiddenFromFarm(IReadOnlyList<ScheduleTemplate> visible, IReadOnlyList<ScheduleCheck> checks)
+    private static bool HasRowHiddenFromFarm(IReadOnlyList<ScheduleTemplate> visible, IReadOnlyList<ScheduleCheck> checks, IReadOnlySet<Guid> withTasks)
     {
         var byRow = checks.GroupBy(c => c.ScheduleTemplateId).ToDictionary(g => g.Key, g => g.ToList());
         return visible.Any(r =>
-            r.TenantScope == TenantScope.Public && r.HasStoredDays
+            r.TenantScope == TenantScope.Public && (r.HasStoredDays || withTasks.Contains(r.Id))
             && ScheduleCheck.StateOf(byRow.GetValueOrDefault(r.Id) ?? []) is not (ScheduleCheckState.Checked or ScheduleCheckState.Withdrawn));
     }
 
@@ -246,12 +253,14 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         {
             // A carry-over (R7) bridges SAMPLES only (a built-in id, or a Public row WITHOUT stored days) and a row whose check was
             // withdrawn; a Public row WITH stored days that is waiting or sent back is refused even then (D-82: it is never shown).
-            var isSample = isBuiltIn || row is { HasStoredDays: false };
+            // slice 7: a version in the task format is never a sample (a dayless task never makes an adoptable sample).
+            var inTaskFormat = template.HasTaskFormat == true;
+            var isSample = isBuiltIn || (row is { HasStoredDays: false } && !inTaskFormat);
             var bridged = carryOver && (isSample || live == ScheduleCheckState.Withdrawn);
             var rowById = visible.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
             var cropHasChecked = GetScheduleTemplatesHandler.CheckedOutsideCrops(pool, rowById).Contains(CropGroupKey(template.CropType));
             // spec: plr-d10 lane SCH-GATE-a - the "a new choice is open" rule is shared with the planning gate (NewChoiceOpen).
-            var newChoiceOpen = NewChoiceOpen(origin, isBuiltIn, row?.HasStoredDays ?? false, live, cropHasChecked);
+            var newChoiceOpen = NewChoiceOpen(origin, isBuiltIn, (row?.HasStoredDays ?? false) || inTaskFormat, live, cropHasChecked);
             if (!bridged && !newChoiceOpen)
             {
                 return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleNotChecked);

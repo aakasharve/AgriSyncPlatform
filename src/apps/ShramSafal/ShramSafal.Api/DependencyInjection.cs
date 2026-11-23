@@ -293,6 +293,10 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.ImportScheduleTemplateHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.RecordScheduleCheckHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetSchedulesWaitingForCheckHandler>();
+        // spec: plr-d10 schedule slice 7 - reference schedules in format 2: import, the checker's view, and the task format for a phone that declares it.
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.ImportReferenceScheduleHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetScheduleCheckViewHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleTaskFormatHandler>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.

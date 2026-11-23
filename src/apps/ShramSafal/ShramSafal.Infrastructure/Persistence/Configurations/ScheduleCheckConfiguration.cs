@@ -54,6 +54,12 @@ internal sealed class ScheduleCheckConfiguration : IEntityTypeConfiguration<Sche
 
         builder.Property(x => x.CheckedAtUtc).HasColumnName("checked_at_utc").IsRequired();
 
+        // spec: plr-d10 schedule slice 7 - a check of a version in the task format keeps every ticked task and challenge key and the content hash it was made on.
+        // All nullable (every check before the slice, and every check of a row in the old form, has none; the deployed binary never writes them).
+        builder.Property(x => x.CheckedTaskKeys).HasColumnName("checked_task_keys").HasColumnType("text[]");
+        builder.Property(x => x.CheckedChallengeKeys).HasColumnName("checked_challenge_keys").HasColumnType("text[]");
+        builder.Property(x => x.ContentHash).HasColumnName("content_hash").HasMaxLength(64);
+
         builder.HasIndex(x => new { x.ScheduleTemplateId, x.CheckedAtUtc }).HasDatabaseName("ix_schedule_checks_template_checked");
         builder.Ignore(x => x.DomainEvents);
     }

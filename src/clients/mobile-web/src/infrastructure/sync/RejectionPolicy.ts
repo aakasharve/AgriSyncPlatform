@@ -194,6 +194,9 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     //   OwnScheduleInvalid   - a work that does not hold together, a key never saved, a make-main with no work or no stage: command shape, for ever.
     'ScheduleMechanismOff',
     'OwnScheduleInvalid',
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - an old whole edit (schedule.edit with stages and works) of a schedule written in the task
+    // format: it would drop its works, so the server refuses it and writes nothing. The same bytes get the same answer for ever: parked with its words.
+    'ScheduleTaskFormatEdit',
 ];
 
 const PERMANENT_SET = new Set(

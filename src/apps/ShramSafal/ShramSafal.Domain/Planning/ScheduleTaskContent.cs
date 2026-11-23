@@ -272,6 +272,46 @@ public sealed record ScheduleChallengeContent(
 
     public string ContentHash() => ScheduleTaskJson.Sha256Hex(ToCanonicalJson());
 
+    private static readonly JsonSerializerOptions WireOptions = new(ScheduleTaskJson.Options)
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        RespectRequiredConstructorParameters = true,
+        RespectNullableAnnotations = true,
+    };
+
+    /// <summary>
+    /// spec: plr-d10 schedule slice 7 - reads a challenge as the reference import sends it (the canonical JSON names) and checks it. A key the format does not know is
+    /// a refusal, never silently dropped (the same strict reading as <see cref="ScheduleTaskContent.TryParseWire"/>).
+    /// </summary>
+    public static bool TryParseWire(string json, out ScheduleChallengeContent? content, out ScheduleTaskProblem? problem)
+    {
+        content = null;
+        try
+        {
+            content = JsonSerializer.Deserialize<ScheduleChallengeContent>(json, WireOptions)?.Normalized();
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or ArgumentException or InvalidOperationException)
+        {
+            problem = new("ScheduleChallengeWire", "The challenge is not in the task format.");
+            return false;
+        }
+
+        if (content is null)
+        {
+            problem = new("ScheduleChallengeWire", "The challenge is missing.");
+            return false;
+        }
+
+        problem = content.Check();
+        if (problem is not null)
+        {
+            content = null;
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Whether the challenge holds together. <c>null</c> = fine.</summary>
     public ScheduleTaskProblem? Check()
     {

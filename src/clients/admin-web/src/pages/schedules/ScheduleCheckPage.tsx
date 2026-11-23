@@ -6,6 +6,7 @@ import { adminApi } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
+import { TaskFormatCheck, type ScheduleCheckView } from './TaskFormatCheck';
 
 // spec: plr-d10 lane SCH-A (Task 5; founder D-74, L8-R) - ShramSafal's check of a library schedule, day by day.
 // A check is a ShramSafal PLATFORM act: the server records who checked (the signed-in person), when, and which version. This page
@@ -22,6 +23,8 @@ interface WaitingSchedule {
   stageCount: number;
   activityCount: number;
   createdAtUtc: string;
+  // slice 7: a version written in the task format is checked task by task (TaskFormatCheck).
+  hasTaskFormat?: boolean | null;
 }
 
 interface CheckActivity {
@@ -84,9 +87,21 @@ export default function ScheduleCheckPage() {
     staleTime: 15_000,
   });
 
+  // The format is kept in the address (fmt=2), so the page stays on the task check after an approval takes the row off the waiting list.
+  const selectedIsTaskFormat = params.get('fmt') === '2';
+
+  const taskView = useQuery<ScheduleCheckView>({
+    queryKey: ['schedules', 'check', 'view', selectedId],
+    enabled: !!selectedId && selectedIsTaskFormat,
+    queryFn: async () => {
+      const { data } = await adminApi.get<ScheduleCheckView>(`/shramsafal/schedule-templates/${selectedId}/check-view`);
+      return data;
+    },
+  });
+
   const schedule = useQuery<CheckSchedule>({
     queryKey: ['schedules', 'check', 'one', selectedId],
-    enabled: !!selectedId,
+    enabled: !!selectedId && !selectedIsTaskFormat,
     queryFn: async () => {
       const { data } = await adminApi.get<CheckSchedule>(`/shramsafal/reference/schedule-templates/${selectedId}`);
       return data;
@@ -117,12 +132,12 @@ export default function ScheduleCheckPage() {
                 <li key={w.id}>
                   <button
                     type="button"
-                    onClick={() => setParams({ id: w.id })}
+                    onClick={() => setParams(w.hasTaskFormat ? { id: w.id, fmt: '2' } : { id: w.id })}
                     className={`w-full rounded-lg border-2 px-3 py-2 text-left text-sm ${selectedId === w.id ? 'border-brand-teal bg-surface-panel' : 'border-surface-border bg-surface-glass'}`}
                   >
                     <span className="block font-bold text-text-primary">{w.name}</span>
                     <span className="block text-[12px] text-text-muted">
-                      v{w.version} - {w.stageCount} stages - {w.activityCount} activities{w.sourceLabel ? ` - ${w.sourceLabel}` : ''}
+                      v{w.version} - {w.stageCount} stages - {w.hasTaskFormat ? 'task format' : `{w.activityCount} activities`}{w.sourceLabel ? ` - ${w.sourceLabel}` : ''}
                     </span>
                   </button>
                 </li>
@@ -133,6 +148,11 @@ export default function ScheduleCheckPage() {
 
         <div>
           {!selectedId && <div className="glass-panel py-16 text-center text-sm text-text-muted">Pick a schedule to check it day by day.</div>}
+          {selectedId && selectedIsTaskFormat && taskView.isLoading && <div className="h-40 animate-pulse rounded-xl bg-surface-sidebar"/>}
+          {selectedId && selectedIsTaskFormat && taskView.isError && <div className="glass-panel py-10 text-center text-sm text-danger">{errorText(taskView.error)}</div>}
+          {selectedId && selectedIsTaskFormat && taskView.data && (
+            <TaskFormatCheck key={taskView.data.id} view={taskView.data} onDone={() => { void queryClient.invalidateQueries({ queryKey: ['schedules'] }); }} />
+          )}
           {selectedId && schedule.isLoading && <div className="h-40 animate-pulse rounded-xl bg-surface-sidebar"/>}
           {selectedId && schedule.isError && <div className="glass-panel py-10 text-center text-sm text-danger">{errorText(schedule.error)}</div>}
           {selectedId && schedule.data && (

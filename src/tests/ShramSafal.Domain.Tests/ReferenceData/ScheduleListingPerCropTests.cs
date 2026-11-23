@@ -17,6 +17,9 @@ public sealed class ScheduleListingPerCropTests
 {
     private static readonly DateTime T0 = new(2026, 11, 8, 6, 0, 0, DateTimeKind.Utc);
     private static readonly UserId Checker = new(Guid.Parse("c0c0c0c0-0000-4000-8000-000000000001"));
+
+    // spec: plr-d10 schedule slice 7 - the maker of a version never approves it: the imports below are made by another person than the checker.
+    private static readonly UserId Maker = new(Guid.Parse("c0c0c0c0-0000-4000-8000-0000000000ad"));
     private static readonly UserId Farmer = new(Guid.Parse("f0f0f0f0-0000-4000-8000-000000000001"));
     private const string Display = "श्रमसफल कृषी तज्ज्ञ चाचणी";
     private static readonly Guid[] BuiltInIds = ReferenceDataCatalog.ScheduleTemplates.Select(t => t.Id).ToArray();
@@ -99,7 +102,7 @@ public sealed class ScheduleListingPerCropTests
         var thinGrape = Thin("Grapes - Old thin row");
         var checkedPomegranate = ScheduleTemplate.Import(
             Guid.NewGuid(), "Pomegranate - University Schedule", ScheduleOwnerType.Institution, "Test University", "pomegranate",
-            Checker, TenantScope.Public, T0, [new("Bahar Treatment", 0, 30)],
+            Maker, TenantScope.Public, T0, [new("Bahar Treatment", 0, 30)],
             [new ImportedActivity("a", "Irrigation", 1, 2, FrequencyMode.OneTime, 1)], out var problem)!;
         Assert.Null(problem);
 

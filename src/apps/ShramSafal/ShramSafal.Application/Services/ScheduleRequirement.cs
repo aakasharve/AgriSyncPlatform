@@ -118,7 +118,8 @@ public sealed class ScheduleRequirement(
             && ScheduleLibrary.NewChoiceOpen(
                 facts.OriginOf(t),
                 isBuiltIn: t.Scope is null,
-                hasStoredDays: t.HasStoredDays == true,
+                // slice 7: an OUTSIDE version in the task format is never a sample (adopt's own rule, ScheduleLibrary.ChooseAsync); an own one keeps its rule.
+                hasStoredDays: t.HasStoredDays == true || (t.HasTaskFormat == true && facts.OriginOf(t) != ScheduleOrigin.Own),
                 ParseState(t),
                 checkedCrops.Contains(ScheduleLibrary.CropGroupKey(t.CropType))));
 

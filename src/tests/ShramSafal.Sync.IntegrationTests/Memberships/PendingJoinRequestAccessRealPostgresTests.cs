@@ -637,6 +637,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // no existing policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any linked plan or answer exists (none does in this
         // proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261123071136_AddScheduleFeed",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - Up() and Down() read in full: four NULLABLE columns on ssf.schedule_templates and ssf.schedule_checks
+        // and one index. No policy is created or altered (no farm_memberships or farm_join_requests object, no seat). Down() refuses while any of the columns holds a
+        // value (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261123113122_AddScheduleReferenceFormat",
     ];
 
     /// <summary>

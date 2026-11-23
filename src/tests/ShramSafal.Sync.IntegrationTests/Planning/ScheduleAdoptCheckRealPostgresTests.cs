@@ -437,7 +437,8 @@ public sealed class ScheduleAdoptCheckRealPostgresTests(ITestOutputHelper output
 
     private async Task<ScheduleTemplate> NewCheckedVersionAsync(ScheduleTemplate v1)
     {
-        var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), null, null, new UserId(PlatformOwner), DateTime.UtcNow);
+        // slice 7: the version is made by the importer, never by the checker who approves it (a maker never approves his own).
+        var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), null, null, new UserId(Importer), DateTime.UtcNow);
         await using (var db = NewSuperuserContext())
         {
             db.ScheduleTemplates.Add(v2);

@@ -1,0 +1,125 @@
+[
+  {
+    "id": "71392204-6765-4294-abd3-1ea10e1713fa",
+    "name": "द्राक्ष: चाचणी संदर्भ",
+    "cropType": "Grapes",
+    "totalDays": 100,
+    "stages": [
+      {
+        "name": "छाटणी आणि फूट",
+        "startDay": 0,
+        "endDay": 40
+      },
+      {
+        "name": "मण्यांची वाढ",
+        "startDay": 41,
+        "endDay": 99,
+        "endSign": "काढणी"
+      }
+    ],
+    "activities": [
+      {
+        "name": "फळछाटणी",
+        "category": "Monitoring",
+        "stageName": "छाटणी आणि फूट",
+        "startDay": 0,
+        "endDay": 0,
+        "frequencyMode": "one_time",
+        "intervalDays": null,
+        "operationKey": null,
+        "id": "a6c8003a-78e3-4fc3-a956-8e187497b293",
+        "part": "Work",
+        "role": null,
+        "nutrientKey": null,
+        "afterActivityId": null,
+        "storedFrequencyMode": "OneTime"
+      },
+      {
+        "name": "बुरशीनाशक फवारणी",
+        "category": "Spraying",
+        "stageName": "छाटणी आणि फूट",
+        "startDay": 10,
+        "endDay": 30,
+        "frequencyMode": "every_n_days",
+        "intervalDays": 7,
+        "operationKey": "op_spray_gen",
+        "id": "a3b44af8-c418-4ab9-ad1d-76729db87576",
+        "part": "Spray",
+        "role": "fungicide",
+        "nutrientKey": null,
+        "afterActivityId": null,
+        "storedFrequencyMode": "EveryNDays"
+      }
+    ],
+    "versionHash": "9f532a4258c4df32dec1e354ddcc2c4ceae7e327a8b50a1f04d01e082a92bc56",
+    "ownerType": "INSTITUTION",
+    "sourceLabel": "चाचणी पुस्तिका",
+    "check": {
+      "state": "Checked",
+      "checkerDisplayName": "श्रमसफल कृषी तज्ज्ञ चाचणी",
+      "checkedAtUtc": "2026-11-23T12:01:55.819802Z",
+      "note": null
+    },
+    "rowVersionTag": "v1",
+    "hasStoredDays": true,
+    "scope": "Public",
+    "ownerUserId": null,
+    "madeByUserId": null,
+    "madeAtUtc": null,
+    "previousVersionId": null,
+    "variety": null,
+    "soilType": null,
+    "region": null,
+    "climate": null,
+    "draftStages": null,
+    "pictureId": null,
+    "pictureSha256": null,
+    "pictureKind": null,
+    "hasTaskFormat": true
+  },
+  {
+    "id": "1a38c910-7c28-4be2-b1f3-7c1f696360b6",
+    "name": "द्राक्ष: फक्त खुणा",
+    "cropType": "Grapes",
+    "totalDays": 0,
+    "stages": [],
+    "activities": [],
+    "versionHash": "9f532a4258c4df32dec1e354ddcc2c4ceae7e327a8b50a1f04d01e082a92bc56",
+    "ownerType": "INSTITUTION",
+    "sourceLabel": "चाचणी पुस्तिका",
+    "check": {
+      "state": "Checked",
+      "checkerDisplayName": "श्रमसफल कृषी तज्ज्ञ चाचणी",
+      "checkedAtUtc": "2026-11-23T12:01:55.869482Z",
+      "note": null
+    },
+    "rowVersionTag": "v1",
+    "hasStoredDays": false,
+    "scope": "Public",
+    "ownerUserId": null,
+    "madeByUserId": null,
+    "madeAtUtc": null,
+    "previousVersionId": null,
+    "variety": null,
+    "soilType": null,
+    "region": null,
+    "climate": null,
+    "draftStages": [
+      {
+        "name": "छाटणी आणि फूट",
+        "startDay": 0,
+        "endDay": 40
+      },
+      {
+        "name": "मण्यांची वाढ",
+        "startDay": 41,
+        "endDay": 99,
+        "endSign": "काढणी"
+      }
+    ],
+    "pictureId": null,
+    "pictureSha256": null,
+    "pictureKind": null,
+    "hasTaskFormat": true
+  }
+]

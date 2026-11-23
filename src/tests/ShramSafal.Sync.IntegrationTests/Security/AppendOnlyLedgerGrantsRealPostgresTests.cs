@@ -333,6 +333,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    trigger), GRANTing SELECT, INSERT and REVOKEing UPDATE, DELETE, TRUNCATE on that new table only; no ledger this suite asserts about is touched. Down()
         //    REFUSES while any linked plan or answer exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
         "20261123071136_AddScheduleFeed",
+        // ── Reviewed 2026-11-23 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, slice 7); Up() and Down() read in full: four NULLABLE columns (ssf.schedule_templates.chain_id;
+        //    ssf.schedule_checks.checked_task_keys / checked_challenge_keys / content_hash) and one index. No GRANT or REVOKE: the append-only ledger ssf.schedule_checks keeps
+        //    SELECT / INSERT only (grants are per table). Down() REFUSES while any of the columns holds a value and otherwise drops exactly what Up() added, so on this
+        //    harness's empty schema it reverts and re-applies.
+        "20261123113122_AddScheduleReferenceFormat",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

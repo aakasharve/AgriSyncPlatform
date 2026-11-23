@@ -304,6 +304,62 @@ public static class ScheduleTemplateEndpoints
         })
         .WithName("ImportScheduleTemplate");
 
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - a reference schedule in FORMAT 2 (the task format). A NEW route: the old import above keeps
+        // its shape for every client that sends it. Platform review seat only; the new row is unchecked until ANOTHER person approves it.
+        group.MapPost("/schedule-templates/import/format-2", async (
+            ImportReferenceScheduleRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            ImportReferenceScheduleHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var command = new ImportReferenceScheduleCommand(
+                CallerUserId: actorUserId,
+                Format: request.Format,
+                Name: request.Name ?? string.Empty,
+                CropKey: request.CropKey,
+                OwnerType: request.OwnerType ?? string.Empty,
+                SourceLabel: request.SourceLabel,
+                PreviousVersionId: request.PreviousVersionId,
+                Stages: (request.Stages ?? []).Select(s => new ImportReferenceStageInput(s.Name ?? string.Empty, s.StartDay, s.EndDay, s.StartSign, s.EndSign)).ToList(),
+                Tasks: request.Tasks ?? [],
+                Challenges: request.Challenges ?? [],
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct);
+            return result.IsSuccess
+                ? Results.Created($"/schedule-templates/{result.Value.TemplateId}", result.Value)
+                : ToErrorResult(result.Error);
+        })
+        .WithName("ImportReferenceSchedule");
+
+        // spec: plr-d10 schedule slice 7 - one library row in the task format with every field, its shown days and its content hash, for the platform checker.
+        group.MapGet("/schedule-templates/{id:guid}/check-view", async (
+            Guid id,
+            ClaimsPrincipal user,
+            GetScheduleCheckViewHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(actorUserId, id, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetScheduleCheckView");
+
         group.MapPost("/schedule-templates/{id:guid}/check", async (
             Guid id,
             RecordScheduleCheckRequest request,
@@ -330,7 +386,10 @@ public static class ScheduleTemplateEndpoints
                 CheckerDisplayName: request.CheckerDisplayName ?? string.Empty,
                 ClientAppVersion: ResolveClientAppVersion(httpContext),
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                CheckedTaskKeys: request.CheckedTaskKeys,
+                CheckedChallengeKeys: request.CheckedChallengeKeys,
+                ContentHash: request.ContentHash);
 
             var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -371,6 +430,8 @@ public static class ScheduleTemplateEndpoints
         ["ShramSafal.ScheduleImportOperationKey"] = "कामाची ओळख बरोबर नाही.",
         // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - PROPOSED: a made-for tag that is not one of its list's choices (part b adds the code to RejectionPolicy as permanent).
         ["ShramSafal.ScheduleMadeFor"] = "ही निवड यादीत नाही.",
+        // spec: plr-d10 schedule slice 7 - PROPOSED: an old whole edit of a schedule written in the task format (it would drop its works) is refused visibly.
+        ["ShramSafal.ScheduleTaskFormatEdit"] = "हे शेड्यूल नव्या पद्धतीत आहे; हा बदल जतन झाला नाही.",
     };
 
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
@@ -479,4 +540,23 @@ public sealed record RecordScheduleCheckRequest(
     string? Decision,
     IReadOnlyList<Guid>? CheckedActivityIds,
     string? Note,
-    string? CheckerDisplayName);
+    string? CheckerDisplayName,
+    // spec: plr-d10 schedule slice 7 - additive and optional: for a version in the task format, every ticked task and challenge key and the content hash they
+    // were ticked on (the old admin page never sends them, and a row in the old form never needs them).
+    IReadOnlyList<string>? CheckedTaskKeys = null,
+    IReadOnlyList<string>? CheckedChallengeKeys = null,
+    string? ContentHash = null);
+
+// spec: plr-d10 schedule slice 7 - a reference schedule in format 2. Days are STORED days; Tasks / Challenges are canonical task-format objects.
+public sealed record ImportReferenceStageRequest(string? Name, int StartDay, int EndDay, string? StartSign, string? EndSign);
+
+public sealed record ImportReferenceScheduleRequest(
+    int? Format,
+    string? Name,
+    string? CropKey,
+    string? OwnerType,
+    string? SourceLabel,
+    Guid? PreviousVersionId,
+    IReadOnlyList<ImportReferenceStageRequest>? Stages,
+    IReadOnlyList<System.Text.Json.JsonElement>? Tasks,
+    IReadOnlyList<System.Text.Json.JsonElement>? Challenges);

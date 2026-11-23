@@ -313,7 +313,8 @@ public sealed class OwnScheduleWriteGateTests
             [new("Pruning", 0, 40)], [new ImportedActivity("a", "Pruning", 0, 1, FrequencyMode.OneTime, 1)], out var problem)!;
         problem.Should().BeNull();
         repo.Templates[source.Id] = source;
-        var approve = ScheduleCheck.Approve(source, source.Activities.Select(a => a.Id).ToList(), new UserId(Outsider), "चेकर", Now, out var checkProblem)!;
+        // slice 7: the maker (Outsider) never approves his own version; ShramSafal's checker is another person.
+        var approve = ScheduleCheck.Approve(source, source.Activities.Select(a => a.Id).ToList(), new UserId(Guid.Parse("0c0c0c0c-7777-4000-8000-000000000007")), "चेकर", Now, out var checkProblem)!;
         checkProblem.Should().BeNull();
         repo.Checks.Add(approve);
         return source;

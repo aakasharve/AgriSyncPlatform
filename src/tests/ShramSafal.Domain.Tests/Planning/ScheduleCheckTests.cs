@@ -15,6 +15,9 @@ public sealed class ScheduleCheckTests
 {
     private static readonly DateTime T0 = new(2026, 11, 8, 6, 0, 0, DateTimeKind.Utc);
     private static readonly UserId Checker = new(Guid.Parse("c0c0c0c0-0000-4000-8000-000000000001"));
+
+    // spec: plr-d10 schedule slice 7 - a maker never approves his own schedule, so the import's maker is ANOTHER person than the checker.
+    private static readonly UserId Maker = new(Guid.Parse("c0c0c0c0-0000-4000-8000-0000000000ad"));
     private const string Display = "श्रमसफल कृषी तज्ज्ञ Test";
 
     private static readonly StageDefinition[] Stages =
@@ -31,7 +34,7 @@ public sealed class ScheduleCheckTests
     {
         var template = ScheduleTemplate.Import(
             Guid.NewGuid(), "Grapes - University Schedule", ScheduleOwnerType.Institution, "Test University", "grape",
-            Checker, TenantScope.Public, T0, Stages,
+            Maker, TenantScope.Public, T0, Stages,
             activities.Length == 0
                 ? [Act("a", "Pruning", 0, 1), Act("b", "Foliar Spray", 18, 35, FrequencyMode.EveryNDays, 7)]
                 : activities,
@@ -161,7 +164,7 @@ public sealed class ScheduleCheckTests
         var template = Stored();
         var check = ScheduleCheck.Approve(template, AllIds(template), Checker, Display, T0.AddHours(1), out _)!;
 
-        var edited = template.EditCopyOnWrite(Guid.NewGuid(), "Grapes - University Schedule (rev)", null, Checker, T0.AddDays(1));
+        var edited = template.EditCopyOnWrite(Guid.NewGuid(), "Grapes - University Schedule (rev)", null, Maker, T0.AddDays(1));
 
         Assert.NotEqual(template.Id, edited.Id);
         Assert.Equal(2, edited.Version);

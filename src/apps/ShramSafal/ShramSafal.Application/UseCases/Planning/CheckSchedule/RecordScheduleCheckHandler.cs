@@ -21,7 +21,11 @@ public sealed record RecordScheduleCheckCommand(
     string CheckerDisplayName,
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // spec: plr-d10 schedule slice 7 - for a version in the task format: every task key and challenge key ticked, and the content hash they were ticked on.
+    IReadOnlyList<string>? CheckedTaskKeys = null,
+    IReadOnlyList<string>? CheckedChallengeKeys = null,
+    string? ContentHash = null);
 
 public sealed record RecordScheduleCheckResult(
     Guid CheckId,
@@ -59,7 +63,8 @@ public sealed class RecordScheduleCheckHandler(
             return Result.Failure<RecordScheduleCheckResult>(ShramSafalErrors.Forbidden);
         }
 
-        var template = await repository.GetScheduleTemplateByIdAsync(command.TemplateId, ct);
+        // slice 7: loaded WITH its tasks, so a version in the task format is checked by its tasks and its content hash.
+        var template = await repository.GetScheduleTemplateWithTasksByIdAsync(command.TemplateId, ct);
         if (template is null || template.TenantScope != TenantScope.Public)
         {
             return Result.Failure<RecordScheduleCheckResult>(ShramSafalErrors.ScheduleTemplateNotFound);
@@ -77,7 +82,9 @@ public sealed class RecordScheduleCheckHandler(
         var check = decision switch
         {
             ScheduleCheckDecision.Approved => ScheduleCheck.Approve(
-                template, command.CheckedActivityIds ?? [], caller, command.CheckerDisplayName, now, out problem),
+                template,
+                new ScheduleCheckTicks(command.CheckedActivityIds ?? [], command.CheckedTaskKeys, command.CheckedChallengeKeys, command.ContentHash),
+                caller, command.CheckerDisplayName, now, out problem),
             ScheduleCheckDecision.Returned => ScheduleCheck.Return(
                 template, command.Note, caller, command.CheckerDisplayName, now, out problem),
             _ => ScheduleCheck.Withdraw(
@@ -134,7 +141,11 @@ public sealed record WaitingScheduleDto(
     string? SourceLabel,
     int StageCount,
     int ActivityCount,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    // spec: plr-d10 schedule slice 7 - additive (the admin console only): a version in the task format, its chain, and who made it (who may NOT approve it).
+    bool? HasTaskFormat = null,
+    Guid? ChainId = null,
+    Guid? MadeByUserId = null);
 
 /// <summary>
 /// spec: plr-d10 lane SCH-A (Task 4) - <c>GET /shramsafal/schedule-templates/checks/waiting</c>: the Public library rows that
@@ -157,8 +168,13 @@ public sealed class GetSchedulesWaitingForCheckHandler(
             return Result.Failure<IReadOnlyList<WaitingScheduleDto>>(ShramSafalErrors.Forbidden);
         }
 
-        var rows = (await repository.GetScheduleTemplatesAsync(ct))
-            .Where(t => t.TenantScope == TenantScope.Public && t.HasStoredDays)
+        var publicRows = (await repository.GetScheduleTemplatesAsync(ct))
+            .Where(t => t.TenantScope == TenantScope.Public)
+            .ToList();
+        // spec: plr-d10 schedule slice 7 - a version in the task format waits too (its check is by tasks; some of them never store a day).
+        var withTasks = await repository.GetScheduleTemplateIdsWithTasksAsync(publicRows.Select(r => r.Id).ToList(), ct);
+        var rows = publicRows
+            .Where(t => t.HasStoredDays || (withTasks.Contains(t.Id) && t.StageRows.Count > 0))
             .ToList();
         var decided = (await repository.GetScheduleChecksAsync(rows.Select(r => r.Id).ToList(), ct))
             .Select(c => c.ScheduleTemplateId)
@@ -170,7 +186,10 @@ public sealed class GetSchedulesWaitingForCheckHandler(
             .Select(r => new WaitingScheduleDto(
                 r.Id, r.Name, r.Version, r.CropKey,
                 r.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null,
-                r.SourceLabel, r.StageRows.Count, r.Activities.Count, r.CreatedAtUtc))
+                r.SourceLabel, r.StageRows.Count, r.Activities.Count, r.CreatedAtUtc,
+                HasTaskFormat: withTasks.Contains(r.Id) ? true : null,
+                ChainId: r.ChainId,
+                MadeByUserId: r.CreatedByUserId?.Value))
             .ToList();
         return Result.Success(waiting);
     }

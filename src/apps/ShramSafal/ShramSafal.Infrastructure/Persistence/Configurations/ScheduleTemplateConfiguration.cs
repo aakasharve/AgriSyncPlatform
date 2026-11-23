@@ -140,6 +140,11 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
 
         builder.Ignore(x => x.MadeFor);
 
+        // spec: plr-d10 schedule slice 7 - the chain every version of one reference schedule names (version 1 names itself). Nullable: every row before the
+        // slice has none, and the deployed binary never writes it.
+        builder.Property(x => x.ChainId).HasColumnName("chain_id");
+        builder.HasIndex(x => x.ChainId).HasDatabaseName("ix_schedule_templates_chain_id");
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

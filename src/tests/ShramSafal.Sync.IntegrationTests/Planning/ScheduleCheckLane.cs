@@ -30,6 +30,9 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
     protected static readonly Guid AgronomistSeat = Guid.Parse("5c4a0000-0000-4000-8000-000000000005");
     protected static readonly Guid PlatformAuditor = Guid.Parse("5c4a0000-0000-4000-8000-000000000006");
 
+    /// <summary>spec: plr-d10 schedule slice 7 - who loaded a seeded schedule row: a person who is NOT a checker (a maker never approves his own version).</summary>
+    protected static readonly Guid Importer = Guid.Parse("5c4a0000-0000-4000-8000-0000000000a7");
+
     protected const string DisplayName = "श्रमसफल कृषी तज्ज्ञ चाचणी";
 
     private bool _reviewSeatsSeeded;
@@ -81,7 +84,7 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
     {
         var template = ScheduleTemplate.Import(
             Guid.NewGuid(), name, ScheduleOwnerType.Institution, "Test University recommendation", "grape",
-            new UserId(maker ?? PlatformOwner), scope, DateTime.UtcNow, UnequalStages,
+            new UserId(maker ?? Importer), scope, DateTime.UtcNow, UnequalStages,
             activities ??
             [
                 new ImportedActivity("cut", "Pruning", 0, 1, FrequencyMode.OneTime, 1),
