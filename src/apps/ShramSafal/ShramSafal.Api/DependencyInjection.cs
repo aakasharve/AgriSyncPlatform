@@ -273,6 +273,9 @@ public static class DependencyInjection
         services.AddScoped<GetScheduleTemplatesHandler>();
         // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the farm-scoped schedule_mechanism switch: the pull tells the phone
+        // which farms it is on for, the push refuses the reserved new mutation names for a farm it is off for.
+        services.AddScoped<ShramSafal.Application.Services.ScheduleMechanismSwitch>();
         services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
         // spec: facts-card-input-truth-2026-11-19 (lane FACTS) - what the server works out about each used product, and its rebuild.
         services.AddScoped<ShramSafal.Application.Services.IInputUseDerivation, ShramSafal.Application.Services.InputUseDerivation>();

@@ -29,6 +29,8 @@ public sealed class PullSyncChangesHandler(
     EvaluateComplianceHandler evaluateComplianceHandler,
     TenantContext tenantContext,
     IPictureStore pictureStore,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - which of this pull's farms the schedule mechanism is switched on for.
+    ScheduleMechanismSwitch scheduleMechanismSwitch,
     ILogger<PullSyncChangesHandler> logger)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
@@ -813,6 +815,12 @@ public sealed class PullSyncChangesHandler(
                 .ToList()
             : ReferenceDataCatalog.CostCategories;
 
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - the farms of THIS pull (the ones he reads) that the schedule mechanism is
+        // on for: ONE read of the flag row, FULL on every pull (a flip moves no row and no cursor). Phase-1 style, NOT degrade-and-continue: a failed read
+        // fails the pull and the phone retries, because swallowing it would send an answer ("off") the server did not decide. With none on there is no
+        // `capabilities` key at all, so the pull is byte for byte what it was.
+        var scheduleMechanismFarms = await scheduleMechanismSwitch.OnFarmsAsync(window.FarmIds, ct);
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -901,7 +909,11 @@ public sealed class PullSyncChangesHandler(
             // lane L8b-3 (R6, D-76) - which followed schedule is the मुख्य one of each plot-season he may see (FULL every pull; additive and last, P11).
             PlotMainSchedules: plotMainSchedules,
             // lane SCH-GATE-a (D-76, D-83 = 1) - the planning gate per plot he may see (FULL every pull; additive and last, P11).
-            PlotPlanningState: plotPlanningState);
+            PlotPlanningState: plotPlanningState,
+            // slice 1 (the switch) - the farms the schedule mechanism is on for (FULL every pull; additive and last, P11; never a key when none).
+            Capabilities: scheduleMechanismFarms.Count == 0
+                ? null
+                : new SyncCapabilitiesDto(new ScheduleMechanismCapabilityDto(scheduleMechanismFarms)));
 
         return Result.Success(response);
     }

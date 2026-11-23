@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 
 namespace ShramSafal.Application.Contracts.Dtos;
@@ -126,7 +127,27 @@ public sealed record SyncPullResponseDto(
     // the server and sent in FULL on every pull: the trial ends with no row changing, so a delta would go stale (the reason PlotMainSchedules is full).
     // Same filter as PlotMainSchedules: farms whose overview he reads, his plots. Additive and last (P11): 1.0.17 parses the pull with no schema and
     // never reads it. Only planning, the schedule page and the comparison read it; no record door ever does.
-    IReadOnlyList<PlotPlanningStateDto>? PlotPlanningState = null);
+    IReadOnlyList<PlotPlanningStateDto>? PlotPlanningState = null,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - what the server lets THIS caller's farms do (FULL on every pull: a switch is
+    // flipped and no row changes). NEVER A KEY when there is nothing to say - the schedule mechanism is off for every farm of the pull - so with the switch
+    // off the pull's bytes are exactly what they were (P11); the phone reads an absent key as off. Additive and last: 1.0.17 parses the pull with no schema
+    // and never reads it.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    SyncCapabilitiesDto? Capabilities = null);
+
+/// <summary>
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the pull's <c>capabilities</c>: one key per capability, each present only when it
+/// has something to say. A later slice adds a key beside <see cref="ScheduleMechanism"/>; a phone ignores a key it does not know.
+/// </summary>
+public sealed record SyncCapabilitiesDto(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ScheduleMechanismCapabilityDto? ScheduleMechanism = null);
+
+/// <summary>
+/// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the farms of this pull (the ones this person reads) the <c>schedule_mechanism</c>
+/// switch is on for, by id, in a stable order. A farm not listed is off. Never lists a farm this caller does not read.
+/// </summary>
+public sealed record ScheduleMechanismCapabilityDto(IReadOnlyList<Guid> FarmIds);
 
 /// <summary>spec: plr-d10 lane L8b-3 - the मुख्य schedule of one plot-season: the subscription (an Active row) the stage line follows.</summary>
 public sealed record PlotMainScheduleDto(Guid PlotId, Guid CropCycleId, Guid SubscriptionId);

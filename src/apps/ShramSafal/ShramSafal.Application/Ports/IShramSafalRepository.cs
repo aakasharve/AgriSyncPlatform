@@ -948,6 +948,15 @@ public interface IShramSafalRepository
     Task<List<CostCategory>> GetCostCategoriesAsync(CancellationToken ct = default)
         => Task.FromResult(new List<CostCategory>());
 
+    // --- spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) ---------
+    /// <summary>
+    /// The admin-managed <c>ssf.feature_flags</c> row named <paramref name="flagName"/>, or <c>null</c> when there is none. A flag row is global
+    /// (no farm column, RLS-exempt) and read-only here; <c>null</c> means "off". Default impl returns <c>null</c> so legacy test doubles compile
+    /// and read as off; production overrides hit the DB.
+    /// </summary>
+    Task<FeatureFlag?> GetFeatureFlagAsync(string flagName, CancellationToken ct = default)
+        => Task.FromResult<FeatureFlag?>(null);
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     /// <summary>
     /// Persists a warm-tier <see cref="Transcript"/> projection for the

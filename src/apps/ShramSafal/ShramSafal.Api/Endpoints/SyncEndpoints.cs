@@ -89,6 +89,7 @@ public static class SyncEndpoints
             HttpContext httpContext,
             string? since,
             string? farms,
+            string? scheduleFormat,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
             PullSyncChangesHandler handler,
@@ -131,7 +132,10 @@ public static class SyncEndpoints
                     .Take(PullSyncChangesHandler.MaxHeldFarms)
                     .ToList();
 
-            var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor, actorUserId, heldFarmIds), ct);
+            // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - `scheduleFormat=2`: the schedule format the phone can read. A QUERY
+            // parameter (no new header, so CORS is untouched), read leniently like `farms`: an unreadable value says nothing and never refuses the pull.
+            var result = await handler.HandleAsync(
+                new PullSyncChangesQuery(cursor, actorUserId, heldFarmIds, PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat)), ct);
             if (!result.IsSuccess)
             {
                 return ToErrorResult(result.Error);

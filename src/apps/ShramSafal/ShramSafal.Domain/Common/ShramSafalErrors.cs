@@ -289,6 +289,15 @@ public static class ShramSafalErrors
         "ShramSafal.Sync.BatchTooLarge",
         "This sync batch carries more changes than the server takes at once. Send the changes in smaller batches; nothing in this batch was applied.");
 
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - a NEW schedule-mechanism change reached the server for a farm the
+    /// <c>schedule_mechanism</c> switch is not on for (or for no farm the server can read). Nothing was saved. No phone in the field sends these names;
+    /// a build that does asks the pull first, so this is the server's own answer for a switch turned off in between.
+    /// </summary>
+    public static readonly Error ScheduleMechanismOff = Error.Validation(
+        "ShramSafal.ScheduleMechanismOff",
+        "The schedule mechanism is not switched on for this farm. Nothing was saved.");
+
     // PLR-D10 I23 / N6 (founder D-16, 2026-10-26): "Future attendance must not be recorded as
     // completed work. Future work belongs in planning." An attendance mark dated after the farm's
     // India date is refused. THREE SEGMENTS for the same reason as LabourAssignmentConflict below:

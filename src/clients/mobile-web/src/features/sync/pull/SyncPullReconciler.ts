@@ -23,6 +23,7 @@ import { readPendingLogIds, readWithdrawalHolds } from './internal/pendingMutati
 import { reconcileProfileAndCrops } from './reconcilers/profileAndCropsReconciler';
 import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscriptionsReconciler';
 import { reconcilePlanningState } from './reconcilers/planningStateReconciler';
+import { reconcileScheduleMechanism } from './reconcilers/scheduleMechanismReconciler';
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
@@ -135,6 +136,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         await reconcileFarmsPlotsCycles(db, payload, receivedAtUtc);
         // spec: plr-d10 lane SCH-GATE-b (D-83 = 1) - the server's planning gate per plot, stored whole in appMeta (an absent key leaves it).
         await reconcilePlanningState(db, payload, receivedAtUtc);
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the farms the schedule mechanism is switched on for, stored whole in appMeta (an ABSENT key is
+        // an answer here: off - the server omits it when the switch is off for every farm, and an older server never sends it).
+        await reconcileScheduleMechanism(db, payload, receivedAtUtc);
         await reconcileAttentionBoard(db, payload);
         // lane MU-3 (plan step 4a) — keep only what the server lets this person read: after every other
         // reconciler, so what this pull just wrote is scanned too. An older server sends no scopes: no-op.

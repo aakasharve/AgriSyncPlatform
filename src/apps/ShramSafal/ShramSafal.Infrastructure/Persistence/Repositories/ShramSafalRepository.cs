@@ -662,6 +662,17 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - one feature-flag row by name (<c>ssf.feature_flags</c> is global and
+    /// RLS-exempt, so it reads the same under any tenant context); <c>null</c> when there is no row.
+    /// </summary>
+    public async Task<FeatureFlag?> GetFeatureFlagAsync(string flagName, CancellationToken ct = default)
+    {
+        return await db.FeatureFlags
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.FlagName == flagName, ct);
+    }
+
     public async Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default)
     {
         await db.FinanceCorrections.AddAsync(correction, ct);

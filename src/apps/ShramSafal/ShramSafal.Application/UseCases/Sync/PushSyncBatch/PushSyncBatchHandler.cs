@@ -190,7 +190,9 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateHandler cloneScheduleTemplateHandler,
     ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateHandler editScheduleTemplateHandler,
     // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - a reason kept on one item of a saved record (logreason.set): an append-only overlay, never an edit.
-    ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler setLogPracticeReasonHandler)
+    ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler setLogPracticeReasonHandler,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - the farm-scoped switch; the reserved NEW mutation names are refused for a farm it is off for.
+    ScheduleMechanismSwitch scheduleMechanismSwitch)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1094,6 +1096,15 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1, the switch) - the schedule mechanism's NEW mutation names are refused, whole and before
+        // anything else looks at them, for a farm the `schedule_mechanism` switch is not on for (or a payload that names no single readable farm). It sits
+        // ABOVE the catalog guard on purpose: a reserved name is refused as "off" whether or not the catalog knows it yet. The set is empty until slice 2
+        // fills it, so every mutation that exists today passes through here without a read.
+        if (await scheduleMechanismSwitch.RefusalForPushAsync(mutationType, payload, ct) is { } switchedOff)
+        {
+            return MutationExecutionOutcome.Failure(switchedOff.Code, switchedOff.Description);
+        }
+
         // Catalog guard — single source of truth is sync-contract/schemas/mutation-types.json.
         // Names are case-sensitive on purpose; ToLowerInvariant was dropped because
         // dotted names (compliance.acknowledge, jobcard.create, schedule.publish)
