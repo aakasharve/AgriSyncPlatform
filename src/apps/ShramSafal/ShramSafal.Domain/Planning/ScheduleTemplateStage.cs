@@ -26,5 +26,14 @@ public sealed class ScheduleTemplateStage : Entity<Guid>
     public int StartDay { get; private set; }
     public int EndDay { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 schedule slice 2 - the sign this stage STARTS on, in words ("काढणी"), or null. Optional and additive: the day numbers above are
+    /// untouched and every row made before the lane has none. An EXPECTATION of when, never a date of its own (the start day stays the expected day).
+    /// </summary>
+    public string? StartSign { get; internal set; }
+
+    /// <summary>The sign this stage ENDS on, in words, or null (see <see cref="StartSign"/>).</summary>
+    public string? EndSign { get; internal set; }
+
     public StageDefinition ToDefinition() => new(Name, StartDay, EndDay);
 }

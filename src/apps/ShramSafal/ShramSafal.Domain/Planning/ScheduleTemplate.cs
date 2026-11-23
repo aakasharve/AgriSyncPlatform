@@ -181,6 +181,8 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         // Copy activities by value onto the new template (SCH-A: the stored days, role and order travel with them; the
         // order link is remapped to the NEW activity ids — R34).
         copy.CopyActivitiesFrom(this);
+        // spec: plr-d10 schedule slice 2 - the task format and the stage signs travel with a rename by value (new row ids, the same task keys and content).
+        copy.CopyTasksFrom(this);
 
         copy.Raise(new ScheduleTemplateEditedEvent(
             Guid.NewGuid(),
@@ -402,6 +404,8 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         copy.CopyMadeForFrom(MadeFor);
 
         copy.CopyActivitiesFrom(this);
+        // spec: plr-d10 schedule slice 2 - a copy carries the task format and the stage signs by value.
+        copy.CopyTasksFrom(this);
 
         // Note: the event's NewOwnerUserId parameter is the MAKER of the copy (its name predates SCH-OWN-c), not the schedule's owner column.
         copy.Raise(new ScheduleTemplateClonedEvent(
