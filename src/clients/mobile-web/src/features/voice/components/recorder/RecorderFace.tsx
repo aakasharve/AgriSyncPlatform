@@ -21,6 +21,10 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { VoiceLevelRing } from './VoiceLevelRing';
 import { TypedLink, TypedSheet, TypedTag } from './TypedEntry';
 import type { RecorderFlowV2 } from './flowV2Types';
+import { MicCard } from './MicCard';
+import { HintSlot, useSilenceHelp, type AutoCancelReason } from './SilenceHelp';
+import { AUTO_START_SEC, noteLevelUnmeasurable, noteMicGranted, useAutoStartCountdown } from './useAutoStartCountdown';
+import { logger } from '../../../../infrastructure/observability/Logger';
 import {
     AUTO_STOP_SEC, AUTO_STOP_WARN_SEC, MIC_INSTRUCTION, REC_WORDS, autoStoppingIn, STOP_HINT_AFTER_SEC, STOP_HINT_FOR_SEC, formatClock,
 } from './recorderWords';
@@ -28,6 +32,8 @@ import {
 const SANS = "'Noto Sans Devanagari', sans-serif";
 /** How long "बोलणं रद्द केलं" stays on the card after cancel. */
 export const CANCELLED_NOTE_MS = 1600;
+/** spec voice-flow-v2-2026-11-23 (M1) — a start that never answers frees the mic button again after this. */
+const START_GUARD_MS = 5000;
 
 export interface RecorderFaceProps {
     isRecording: boolean;
@@ -59,10 +65,23 @@ export interface RecorderFaceProps {
     flowV2?: RecorderFlowV2;
 }
 
-const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void; onCancel: () => void }> = ({ seconds, level, onStop, onCancel }) => {
+interface RecordingProps {
+    seconds: number;
+    level?: number;
+    onStop: () => void;
+    onCancel: () => void;
+    /** spec voice-flow-v2-2026-11-23 — the silence help in ONE fixed slot above the stop (replaces the 10 s hint). */
+    silenceHelp?: boolean;
+    /** This recording was started by the mic card's ring, not by his tap. */
+    autoStarted?: boolean;
+    onAutoCancel?: (reason: AutoCancelReason) => void;
+}
+
+const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel }) => {
     const [hintDismissed, setHintDismissed] = useState(false);
     const language = useOptionalLanguage()?.language;
-    const hintOn = !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
+    const help = useSilenceHelp({ on: silenceHelp || autoStarted, level, autoStarted, onAutoCancel });
+    const hintOn = !silenceHelp && !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
     return (
         <div data-testid="mic-ui" data-recording="yes" style={{ fontFamily: SANS }}
             className="relative flex w-full flex-col items-center overflow-hidden rounded-[28px] border border-emerald-200 bg-[#FCFCFC] px-3 pb-3 pt-3 text-stone-800 shadow-[0_8px_30px_rgba(16,185,129,0.12)]">
@@ -77,7 +96,8 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
                 <p className="m-0 font-mono text-3xl font-medium tabular-nums tracking-wider text-emerald-800" data-testid="mic-clock">{formatClock(seconds)}</p>
             </div>
 
-            <VoiceLevelRing level={level} onStop={onStop} label={REC_WORDS.tapToStop} attention={hintOn} />
+            {silenceHelp && <HintSlot stage={help.stage} listening={help.listening} />}
+            <VoiceLevelRing level={level} onStop={onStop} label={REC_WORDS.tapToStop} attention={silenceHelp ? help.stage === 'doneAsk' : hintOn} />
             <p className="relative m-0 text-[18px] font-extrabold text-stone-700" data-testid="mic-stop-instruction">{REC_WORDS.tapToStop}</p>
             {/* After 10 seconds of speaking: when to press the red button, and why to keep going until then.
                 spec: plr-d10 (lane L6b fix) — it sits UNDER the stop, in the flow, never over it: drawn as an overlay
@@ -106,12 +126,45 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
 
 export const RecorderFace: React.FC<RecorderFaceProps> = ({
     isRecording, seconds, level, disabled, suggest, error, errorCode, transcript, lastInputTyped, micRefused,
-    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured,
+    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2,
 }) => {
     const [typedOpen, setTypedOpen] = useState(false);
     const [justCancelled, setJustCancelled] = useState(false);
     const cancelTimer = useRef<number | null>(null);
     useEffect(() => () => { if (cancelTimer.current) window.clearTimeout(cancelTimer.current); }, []);
+
+    // spec voice-flow-v2-2026-11-23 — the mic card's ring. It lives HERE, above the recording branch, so the plot tap it
+    // answered stays used up after the card unmounts: a cancel, a mic error or any recording holds it until the NEXT
+    // plot tap (B1). Without `flowV2.card` it never arms (armSeq 0) and nothing below changes today's face.
+    const card = flowV2?.card;
+    const v2On = flowV2 !== undefined;
+    const [autoStarted, setAutoStarted] = useState(false);
+    const [heldNote, setHeldNote] = useState(false);
+    // M1 — one start at a time: a tap at 6.9 s and the 7 s timer can never open two recorders.
+    const startingRef = useRef(false);
+    const startGuardTimer = useRef<number | null>(null);
+    const startOnce = (auto: boolean) => {
+        if (startingRef.current) return;
+        startingRef.current = true;
+        if (startGuardTimer.current) window.clearTimeout(startGuardTimer.current);
+        startGuardTimer.current = window.setTimeout(() => { startingRef.current = false; }, START_GUARD_MS);
+        setAutoStarted(auto);
+        onStart();
+    };
+    const countdown = useAutoStartCountdown({
+        armSeq: card?.armSeq ?? 0,
+        blocked: !card || !!disabled || typedOpen || isRecording,
+        onFire: () => {
+            if (startingRef.current) return;
+            hapticFeedback.selection?.();
+            startOnce(true);
+        },
+    });
+    // The start settled (the mic opened, or it failed and says so): the button may start again.
+    useEffect(() => { if (isRecording || error || micRefused) startingRef.current = false; }, [isRecording, error, micRefused]);
+    useEffect(() => () => { if (startGuardTimer.current) window.clearTimeout(startGuardTimer.current); }, []);
+    useEffect(() => { if (v2On && isRecording) noteMicGranted(); }, [v2On, isRecording]);
+    useEffect(() => { setHeldNote(false); }, [card?.armSeq]);
 
     if (isRecording) {
         const cancel = () => {
@@ -121,12 +174,28 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
             if (cancelTimer.current) window.clearTimeout(cancelTimer.current);
             cancelTimer.current = window.setTimeout(() => setJustCancelled(false), CANCELLED_NOTE_MS);
         };
-        return <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel} />;
+        // H1 — an auto-started recording that hears no speech is dropped quietly (the recorder discards a cancelled clip).
+        const autoCancel = (reason: AutoCancelReason) => {
+            logger.info('voice_v2.mic.autostart_cancelled', { reason });
+            if (reason === 'unmeasurable') noteLevelUnmeasurable();
+            setHeldNote(true);
+            onCancel();
+        };
+        return (
+            <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel}
+                silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel} />
+        );
     }
 
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;
     return (
         <div className="flex w-full flex-col" style={{ fontFamily: SANS }}>
+            {card ? (
+                <MicCard spec={card} disabled={disabled} suggest={suggest} secondsLeft={countdown.secondsLeft} total={AUTO_START_SEC} heldNote={heldNote}
+                    onMicPress={() => { countdown.hold('tap'); startOnce(false); }}
+                    onHold={() => { countdown.hold('link'); setHeldNote(true); }}
+                    onRequestContextSelection={onRequestContextSelection} />
+            ) : (
             <div role="presentation" onClick={disabled ? onRequestContextSelection : onStart} data-testid="mic-ui" data-recording="no" data-disabled={disabled ? 'yes' : 'no'}
                 className={`relative flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-[28px] border p-3 [@media(max-height:720px)]:p-2 shadow-md ${disabled ? 'border-stone-200 bg-stone-50' : 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/60'}`}>
                 <button type="button" data-testid="mic-button" aria-label={instruction}
@@ -137,6 +206,7 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
                 </button>
                 <p className={`m-0 min-w-0 flex-1 text-left text-[17px] [@media(max-height:720px)]:text-[16px] font-extrabold leading-snug ${disabled ? 'text-stone-600' : 'text-emerald-900'}`} data-testid="mic-instruction">{instruction}</p>
             </div>
+            )}
 
             {justCancelled && (
                 <p role="status" data-testid="mic-cancelled" className="m-0 mt-2 flex items-center justify-center gap-2 rounded-2xl bg-rose-50 px-3 py-2 text-[16px] font-extrabold text-rose-800">
