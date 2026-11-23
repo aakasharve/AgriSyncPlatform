@@ -12,11 +12,14 @@ import type { PlanSpeechResult } from '../../plannedWork/data/planVoice';
 import { OwnScheduleDetail } from './OwnScheduleDetail';
 import { OwnScheduleMaker } from './OwnScheduleMaker';
 import type { OwnLanguage } from './ownScheduleWords';
+import type { OwnWorkPlace } from './ownWorkPlace';
 
 export type OwnFlow =
     | { page: 'start'; cropId: string | null }
     | { page: 'detail'; chainId: string }
-    | { page: 'edit'; chainId: string };
+    | { page: 'edit'; chainId: string }
+    /** Slice 4: one work of a plot-season's own schedule (switch-on farms only; the page decides). `taskKey` null = a new work. */
+    | { page: 'work'; place: OwnWorkPlace; taskKey: string | null };
 
 export interface OwnScheduleFlowProps {
     flow: OwnFlow;
@@ -42,6 +45,12 @@ export const OwnScheduleFlow: React.FC<OwnScheduleFlowProps> = ({ flow, setFlow,
         );
     }
     const saved = (note: string) => { onSaved?.(note); setFlow(null); };
+    if (flow.page === 'work') {
+        return (
+            <OwnScheduleMaker key={`work-${flow.place.cropCycleId}-${flow.taskKey ?? 'new'}`} mode={{ kind: 'work', place: flow.place, taskKey: flow.taskKey }} farmId={farmId}
+                language={language} crops={crops} farmerProfile={farmerProfile} understand={understand} onBack={onLeave} onSaved={saved} />
+        );
+    }
     if (flow.page === 'edit') {
         return (
             <OwnScheduleMaker key={`edit-${flow.chainId}`} mode={{ kind: 'edit', chainId: flow.chainId }} farmId={farmId} language={language} crops={crops}

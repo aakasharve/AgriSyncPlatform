@@ -39,6 +39,10 @@ import { OwnScheduleFlow, type OwnFlow } from '../../scheduler/ownSchedule/OwnSc
 import { OWN_WORDS } from '../../scheduler/ownSchedule/ownScheduleWords';
 import { OwnScheduleLibrary } from '../../scheduler/ownSchedule/OwnScheduleLibrary';
 import { takeOwnScheduleMakerRequest } from '../../scheduler/ownSchedule/makerHandoff';
+import { useScheduleMechanism } from '../../../core/session/scheduleMechanism';
+import { OwnWorkList } from '../../scheduler/ownSchedule/OwnWorkList';
+import { useOwnWorkPlace } from '../../scheduler/ownSchedule/ownWorkPlace';
+import { WORK_MAKER_WORDS } from '../../scheduler/ownSchedule/form/workMakerWords';
 
 export interface PlanWorkPageProps {
     farmId: string | null;
@@ -105,6 +109,15 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
         setOwnOpen(true);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival
     const ownLanguage = language === 'en' ? 'en' : 'mr';
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 4) - for a farm the schedule mechanism is switched ON for (the server's last word; off and
+    // unknown = today's page, nothing new), a seat that may make his own schedule also gets "माझं शेड्यूल" of ONE plot-season: the plot chosen in the form's
+    // own crop -> plot selector (CTX-1), else the farm's only plot. Its "काम जोडा" / "बदला" open the same maker, one work at a time.
+    const mechanismOn = useScheduleMechanism(farmId);
+    const allPlotIds = useMemo(() => crops.flatMap(c => c.plots.map(p => p.id)), [crops]);
+    // The plot last opened in the maker stays the card's plot when he comes back (the form below starts empty again after the maker closes).
+    const [lastWorkPlotId, setLastWorkPlotId] = useState<string | null>(null);
+    const workPlotId = !place.whole && place.plotIds.length === 1 ? place.plotIds[0] : lastWorkPlotId ?? (allPlotIds.length === 1 ? allPlotIds[0] : null);
+    const ownWork = useOwnWorkPlace(mechanismOn && mayMakeOwnSchedule ? farmId : null, workPlotId, crops);
 
     // The people he may hand work to: the server's list, kept on the phone for the times there is no net.
     useEffect(() => {
@@ -215,6 +228,22 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                             today={today} understand={understand} onSaved={saved} onPlaceChanged={onPlaceChanged} saveHeld={askAbout.length > 0} mayAdvise={mayPlan} />
                     )}
                 </>
+            )}
+
+            {mechanismOn && mayMakeOwnSchedule && farmId && (
+                <section data-testid="own-work-section">
+                    {ownWork.place
+                        ? <OwnWorkList place={ownWork.place} language={ownLanguage} onOpenConflicts={onOpenConflicts}
+                            onAdd={() => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey: null }); } }}
+                            onEdit={taskKey => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey }); } }} />
+                        : ownWork.reason !== 'loading' && (
+                            // "Only when" parts never vanish: the card says when it works (one plot chosen, its season on the phone).
+                            <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-3.5" data-testid="own-work-waiting">
+                                <b className="block text-[18px] font-extrabold leading-tight text-amber-950">{WORK_MAKER_WORDS[ownLanguage].makerTitle}</b>
+                                <span className="mt-0.5 block text-[14px] font-bold leading-snug text-stone-700">{ownWork.reason === 'noSeason' ? WORK_MAKER_WORDS[ownLanguage].noSeason : WORK_MAKER_WORDS[ownLanguage].noPlot}</span>
+                            </div>
+                        )}
+                </section>
             )}
 
             {mayMakeOwnSchedule && farmId && (

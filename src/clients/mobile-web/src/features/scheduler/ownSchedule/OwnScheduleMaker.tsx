@@ -15,15 +15,18 @@
  * NOTHING is saved until he taps "जतन करा"; then the existing outbox gets the contract's mutations (`ownScheduleCommands.ts`) - offline-first - and the maker
  * closes. Saving never makes a plot follow (that is the per-plot tap on the schedule's own screen). Every change is a NEW version, never in place.
  * The phone asks the server's day rules first (`validateSchedule`) so a draft the server would refuse for good is not sent; the server asks again.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 4, mobile Schedule Maker: "split the existing maker; there is no second maker") - the maker now
+ * has a THIRD mode, `work`: one work of a plot-season's own schedule, asked one question per card (`form/OwnWorkCards.tsx`, saved as
+ * `ownschedule.item.save`), offered only for a farm the schedule mechanism is switched on for. The header and the mic are shared by both (`form/makerBits.tsx`).
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, Plus } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Plus } from 'lucide-react';
 import type { AudioData, CropProfile, FarmerProfile } from '../../../types';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { scheduleCropCode } from '../../../infrastructure/reference/TemplateCatalog';
-import { PlanMic } from '../../plannedWork/components/PlanMic';
-import { understandPlanSpeech, type PlanSpeechResult } from '../../plannedWork/data/planVoice';
+import type { PlanSpeechResult } from '../../plannedWork/data/planVoice';
 import { plannedWorkWords } from '../../plannedWork/plannedWorkWords';
 import { shownScheduleDay, storedScheduleDay } from '../schedulePage/scheduleDates';
 import { SCHEDULE_GATE_WORDS } from '../schedulePage/scheduleGateCopy';
@@ -35,8 +38,16 @@ import { OwnScheduleChangeBlocked, saveOwnSchedule, type SaveOwnScheduleInput } 
 import { derivedDays, validateSchedule, type MadeForTags, type OwnStage, type OwnWork, type ScheduleBody, type WorkMode, type WorkPart } from './ownScheduleModel';
 import { OWN_WORDS, type OwnLanguage } from './ownScheduleWords';
 import { checkedSourceFor, useChangeBlocked, useOwnSchedules } from './useOwnSchedules';
+import { MakerHeader, useMakerVoice } from './form/makerBits';
+import { OwnWorkCards } from './form/OwnWorkCards';
+import type { OwnWorkPlace } from './ownWorkPlace';
 
-export type MakerMode = { kind: 'new'; cropId: string | null } | { kind: 'edit'; chainId: string };
+export type MakerMode =
+    | { kind: 'new'; cropId: string | null }
+    | { kind: 'edit'; chainId: string }
+    /** Slice 4: one work of a plot-season's own schedule (new: `taskKey` null). */
+    | { kind: 'work'; place: OwnWorkPlace; taskKey: string | null };
+type ScheduleMode = Exclude<MakerMode, { kind: 'work' }>;
 
 export interface OwnScheduleMakerProps {
     mode: MakerMode;
@@ -54,7 +65,6 @@ export interface OwnScheduleMakerProps {
 
 type Page = 'start' | 'madefor' | 'stages' | 'work';
 type Kind = 'blank' | 'checked' | 'edit';
-type Voice = 'idle' | 'working' | 'offline' | 'failed';
 
 interface Draft {
     kind: Kind;
@@ -87,7 +97,19 @@ const PARTS: readonly WorkPart[] = ['irrigation', 'nutrition', 'spray', 'work'];
 const byStart = (a: OwnStage, b: OwnStage): number => a.startDay - b.startDay || a.endDay - b.endDay;
 const placeOf = (stages: readonly OwnStage[], w: OwnWork): number => stages.findIndex(s => s.startDay <= w.startDay && w.startDay <= s.endDay);
 
-export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId, language, crops, farmerProfile, understand, onBack, onSaved }) => {
+/** The maker: one work of a plot-season's own schedule, or a whole schedule of his own (new or changed). */
+export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = props => {
+    const { mode } = props;
+    if (mode.kind === 'work') {
+        return (
+            <OwnWorkCards place={mode.place} taskKey={mode.taskKey} language={props.language} crops={props.crops} farmerProfile={props.farmerProfile}
+                understand={props.understand} onBack={props.onBack} onSaved={props.onSaved} />
+        );
+    }
+    return <ScheduleMaker {...props} mode={mode} />;
+};
+
+const ScheduleMaker: React.FC<OwnScheduleMakerProps & { mode: ScheduleMode }> = ({ mode, farmId, language, crops, farmerProfile, understand, onBack, onSaved }) => {
     const words = OWN_WORDS[language];
     const planned = plannedWorkWords(language);
     const partWords = SCHEDULE_GATE_WORDS[language].parts;
@@ -104,8 +126,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     const [draft, setDraft] = useState<Draft | null>(null);
     const [wf, setWf] = useState<WorkForm | null>(null);
     const [sf, setSf] = useState<StageForm | null>(null);
-    const [voice, setVoice] = useState<Voice>('idle');
-    const [heard, setHeard] = useState<string | null>(null);
+    const voice = useMakerVoice({ language, crops, farmerProfile, understand });
     const [saving, setSaving] = useState(false);
     const [failed, setFailed] = useState(false);
     const savingRef = useRef(false);
@@ -124,42 +145,12 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     // P001: while an earlier change of this schedule is still his unsynced change, a further one is refused (nothing is written).
     const blocked = useChangeBlocked(draft?.kind === 'edit' ? draft.sourceId : null, editChain ? editChain.versions.map(v => v.id) : []);
 
-    const resetVoice = () => { setVoice('idle'); setHeard(null); };
-    const go = (next: Page) => { resetVoice(); setPage(next); };
+    const go = (next: Page) => { voice.reset(); setPage(next); };
 
-    const hear = useCallback(async (audio: AudioData, forWork: boolean) => {
-        setVoice('working');
-        const result = await (understand ?? ((a: AudioData) => understandPlanSpeech(a, { crops, profile: farmerProfile })))(audio);
-        if (!alive.current) return;
-        if (!result.ok) { setVoice(result.reason === 'offline' ? 'offline' : 'failed'); return; }
-        setVoice('idle');
-        setHeard(result.speech.transcript);
-        // Voice returns the WORK only (F215): the title fills the काम box; no day window, no how-often, no made-for pick is read from it.
-        if (forWork) setWf(form => (form ? { ...form, name: result.speech.title } : form));
-    }, [understand, crops, farmerProfile]);
+    // Voice returns the WORK only (F215): the title fills the काम box; no day window, no how-often, no made-for pick is read from it.
+    const voiceBlock = (forWork: boolean) => voice.block(forWork ? title => setWf(form => (form ? { ...form, name: title } : form)) : null);
 
-    const voiceBlock = (forWork: boolean) => (
-        <>
-            <PlanMic onAudio={audio => { void hear(audio, forWork); }} onProcessingStart={() => setVoice('working')} disabled={voice === 'working'} />
-            {voice === 'working' && <p className="m-0 mt-1 text-[13px] font-bold text-stone-700" role="status" data-testid="own-voice-working">{planned.understanding}</p>}
-            {voice === 'offline' && <p className="m-0 mt-1 text-[13px] font-bold text-amber-900" role="status" data-testid="own-voice-offline">{planned.voiceOffline}</p>}
-            {voice === 'failed' && <p className="m-0 mt-1 text-[13px] font-bold text-amber-900" role="status" data-testid="own-voice-failed">{planned.voiceFailed}</p>}
-            {heard && <p className="m-0 mt-1 rounded-xl bg-emerald-50 px-3 py-2 text-[13px] font-bold leading-snug text-emerald-900" data-testid="own-heard">{planned.heard}: &ldquo;{heard}&rdquo;</p>}
-        </>
-    );
-
-    const header = (title: string, back: () => void, sub?: string) => (
-        <div className="flex items-center gap-2">
-            <Tap onClick={back} data-testid="own-back" aria-label={planned.back}
-                className="inline-flex min-h-[52px] shrink-0 items-center gap-2 rounded-full border border-stone-300 bg-white pl-2 pr-5 text-stone-800 shadow-md">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-stone-100"><ArrowLeft size={22} strokeWidth={2.75} aria-hidden="true" /></span>
-            </Tap>
-            <div className="min-w-0 flex-1">
-                <h3 className="m-0 truncate text-[20px] font-extrabold leading-tight text-stone-900" data-testid="own-title">{title}</h3>
-                {sub && <p className="m-0 truncate text-[13.5px] font-bold text-stone-600">{sub}</p>}
-            </div>
-        </div>
-    );
+    const header = (title: string, back: () => void, sub?: string) => <MakerHeader title={title} onBack={back} sub={sub} backLabel={planned.back} />;
 
     // ---- screen 3: the two ways to start ----------------------------------------------------------------------------------------------------------
     if (page === 'start') {
