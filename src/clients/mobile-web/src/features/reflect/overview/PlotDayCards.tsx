@@ -34,7 +34,7 @@ import { digitsFor } from '../../../shared/utils/marathiDigits';
 import { PlotCount } from '../../context/components/CropPlotPicker';
 import { PlotGroupHeader, cropWordsOf } from '../../context/components/PlotSelector';
 import {
-    MANY_PLOTS_CARDS_SHOWN, foldsManyPlots, moreShownText, plotNumbers, plotShortName, smallPlotCardsFor, sortedNaturally,
+    MANY_PLOTS_CARDS_SHOWN, foldsManyPlots, groupsByCrop, moreShownText, plotNumbers, plotShortName, smallPlotCardsFor, sortedNaturally,
 } from '../../context/components/plotSelectorRules';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
@@ -171,7 +171,7 @@ const SmallPlotCard: React.FC<{ card: PlotDayCard; number?: number; isToday: boo
  * card's rule: "सांगितले" is every plot with a record (the stopped plots too), "अडचण" is drawn first as a flag with a warning-triangle shape.
  * With 15 plots or fewer none of this applies and the group is drawn exactly as before.
  */
-const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void; folding?: boolean; alone?: boolean }> = ({ cards, isToday, onOpen, onTell, folding = false, alone = false }) => {
+const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void; grouping?: boolean; folding?: boolean; alone?: boolean }> = ({ cards, isToday, onOpen, onTell, grouping = false, folding = false, alone = false }) => {
     const language = useOptionalLanguage()?.language;
     const lang = language === 'en' ? 'en' : 'mr';
     const w = SMALL_WORDS[lang];
@@ -183,7 +183,9 @@ const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onO
     // His own tap on the arrow wins; until then a crop with a problem, or alone on the page, is open.
     const [chosenOpen, setChosenOpen] = useState<boolean | null>(null);
     const [showAll, setShowAll] = useState(false);
-    const open = !folding || (chosenOpen ?? (alone || counts.problem > 0));
+    // Grouped by crop (10 or more plots, founder C1 = B; more than 15 always is): the arrow opens and closes the crop.
+    const tappable = grouping || folding;
+    const open = !tappable || (chosenOpen ?? (alone || counts.problem > 0));
     // The order of need (a stable partition: natural number order is kept inside each kind) and the cap; a problem card is never capped away.
     const ofKind = (kind: SmallStatus) => cards.filter(c => smallStatusOf(c) === kind);
     const byNeed = folding ? [...ofKind('problem'), ...ofKind('left'), ...ofKind('told')] : cards;
@@ -195,7 +197,7 @@ const CropGroup: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onO
             {flag && <AlertTriangle size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" data-part="flag" />}{digitsFor(n, language)} {text}
         </span>
         : null);
-    const arrow = folding ? (
+    const arrow = tappable ? (
         <button type="button" onClick={() => setChosenOpen(!open)} aria-expanded={open} aria-label={open ? w.close : w.open} data-testid={`plot-group-fold-${first.cropId}`}
             className="grid h-11 w-11 shrink-0 place-items-center self-center rounded-xl border-2 border-stone-300 bg-white text-stone-800 active:scale-95">
             {open ? <ChevronUp size={22} aria-hidden="true" /> : <ChevronDown size={22} aria-hidden="true" />}
@@ -358,13 +360,17 @@ export const PlotDayCards: React.FC<{
     }
     // Natural number order inside a crop (G2 before G10); a crop with no plot yet has its one card.
     const ordered = groups.map(g => (g[0].ref.plotId ? sortedNaturally(g, c => c.ref.plotName ?? '') : g));
-    // Lane UI-9a (founder D-173 = A): more than 15 plots ON THE PAGE (what is shown, not what the farm holds) folds the crops.
-    const folding = foldsManyPlots(cards.filter(c => c.ref.plotId).length);
+    // Founder C1 = B (2026-11-23): 10 or more plots ON THE PAGE (what is shown, not what the farm holds) are grouped by crop - EVERY
+    // crop, the small ones too, behind one tap that opens its plots. Below 10 a crop of 1 to 3 plots keeps its full cards, as before.
+    // Lane UI-9a (founder D-173 = A): more than 15 adds the order of need and six cards at a time, as before.
+    const shownPlots = cards.filter(c => c.ref.plotId).length;
+    const grouping = groupsByCrop(shownPlots);
+    const folding = foldsManyPlots(shownPlots);
     const alone = ordered.filter(g => g[0].ref.plotId).length === 1;
     return (
         <div className="space-y-2.5" data-testid="plot-day-cards">
-            {ordered.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
-                ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} folding={folding} alone={alone} />
+            {ordered.map(g => ((grouping || smallPlotCardsFor(g.length)) && g[0].ref.plotId
+                ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} grouping={grouping} folding={folding} alone={alone} />
                 : g.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)))}
             {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
         </div>

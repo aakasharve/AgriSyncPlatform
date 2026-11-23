@@ -110,31 +110,40 @@ describe('more than 15 plots: crops fold, a crop with a problem opens itself', (
         expect(screen.getByTestId('plot-group-fold-g').getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('a crop with 1 to 3 plots keeps its full card with its photo; it never folds', () => {
+    // spec: plr-d10-founder-answers-2026-11-23 (C1 = B) — on a big farm every crop is grouped, a crop of 1 to 3 plots too.
+    it('a crop with 1 to 3 plots is grouped too (founder C1 = B): its header, its arrow, its plots behind one tap', () => {
         const farm = [GRAPES, CANE, mk('o', 'कांदा', 'Onion', 'bg-amber-500', 'O', 2)];
         render(<PlotDayCards cards={cardsOf(farm, selectAll(farm), HISTORY)} isToday onOpen={vi.fn()} />);
-        expect(screen.queryByTestId('plot-group-fold-o')).toBeNull();
-        expect(screen.getByTestId('plot-card-o:o1').querySelector('[data-part="banner"]')).toBeTruthy();
+        expect(screen.getByTestId('plot-group-header-o')).toBeTruthy();
+        expect(screen.getByTestId('plot-group-fold-o').getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(screen.getByTestId('plot-group-fold-o'));
+        expect(names('o')).toEqual(['O1', 'O2']);
     });
 });
 
-describe('15 plots or fewer: nothing changes', () => {
-    it('15 plots: no arrow, every card drawn in number order, no "आणखी" button, the old tags (a stopped plot is not counted as told)', () => {
+describe('15 plots or fewer: grouped by crop from 10 (founder C1 = B), nothing else changes', () => {
+    it('15 plots: the crop\'s arrow (open: it holds a problem), every card in number order, no "आणखी" button, the old tags (a stopped plot is not counted as told)', () => {
         const fifteen = [mk('g', 'द्राक्ष', 'Grapes', 'bg-green-500', 'G', 10), mk('u', 'ऊस', 'Sugarcane', 'bg-pink-500', 'U', 5)];
         const hist = [stop('s1', 'g3', 'g'), work('w1', 'g1', 'g'), work('w2', 'g2', 'g')];
         render(<PlotDayCards cards={cardsOf(fifteen, selectAll(fifteen), hist)} isToday onOpen={vi.fn()} />);
-        expect(screen.queryByTestId('plot-group-fold-g')).toBeNull();
+        expect(screen.getByTestId('plot-group-fold-g').getAttribute('aria-expanded')).toBe('true');
         expect(names('g')).toEqual(['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10']);
         expect(screen.queryByTestId('plot-more-g')).toBeNull();
         expect(screen.getByTestId('plot-group-told-g')).toHaveTextContent('२ सांगितले');
         expect(visibleTags('g')).toEqual(['told', 'problem', 'left']);
     });
 
-    it('a page narrowed to 10 plots out of 42 is not folded either (more than 15 is counted on what the page shows)', () => {
-        const sel: ReflectSelection = { crop: 'all', plotIds: ['g1', 'g2', 'g3', 'g4', 'g5', 'u1', 'u2', 'u3', 'u4', 'u5'] };
-        render(<PlotDayCards cards={cardsOf(FARM, sel)} isToday onOpen={vi.fn()} />);
+    it('a page narrowed to 9 plots out of 42 is not grouped (counted on what the page shows); 10 are, with no cap', () => {
+        const nine: ReflectSelection = { crop: 'all', plotIds: ['g1', 'g2', 'g3', 'g4', 'g5', 'u1', 'u2', 'u3', 'u4'] };
+        render(<PlotDayCards cards={cardsOf(FARM, nine)} isToday onOpen={vi.fn()} />);
         expect(screen.queryByTestId('plot-group-fold-g')).toBeNull();
         expect(names('g')).toEqual(['G1', 'G2', 'G3', 'G4', 'G5']);
+        cleanup();
+        const ten: ReflectSelection = { crop: 'all', plotIds: ['g1', 'g2', 'g3', 'g4', 'g5', 'u1', 'u2', 'u3', 'u4', 'u5'] };
+        render(<PlotDayCards cards={cardsOf(FARM, ten)} isToday onOpen={vi.fn()} />);
+        fireEvent.click(screen.getByTestId('plot-group-fold-g'));
+        expect(names('g')).toEqual(['G1', 'G2', 'G3', 'G4', 'G5']);
+        expect(screen.queryByTestId('plot-more-g')).toBeNull();
     });
 });
 

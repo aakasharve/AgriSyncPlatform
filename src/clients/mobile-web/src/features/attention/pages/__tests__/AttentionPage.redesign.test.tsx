@@ -88,7 +88,7 @@ describe('लक्ष द्या — Marathi page in the common look (H14)', 
         expect(screen.queryByText('गंभीर')).toBeNull();
         expect(screen.getAllByText('लक्ष द्या').length).toBeGreaterThan(1);
         expect(screen.getByText('४ कामं बाकी')).toBeInTheDocument();
-        expect(screen.getByText('तब्येत: लक्ष द्या')).toBeInTheDocument();
+        expect(screen.getByText('पिकाच्या स्थितीकडे लक्ष द्या')).toBeInTheDocument();
         expect(screen.getByTestId('attention-as-of')).toHaveTextContent('आज सकाळी ९:०० पर्यंतची माहिती');
     });
 

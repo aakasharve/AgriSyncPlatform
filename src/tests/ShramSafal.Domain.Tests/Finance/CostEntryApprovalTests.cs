@@ -140,10 +140,11 @@ public sealed class CostEntryApprovalTests
     }
 
     [Fact]
-    public void Fix_round_1_self_approval_waits_for_the_founder_behind_one_named_rule()
+    public void Fix_round_1_self_approval_follows_the_founders_answer_behind_one_named_rule()
     {
-        BillApprovalRules.ReviewerMayApproveOwnBill.Should().BeTrue("as built until the founder answers D-105 (a)");
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true).Should().BeTrue();
+        // D-105 (a), answered 2026-11-23 (C3 = C): nobody approves his own bill, the owner may (EveryBillIsCheckedTests too).
+        BillApprovalRules.ReviewerMayApproveOwnBill.Should().BeFalse("founder C3 = C");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true).Should().BeFalse();
         BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true).Should().BeTrue();
         BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false).Should().BeTrue();
     }

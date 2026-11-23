@@ -20,11 +20,12 @@ import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, formatMoneyDate, reviewReasonLabel } from '../features/finance/moneyLabels';
 import { Chip, GlassCard, IconDot } from '../shared/components/ui/placeUi';
 import { BillApprovalLine, useBillApprovalOutbox } from '../features/finance/components/BillApprovalLine';
-import { mayApproveBills, mayApproveThisBill } from '../features/finance/billApproval';
+import { billApprovalSeat, mayApproveBills } from '../features/finance/billApproval';
 import { useStoredAccessScopes } from '../core/session/storedFarmScope';
 import { scopeForFarm } from '../infrastructure/storage/accessScopeStore';
 import { billWord } from '../features/finance/billApprovalWords';
 import { useOptionalFarmContext } from '../core/session/FarmContext';
+import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 
 interface ReviewInboxPageProps {
@@ -38,13 +39,17 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
     // lane BILL-1 — who may approve (the current farm's seat, the server's rule), his language, and this phone's outbox.
     const farmContext = useOptionalFarmContext();
+    const auth = useOptionalAuth();
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const [outbox, refreshOutbox] = useBillApprovalOutbox();
     // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
     const storedScopes = useStoredAccessScopes();
-    const mayApproveOn = (bill: { farmId: string; plotId?: string }) =>
+    // founder C3 = C (2026-11-23) — and never his own bill unless he is the owner: who he is, from the signed-in person.
+    const myUserId = farmContext?.meContext?.me?.userId ?? auth?.session?.userId ?? null;
+    const seatOn = (bill: { farmId: string; plotId?: string; createdByUserId: string }) =>
         !!farmContext && farmContext.currentFarmId === bill.farmId
-        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
+            ? billApprovalSeat(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill, myUserId)
+            : 'no';
     const seatMayApprove = !!farmContext && mayApproveBills(farmContext.currentFarm);
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5). "Approve" used to mark
@@ -96,7 +101,8 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                                 </div>
                                 <BillApprovalLine
                                     bill={item}
-                                    mayApprove={mayApproveOn(item)}
+                                    mayApprove={seatOn(item) === 'may'}
+                                    ownBill={seatOn(item) === 'ownBill'}
                                     outbox={outbox}
                                     language={language}
                                     onQueued={refreshOutbox}

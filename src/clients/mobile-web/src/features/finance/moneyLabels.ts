@@ -89,8 +89,9 @@ export function periodFilters(period: ReportPeriod, todayKey: string = getDateKe
 }
 
 /**
- * Why the server set an entry aside, in plain Marathi. The server writes these in English
- * (`High amount: >= 25000 INR`); the amount in it is read out, never invented. A reason this page does not
+ * Why the server set an entry aside, in plain Marathi. The server writes these in English: `Every bill is checked` since
+ * 2026-11-23, `High amount: >= 25000 INR` on rows saved before it (and on money that came in); the amount in it is read out,
+ * never invented. A reason this page does not
  * know is not shown in English — it says the entry looked different, which is all the farmer can act on.
  */
 export function reviewReasonLabel(reason: string): string {
@@ -98,6 +99,8 @@ export function reviewReasonLabel(reason: string): string {
         const n = /(\d[\d,]*)/.exec(reason);
         return n ? `${rupees(Number(n[1].replace(/,/g, '')))} किंवा जास्त रक्कम` : 'मोठी रक्कम';
     }
+    // spec: plr-d10-founder-answers-2026-11-23 — "every bill must be checked": the server's new reason. PROPOSED (Marathi).
+    if (/every bill is checked/i.test(reason)) return 'प्रत्येक बिल तपासले जाते';
     if (/duplicate/i.test(reason)) return 'दुहेरी नोंद असू शकते';
     // lane BILL-1 fix round 1 (review M3) — approved before, changed since: looked at again. PROPOSED.
     if (/changed after approval/i.test(reason)) return 'मंजुरीनंतर बदललं — पुन्हा पाहा';

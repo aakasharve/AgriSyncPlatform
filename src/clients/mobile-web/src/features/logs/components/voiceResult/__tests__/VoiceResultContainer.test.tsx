@@ -183,7 +183,7 @@ describe('the ONE result screen — what he reads', () => {
             }
         }
         const labour = parts.getByTestId('vr-part-labour');
-        expect(labour.textContent).toContain('नक्की समजलं नाही');
+        expect(labour.textContent).toContain('स्पष्ट समजू शकले नाही');
         expect(labour.textContent).not.toContain('सांगितलं नाही');
         expect(labour.className).toContain('amber');
         expect(labour.tagName).not.toBe('BUTTON'); // saying it again would record it twice
@@ -325,7 +325,7 @@ describe('the ONE result screen — what his taps do', () => {
         });
         await waitFor(() => expect(screen.getByTestId('vr-confirm-done').textContent).toContain('तुम्ही पक्कं केलं'));
         // Only his words are claimed kept: the clip itself is kept 30 days (processing_30d), not for good.
-        expect(screen.getByTestId('vr-kept-safe').textContent).toBe('तुमचे शब्द जपले आहेत');
+        expect(screen.getByTestId('vr-kept-safe').textContent).toBe('तुमचे शब्द समजून घेतले आहेत');
         const rows = await verifyRows();
         expect(rows).toHaveLength(1);
         expect(rows[0].payload).toMatchObject({ logId: NOW, verifierUserId: ME, decision: 'verify', reviewBasis: 'heard' });

@@ -69,11 +69,17 @@ describe('a crop with 15 plots: the photo once, two small cards across', () => {
         expect(group.querySelectorAll('img').length + group.querySelectorAll('svg[data-part="banner"]').length).toBeLessThanOrEqual(1); // only the header's photo
     });
 
-    it('a crop with 3 plots next to it keeps today\'s full cards, each with its banner photo, and no group header (a farm of 12 + 3)', () => {
+    // spec: plr-d10-founder-answers-2026-11-23 (C1 = B) — a farm of 10 or more plots is grouped by crop: the 3-plot crop too.
+    it('a crop with 3 plots next to it is grouped too on a farm of 12 + 3 (founder C1 = B): its photo once, in its header', () => {
         render(<PlotDayCards cards={cardsOf(MIXED)} isToday onOpen={vi.fn()} />);
+        for (const id of ['grape', 'cane']) {
+            const arrow = screen.getByTestId(`plot-group-fold-${id}`);
+            if (arrow.getAttribute('aria-expanded') === 'false') fireEvent.click(arrow);
+        }
         expect(screen.getByTestId('plot-small-cards-grape').children.length).toBe(12);
-        expect(screen.queryByTestId('plot-group-cane')).toBeNull();
-        for (const id of ['cane:c1', 'cane:c2', 'cane:c3']) expect(part(screen.getByTestId(`plot-card-${id}`), 'banner')).toBeTruthy();
+        expect(screen.getByTestId('plot-group-header-cane')).toBeTruthy();
+        expect(screen.getByTestId('plot-small-cards-cane').children.length).toBe(3);
+        for (const id of ['cane:c1', 'cane:c2', 'cane:c3']) expect(part(screen.getByTestId(`plot-card-${id}`), 'banner')).toBeFalsy();
     });
 
     it('item 5 (founder 2026-11-20): on a small card the number is 14 px in the darker grey and the status words 13 px (they were 12.5 px, paler)', () => {
@@ -237,6 +243,11 @@ describe('the number of cards drawn decides, not the crop\'s size', () => {
         const caneBig = crop('cane', 'ऊस', 'Sugarcane', 'bg-pink-500', Array.from({ length: 6 }, (_, i) => plot(`c${i + 1}`, `ऊस S${i + 1}`)));
         const grapes9 = crop('grape', 'द्राक्ष', 'Grapes', 'bg-green-500', Array.from({ length: 9 }, (_, i) => plot(`g${i + 1}`, `द्राक्ष G${i + 1}`)));
         render(<PlotDayCards cards={cardsOf([grapes9, caneBig])} isToday onOpen={vi.fn()} />);
+        // 15 plots: grouped by crop (founder C1 = B) - a folded crop opens with one tap.
+        for (const id of ['grape', 'cane']) {
+            const arrow = screen.getByTestId(`plot-group-fold-${id}`);
+            if (arrow.getAttribute('aria-expanded') === 'false') fireEvent.click(arrow);
+        }
         expect(screen.getByTestId('plot-group-header-grape')).toBeTruthy();
         expect(screen.getByTestId('plot-group-header-cane')).toBeTruthy();
         expect(part(screen.getByTestId('plot-card-cane:c3'), 'edge')?.className).toContain('bg-pink-500');

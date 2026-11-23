@@ -43,9 +43,11 @@ vi.mock('../../features/finance/billApproval', async (importOriginal) => ({
 
 import ReviewInboxPage from '../ReviewInboxPage';
 
+const ME = 'u-me';
 const asSeat = (role: string, authorities?: { name: string }[], farmId = FARM) => ({
     currentFarmId: farmId,
     currentFarm: { role, ...(authorities ? { authorities } : {}) },
+    meContext: { me: { userId: ME } },
 }) as never;
 
 function drawAs(seat: unknown, onBack?: () => void) {
@@ -97,9 +99,29 @@ describe('the review inbox, now that a bill can be approved (D-12)', () => {
         expect(screen.queryByText(/बरोबर आहे|मंजूर केलं|approve|resolve/i)).toBeNull();
     });
 
+    // spec: plr-d10-founder-answers-2026-11-23 — founder C3 = C: nobody approves his own bill; the owner may.
+    it("the approve button follows the rule: a reviewer's own bill offers no button and says who approves it", () => {
+        h.inbox = [{ ...ENTRY, createdByUserId: ME }, { ...ENTRY, id: 'me-2', sourceId: 's-2', createdByUserId: 'u-owner' }];
+        drawAs(asSeat('Mukadam', [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }]));
+        expect(screen.queryByTestId('bill-approve-me-1')).toBeNull();
+        expect(screen.getByTestId('bill-own-me-1')).toHaveTextContent('हे बिल तुम्ही केलं आहे — ते मालक किंवा परवानगी असलेली दुसरी व्यक्ती मंजूर करेल');
+        expect(latinLeftovers(screen.getByTestId('bill-own-me-1'))).toEqual([]);
+        expect(screen.getByTestId('bill-approve-me-2')).toBeInTheDocument();
+        expect(screen.queryByTestId('bill-own-me-2')).toBeNull();
+    });
+
+    it("the owner's own bill: his button, no 'someone else' line", () => {
+        h.inbox = [{ ...ENTRY, createdByUserId: ME }];
+        drawAs(asSeat('PrimaryOwner'));
+        expect(screen.getByTestId('bill-approve-me-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('bill-own-me-1')).toBeNull();
+    });
+
     it('says why the entry was set aside, in Marathi', () => {
-        h.inbox = [ENTRY, { ...ENTRY, id: 'me-2', sourceId: 's-2', reviewReasons: ['High amount: >= 25000 INR'] }];
+        h.inbox = [ENTRY, { ...ENTRY, id: 'me-2', sourceId: 's-2', reviewReasons: ['High amount: >= 25000 INR'] },
+            { ...ENTRY, id: 'me-3', sourceId: 's-3', reviewReasons: ['Every bill is checked'] }];
         render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} />);
+        expect(screen.getByTestId('review-me-3')).toHaveTextContent('प्रत्येक बिल तपासले जाते');
         expect(screen.getByTestId('review-me-1')).toHaveTextContent('मोठी रक्कम');
         expect(screen.getByTestId('review-me-2')).toHaveTextContent('₹ 25,000 किंवा जास्त रक्कम');
         expect(screen.getByTestId('review-me-1')).toHaveTextContent('खत-औषध');

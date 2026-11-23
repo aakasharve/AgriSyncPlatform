@@ -13,7 +13,7 @@ namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 
 /// <summary>
 /// Adds a <see cref="Domain.Finance.CostEntry"/> with duplicate
-/// detection, high-amount flagging, audit, save, and analytics.
+/// detection, the review flag (every bill is checked), audit, save, and analytics.
 ///
 /// <para>
 /// T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): caller-shape validation
@@ -45,9 +45,6 @@ public sealed class AddCostEntryHandler(
     : IHandler<AddCostEntryCommand, AddCostEntryResultDto>
 {
     private const int DuplicateWindowMinutes = 120;
-    // One rule with money an edit makes or corrects (lane OF-M fix pass 1): the constants live on the entry.
-    private const decimal HighAmountThreshold = Domain.Finance.CostEntry.ReviewAmountThreshold;
-    private const string HighAmountFlagReason = Domain.Finance.CostEntry.ReviewAmountReason;
 
     public async Task<Result<AddCostEntryResultDto>> HandleAsync(AddCostEntryCommand command, CancellationToken ct = default)
     {
@@ -205,9 +202,11 @@ public sealed class AddCostEntryHandler(
             entry,
             DuplicateWindowMinutes);
 
-        if (entry.Amount >= HighAmountThreshold)
+        // spec: plr-d10-founder-answers-2026-11-23 — every bill is checked, whatever its amount (one rule with money an edit makes
+        // or corrects, lane OF-M fix pass 1: it lives on the entry).
+        if (Domain.Finance.CostEntry.ReviewReasonFor(entry.Amount, entry.Direction) is { } reviewReason)
         {
-            entry.Flag(HighAmountFlagReason);
+            entry.Flag(reviewReason);
         }
 
         // spec: plr-d10 lane PRV (founder D-26) — money a narrowed record's own line made follows that record's audience,
