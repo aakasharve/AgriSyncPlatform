@@ -145,4 +145,12 @@ export const FEATURE_FLAGS = {
      * -> false) and it must stay OFF in production.
      */
     simulateUnlock: isEnabled('VITE_SIMULATE_UNLOCK'),
+
+    /**
+     * spec: voice-flow-v2-2026-11-23 — the founder-approved voice flow on the TEST app: the mic card with a 7 s ring
+     * after the plot, silence help while recording, a calm step list after stop that ticks only on real events, and a
+     * saved screen (built from the existing result pieces) that closes itself after 30 s untouched. Phone only; no
+     * server or database change. Default OFF (env VITE_VOICE_FLOW_V2 absent -> false): ON in the fieldtest build only.
+     */
+    voiceFlowV2: isEnabled('VITE_VOICE_FLOW_V2'),
 } as const;

@@ -20,6 +20,7 @@ import { hapticFeedback } from '../../../../shared/utils/haptics';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { VoiceLevelRing } from './VoiceLevelRing';
 import { TypedLink, TypedSheet, TypedTag } from './TypedEntry';
+import type { RecorderFlowV2 } from './flowV2Types';
 import {
     AUTO_STOP_SEC, AUTO_STOP_WARN_SEC, MIC_INSTRUCTION, REC_WORDS, autoStoppingIn, STOP_HINT_AFTER_SEC, STOP_HINT_FOR_SEC, formatClock,
 } from './recorderWords';
@@ -54,6 +55,8 @@ export interface RecorderFaceProps {
     onRequestContextSelection?: () => void;
     /** The real typed entry (same parse as speaking). Absent = no typing way in. */
     onTextCaptured?: (text: string) => void;
+    /** spec voice-flow-v2-2026-11-23 — the v2 mic card and silence help. Absent = today's recorder, unchanged. */
+    flowV2?: RecorderFlowV2;
 }
 
 const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void; onCancel: () => void }> = ({ seconds, level, onStop, onCancel }) => {

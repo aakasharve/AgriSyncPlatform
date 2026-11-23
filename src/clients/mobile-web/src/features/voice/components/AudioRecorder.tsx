@@ -20,6 +20,7 @@ import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import type { RecorderFlowV2 } from './recorder/flowV2Types';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -31,9 +32,11 @@ interface AudioRecorderProps {
   onRequestContextSelection?: () => void;
   /** Told when the mic starts / stops listening (the entry flow hides its choices meanwhile). */
   onRecordingChange?: (recording: boolean) => void;
+  /** spec voice-flow-v2-2026-11-23 — handed to RecorderFace as is. */
+  flowV2?: RecorderFlowV2;
 }
 
-const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection, onRecordingChange }) => {
+const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection, onRecordingChange, flowV2 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   // I12-V1-m3 — the mic's own failure, in Marathi whatever the app language; its technical cause
@@ -237,6 +240,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       onCancel={cancelRecording}
       onRequestContextSelection={onRequestContextSelection}
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
+      flowV2={flowV2}
     />
   );
 };

@@ -55,6 +55,43 @@
 
 ---
 
+
+## Review amendments (CTO review + independent code verification, 2026-11-23) — these OVERRIDE the tasks below where they differ
+
+**Delivery shape.** Two stages on the same branch, each verified before it is offered: **Stage 1** = T0, T1, T2–T5, T6 (mic card, silence help, step list). **Stage 2** = T8–T12 (saved screen, auto-close) without T7. T13 (dev preview) after both; T14 dropped. Gate 1 is on the TEST APK (or localhost preview) of the branch; nothing merges into `task/plr-d10-rc1` before the Founder Acceptance Gate.
+
+**Task 0 (done in commit "feat(voice): voice flow v2 flag…"):** `placeLabelOf` moved to `core/navigation/placeLabel.ts` and re-exported from SpeakHost (no circular import, review M6 / verifier 5). The fieldtest line is ACTIVE (`VITE_VOICE_FLOW_V2=1`). The flag test reads the files (Vitest cannot stub this env read).
+
+**Mic card (T4/T5):**
+- B1 / verifier 2 — **fire once per armSeq.** The countdown hook lives in `RecorderFace` ABOVE the `if (isRecording)` early return, with a "consumed armSeq" ref that survives the card unmounting. A cancel, a mic error, or any recording that starts holds the countdown until the NEXT plot tap. Tests: cancel → no restart; mic error after auto-start → no loop; plot deselected at 5 s → no start at 7 s.
+- Verifier 3 — `readDevicePermission` is async: no ring until it resolves; the 7 s deadline starts at the resolve; unknown / prompt / denied = no auto-start (the card still shows, tap only).
+- H1 — an AUTO-started recording with no detected speech in 20 s is cancelled silently (nothing saved) and the card shows "माइक दाबल्यावरच ऐकेल". If the level is not measurable, no auto-start. A level stuck at exactly 0 for the first 3 s = not measurable.
+- M1 — synchronous `startingRef` guard: a tap at 6.9 s and the 7.0 s timer can never open two recorders; the mic button calls `hold()` before `onStart`.
+- M2 — only the big mic button starts recording; the "थांबा…" link and the card body never call `onStart`.
+- H7 — `setArmSeq` only when `FEATURE_FLAGS.voiceFlowV2` (flag off = no new state change on plot tap).
+- L3 — closing the typing sheet without sending leaves the countdown held.
+
+**Silence help (T2/T3):**
+- Verifier 1 — `SilenceState.measured` (true on the first defined level); stage is `none` while not measured; never latch on the first ~90 ms `undefined`.
+- H4 — ONE fixed-height hint slot, rendered from t=0, content swapped; the stop button's position never changes. Test pins the slot from t=0.
+- H5 — no live region while the mic is open (`role="note"`, `aria-live="off"`); countdown digits `aria-hidden`, one announcement when the countdown arms. Ask the founder for example sentences without numbers or brand names (open item; keep the approved ones until then).
+
+**Step list (T6):** H6 — on a real phone `understood → written → success` happen within milliseconds; the final completed state (all ticks + chips) is HELD on screen for 1.2 s before the result screen replaces it (no extra tick; P4-safe). Ticks only from `voiceJourneySignal`. M7 — `renderProcessingScreen` is shared with SpeakHost: with the flag on, every speak entry point shows the step list (add a flag-on SpeakHost test; a हजेरी-door recording that never emits 'understood' shows step 1 only, then the existing screen it lands on).
+
+**Saved screen (Stage 2):**
+- H7 — **T7 removed:** zero edits to `VoiceResultScreen.tsx`; the saved screen duplicates the ~25 lines of badge row / edit buttons (follow-up to dedupe).
+- H2 / P10 — the title follows the sync truth: on the phone only → `RS.remembered` ("लक्षात ठेवलं ✓"); server-acknowledged → `RS.onServer`. The 30 s toast uses the same claim. **No auto-close** while any log's `syncQueued !== true`, while sync is `needsFix`, or while a refused / money-not-followed banner shows.
+- H3 — auto-close pauses while `openOverlayCount() > 0` (`backStack.ts`), while `pickingDay`, while the ProductCard is open, while a clip plays, and resets on `focusin`/pointer/touch/key; no scroll listener.
+- M4 — the 30 s ticking lives in the `IdleCloseBar` leaf (text once per second, bar by CSS), never re-rendering the whole screen.
+- M5 / verifier 7 — `detail` state and `useBackDismiss` sit above the container's `return null`; the sticky `SavedScreenBack` returns to the saved screen while in detail.
+- Verifier 6 — `TypedNote` from `DayParts.tsx` (testid `vr-typed-note`); mix verdicts recomputed as `VoiceResultScreen.tsx:144-149`; `DayPickSheet` still rendered in the v2 branch.
+- Detail button words: "आजचा आढावा बघा" (V2-6: "शेतीचा आढावा" is ReflectPage's name). The closing toast keeps "शेतीचा आढावा मध्ये बघा" because the saved record is visible there.
+
+**Preview (T13):** verifier 8 — `OversightAppPreview` listens for `agrisync:toast`; `DataSourceValueProvider` stub satisfies `AppDataSource`. Fixture strings must be absent from `dist/` (L1 check).
+
+**Checks per lane (M8):** add the source sweeps: `shared/utils/__tests__/bottomBarSweep.test.ts`, `voiceResult/__tests__/ResultHero.plot.test.tsx`, `src/__tests__/testHygiene.contract.test.ts`, `displayTime.sweep.test.ts`; the full suite at every lane merge. `check:file-sizes` must still name exactly the same 3 base files. **Telemetry (M9):** `logger.info('voice_v2.*')` breadcrumbs (auto-start fired / held / cancelled, hint stage, auto-close, detail opened, pause reason). **Rollback (M10):** at D1 build the flag-on and flag-off APKs from one SHA.
+
+---
 ## Parallelisation map
 
 ```
@@ -139,7 +176,7 @@ Five engineers: wall-clock ≈ 6–7 h including review.
   - `src/app/__tests__/featureFlags.voiceFlowV2.test.ts`: with `vi.stubEnv('VITE_VOICE_FLOW_V2', '1')` + `vi.resetModules()` the flag is true; unset → false.
 - [ ] **Step 2: Run and see them fail:** `npx vitest run src/features/voice/flowV2 src/infrastructure/voice/__tests__/voiceJourneySignal.test.ts src/app/__tests__/featureFlags.voiceFlowV2.test.ts`.
 - [ ] **Step 3: Implement** the files above.
-- [ ] **Step 4: The checks** + the baseline suite list (must stay 835/835 plus the new tests). Commit `feat(voice): voice flow v2 flag, words and contracts (off by default)`; push; lanes branch from here.
+- [x] **Step 4: The checks** + the baseline suite list (must stay 835/835 plus the new tests). Commit `feat(voice): voice flow v2 flag, words and contracts (off by default)`; push; lanes branch from here.
 
 ### Task 1: Say the real events (emit only; the save path is unchanged)
 
