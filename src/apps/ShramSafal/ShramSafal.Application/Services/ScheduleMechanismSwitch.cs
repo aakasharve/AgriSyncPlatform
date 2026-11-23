@@ -27,7 +27,7 @@ namespace ShramSafal.Application.Services;
 /// </list>
 ///
 /// <para><b>The push gate.</b> <see cref="ReservedMutationNames"/> is the set of NEW mutation names that exist only for the mechanism. It was
-/// empty in slices 1 and 2 (slice 2 added no mutation); slice 3 reserves its three own-schedule names. Every later slice adds its names here in the
+/// empty in slices 1 and 2 (slice 2 added no mutation); slice 3 reserves its three own-schedule names; slice 5 its two feed names. Every later slice adds its names here in the
 /// same change that adds them to both <c>SyncMutationCatalog</c> files, <c>mutation-types.json</c> and both contract tests. Strict push rule: NEW names only, never a new key in an
 /// old payload - a name a released phone already sends cannot be gated, and a test (<c>Every_reserved_name_is_a_new_catalog_name</c>) holds that.
 /// A reserved name is refused with <see cref="ShramSafalErrors.ScheduleMechanismOff"/> when the switch is off for the farm its payload names, and
@@ -56,7 +56,10 @@ public sealed class ScheduleMechanismSwitch
         StringComparer.Ordinal,
         "ownschedule.item.save",
         "ownschedule.item.remove",
-        "ownschedule.make_main");
+        "ownschedule.make_main",
+        // Slice 5: "plan", then who, on one own work (ownschedule.item.plan) and an answer about a work's sign (schedule.task_event); each names its farmId.
+        "ownschedule.item.plan",
+        "schedule.task_event");
 
     private readonly IShramSafalRepository repository;
     private readonly IReadOnlySet<string> reservedNames;

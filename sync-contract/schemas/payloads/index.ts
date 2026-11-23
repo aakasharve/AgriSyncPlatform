@@ -78,6 +78,9 @@ export { LogReasonSetPayload } from './logreason_set.zod';
 export { OwnScheduleItemSavePayload } from './ownschedule_item_save.zod';
 export { OwnScheduleItemRemovePayload } from './ownschedule_item_remove.zod';
 export { OwnScheduleMakeMainPayload } from './ownschedule_make_main.zod';
+// slice 5 (schedule mechanism): an own work feeds planning (ownschedule.item.plan) and an answer about a work's sign (schedule.task_event).
+export { OwnScheduleItemPlanPayload } from './ownschedule_item_plan.zod';
+export { ScheduleTaskEventPayload } from './schedule_task_event.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly

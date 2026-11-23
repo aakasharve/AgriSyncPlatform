@@ -1442,6 +1442,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // revisions for the app role). It never touches ssf.audit_events, its policies or its grants. Down() refuses while any own work or revision exists (none does
         // in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261123040137_AddOwnScheduleItems",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - Up() and Down() read in full: Up() adds seven NULLABLE columns, two partial unique indexes,
+        // two CHECKs and a link trigger to ssf.planned_work, and creates ssf.schedule_task_events (FORCE RLS on its own farm_id, a place trigger, SELECT + INSERT for
+        // the app role). It never touches ssf.audit_events, its policies or its grants. Down() refuses while any linked plan or answer exists (none does in this proof)
+        // and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261123071136_AddScheduleFeed",
     ];
 
     /// <summary>

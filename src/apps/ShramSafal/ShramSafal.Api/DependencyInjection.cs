@@ -303,6 +303,10 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.SaveOwnScheduleItemHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.RemoveOwnScheduleItemHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnSchedule.MakeOwnScheduleMainHandler>();
+        // spec: plr-d10 schedule slice 5 - own schedule feeds नियोजन: plan one own work (ownschedule.item.plan), an answer about a sign (schedule.task_event).
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.ScheduleFeed>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.PlanFromOwnScheduleHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

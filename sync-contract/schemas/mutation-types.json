@@ -1,6 +1,6 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "lastUpdated": "2026-11-23",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
@@ -54,6 +54,8 @@
     { "name": "logreason.set",          "ownerAggregate": "LogPracticeReason", "sinceVersion": "1.0.18", "payloadSchema": "LogReasonSet" },
     { "name": "ownschedule.item.save",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemSave" },
     { "name": "ownschedule.item.remove", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemRemove" },
-    { "name": "ownschedule.make_main",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleMakeMain" }
+    { "name": "ownschedule.make_main",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleMakeMain" },
+    { "name": "ownschedule.item.plan",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemPlan" },
+    { "name": "schedule.task_event",     "ownerAggregate": "ScheduleTaskEvent", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTaskEvent" }
   ]
 }

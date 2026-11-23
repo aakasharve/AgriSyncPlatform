@@ -5798,9 +5798,17 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("done_by_user_id");
 
+                    b.Property<DateOnly?>("ExpectedFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("expected_from");
+
                     b.Property<short?>("ExpectedHeadcount")
                         .HasColumnType("smallint")
                         .HasColumnName("expected_headcount");
+
+                    b.Property<DateOnly?>("ExpectedTo")
+                        .HasColumnType("date")
+                        .HasColumnName("expected_to");
 
                     b.Property<Guid>("FarmId")
                         .HasColumnType("uuid")
@@ -5830,6 +5838,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("note");
 
+                    b.Property<int?>("Occurrence")
+                        .HasColumnType("integer")
+                        .HasColumnName("occurrence");
+
+                    b.Property<Guid?>("OwnItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("own_item_id");
+
                     b.Property<string>("PayMode")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
@@ -5856,6 +5872,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reminder_audience_changed_at_utc");
 
+                    b.Property<DateOnly?>("ScheduleDueOn")
+                        .HasColumnType("date")
+                        .HasColumnName("schedule_due_on");
+
+                    b.Property<string>("ScheduleTaskKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("schedule_task_key");
+
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(12)
@@ -5865,6 +5890,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("SeenAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("seen_at_utc");
+
+                    b.Property<string>("SignAnswer")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("sign_answer");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -5920,8 +5950,18 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("ix_planned_work_creator");
 
+                    b.HasIndex("OwnItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_planned_work_own_item_open")
+                        .HasFilter("own_item_id IS NOT NULL AND status NOT IN ('Done','Cancelled')");
+
                     b.HasIndex("FarmId", "ModifiedAtUtc")
                         .HasDatabaseName("ix_planned_work_farm_modified");
+
+                    b.HasIndex("OwnItemId", "Occurrence")
+                        .IsUnique()
+                        .HasDatabaseName("ux_planned_work_own_item_occurrence")
+                        .HasFilter("own_item_id IS NOT NULL");
 
                     b.ToTable("planned_work", "ssf", t =>
                         {
@@ -5933,9 +5973,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_planned_work_loose_when", "loose_when IS NULL OR loose_when IN ('Week','Month','Anytime')");
 
+                            t.HasCheckConstraint("ck_planned_work_own_item_link", "(own_item_id IS NULL AND schedule_task_key IS NULL AND occurrence IS NULL) OR (own_item_id IS NOT NULL AND schedule_task_key IS NOT NULL AND occurrence >= 1)");
+
                             t.HasCheckConstraint("ck_planned_work_pay_mode", "pay_mode IS NULL OR pay_mode IN ('Cash','Daily','Contract','Later')");
 
                             t.HasCheckConstraint("ck_planned_work_scope", "scope IN ('Plot','MultiPlot','Farm','Unspecified')");
+
+                            t.HasCheckConstraint("ck_planned_work_sign_answer", "sign_answer IS NULL OR sign_answer IN ('seen','not_yet','unsure')");
 
                             t.HasCheckConstraint("ck_planned_work_source", "source IN ('Planning','VoiceLog','LogLeftover','Schedule')");
 
@@ -6346,6 +6390,69 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_schedule_tasks_stage_order", "stage_index BETWEEN 0 AND 39 AND order_index BETWEEN 0 AND 9999");
 
                             t.HasCheckConstraint("ck_schedule_tasks_timer", "(timer_kind = 'day' AND from_day IS NOT NULL AND after_task_key IS NULL AND (to_day IS NULL OR to_day >= from_day)) OR (timer_kind = 'after' AND after_task_key IS NOT NULL AND from_day IS NULL AND to_day IS NULL) OR (timer_kind IN ('none', 'sign') AND from_day IS NULL AND to_day IS NULL AND after_task_key IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTaskEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("answer");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateOnly>("ObservedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("observed_on");
+
+                    b.Property<Guid>("OwnItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("own_item_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by_user_id");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_schedule_task_events_farm");
+
+                    b.HasIndex("OwnItemId")
+                        .HasDatabaseName("ix_schedule_task_events_item");
+
+                    b.HasIndex("PlotId", "CropCycleId")
+                        .HasDatabaseName("ix_schedule_task_events_plot_season");
+
+                    b.ToTable("schedule_task_events", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_task_events_answer", "answer IN ('seen', 'not_yet', 'unsure')");
                         });
                 });
 

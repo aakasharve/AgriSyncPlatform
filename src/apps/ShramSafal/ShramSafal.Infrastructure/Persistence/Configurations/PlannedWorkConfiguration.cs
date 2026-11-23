@@ -33,6 +33,11 @@ internal sealed class PlannedWorkConfiguration : IEntityTypeConfiguration<Planne
             t.HasCheckConstraint("ck_planned_work_time_needs_date", "planned_time IS NULL OR planned_date IS NOT NULL");
             t.HasCheckConstraint("ck_planned_work_crew_needs_assignee", "assignee_user_id IS NOT NULL OR (crew_text IS NULL AND expected_headcount IS NULL)");
             t.HasCheckConstraint("ck_planned_work_headcount", "expected_headcount IS NULL OR (expected_headcount >= 1 AND expected_headcount <= 999)");
+            // spec: schedule slice 5 - the link to an own work comes whole (work, key and occurrence together, or none) and a sign answer is one of three words.
+            t.HasCheckConstraint(
+                "ck_planned_work_own_item_link",
+                "(own_item_id IS NULL AND schedule_task_key IS NULL AND occurrence IS NULL) OR (own_item_id IS NOT NULL AND schedule_task_key IS NOT NULL AND occurrence >= 1)");
+            t.HasCheckConstraint("ck_planned_work_sign_answer", "sign_answer IS NULL OR sign_answer IN ('seen','not_yet','unsure')");
         });
 
         builder.HasKey(x => x.Id);
@@ -84,6 +89,20 @@ internal sealed class PlannedWorkConfiguration : IEntityTypeConfiguration<Planne
 
         builder.Property(x => x.ReminderAudienceChangedAtUtc).HasColumnName("reminder_audience_changed_at_utc");
 
+        // spec: schedule slice 5 - a plan made from the farmer's own schedule (all nullable: every other plan leaves them empty; additive, P11).
+        builder.Property(x => x.ScheduleTaskKey).HasColumnName("schedule_task_key").HasMaxLength(80);
+        builder.Property(x => x.OwnItemId).HasColumnName("own_item_id");
+        builder.Property(x => x.Occurrence).HasColumnName("occurrence");
+        builder.Property(x => x.ScheduleDueOn).HasColumnName("schedule_due_on").HasColumnType("date");
+        builder.Property(x => x.ExpectedFrom).HasColumnName("expected_from").HasColumnType("date");
+        builder.Property(x => x.ExpectedTo).HasColumnName("expected_to").HasColumnType("date");
+        builder.Property(x => x.SignAnswer)
+            .HasColumnName("sign_answer")
+            .HasMaxLength(8)
+            .HasConversion(
+                v => v == null ? null : ScheduleSignAnswers.ToWire(v.Value),
+                v => v == null ? null : (ScheduleSignAnswer?)(v == "seen" ? ScheduleSignAnswer.Seen : v == "not_yet" ? ScheduleSignAnswer.NotYet : ScheduleSignAnswer.Unsure));
+
         // The row version: Postgres' own transaction id of the last write (no column to add).
         builder.Property<uint>("xmin")
             .HasColumnName("xmin")
@@ -95,6 +114,7 @@ internal sealed class PlannedWorkConfiguration : IEntityTypeConfiguration<Planne
         builder.Ignore(x => x.LivePlots);
         builder.Ignore(x => x.IsClosed);
         builder.Ignore(x => x.IsReminder);
+        builder.Ignore(x => x.IsWaiting);
 
         builder.HasMany(x => x.Plots)
             .WithOne()
@@ -105,6 +125,16 @@ internal sealed class PlannedWorkConfiguration : IEntityTypeConfiguration<Planne
         builder.HasIndex(x => new { x.FarmId, x.ModifiedAtUtc }).HasDatabaseName("ix_planned_work_farm_modified");
         builder.HasIndex(x => x.AssigneeUserId).HasDatabaseName("ix_planned_work_assignee");
         builder.HasIndex(x => x.CreatedByUserId).HasDatabaseName("ix_planned_work_creator");
+
+        // spec: schedule slice 5 - one plan per occurrence of an own work, and ONE OPEN occurrence at a time (never a flood; two phones, one plan).
+        builder.HasIndex(x => new { x.OwnItemId, x.Occurrence })
+            .IsUnique()
+            .HasFilter("own_item_id IS NOT NULL")
+            .HasDatabaseName("ux_planned_work_own_item_occurrence");
+        builder.HasIndex(x => x.OwnItemId)
+            .IsUnique()
+            .HasFilter("own_item_id IS NOT NULL AND status NOT IN ('Done','Cancelled')")
+            .HasDatabaseName("ux_planned_work_own_item_open");
     }
 }
 
