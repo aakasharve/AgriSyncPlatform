@@ -80,6 +80,18 @@ public sealed class GeminiAdapterTests
         Assert.True(result.OverallConfidence > 0m);
     }
 
+    [Fact]
+    public void GeminiProvider_NeverHandlesVoice_ButStillHandlesBillsAndSaleSlips()
+    {
+        // Founder's order 23 Nov 2026: no Gemini on any voice path. The orchestrator resolves primary, structurer and
+        // fallback providers through CanHandle, so this one answer keeps Gemini out of all of them. Photos stay on Gemini.
+        var provider = CreateProvider("{}");
+
+        Assert.False(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.VoiceToStructuredLog));
+        Assert.True(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.ReceiptToExpenseItems));
+        Assert.True(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.PattiImageToSaleData));
+    }
+
     private static GeminiAiProvider CreateProvider(string responsePayload)
     {
         var options = Options.Create(new GeminiOptions

@@ -177,10 +177,12 @@ public sealed class AiOrchestratorTests
     }
 
     [Fact]
-    public async Task StreamingTextParse_UsesGeminiStructurer_WhenVoiceDefaultIsSarvam()
+    public async Task StreamingTextParse_FollowsTheConfiguredVoiceProvider_NeverGemini()
     {
+        // Founder's order 23 Nov 2026: no Gemini on any voice path. The streaming text parse used to prefer Gemini whenever
+        // it could structure voice; it now follows the configured voice provider (Sarvam by default).
         var harness = CreateHarness(AiProviderConfig.CreateDefault());
-        harness.Gemini.EnqueueStreamChunks(
+        harness.Sarvam.EnqueueStreamChunks(
             "{\"summary\":\"ok\",",
             "\"confidence\":0.91}");
 
@@ -199,8 +201,8 @@ public sealed class AiOrchestratorTests
             events.Add(evt);
         }
 
-        Assert.Equal(0, harness.Sarvam.VoiceStreamCallCount);
-        Assert.Equal(1, harness.Gemini.VoiceStreamCallCount);
+        Assert.Equal(1, harness.Sarvam.VoiceStreamCallCount);
+        Assert.Equal(0, harness.Gemini.VoiceStreamCallCount);
         Assert.Contains(events, evt => evt.Type == "complete");
     }
 

@@ -58,10 +58,13 @@ internal sealed class GeminiAiProvider : IAiProvider
 
     public AiProviderType ProviderType => AiProviderType.Gemini;
 
+    // 23 Nov 2026, founder's order: Gemini never handles a voice recording, as primary, as structurer or as fallback.
+    // Every voice path (speech to text, then structuring the transcript into the log) runs on Sarvam only. The
+    // orchestrator resolves providers through CanHandle, so answering false for VoiceToStructuredLog removes Gemini from
+    // every voice choice at once. Bills (receipts) and sale slips (patti) stay on Gemini: they are photos, not voice.
     public bool CanHandle(AiOperationType operation)
     {
-        return operation is AiOperationType.VoiceToStructuredLog
-            or AiOperationType.ReceiptToExpenseItems
+        return operation is AiOperationType.ReceiptToExpenseItems
             or AiOperationType.PattiImageToSaleData;
     }
 

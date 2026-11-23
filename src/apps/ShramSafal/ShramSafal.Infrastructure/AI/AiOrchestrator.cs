@@ -1577,12 +1577,9 @@ internal sealed class AiOrchestrator(
 
     private IAiProvider? ResolveVoiceStructurerProvider(AiProviderConfig config)
     {
-        if (_providers.TryGetValue(AiProviderType.Gemini, out var gemini) &&
-            gemini.CanHandle(AiOperationType.VoiceToStructuredLog))
-        {
-            return gemini;
-        }
-
+        // This used to prefer Gemini whenever it could structure voice (it was the only provider that could stream).
+        // Founder's order 23 Nov 2026: no Gemini on any voice path, so the configured voice provider decides, and a
+        // provider that cannot stream answers the streaming call with a plain "not supported" error event.
         return ResolveProvider(
             config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
             AiOperationType.VoiceToStructuredLog);
