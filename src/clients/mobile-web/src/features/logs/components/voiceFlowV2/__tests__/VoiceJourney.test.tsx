@@ -72,10 +72,12 @@ describe('VoiceJourney — ticks live, only on real events', () => {
         expect([state('words'), state('parts'), state('products')]).toEqual(['done', 'done', 'done']);
         expect(state('place')).toBe('active');
         expect(screen.getByTestId('vj-step-products')).toHaveTextContent('कॉन्फिडॉर');
+        expect(screen.getByTestId('vj-step-words')).toHaveTextContent('“कॉन्फिडॉर'); // his words in quotes, as the design
         expect(wholeStep()).toBe(true);
         expect(haptic.success).not.toHaveBeenCalled();
 
         act(() => noteVoiceJourney({ kind: 'placeChecked', result: 'same' }));
+        expect(screen.getByTestId('vj-step-place')).toHaveTextContent('तुम्ही निवडलेला: सोनाका ✓');
         act(() => noteVoiceJourney({ kind: 'written', logIds: ['LOG-1'] }));
         expect(state('saved')).toBe('done');
         expect(barWidth()).toBe(100);

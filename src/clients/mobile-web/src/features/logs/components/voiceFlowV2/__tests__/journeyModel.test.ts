@@ -50,6 +50,17 @@ describe('journeyFactsOf — what the step list shows, from the save\'s own fact
         expect(f.products[2].text).toContain('खत');
     });
 
+    it('a product chip carries its name and type for the design (bold name, colour by type), from the same identity as its text', () => {
+        const [first] = facts(draft()).products;
+        expect(first.product).toMatchObject({ type: 'insecticide', typeName: 'कीटकनाशक' });
+        expect(first.text).toBe(`${first.product?.name} · ${first.product?.typeName}`);
+    });
+
+    it('the place: the plot(s) the save is built on, each named once', () => {
+        expect(facts(draft()).places).toEqual(['सोनाका']);
+        expect(facts(draft(), 'mr', twoPlots).places).toEqual(['सोनाका', 'थॉमसन']);
+    });
+
     it('the parts include labour (his count, in Devanagari digits) and the sprays by their part name', () => {
         const f = facts(draft());
         const labour = f.parts.find(c => c.part === 'labour');
@@ -71,7 +82,7 @@ describe('journeyFactsOf — what the step list shows, from the save\'s own fact
         expect(facts(draft()).excerpt).toBe(`${SAID.split(' ').slice(0, 8).join(' ')} …`);
         expect(facts(draft({ fullTranscript: 'दहा मजूर होते' })).excerpt).toBe('दहा मजूर होते');
         expect(facts(draft({ fullTranscript: '   ' })).excerpt).toBeNull();
-        expect(facts(undefined)).toEqual({ excerpt: null, parts: [], products: [] });
+        expect(facts(undefined)).toEqual({ excerpt: null, parts: [], products: [], places: [] });
     });
 });
 
@@ -125,6 +136,16 @@ describe('journeyStepsOf — each tick a real event', () => {
         expect(states(snap({ draft: d, understoodAt: MOUNT + 900, place: 'otherPlot' })).place).toBe('active');
         expect(states(snap({ draft: d, understoodAt: MOUNT + 900, place: 'unclear' })).place).toBe('active');
         expect(states(snap({ draft: d, understoodAt: MOUNT + 900, place: 'otherPlot' })).saved).toBe('waiting');
+    });
+
+    it('the plot step, once checked, names the plot he chose (the design\'s "तुम्ही निवडलेला: … ✓"); not before', () => {
+        const d = draft();
+        const place = (s: VoiceJourneySnapshot, f: JourneyFacts = facts(d), language: 'mr' | 'en' = 'mr') =>
+            journeyStepsOf(liveJourney(s, MOUNT), f, language).steps.find(x => x.key === 'place');
+        expect(place(snap({ draft: d, understoodAt: MOUNT + 900 }))?.sub).toBeUndefined();
+        expect(place(snap({ draft: d, understoodAt: MOUNT + 900, place: 'same' }))?.sub).toBe('तुम्ही निवडलेला: सोनाका ✓');
+        expect(place(snap({ draft: d, understoodAt: MOUNT + 900, place: 'same' }), facts(d, 'mr', twoPlots))?.sub).toBe('तुम्ही निवडलेले: सोनाका, थॉमसन ✓');
+        expect(place(snap({ draft: d, understoodAt: MOUNT + 900, place: 'same' }), facts(d, 'en'), 'en')?.sub).toBe('Your plot: सोनाका ✓');
     });
 
     it('written: every step done, progress 1, complete', () => {

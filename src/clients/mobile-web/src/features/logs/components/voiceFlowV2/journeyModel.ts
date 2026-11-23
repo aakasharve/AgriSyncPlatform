@@ -16,7 +16,7 @@ import { previewLogs } from '../checkSave/checkSaveModel';
 import { partEntriesOf, primaryOf, type PartKey } from '../voiceResult/resultModel';
 import { entryText, partNameIn } from '../voiceResult/partNames';
 import { productBoxesOf, productName } from '../voiceResult/productModel';
-import { identityOf, typeKeyOf } from '../voiceResult/inputIdentityModel';
+import { identityOf, typeKeyOf, type TypeKey } from '../voiceResult/inputIdentityModel';
 import { resultCopy } from '../voiceResult/resultCopy';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 
@@ -28,14 +28,19 @@ const EXCERPT_WORDS = 8;
 export type JourneyStepKey = 'kept' | 'words' | 'parts' | 'place' | 'products' | 'saved';
 export type JourneyStepState = 'done' | 'active' | 'waiting' | 'skipped';
 
-/** One chip under a step: the part it belongs to (its icon) and what was understood. */
-export interface JourneyChip { part: PartKey; text: string }
+/**
+ * One chip under a step: the part it belongs to (its icon) and what was understood. A product chip also carries its name
+ * and type, read from the same identity as `text`, so the approved design can colour it by type and show the name in bold.
+ */
+export interface JourneyChip { part: PartKey; text: string; product?: { name: string; typeName: string; type: TypeKey } }
 
 export interface JourneyFacts {
     /** His first words as transcribed, or null when the answer carried none. */
     excerpt: string | null;
     parts: JourneyChip[];
     products: JourneyChip[];
+    /** The plot(s) the save is built on (the place he chose), for the "प्लॉट तपासला" line; empty when none is named. */
+    places: string[];
 }
 
 export interface JourneyStep {
@@ -54,7 +59,7 @@ export interface JourneyView {
     complete: boolean;
 }
 
-const NO_FACTS: JourneyFacts = { excerpt: null, parts: [], products: [] };
+const NO_FACTS: JourneyFacts = { excerpt: null, parts: [], products: [], places: [] };
 
 /** The journey this screen may show: null when there is none, or it began before the screen (an earlier recording). */
 export function liveJourney(snapshot: VoiceJourneySnapshot | null, mountedAt: number): VoiceJourneySnapshot | null {
@@ -86,9 +91,11 @@ export function journeyFactsOf(
     draft: AgriLogResponse | undefined, scope: LogScope | null, crops: CropProfile[], profile: FarmerProfile, language: string | null | undefined,
 ): JourneyFacts {
     if (!draft) return NO_FACTS;
-    const primary = primaryOf(previewLogs(draft, scope, crops, profile));
+    const logs = previewLogs(draft, scope, crops, profile);
+    const primary = primaryOf(logs);
     const excerpt = excerptOf(draft.fullTranscript);
-    if (!primary) return { ...NO_FACTS, excerpt };
+    const places = [...new Set(logs.flatMap(l => (l.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? [])).filter(Boolean))];
+    if (!primary) return { ...NO_FACTS, excerpt, places };
     const parts = unique(partEntriesOf(primary, language, true).map(e => ({
         part: e.part,
         text: e.part === 'inputs' ? partNameIn('inputs', language) : entryText(e, language, true) || partNameIn(e.part, language),
@@ -96,9 +103,10 @@ export function journeyFactsOf(
     const typeNames = resultCopy(language ?? undefined).typeNames;
     const products = unique(productBoxesOf(primary).flatMap(box => box.items.map(item => {
         const name = productName(item, language);
-        return { part: 'inputs' as const, text: name ? `${name} · ${typeNames[typeKeyOf(identityOf(item))]}` : '' };
+        const type = typeKeyOf(identityOf(item));
+        return { part: 'inputs' as const, text: name ? `${name} · ${typeNames[type]}` : '', product: { name, typeName: typeNames[type], type } };
     })));
-    return { excerpt, parts, products };
+    return { excerpt, parts, products, places };
 }
 
 /** The ordered steps for this journey (null = none yet). Exactly one step is active: the first one not done. */
@@ -118,7 +126,10 @@ export function journeyStepsOf(journey: VoiceJourneySnapshot | null, facts: Jour
             ...(understood && facts.excerpt && { sub: facts.excerpt }),
         },
         { key: 'parts', label: w.stepParts, state: understood ? 'done' : 'pending', ...(understood && facts.parts.length > 0 && { chips: facts.parts }) },
-        { key: 'place', label: w.stepPlace, state: journey?.place === 'same' ? 'done' : 'pending' },
+        {
+            key: 'place', label: w.stepPlace, state: journey?.place === 'same' ? 'done' : 'pending',
+            ...(journey?.place === 'same' && facts.places.length > 0 && { sub: w.placeSub(facts.places) }),
+        },
         ...(facts.products.length > 0
             ? [{ key: 'products' as const, label: w.stepProducts, state: understood ? 'done' as const : 'pending' as const, ...(understood && { chips: facts.products }) }]
             : []),

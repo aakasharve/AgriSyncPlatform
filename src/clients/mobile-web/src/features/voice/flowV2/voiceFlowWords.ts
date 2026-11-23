@@ -38,6 +38,8 @@ export interface VoiceFlowWords {
     stepWords: string;
     stepParts: string;
     stepPlace: string;
+    /** Under "प्लॉट तपासला": the plot(s) he chose, the prototype's line (no claim about separate entries). */
+    placeSub: (plots: readonly string[]) => string;
     stepProducts: string;
     stepSaved: string;
     waiting: string;
@@ -85,6 +87,7 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     stepWords: 'शब्द लिहून घेतले', // PROPOSED (Marathi)
     stepParts: 'कामं वेगळी केली', // PROPOSED (Marathi)
     stepPlace: 'प्लॉट तपासला', // PROPOSED (Marathi)
+    placeSub: plots => `${plots.length > 1 ? 'तुम्ही निवडलेले' : 'तुम्ही निवडलेला'}: ${plots.join(', ')} ✓`, // PROPOSED (Marathi)
     stepProducts: 'औषध आणि खत ओळखले', // PROPOSED (Marathi)
     stepSaved: 'जतन झालं', // PROPOSED (Marathi)
     waiting: 'थोडं थांबा… साथी लिहून ठेवतोय', // PROPOSED (Marathi)
@@ -132,6 +135,7 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     stepWords: 'Words written down', // PROPOSED (English)
     stepParts: 'Work sorted into parts', // PROPOSED (English)
     stepPlace: 'Plot checked', // PROPOSED (English)
+    placeSub: plots => `${plots.length > 1 ? 'Your plots' : 'Your plot'}: ${plots.join(', ')} ✓`, // PROPOSED (English)
     stepProducts: 'Sprays and fertiliser recognised', // PROPOSED (English)
     stepSaved: 'Saved', // PROPOSED (English)
     waiting: 'A moment… Sathi is writing it down', // PROPOSED (English)

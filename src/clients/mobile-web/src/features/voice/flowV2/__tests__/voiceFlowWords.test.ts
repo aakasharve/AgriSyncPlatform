@@ -5,9 +5,10 @@ import { VOICE_FLOW_EN, VOICE_FLOW_MR, voiceFlowWords } from '../voiceFlowWords'
 const DEVANAGARI = /[ऀ-ॿ]/;
 const LATIN = /[A-Za-z]/;
 
-const strings = (w: object): string[] => Object.values(w).flatMap(v =>
+// `placeSub` takes the plot names (a plot named "7" keeps both language checks about the words themselves).
+const strings = (w: object): string[] => Object.entries(w).flatMap(([k, v]) =>
     typeof v === 'string' ? [v]
-        : typeof v === 'function' ? [String((v as (a: number, b?: number) => string)(7, 8))]
+        : typeof v === 'function' ? [String(k === 'placeSub' ? (v as (p: string[]) => string)(['7']) : (v as (a: number, b?: number) => string)(7, 8))]
             : Array.isArray(v) ? v.flatMap(p => [p.q, p.ex]) : []);
 
 describe('voiceFlowWords', () => {
