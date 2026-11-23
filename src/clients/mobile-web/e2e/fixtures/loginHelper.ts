@@ -152,7 +152,7 @@ export async function loginViaPassword(
     await submitButton.click();
 
     let landing = await waitForLoginLanding(page);
-    // First-run WelcomeScreen (shramsafal_welcome_seen) renders once after login,
+    // First-run WelcomeScreen (shramsafal_welcome_voice_v1_seen) renders once after login,
     // before the permission gate. Click through it, then re-evaluate the landing.
     if (landing === 'welcome') {
         await skipWelcome(page);
