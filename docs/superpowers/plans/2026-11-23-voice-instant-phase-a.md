@@ -152,6 +152,26 @@
 - [ ] **Step 1: Failing tests:** tapping a red tile or a red ring part opens the sheet with Sathi (bright mood), the category's question and its `hint`; "🎤 सांगा" calls `speakHere` with `purpose: 'fillPart'` and that part; "आज नाही" closes the part for this screen only and writes nothing to the record; the sheet closes on back.
 - [ ] **Step 2: Run, fail; implement; run → PASS.** Commit `feat(result): Sathi asks one question for each part not told`.
 
+### Task 12A: After "पक्कं आहे": seal the day, then the समजलं meter as the trigger to say more
+
+Founder 2026-11-23: "after he taps the completion … one another animation of gratification or celebration"; "The understanding meter is … a trigger that let him know he needs to speak more. That number matters, that decides the quality of the log. Check the DFES code for that." Approved preview: artifact *Understanding Meter* (version 2).
+
+**What the number is (verified in code):** the Day Understanding Score (`DayUnderstandingScore.cs`, roster from `DfesLensExtractor.cs`, engine `dfes-5`): details told ÷ details this day owes (WHAT 20, DOSE 20, OBS_FACET 15, COST 12, PRODUCT_ID 10, CARRIER 10, WEATHER 8 unless the app holds the weather; LEARN_FACET recorded, not counted), × 10, rounded. Fixed denominator, so telling more can only raise it. Labour and plot do not count. Today only the /10 crosses to the phone (`DfesResource.ts:38-40`), so the phone cannot say which detail would raise it.
+
+**Files:** server `GetDayUnderstandingHandler` + DTO (new additive field), `DayUnderstandingScore` (projection helper); phone `infrastructure/api/resources/DfesResource.ts`, new `features/logs/components/voiceResult/completion/` (`CompletionMoment.tsx`, `UnderstandingMeterDial.tsx`, `nextDetails.ts`), `VoiceResultContainer.tsx` (open on confirm), `resultStrings.ts` (detail questions), `app/featureFlags.ts` (`VITE_UNDERSTANDING_METER_V2`).
+
+- [ ] **Step 0: Founder decision** — `[ ]` allow the server to send, beside the /10, the details still owed and the score each would lead to (names only, e.g. `DOSE`; no lens scores). Without it this task stops at the seal and the dial.
+- [ ] **Step 1: Failing server tests:** `nextDetails` lists every roster dimension that is applicable, counted and not fully covered, each with `ifToldScore` = the score with that dimension at coverage 1 (same formula, same rounding); sorted by `ifToldScore` then weight; empty when the score is 10 or null; LEARN_FACET never listed; a dimension not owed today never listed; the field is additive (old phones ignore it, P11).
+- [ ] **Step 2: Failing phone tests:**
+  - tap "पक्कं आहे" → the existing verify is queued, then the moment opens: entry card, seal, dial;
+  - the needle steps to the server score (never above it, never 0; null → "अजून समजतंय…");
+  - one chip per `nextDetails` item, with the founder-approved question for that dimension and "→ X / १०" from the server; the OBS chip is marked "९ साठी आवश्यक" when 9 is reachable only through it;
+  - tapping a chip opens the existing one-mic answer flow for that detail (`stashPendingQuestionAnswer` + `speakHere`), and the dial moves only when the rescored /10 arrives from the server;
+  - ≥ 9 → "★ लक्ष्य ९ गाठलं" and the marigold shower; 10 → "★ सगळं समजलं";
+  - the month count comes from recorded days (never a streak); tap anywhere skips to the final frame; reduced motion → final frame only.
+- [ ] **Step 3: Run, fail; implement; run → PASS.** Playwright pictures at 320 px and 412 px, light and dark, for 3/10, 7/10, 9/10, 10/10.
+- [ ] **Step 4: Commit** `feat(result): seal the day and show what raises the समजलं meter`.
+
 ### Task 13: Founder actions (no code)
 
 - [ ] Sarvam dashboard: Model API data retention set to **0 days** (it is indefinite by default); screenshot in the notes folder.

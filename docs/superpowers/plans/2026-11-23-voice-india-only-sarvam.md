@@ -107,9 +107,18 @@ Per farmer per month (one 1-minute note a day, speech-to-text included): **Sarva
 
 - [ ] Sarvam Model API retention **0 days**. - [ ] DPA signed. - [ ] Plan: pay as you go is enough for REST (60 requests/min); Pro (₹9,999/month) when live streaming (Phase C) needs more than 20 concurrent sockets.
 
-### Task 9: Decide receipts and patti images (later lane)
+### Task 9: Receipts and patti stay on Gemini (founder, 2026-11-23)
 
-- [ ] Founder decides whether "fully Sarvam" includes receipt and patti photos (today Gemini, `AiProviderConfig.cs:87-88`). Sarvam vision and document-digitisation clients already exist in the codebase; a separate plan with its own golden set if yes.
+- [x] Founder decided: "Gemini for OCR will remain as it is. Just check the model. If that is expiring, we will change it in the test app."
+
+### Task 9A: Move off expiring Gemini models (deadline 1 Dec 2026)
+
+Checked 2026-11-23 on Google's deprecations page: `gemini-3.1-flash-lite-preview` (today's `StructurerModelId`) **shut down 25 May 2026**; `gemini-2.5-flash` (today's `OcrModelId` and `VoiceFallbackModelId`) **shuts down 1 Dec 2026** and then auto-routes to `gemini-3.5-flash-lite`.
+
+- [ ] **Step 1:** Check the live server and the PC stack for `Gemini__*` environment overrides; record what each actually runs.
+- [ ] **Step 2:** On the PC stack, read 10 receipt and patti photos with known values on `gemini-3.5-flash-lite` and on `gemini-3.8-flash`; record field-by-field accuracy in `gemini-ocr-model-check-2026-11.md`.
+- [ ] **Step 3:** Set `Gemini:OcrModelId` (and, until Task 7 lands, `VoiceFallbackModelId`) to the model the founder approves; set `StructurerModelId` to `gemini-3.1-flash-lite` for the Task 2 comparison only. Settings change in `appsettings.Production.json` and `appsettings.Development.example.json`; the default constants in `GeminiOptions.cs:6-8` updated to match.
+- [ ] **Step 4: Commit** `chore(ai): move Gemini OCR off the model that shuts down on 1 Dec`. Ship this to the test stack first, then to production before 1 Dec 2026, even if the rest of the plan is not ready.
 
 ### Task 10: Accept and deploy
 
