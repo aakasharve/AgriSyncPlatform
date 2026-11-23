@@ -114,7 +114,9 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     // own crop -> plot selector (CTX-1), else the farm's only plot. Its "काम जोडा" / "बदला" open the same maker, one work at a time.
     const mechanismOn = useScheduleMechanism(farmId);
     const allPlotIds = useMemo(() => crops.flatMap(c => c.plots.map(p => p.id)), [crops]);
-    const workPlotId = !place.whole && place.plotIds.length === 1 ? place.plotIds[0] : allPlotIds.length === 1 ? allPlotIds[0] : null;
+    // The plot last opened in the maker stays the card's plot when he comes back (the form below starts empty again after the maker closes).
+    const [lastWorkPlotId, setLastWorkPlotId] = useState<string | null>(null);
+    const workPlotId = !place.whole && place.plotIds.length === 1 ? place.plotIds[0] : lastWorkPlotId ?? (allPlotIds.length === 1 ? allPlotIds[0] : null);
     const ownWork = useOwnWorkPlace(mechanismOn && mayMakeOwnSchedule ? farmId : null, workPlotId, crops);
 
     // The people he may hand work to: the server's list, kept on the phone for the times there is no net.
@@ -232,8 +234,8 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                 <section data-testid="own-work-section">
                     {ownWork.place
                         ? <OwnWorkList place={ownWork.place} language={ownLanguage} onOpenConflicts={onOpenConflicts}
-                            onAdd={() => { const p = ownWork.place; if (p) setOwnFlow({ page: 'work', place: p, taskKey: null }); }}
-                            onEdit={taskKey => { const p = ownWork.place; if (p) setOwnFlow({ page: 'work', place: p, taskKey }); }} />
+                            onAdd={() => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey: null }); } }}
+                            onEdit={taskKey => { const p = ownWork.place; if (p) { setLastWorkPlotId(p.plotId); setOwnFlow({ page: 'work', place: p, taskKey }); } }} />
                         : ownWork.reason !== 'loading' && (
                             // "Only when" parts never vanish: the card says when it works (one plot chosen, its season on the phone).
                             <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-3.5" data-testid="own-work-waiting">

@@ -73,6 +73,21 @@ describe('planning page -> the one-work maker (slice 4)', () => {
         expect(screen.getByTestId(`own-list-pending-${key}`)).toBeInTheDocument();
     });
 
+    it('two plots, one chosen in the form: after saving, the list of that plot is back (not the "choose a plot" card)', async () => {
+        await writeScheduleMechanismFarmIds(getDatabase(), [FARM], '2026-11-23T00:00:00Z');
+        page(TWO_PLOTS);
+        fireEvent.click(await screen.findByTestId('flow-crop-grape'));
+        fireEvent.click(await screen.findByTestId(`flow-plot-${PLOT}`));
+        fireEvent.click(await screen.findByTestId('own-list-add'));
+        fireEvent.click(await screen.findByTestId('own-kind-work'));
+        fireEvent.change(screen.getByTestId('own-work-name'), { target: { value: 'खुरपणी' } });
+        fireEvent.click(screen.getByTestId('own-work-save'));
+        expect(await screen.findByTestId('plan-banner')).toBeInTheDocument();
+        expect(await screen.findByTestId('own-list')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('खुरपणी')).toBeInTheDocument());
+        expect(screen.queryByTestId('own-work-waiting')).toBeNull();
+    });
+
     it('switch on, two plots and none chosen: the card stays and says when it works', async () => {
         await writeScheduleMechanismFarmIds(getDatabase(), [FARM], '2026-11-23T00:00:00Z');
         page(TWO_PLOTS);
