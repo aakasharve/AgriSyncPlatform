@@ -1,0 +1,304 @@
+{
+  "tasks": [
+    {
+      "taskKey": "spray-one",
+      "name": "लांबट मण्यांचे वाण: फुलोऱ्यात GA३",
+      "kind": "spray",
+      "timing": {
+        "timer": "day",
+        "fromDay": 35,
+        "toDay": 50,
+        "afterTaskKey": null,
+        "usualDays": null,
+        "earliestDays": null,
+        "latestDays": null,
+        "signWords": null,
+        "expectedFromDay": null,
+        "expectedToDay": null,
+        "whenWords": "फुलोरा (दिवस ३६–५०)",
+        "repeat": "every_n_days",
+        "repeatInterval": 7,
+        "repeatEndDay": 60,
+        "repeatEndSign": null
+      },
+      "basis": "our_choice",
+      "stageIndex": 1,
+      "order": 3,
+      "why": "मणी लांबट होण्यासाठी.",
+      "dose": "GA३ १५ ppm",
+      "steps": [
+        "सामू ५.५–६ ठेवा."
+      ],
+      "products": [
+        {
+          "name": "GA३",
+          "doseAsWritten": "१५",
+          "unit": "ppm",
+          "perWhat": "लिटर पाणी",
+          "water": "५०० लिटर"
+        }
+      ],
+      "reEntryHours": 24,
+      "preHarvestDays": 15,
+      "warnings": [
+        "पूर्ण फुलोऱ्यात फवारल्यास मणी गळतात."
+      ],
+      "look": {
+        "where": "घड",
+        "sample": "५ वेली",
+        "sign": "मणी लांबट",
+        "threshold": "५०%",
+        "ifThen": [
+          {
+            "if": "पाऊस",
+            "then": "फवारणी पुढे ढकला"
+          }
+        ],
+        "photoRef": "P02"
+      },
+      "ask": {
+        "question": "फुलोरा ५०% झाला का?",
+        "when": "सकाळी",
+        "answers": [
+          {
+            "answer": "yes",
+            "changes": "आज फवारा"
+          },
+          {
+            "answer": "no",
+            "changes": "उद्या पुन्हा पाहा"
+          }
+        ]
+      },
+      "sources": [
+        {
+          "document": "पुस्तक",
+          "page": "८२"
+        },
+        {
+          "document": "NRC साप्ताहिक सल्ला, १८ मे २०२३",
+          "page": null
+        }
+      ],
+      "origin": "reader"
+    },
+    {
+      "taskKey": "before-start",
+      "name": "माती तपासणी",
+      "kind": "observe",
+      "timing": {
+        "timer": "day",
+        "fromDay": -20,
+        "toDay": -18,
+        "afterTaskKey": null,
+        "usualDays": null,
+        "earliestDays": null,
+        "latestDays": null,
+        "signWords": null,
+        "expectedFromDay": null,
+        "expectedToDay": null,
+        "whenWords": null,
+        "repeat": "once",
+        "repeatInterval": null,
+        "repeatEndDay": null,
+        "repeatEndSign": null
+      },
+      "basis": "stated",
+      "stageIndex": 0,
+      "order": 1,
+      "why": null,
+      "dose": null,
+      "steps": [],
+      "products": [],
+      "reEntryHours": null,
+      "preHarvestDays": null,
+      "warnings": [],
+      "look": null,
+      "ask": null,
+      "sources": [],
+      "origin": null
+    },
+    {
+      "taskKey": "spray-two",
+      "name": "दुसरी फवारणी",
+      "kind": "spray",
+      "timing": {
+        "timer": "after",
+        "fromDay": null,
+        "toDay": null,
+        "afterTaskKey": "spray-one",
+        "usualDays": 4,
+        "earliestDays": 3,
+        "latestDays": 9,
+        "signWords": null,
+        "expectedFromDay": null,
+        "expectedToDay": null,
+        "whenWords": "४–५ दिवसांनी",
+        "repeat": "per_week",
+        "repeatInterval": 2,
+        "repeatEndDay": null,
+        "repeatEndSign": "फळे पक्व झाल्यावर"
+      },
+      "basis": "experience",
+      "stageIndex": 1,
+      "order": 4,
+      "why": null,
+      "dose": null,
+      "steps": [],
+      "products": [],
+      "reEntryHours": null,
+      "preHarvestDays": null,
+      "warnings": [],
+      "look": null,
+      "ask": null,
+      "sources": [],
+      "origin": null
+    },
+    {
+      "taskKey": "seen-one",
+      "name": "कूज",
+      "kind": "nutrition",
+      "timing": {
+        "timer": "sign",
+        "fromDay": null,
+        "toDay": null,
+        "afterTaskKey": null,
+        "usualDays": null,
+        "earliestDays": null,
+        "latestDays": null,
+        "signWords": "पाकळ्या फुगलेल्या दिसल्यावर",
+        "expectedFromDay": -5,
+        "expectedToDay": 9,
+        "whenWords": "फुलोऱ्याच्या अगदी आधी",
+        "repeat": "once",
+        "repeatInterval": null,
+        "repeatEndDay": null,
+        "repeatEndSign": null
+      },
+      "basis": "assumed",
+      "stageIndex": 1,
+      "order": 5,
+      "why": null,
+      "dose": null,
+      "steps": [],
+      "products": [],
+      "reEntryHours": null,
+      "preHarvestDays": null,
+      "warnings": [],
+      "look": null,
+      "ask": null,
+      "sources": [],
+      "origin": null
+    },
+    {
+      "taskKey": "water-one",
+      "name": "पाणी",
+      "kind": "irrigation",
+      "timing": {
+        "timer": "none",
+        "fromDay": null,
+        "toDay": null,
+        "afterTaskKey": null,
+        "usualDays": null,
+        "earliestDays": null,
+        "latestDays": null,
+        "signWords": null,
+        "expectedFromDay": null,
+        "expectedToDay": null,
+        "whenWords": "मणी ३–४ मि.मी. झाल्यावर",
+        "repeat": "once",
+        "repeatInterval": null,
+        "repeatEndDay": null,
+        "repeatEndSign": null
+      },
+      "basis": "stated",
+      "stageIndex": 0,
+      "order": 6,
+      "why": null,
+      "dose": null,
+      "steps": [],
+      "products": [],
+      "reEntryHours": null,
+      "preHarvestDays": null,
+      "warnings": [],
+      "look": null,
+      "ask": null,
+      "sources": [],
+      "origin": null
+    },
+    {
+      "taskKey": "open-end",
+      "name": "माइट",
+      "kind": "work",
+      "timing": {
+        "timer": "day",
+        "fromDay": 60,
+        "toDay": null,
+        "afterTaskKey": null,
+        "usualDays": null,
+        "earliestDays": null,
+        "latestDays": null,
+        "signWords": null,
+        "expectedFromDay": null,
+        "expectedToDay": null,
+        "whenWords": null,
+        "repeat": "once",
+        "repeatInterval": null,
+        "repeatEndDay": null,
+        "repeatEndSign": null
+      },
+      "basis": "stated",
+      "stageIndex": 0,
+      "order": 7,
+      "why": null,
+      "dose": null,
+      "steps": [],
+      "products": [],
+      "reEntryHours": null,
+      "preHarvestDays": null,
+      "warnings": [],
+      "look": null,
+      "ask": null,
+      "sources": [],
+      "origin": null
+    }
+  ],
+  "challenges": [
+    {
+      "challengeKey": "mildew",
+      "title": "केवडा घडांवर (फसवा काळ)",
+      "stageIndex": 1,
+      "order": 2,
+      "whenWords": "दिवस ३५–५० (फुलोरा)",
+      "signs": "फुलं गळतात",
+      "action": "५ दिवसांच्या अंतराने दोन फवारण्या",
+      "ifThen": [
+        {
+          "if": "नोव्हेंबर-डिसेंबरमध्ये पाऊस झाला",
+          "then": "फवारण्या वाढवा"
+        }
+      ],
+      "sources": [
+        {
+          "document": "GAP",
+          "page": "३५"
+        },
+        {
+          "document": "पुस्तक",
+          "page": "८३"
+        }
+      ]
+    },
+    {
+      "challengeKey": "bare",
+      "title": "भुरी",
+      "stageIndex": 0,
+      "order": 0,
+      "whenWords": null,
+      "signs": null,
+      "action": null,
+      "ifThen": [],
+      "sources": []
+    }
+  ]
+}
