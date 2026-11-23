@@ -28,11 +28,12 @@ describe('when the overview says the day in one sentence (D-172)', () => {
     });
 });
 
-describe('"more than 15 plots" (D-173, D-174)', () => {
-    it('folds from 16 plots: 15 plots are drawn exactly as before', () => {
-        expect(MANY_PLOTS_FROM).toBe(16);
-        expect(foldsManyPlots(15)).toBe(false);
-        expect(foldsManyPlots(16)).toBe(true);
+describe('"many plots" (D-173, D-174; founder C1 = B, 2026-11-23: 10 or more)', () => {
+    it('groups from 10 plots: 9 plots are drawn exactly as before', () => {
+        expect(MANY_PLOTS_FROM).toBe(10);
+        expect(foldsManyPlots(9)).toBe(false);
+        expect(foldsManyPlots(10)).toBe(true);
+        expect(foldsManyPlots(15)).toBe(true);
         expect(foldsManyPlots(100)).toBe(true);
     });
 

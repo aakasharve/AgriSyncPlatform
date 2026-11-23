@@ -358,12 +358,14 @@ export const PlotDayCards: React.FC<{
     }
     // Natural number order inside a crop (G2 before G10); a crop with no plot yet has its one card.
     const ordered = groups.map(g => (g[0].ref.plotId ? sortedNaturally(g, c => c.ref.plotName ?? '') : g));
-    // Lane UI-9a (founder D-173 = A): more than 15 plots ON THE PAGE (what is shown, not what the farm holds) folds the crops.
+    // Lane UI-9a (founder D-173 = A): many plots ON THE PAGE (what is shown, not what the farm holds) folds the crops. Founder C1 = B
+    // (2026-11-23): from 10 plots, and then EVERY crop is a group - the small crops too - so the page is plots grouped by crop and a tap
+    // on a crop opens its plots. Below 10 a crop of 1 to 3 plots keeps its full cards, as before.
     const folding = foldsManyPlots(cards.filter(c => c.ref.plotId).length);
     const alone = ordered.filter(g => g[0].ref.plotId).length === 1;
     return (
         <div className="space-y-2.5" data-testid="plot-day-cards">
-            {ordered.map(g => (smallPlotCardsFor(g.length) && g[0].ref.plotId
+            {ordered.map(g => ((folding || smallPlotCardsFor(g.length)) && g[0].ref.plotId
                 ? <CropGroup key={`group:${g[0].ref.cropId}`} cards={g} isToday={isToday} onOpen={onOpen} onTell={onTell} folding={folding} alone={alone} />
                 : g.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)))}
             {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}

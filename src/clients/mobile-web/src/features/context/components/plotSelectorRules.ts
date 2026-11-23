@@ -255,13 +255,16 @@ export const moreCropsText = (n: number, language: string | null | undefined): s
 
 // ── the आढावा page with many plots (lane UI-9a; founder picks 2026-11-22: D-172 B, D-173 A, D-174 A, D-175 A) ──────────────
 //
-// ONE place for the numbers every part of the page reads, so "more than 15" can never mean two things on one screen. All of them are
-// small and reversible: a farm of 15 plots or fewer draws exactly what it drew before (except the day card, which only ADDS a sentence).
+// ONE place for the numbers every part of the page reads, so "many plots" can never mean two things on one screen. All of them are
+// small and reversible: a farm of 9 plots or fewer draws exactly what it drew before (except the day card, which only ADDS a sentence).
+// spec: plr-d10-founder-answers-2026-11-23 — founder C1 = B: plots grouped by crop "once a farm has 10 or more plots" (it was more than
+// 15); small farms (Arve 2, Ronge 4) look the same either way, and a big farm's screens get no more complicated than the grouping.
 
 /** From this many plots in view (all crops in view together): the page says the day in one sentence, with its bar and buttons (D-172). */
 export const DAY_CARD_FROM = PLOT_GRID_FROM;
-/** From this many plots in view ("more than 15"): crops fold, problems come first, the number grids fold behind one search (D-173, D-174). */
-export const MANY_PLOTS_FROM = 16;
+/** From this many plots in view (founder C1 = B, 2026-11-23: 10 or more): plots grouped by crop, a tap on a crop opens its plots; problems come
+ * first, the number grids fold behind one search (D-173, D-174). */
+export const MANY_PLOTS_FROM = 10;
 /** An open crop draws this many plot cards, then "आणखी N दाखवा"; a plot with a problem is never hidden (D-173). */
 export const MANY_PLOTS_CARDS_SHOWN = 6;
 /** A calendar day row draws this many record chips, then "+N नोंदी" (D-175). */
@@ -271,7 +274,7 @@ export const MONEY_BARS_SHOWN = 5;
 
 /** Whether the day card (sentence, bar, buttons) is drawn for this many plots in view. */
 export const hasDayCard = (plotCount: number): boolean => plotCount >= DAY_CARD_FROM;
-/** Whether the page holds more than 15 plots, so the crops fold. */
+/** Whether the page holds 10 or more plots, so the plots are grouped by crop (founder C1 = B). */
 export const foldsManyPlots = (plotCount: number): boolean => plotCount >= MANY_PLOTS_FROM;
 
 /** "आज १०० पैकी ४३ सांगितले": how the day stands, in one line. A zero is a true count and is said ("आज १४ पैकी ० सांगितले"). */
