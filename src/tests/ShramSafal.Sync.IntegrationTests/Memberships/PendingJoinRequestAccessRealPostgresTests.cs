@@ -620,6 +620,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // policy, so nothing here reads farm_memberships). No farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched. Down()
         // drops the policy, the new table, the index and the nine columns: it destroys only data this migration created. Re-Up recreates them empty.
         "20261121032701_AddDfesQuestionContext",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 2) - Up() and Down() read in full: Up() creates ssf.schedule_tasks and ssf.schedule_challenges (FORCE RLS,
+        // their own tenant columns, a tenant trigger, SELECT + INSERT for the app role) and adds two nullable columns to ssf.schedule_template_stages. Its two new
+        // policies READ ssf.farms and ssf.farm_memberships, in the Active-only form (m.status = 3) from birth; it alters no existing policy, no farm_memberships or
+        // farm_join_requests object, no seat. Down() refuses while any row of the new format exists (none does in this proof) and otherwise drops exactly what Up()
+        // added. Safe mid-proof.
+        "20261123020241_AddScheduleTaskFormat",
     ];
 
     /// <summary>

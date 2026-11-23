@@ -1432,6 +1432,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // policies or its grants. Down() drops the policy, the new table, the index and the nine columns: it destroys only data this migration created
         // (the proof's data has none). Safe mid-proof.
         "20261121032701_AddDfesQuestionContext",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 2) - Up() and Down() read in full: Up() creates ssf.schedule_tasks and ssf.schedule_challenges only
+        // (FORCE RLS on their own tenant columns, a tenant trigger, SELECT + INSERT for the app role) and adds two nullable columns to ssf.schedule_template_stages.
+        // It never touches ssf.audit_events, its policies or its grants. Down() refuses while any row of the new format exists (none does in this proof) and otherwise
+        // drops exactly what Up() added. Safe mid-proof.
+        "20261123020241_AddScheduleTaskFormat",
     ];
 
     /// <summary>

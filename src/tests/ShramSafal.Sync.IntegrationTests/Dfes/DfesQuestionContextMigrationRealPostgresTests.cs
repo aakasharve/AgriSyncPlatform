@@ -30,6 +30,13 @@ public sealed class DfesQuestionContextMigrationRealPostgresTests(Xunit.Abstract
 {
     private const string ThisMigration = "20261121032701_AddDfesQuestionContext";
     private const string MigrationBefore = "20261120111737_AddPlotGroupName";
+
+    /// <summary>
+    /// The migrations after this one whose Down() was read in full and leaves everything asserted here alone.
+    /// 20261123020241_AddScheduleTaskFormat (plr-d10 schedule slice 2): two new tables and two nullable columns on schedule_template_stages; Down() refuses while any row
+    /// of them exists (none does in this proof) and otherwise drops exactly what Up() added. It touches no question table.
+    /// </summary>
+    private static readonly string[] ReviewedLaterMigrations = ["20261123020241_AddScheduleTaskFormat"];
     private const string AppRole = "agrisync_app";
 
     private static readonly string[] NewColumns =
@@ -86,8 +93,11 @@ public sealed class DfesQuestionContextMigrationRealPostgresTests(Xunit.Abstract
     public async Task Down_removes_only_what_Up_added_and_an_old_phone_row_survives_both_ways()
     {
         var applied = await AppliedShramSafalMigrationsAsync();
-        applied.Last().Should().Be(ThisMigration,
-            "Down to the migration before must revert this one only; a later migration would be reverted with it");
+        // Down to MigrationBefore reverts this migration AND every later one, so every later one must be a migration whose Down() is reviewed to leave what
+        // this proof asserts alone (it used to be the head of the chain: applied.Last() == ThisMigration).
+        applied.Should().Contain(ThisMigration);
+        applied.Where(m => string.CompareOrdinal(m, ThisMigration) > 0).Should().BeSubsetOf(ReviewedLaterMigrations,
+            "a later migration is reverted and re-applied with this one inside the proof: review its Down() and add it to ReviewedLaterMigrations");
 
         // ═════ Down(): the shape an old server and an old phone know. ═════
         await MigrateShramSafalToAsync(MigrationBefore);

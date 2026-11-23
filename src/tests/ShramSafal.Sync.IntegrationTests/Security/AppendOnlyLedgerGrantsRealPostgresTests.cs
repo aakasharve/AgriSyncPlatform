@@ -318,6 +318,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    guard (it is on AppendOnlyLedgers above); it grants or revokes nothing on any other ledger. Down() drops the policy, the new table, the index
         //    and the nine columns - only what Up() added (DATA-DESTROYING for those columns and checks, by design). Safe to revert and re-apply mid-proof.
         "20261121032701_AddDfesQuestionContext",
+        // ── Reviewed 2026-11-23 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, slice 2); Up() and Down() read in full: Up() creates ssf.schedule_tasks and
+        //    ssf.schedule_challenges (FORCE RLS, their own tenant columns, a tenant trigger, SELECT + INSERT only for the app role) and adds two NULLABLE columns to
+        //    ssf.schedule_template_stages. It GRANTs and REVOKEs on those two new tables only; no ledger this suite asserts about is touched. Down() REFUSES while
+        //    any task, challenge or stage sign exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies mid-proof.
+        "20261123020241_AddScheduleTaskFormat",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");
