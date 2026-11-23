@@ -542,6 +542,20 @@
 //     variety / soil_type / region_code / climate hold list codes (what the schedule was made for), no person. No action, no ScrubbedColumnsFor entry.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.schedule_tasks and ssf.schedule_challenges (plr-d10 schedule mechanism, slice 2; approved spec plr-d10-schedule-approved-spec-2026-11-23) — KEEP.
+//     One schedule_tasks row is one task of one VERSION of a schedule in the task format (what to do, when, how, what to look at, the one question, the
+//     sources and the basis); one schedule_challenges row is one challenge of a stage. Both carry owner_user_id, a PERSON's opaque id (the version's owner,
+//     else its maker, copied from the version when the row is written) and tenant_scope. KEEP, exactly as ssf.schedule_templates.owner_user_id above and
+//     ssf.farms.owner_user_id: the person link is an opaque id with no name beside it, the work is the schedule. Doctrine P6: anonymise the person, never the
+//     work; a creator's erased account must not take a schedule away from the farmers who took it. DISCLOSED: the free words of a task (its name, why, steps,
+//     warnings, what to look at, the question) are a grower's or ShramSafal's words about a crop practice, kept like observation_events text
+//     (D-FREETEXT-PRESERVE-2026-06-29); the format has no field for a person's name. Both tables are APPEND-ONLY BY PRIVILEGE (agrisync_app holds no UPDATE or
+//     DELETE), so no scrub is wired: a row leaves only with its version (the foreign key cascades). Not exported: ExportWorker does not export any schedule
+//     today (versions, stages and activities are not either); the export of a person's own schedule belongs with slice 3's own store.
+//     Proven through the WHOLE worker (a new step once made every erasure end Failed): ErasureWorkerScheduleTaskRealPostgresTests runs the real worker with rows in
+//     both tables and proves the request Completes and the rows are untouched.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
 //     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
 //     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with

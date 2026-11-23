@@ -26,6 +26,10 @@ internal sealed class ScheduleTemplateStageConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.StartDay).HasColumnName("start_day").IsRequired();
         builder.Property(x => x.EndDay).HasColumnName("end_day").IsRequired();
 
+        // spec: plr-d10 schedule slice 2 - the sign a stage starts or ends on, in words (both optional; the day columns above are untouched).
+        builder.Property(x => x.StartSign).HasColumnName("start_sign").HasMaxLength(ScheduleTemplate.MaxStageSignLength);
+        builder.Property(x => x.EndSign).HasColumnName("end_sign").HasMaxLength(ScheduleTemplate.MaxStageSignLength);
+
         builder.HasIndex(x => x.ScheduleTemplateId).HasDatabaseName("ix_schedule_template_stages_template");
         builder.Ignore(x => x.DomainEvents);
     }

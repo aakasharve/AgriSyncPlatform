@@ -78,6 +78,19 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
         builder.Ignore(x => x.Stages);
         builder.Ignore(x => x.HasStoredDays);
 
+        // spec: plr-d10 schedule slice 2 - the task format of a version (ssf.schedule_tasks / ssf.schedule_challenges), beside the activities. Written once with
+        // the version and never read by any existing loader unless it asks (no Include today), so a row reads exactly as before.
+        builder.HasMany(x => x.Tasks)
+            .WithOne()
+            .HasForeignKey(x => x.ScheduleTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.Tasks).HasField("_tasks").UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(x => x.Challenges)
+            .WithOne()
+            .HasForeignKey(x => x.ScheduleTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.Challenges).HasField("_challenges").UsePropertyAccessMode(PropertyAccessMode.Field);
+
         builder.Property(x => x.OwnerType)
             .HasColumnName("owner_type")
             .HasMaxLength(16)

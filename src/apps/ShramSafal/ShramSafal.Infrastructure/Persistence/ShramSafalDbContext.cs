@@ -141,6 +141,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // decision (APPEND-ONLY by privilege, migration AddScheduleCheckAndStoredDays), and a row's stored stages.
     public DbSet<ScheduleCheck> ScheduleChecks => Set<ScheduleCheck>();
     public DbSet<ScheduleTemplateStage> ScheduleTemplateStages => Set<ScheduleTemplateStage>();
+
+    // spec: plr-d10 schedule slice 2 - the task format of a version (append-only by privilege, row security on the row's own tenant columns).
+    public DbSet<ScheduleTask> ScheduleTasks => Set<ScheduleTask>();
+    public DbSet<ScheduleChallenge> ScheduleChallenges => Set<ScheduleChallenge>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();
     public DbSet<CropScheduleTemplate> CropScheduleTemplates => Set<CropScheduleTemplate>();

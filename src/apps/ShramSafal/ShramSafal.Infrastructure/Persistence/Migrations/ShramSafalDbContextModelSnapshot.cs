@@ -5860,6 +5860,78 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChallengeKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("challenge_key");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<short>("StageIndex")
+                        .HasColumnType("smallint")
+                        .HasColumnName("stage_index");
+
+                    b.Property<short>("TenantScope")
+                        .HasColumnType("smallint")
+                        .HasColumnName("tenant_scope");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_schedule_challenges_owner_user_id")
+                        .HasFilter("owner_user_id IS NOT NULL");
+
+                    b.HasIndex("ScheduleTemplateId", "ChallengeKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_schedule_challenges_template_key");
+
+                    b.HasIndex("ScheduleTemplateId", "StageIndex", "Order")
+                        .HasDatabaseName("ix_schedule_challenges_template_stage");
+
+                    b.ToTable("schedule_challenges", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_challenges_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_schedule_challenges_scope", "tenant_scope IN (0, 1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_schedule_challenges_stage_order", "stage_index BETWEEN 0 AND 39 AND order_index BETWEEN 0 AND 9999");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleCheck", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5959,6 +6031,109 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_schedule_step_moves_step_moved");
 
                     b.ToTable("schedule_step_moves", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AfterTaskKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("after_task_key");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int?>("FromDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_day");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<short>("StageIndex")
+                        .HasColumnType("smallint")
+                        .HasColumnName("stage_index");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.Property<short>("TenantScope")
+                        .HasColumnType("smallint")
+                        .HasColumnName("tenant_scope");
+
+                    b.Property<string>("TimerKind")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("timer_kind");
+
+                    b.Property<int?>("ToDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("to_day");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_schedule_tasks_owner_user_id")
+                        .HasFilter("owner_user_id IS NOT NULL");
+
+                    b.HasIndex("ScheduleTemplateId", "TaskKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_schedule_tasks_template_key");
+
+                    b.HasIndex("ScheduleTemplateId", "StageIndex", "Order")
+                        .HasDatabaseName("ix_schedule_tasks_template_stage");
+
+                    b.ToTable("schedule_tasks", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_tasks_days", "(from_day IS NULL OR from_day BETWEEN -3650 AND 3650) AND (to_day IS NULL OR to_day BETWEEN -3650 AND 3650)");
+
+                            t.HasCheckConstraint("ck_schedule_tasks_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_schedule_tasks_kind", "kind IN ('irrigation', 'nutrition', 'spray', 'work', 'observe')");
+
+                            t.HasCheckConstraint("ck_schedule_tasks_scope", "tenant_scope IN (0, 1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_schedule_tasks_stage_order", "stage_index BETWEEN 0 AND 39 AND order_index BETWEEN 0 AND 9999");
+
+                            t.HasCheckConstraint("ck_schedule_tasks_timer", "(timer_kind = 'day' AND from_day IS NOT NULL AND after_task_key IS NULL AND (to_day IS NULL OR to_day >= from_day)) OR (timer_kind = 'after' AND after_task_key IS NOT NULL AND from_day IS NULL AND to_day IS NULL) OR (timer_kind IN ('none', 'sign') AND from_day IS NULL AND to_day IS NULL AND after_task_key IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplate", b =>
@@ -6068,6 +6243,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("end_day");
 
+                    b.Property<string>("EndSign")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("end_sign");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -6085,6 +6265,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<int>("StartDay")
                         .HasColumnType("integer")
                         .HasColumnName("start_day");
+
+                    b.Property<string>("StartSign")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("start_sign");
 
                     b.HasKey("Id");
 
@@ -8212,6 +8397,24 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleChallenge", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
+                        .WithMany("Challenges")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTask", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
+                        .WithMany("Tasks")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplateStage", b =>
                 {
                     b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
@@ -8370,7 +8573,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Activities");
 
+                    b.Navigation("Challenges");
+
                     b.Navigation("StageRows");
+
+                    b.Navigation("Tasks");
                 });
 #pragma warning restore 612, 618
         }
