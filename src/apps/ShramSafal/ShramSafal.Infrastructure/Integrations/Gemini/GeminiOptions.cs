@@ -3,7 +3,7 @@ namespace ShramSafal.Infrastructure.Integrations.Gemini;
 public sealed class GeminiOptions
 {
     public const string SectionName = "Gemini";
-    public const string DefaultStructurerModelId = "gemini-3.1-flash-lite-preview";
+    public const string DefaultStructurerModelId = "gemini-3.1-flash-lite";
     public const string DefaultOcrModelId = "gemini-2.5-flash";
     public const string DefaultVoiceFallbackModelId = "gemini-2.5-flash";
     public const string DefaultModelId = DefaultVoiceFallbackModelId;

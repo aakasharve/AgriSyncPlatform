@@ -53,6 +53,39 @@ public sealed class SarvamAdapterTests
     }
 
     [Fact]
+    public async Task SttClient_SendsSaarasV4_WhenNothingOverridesTheDefault()
+    {
+        // 23 Nov 2026 (founder's order): speech-to-text moves from saaras:v3 to saaras:v4. A request built from
+        // untouched options must name v4 on the wire, so a deployment that sets no Sarvam model gets v4.
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            capturedBody = request.Content is null
+                ? null
+                : request.Content.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"transcript\":\"ok\",\"language_code\":\"mr-IN\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var defaults = new SarvamOptions { ApiSubscriptionKey = "k-test", SttEndpoint = "https://unit.test/stt" };
+        var stt = new SarvamSttClient(
+            Options.Create(defaults),
+            new StaticHttpClientFactory(new HttpClient(handler)),
+            NullLogger<SarvamSttClient>.Instance);
+
+        await using var stream = new MemoryStream([0x10, 0x20, 0x30, 0x40]);
+        var result = await stt.TranscribeAsync(stream, "audio/webm", "mr-IN", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("saaras:v4", defaults.SttModel);
+        Assert.Equal("saaras:v4", defaults.StreamingSttModel);
+        Assert.Contains("saaras:v4", capturedBody ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("saaras:v3", capturedBody ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ChatClient_FormatsJsonBodyCorrectly()
     {
         string? capturedBody = null;
@@ -183,7 +216,7 @@ public sealed class SarvamAdapterTests
     {
         var options = CreateOptions();
         options.StreamingSttEndpoint = "wss://unit.test/speech-to-text/ws";
-        options.StreamingSttModel = "saaras:v3";
+        options.StreamingSttModel = "saaras:v4";
         options.StreamingSttMode = "codemix";
         options.StreamingSttLanguage = "mr-IN";
         options.StreamingSampleRate = 16000;
@@ -197,7 +230,7 @@ public sealed class SarvamAdapterTests
 
         Assert.Equal("wss://unit.test/speech-to-text/ws", uri.GetLeftPart(UriPartial.Path));
         Assert.Contains("language-code=mr-IN", uri.Query, StringComparison.Ordinal);
-        Assert.Contains("model=saaras%3Av3", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("model=saaras%3Av4", uri.Query, StringComparison.Ordinal);
         Assert.Contains("mode=codemix", uri.Query, StringComparison.Ordinal);
         Assert.Contains("sample_rate=16000", uri.Query, StringComparison.Ordinal);
         Assert.Contains("input_audio_codec=wav", uri.Query, StringComparison.Ordinal);

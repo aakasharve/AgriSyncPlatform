@@ -6,11 +6,11 @@ public sealed class SarvamOptions
 
     public string ApiSubscriptionKey { get; set; } = string.Empty;
     public string SttEndpoint { get; set; } = "https://api.sarvam.ai/speech-to-text";
-    public string SttModel { get; set; } = "saaras:v3";
+    public string SttModel { get; set; } = "saaras:v4";
     public string SttMode { get; set; } = "codemix";
     public string SttLanguage { get; set; } = "mr-IN";
     public string StreamingSttEndpoint { get; set; } = "wss://api.sarvam.ai/speech-to-text/ws";
-    public string StreamingSttModel { get; set; } = "saaras:v3";
+    public string StreamingSttModel { get; set; } = "saaras:v4";
     public string StreamingSttMode { get; set; } = "codemix";
     public string StreamingSttLanguage { get; set; } = "mr-IN";
     public int StreamingSampleRate { get; set; } = 16000;

@@ -95,7 +95,7 @@ internal sealed class SarvamVerbatimSttClient
             : audioContentHash.Trim().ToLowerInvariant();
 
         var resolvedModel = string.IsNullOrWhiteSpace(_options.SttModel)
-            ? "saaras:v3"
+            ? "saaras:v4"
             : _options.SttModel.Trim();
         var resolvedLanguage = string.IsNullOrWhiteSpace(languageHint)
             ? _options.SttLanguage

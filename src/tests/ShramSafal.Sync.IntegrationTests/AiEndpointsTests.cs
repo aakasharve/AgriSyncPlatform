@@ -559,8 +559,8 @@ public sealed class AiEndpointsTests
         var configId = configDoc.RootElement.GetProperty("id").GetGuid();
         Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("defaultProvider").GetString());
         Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("resolvedVoiceProvider").GetString());
-        Assert.Equal("gemini-3.1-flash-lite-preview", configDoc.RootElement.GetProperty("geminiModelId").GetString());
-        Assert.Equal("gemini-3.1-flash-lite-preview", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
+        Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiModelId").GetString());
+        Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
         Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiOcrModelId").GetString());
         Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiVoiceFallbackModelId").GetString());
 
