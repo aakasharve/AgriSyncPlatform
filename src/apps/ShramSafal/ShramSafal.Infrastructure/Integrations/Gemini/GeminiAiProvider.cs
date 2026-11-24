@@ -30,14 +30,19 @@ internal sealed class GeminiAiProvider : IAiProvider
     private readonly AiResponseNormalizer _responseNormalizer;
     private readonly ILogger<GeminiAiProvider> _logger;
     private readonly IAdminDbContextFactory<ShramSafalDbContext> _adminDbFactory;
+    private readonly int _structuringMaxParallel;
 
     public GeminiAiProvider(
         IOptions<GeminiOptions> optionsAccessor,
         IHttpClientFactory httpClientFactory,
         AiResponseNormalizer responseNormalizer,
         ILogger<GeminiAiProvider> logger,
-        IAdminDbContextFactory<ShramSafalDbContext> adminDbFactory)
+        IAdminDbContextFactory<ShramSafalDbContext> adminDbFactory,
+        // spec: voice-instant-phase-a-2026-11-23 (Task 5) — optional: absent means the old 2 parts at once.
+        IOptions<StructuringOptions>? structuringOptions = null)
     {
+        _structuringMaxParallel = ChunkedStructuring.ResolveMaxParallel(
+            structuringOptions?.Value.MaxParallel ?? ChunkedStructuring.DefaultMaxParallel);
         _options = (optionsAccessor ?? throw new ArgumentNullException(nameof(optionsAccessor))).Value;
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _responseNormalizer = responseNormalizer ?? throw new ArgumentNullException(nameof(responseNormalizer));
@@ -189,7 +194,8 @@ internal sealed class GeminiAiProvider : IAiProvider
                     },
                     logger,
                     ct,
-                    allowSplit: !isCorrection);
+                    allowSplit: !isCorrection,
+                    maxParallel: _structuringMaxParallel);
                 if (!structured.IsSuccess)
                 {
                     return new VoiceParseCanonicalResult { Success = false, Error = structured.Error };

@@ -29,8 +29,21 @@ namespace ShramSafal.Infrastructure.AI;
 /// </summary>
 internal static class ChunkedStructuring
 {
-    /// <summary>Segments structured at the same time.</summary>
-    public const int MaxParallel = 2;
+    /// <summary>
+    /// Segments structured at the same time when nothing says otherwise (<c>Ai:Structuring:MaxParallel</c> absent):
+    /// the number this class always used before it became an option.
+    /// </summary>
+    public const int DefaultMaxParallel = 2;
+
+    /// <summary>
+    /// The most segments ever structured at once, whatever the setting says: Sarvam's pay-as-you-go limit is 60 requests
+    /// a minute, shared with speech-to-text pieces, and a typo such as 40 must not turn one long note into a burst.
+    /// </summary>
+    public const int MaxParallelCeiling = 8;
+
+    /// <summary>The setting as it is used: less than 1 (unset or nonsense) reads as the default; more than the ceiling is capped.</summary>
+    public static int ResolveMaxParallel(int configured) =>
+        configured < 1 ? DefaultMaxParallel : Math.Min(configured, MaxParallelCeiling);
 
     private static readonly char[] SentenceEnds = ['।', '॥', '.', '?', '!', '\n'];
     private static readonly char[] ClauseEnds = [',', ';', ':'];
@@ -169,13 +182,18 @@ internal static class ChunkedStructuring
     public const int MinBisectTokens = 60;
 
     /// <param name="allowSplit">False for a correction: its block asks for whole buckets, which pieces would repeat.</param>
+    /// <param name="maxParallel">
+    /// Segments structured at the same time (<c>Ai:Structuring:MaxParallel</c>); read through
+    /// <see cref="ResolveMaxParallel"/>, so an unset or nonsense value is the old default of 2.
+    /// </param>
     public static async Task<StructuredAnswer> StructureAsync(
         string transcript,
         int segmentTokens,
         Func<string, CancellationToken, Task<SegmentAnswer>> structureSegment,
         ILogger logger,
         CancellationToken ct,
-        bool allowSplit = true)
+        bool allowSplit = true,
+        int maxParallel = DefaultMaxParallel)
     {
         var segments = allowSplit ? Segment(transcript, segmentTokens) : [transcript];
         SegmentAnswer? wholeCutOff = null;
@@ -207,7 +225,7 @@ internal static class ChunkedStructuring
         var answers = new List<JsonObject>?[segments.Count];
         string? failure = null;
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        using var gate = new SemaphoreSlim(MaxParallel);
+        using var gate = new SemaphoreSlim(ResolveMaxParallel(maxParallel));
 
         void Fail(string reason)
         {

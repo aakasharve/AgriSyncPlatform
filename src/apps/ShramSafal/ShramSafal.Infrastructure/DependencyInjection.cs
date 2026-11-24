@@ -624,6 +624,11 @@ public static class DependencyInjection
         // when Enabled is false — zero load.
         services.Configure<TranscriptBackfillOptions>(
             configuration.GetSection(TranscriptBackfillOptions.SectionName));
+
+        // spec: voice-instant-phase-a-2026-11-23 (Task 5) — how many parts of a long transcript are sorted at once
+        // (Ai:Structuring:MaxParallel). Absent = 2, the number that was hard-wired before it became an option.
+        services.Configure<StructuringOptions>(
+            configuration.GetSection(StructuringOptions.SectionName));
         services.AddHostedService<TranscriptBackfillWorker>();
 
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — rolling
