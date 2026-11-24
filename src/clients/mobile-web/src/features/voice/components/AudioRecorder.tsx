@@ -16,6 +16,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AudioData } from '../../../types';
 import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
+import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
@@ -183,7 +184,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — batch path entry mark.
-      try { performance.mark('voice:stop'); } catch { /* observability-only */ }
+      markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (timerRef.current) {

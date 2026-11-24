@@ -32,6 +32,7 @@ import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/Streaming
 import { StreamingHasher } from '../../../infrastructure/voice/StreamingHasher';
 import { VoicePreprocessor } from '../../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency';
+import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
 
 interface AudioRecorderStreamingProps {
@@ -175,7 +176,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     if (!recorderRef.current || !isRecording) return;
 
     // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — streaming path entry mark.
-    try { performance.mark('voice:stop'); } catch { /* observability-only */ }
+    markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
 
     setIsRecording(false);
     setLiveStream(null);

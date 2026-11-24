@@ -10,6 +10,7 @@
  * Snapshots are replaced, never mutated, so `useSyncExternalStore` sees each change.
  */
 import type { AgriLogResponse } from '../../domain/types/log.types';
+import { markVoice } from './voiceTiming';
 
 export type VoicePlaceResult = 'same' | 'otherPlot' | 'unclear';
 
@@ -51,6 +52,7 @@ function next(snapshot: VoiceJourneySnapshot): void {
 export function noteVoiceJourney(event: VoiceJourneyEvent, now: number = Date.now()): void {
     try {
         if (event.kind === 'kept') {
+            if (event.input === 'audio') markVoice('ack'); // the recording is written on this phone (voice_timing)
             next({ startedAt: now, input: event.input, durationMs: event.durationMs, keptAt: now });
             return;
         }

@@ -15,6 +15,7 @@ import type {
     UpdateAiProviderConfigRequest,
 } from '../dtos';
 import type { HttpTransport } from '../transport';
+import { endVoiceTiming, finishVoiceTiming, markVoice, noteUploadProgress } from '../../voice/voiceTiming';
 
 export async function parseVoice(
     t: HttpTransport,
@@ -104,8 +105,16 @@ export async function parseVoiceLog(
     // AiTranscribeStreamEndpoints.cs.
     if (options?.recordedAtUtc) formData.append('recorded_at', options.recordedAtUtc);
 
-    const response = await t.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', formData);
-    return response.data;
+    // spec: voice-instant-phase-a-2026-11-23 (Task 0) — measure this request (stop → upload → server → result). Reads the
+    // server's `Server-Timing` header when it sends one; never changes what is sent or what comes back.
+    markVoice('upload-start');
+    try {
+        const response = await t.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', formData, { onUploadProgress: noteUploadProgress });
+        finishVoiceTiming(response.headers, { recordingMs: options?.inputRawDurationMs });
+        return response.data;
+    } finally {
+        endVoiceTiming();
+    }
 }
 
 export async function parseTextLog(
