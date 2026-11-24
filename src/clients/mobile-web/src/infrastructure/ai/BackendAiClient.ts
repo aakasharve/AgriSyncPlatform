@@ -9,6 +9,7 @@ import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/F
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
 import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceDay, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
+import { ONLINE_KEPT_MESSAGE, isRetryableParseFailure } from '../voice/keptForLater';
 import { noteVoiceNotesChanged } from '../sync/waitingVoiceNotes';
 import { noteVoiceJourney } from '../voice/voiceJourneySignal';
 import { correctionParseContext } from './correctionParseContext';
@@ -95,9 +96,29 @@ export class BackendAiClient implements VoiceParserPort {
                 };
             }
 
-            const apiResult = input.type === 'audio'
-                ? await this.submitVoiceAudioInput(input, farmId, userId, context, scope)
-                : await this.submitVoiceTextInput(input, farmId, userId, context, scope);
+            let apiResult: Awaited<ReturnType<typeof agriSyncClient.parseVoiceLog>>;
+            try {
+                apiResult = input.type === 'audio'
+                    ? await this.submitVoiceAudioInput(input, farmId, userId, context, scope)
+                    : await this.submitVoiceTextInput(input, farmId, userId, context, scope);
+            } catch (error) {
+                // spec voice-instant-phase-a-2026-11-23 (P4): a server/line failure keeps his words exactly as the
+                // offline path does - same two gates, same day rule (a correction of a saved entry is never kept as
+                // a new log; planVoice closes the gate for the plan mic).
+                if (this.wouldKeepAfterFailure(error)) {
+                    try {
+                        const chosen = offlineVoiceDay();
+                        if (chosen.ok) {
+                            await this.enqueueOfflineVoiceJob(input, farmId, userId, context, scope, chosen.day);
+                            return { success: false, error: ONLINE_KEPT_MESSAGE };
+                        }
+                    } catch {
+                        // Could not keep it either: the original error is shown as today; the clip must not stay 'parsing'.
+                        if (input.type === 'audio') await this.markClipFailed(input, farmId, userId, scope, error);
+                    }
+                }
+                throw error;
+            }
 
             const confidenceScore = Number(apiResult.confidence || 0);
             const fieldConfidences = annotateFieldConfidencesWithBuckets(apiResult.fieldConfidences ?? {});
@@ -399,6 +420,8 @@ export class BackendAiClient implements VoiceParserPort {
             await this.persistProcessingVoiceClip(material, farmId, scope, 'parsed');
             return result;
         } catch (error) {
+            // The note is about to be kept as a pending job (`parseInput`): no 'failed' window without a job.
+            if (this.wouldKeepAfterFailure(error)) throw error;
             await this.persistProcessingVoiceClip(
                 material,
                 farmId,
@@ -409,6 +432,29 @@ export class BackendAiClient implements VoiceParserPort {
             );
             throw error;
         }
+    }
+
+    /** Retryable server/line failure AND both offline-keep gates open (same rule as the offline path). */
+    private wouldKeepAfterFailure(error: unknown): boolean {
+        try {
+            return isRetryableParseFailure(error) && offlineVoiceQueueAllowed() && offlineVoiceDay().ok;
+        } catch {
+            return false;
+        }
+    }
+
+    private async markClipFailed(
+        input: Extract<VoiceInput, { type: 'audio' }>,
+        farmId: string,
+        userId: string,
+        scope: LogScope,
+        error: unknown,
+    ): Promise<void> {
+        try {
+            const material = await this.resolveVoiceUploadMaterial(input, farmId, userId);
+            await this.persistProcessingVoiceClip(material, farmId, scope, 'failed', undefined,
+                error instanceof Error ? error.message : 'Voice parse failed.');
+        } catch { /* nothing more can be written */ }
     }
 
     private async submitVoiceTextInput(
@@ -471,9 +517,11 @@ export class BackendAiClient implements VoiceParserPort {
                 contentHash: payloadHash,
             });
 
-        const inferredDurationMs = await estimateAudioDurationMs(audioBlob);
-        const inputSpeechDurationMs = input.inputSpeechDurationMs ?? inferredDurationMs;
-        const inputRawDurationMs = input.inputRawDurationMs ?? inputSpeechDurationMs ?? inferredDurationMs;
+        // Decode only when the recorder gave NO duration (every recording now arrives with both).
+        const durationKnown = input.inputRawDurationMs !== undefined || input.inputSpeechDurationMs !== undefined;
+        const inferredDurationMs = durationKnown ? undefined : await estimateAudioDurationMs(audioBlob);
+        const inputSpeechDurationMs = input.inputSpeechDurationMs ?? input.inputRawDurationMs ?? inferredDurationMs;
+        const inputRawDurationMs = input.inputRawDurationMs ?? inputSpeechDurationMs;
         const segmentMetadataJson = input.segmentMetadataJson
             ?? buildVoiceSessionMetadataJson({
                 sessionId,
