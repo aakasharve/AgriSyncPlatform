@@ -59,12 +59,16 @@ export const AUTO_STOP_SEC = 600;
 export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 30;
 
 /**
- * Lane V-1 — a recording LONGER than this is uploaded as the recorder encoded it while he spoke (`encodedLive`), not
- * re-encoded after stop. The re-encode plays the sound through the browser in real time (`SegmentCompressor`), so a
- * 10-minute recording would wait about 10 minutes after the stop — twice over, once more in the upload preparation —
- * and a phone that sleeps meanwhile could cut it short. Up to this length nothing changes from what is in use today.
+ * A recording of AT LEAST this many seconds is uploaded as the recorder encoded it while he spoke (`encodedLive`), not
+ * re-encoded after the stop. Lane V-1 set it to 60: the re-encode plays the sound through the browser in real time
+ * (`SegmentCompressor`), so a 10-minute recording waited about 10 minutes after the stop, twice over (once more in the
+ * upload preparation), and a phone that slept meanwhile could cut it short. Phase A (voice-instant-phase-a-2026-11-23,
+ * founder 2026-11-24: "the user should not wait for processing") sets it to 0, because a 30-second note waited 30
+ * seconds the same way: every recording now goes the live way. Consequence, accepted (decision A-1): a short note is no
+ * longer silence-trimmed on the phone (about 90 KB for 30 s at 24 kbps). The post-stop encode stays in place for the
+ * recorder that has no live encoder to use.
  */
-export const LIVE_ENCODE_AFTER_SEC = 60;
+export const LIVE_ENCODE_AFTER_SEC = 0;
 
 /**
  * Lane RF2 fix pass (review B004) — the two offline outcomes the parse reports as stable codes, in his language (the

@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane V-1, register F18) — the upload material of a recording
- * the recorder encoded WHILE he spoke (`AudioData.encodedLive`, a recording longer than `LIVE_ENCODE_AFTER_SEC`).
+ * the recorder encoded WHILE he spoke (`AudioData.encodedLive`: every recording since voice-instant-phase-a Task 1, or
+ * his own sound as a complete WAV when the live encoding failed).
  *
  * The usual preparation decodes the recording, trims its silences and re-encodes it — and that re-encode plays the
- * sound through the browser in real time (a 10-minute wait for a 10-minute recording). An already-encoded long
- * recording skips it: the bytes go exactly as recorded (the server cuts them into pieces), the content hash is taken
+ * sound through the browser in real time (a 10-minute wait for a 10-minute recording). An already-encoded recording
+ * skips it: the bytes go exactly as recorded (the server cuts them into pieces), the content hash is taken
  * over those bytes, and both durations are the recorded length (nothing was trimmed, and the metadata says so).
  */
 import type { AudioData } from '../../types';

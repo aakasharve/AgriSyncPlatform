@@ -8,8 +8,8 @@
  * The streaming recorder keeps raw PCM and encodes it to Opus only after the stop, by playing it through the browser
  * (`SegmentCompressor`) — in real time. For a 10-minute recording that is a 10-minute wait after the stop (and the
  * upload preparation re-encodes once more), and a phone that sleeps meanwhile can end the encode early. So the
- * recorder also runs this encoder on the same microphone stream from the start; a recording longer than
- * `LIVE_ENCODE_AFTER_SEC` is uploaded from it, ready the moment he stops. Shorter recordings keep today's path.
+ * recorder also runs this encoder on the same microphone stream from the start; a recording of `LIVE_ENCODE_AFTER_SEC`
+ * or more (today: every recording, voice-instant-phase-a Task 1) is uploaded from it, ready the moment he stops.
  *
  * It never throws: a browser that cannot encode here (no MediaRecorder, no WebM/Opus) gets `null` and the recorder's
  * own path, as before.

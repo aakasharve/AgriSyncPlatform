@@ -118,14 +118,14 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
             try { performance.measure('voice:batch-pipeline', 'voice:processing-start', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
             try { performance.measure('voice:batch-total', 'voice:stop', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
 
-            // Lane V-1 — this recorder's sound is already encoded while he speaks: a long recording is sent as
-            // it is (never re-encoded in real time after the stop).
+            // Lane V-1 — this recorder's sound is already encoded while he speaks: a recording of LIVE_ENCODE_AFTER_SEC or more
+            // (today: every one) is sent as it is (never re-encoded in real time after the stop).
             const spokenMs = Date.now() - startedAtRef.current;
             onAudioCaptured({
               blob,
               base64,
               mimeType: 'audio/webm',
-              ...(spokenMs > LIVE_ENCODE_AFTER_SEC * 1000 && { encodedLive: true, durationMs: spokenMs }),
+              ...(spokenMs >= LIVE_ENCODE_AFTER_SEC * 1000 && { encodedLive: true, durationMs: spokenMs }),
             });
           };
         }

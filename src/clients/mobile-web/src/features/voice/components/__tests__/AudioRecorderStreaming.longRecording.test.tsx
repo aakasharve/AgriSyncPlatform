@@ -3,15 +3,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Lane V-1 (register F18) — a recording longer than one minute is sent as it was encoded WHILE he spoke.
+ * Lane V-1 (register F18) + voice-instant-phase-a-2026-11-23 (Task 1) — a recording of ANY length is sent as it was
+ * encoded WHILE he spoke.
  *
  * The streaming recorder's own encode plays the sound through the browser in real time after the stop, so a
- * 10-minute recording would wait about 10 minutes before it could even be sent. The recorder now also encodes the
- * same microphone stream live; a recording over `LIVE_ENCODE_AFTER_SEC` is emitted from that encoder at once
- * (`encodedLive`), without the post-stop encode. A shorter one takes today's path, untouched.
- * Fix pass (B002, B003): if the live encoder is unavailable, failed, or does not answer its stop in time, a long
- * recording is sent as the recorder's own sound — a complete mu-law WAV written in one pass — NEVER through the
- * real-time re-encode whose clock could cut it short. The PCM recorder is stopped whatever the live encoder did.
+ * 10-minute recording would wait about 10 minutes before it could even be sent, and a 30-second one about 30 seconds
+ * (twice, with the upload preparation). The recorder also encodes the same microphone stream live; EVERY recording is
+ * emitted from that encoder at once (`encodedLive`), without the post-stop encode.
+ * Fix pass (B002, B003): if the live encoder is unavailable, failed, returned nothing, or does not answer its stop in
+ * time, the recording is sent as the recorder's own sound — a complete mu-law WAV written in one pass — NEVER through
+ * the real-time re-encode whose clock could cut it short, and never as a partial file. The PCM recorder is stopped
+ * whatever the live encoder did.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -94,8 +96,10 @@ const stop = async () => {
     await act(async () => { await vi.runAllTimersAsync(); });
 };
 const captured = (fn: ReturnType<typeof vi.fn>): AudioData => fn.mock.calls[0][0] as AudioData;
+const bytesOf = async (blob: Blob): Promise<number[]> => Array.from(new Uint8Array(await blob.arrayBuffer()));
+const bytesOfBase64 = async (base64: string): Promise<number[]> => Array.from(Uint8Array.from(atob(base64), c => c.charCodeAt(0)));
 
-describe('a long recording is sent as it was encoded while he spoke', () => {
+describe('a recording of any length is sent as it was encoded while he spoke', () => {
     it('over one minute: the live encoding, at once — no re-encode after the stop', async () => {
         const onAudioCaptured = vi.fn();
         render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
@@ -126,17 +130,59 @@ describe('a long recording is sent as it was encoded while he spoke', () => {
         expect(captured(onAudioCaptured).encodedLive).toBe(true);
     });
 
-    it('one minute or less: today\'s path, unchanged', async () => {
+    it('a 20-second recording is sent from the live encoding too: no re-encode after the stop', async () => {
         const onAudioCaptured = vi.fn();
         render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
         await startSpeaking();
         await wait(20_000);
         await stop();
 
-        expect(h.processStreamingResult).toHaveBeenCalledTimes(1);
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        expect(onAudioCaptured).toHaveBeenCalledTimes(1);
         const audio = captured(onAudioCaptured);
-        expect(audio.encodedLive).toBeUndefined();
-        expect(await audio.blob.text()).toBe('re-encoded');
+        expect(audio.encodedLive).toBe(true);
+        expect(await audio.blob.text()).toBe('live-opus');
+        expect(audio.mimeType).toBe('audio/webm');
+        expect(await bytesOfBase64(audio.base64)).toEqual(await bytesOf(audio.blob)); // what is sent IS the blob
+    });
+
+    it('a recording stopped the moment it began is live-encoded too (no length is left on the old path)', async () => {
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
+        await startSpeaking();
+        await stop();
+
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        expect(captured(onAudioCaptured).encodedLive).toBe(true);
+    });
+
+    it('a 20-second recording whose live encoder returned nothing goes as his own sound: a complete WAV, never partial', async () => {
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
+        await startSpeaking();
+        (h.recorders[0] as unknown as { failNext: boolean }).failNext = true;
+        await wait(20_000);
+        await stop();
+
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        const audio = captured(onAudioCaptured);
+        expect(audio.encodedLive).toBe(true);
+        expect(audio.mimeType).toBe('audio/wav');
+        // Every one of the recorder's 16000 samples is in it (44-byte header + one byte a sample).
+        expect(audio.blob.size).toBe(44 + 16000);
+        expect(await bytesOfBase64(audio.base64)).toEqual(await bytesOf(audio.blob));
+    });
+
+    it('a 20-second recording on a phone that cannot encode live (no MediaRecorder) goes as the same complete WAV', async () => {
+        vi.stubGlobal('MediaRecorder', undefined);
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
+        await startSpeaking();
+        await wait(20_000);
+        await stop();
+
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        expect(captured(onAudioCaptured)).toMatchObject({ encodedLive: true, mimeType: 'audio/wav' });
     });
 
     it('a long recording whose live encoder failed goes as his own sound, complete — never the real-time re-encode (B002)', async () => {
