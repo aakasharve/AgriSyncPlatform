@@ -101,6 +101,19 @@ public sealed class OwnScheduleItemOrigin : Entity<Guid>
     /// <summary>Whether <paramref name="origin"/> is the origin text of a taken work.</summary>
     public static bool IsTakenText(string? origin) => origin is not null && origin.StartsWith(TextPrefix, StringComparison.Ordinal);
 
+    /// <summary>
+    /// The origin of the COPY of a work carried into next season (slice 11): exactly the previous work's CURRENT origin (the same schedule owner, schedule, version, task, dose and the
+    /// take that made it), sequence 1 of the new work. A withdrawn source stays withdrawn: nothing is re-read from the schedule. Origin never changes.
+    /// </summary>
+    public static OwnScheduleItemOrigin CarriedFrom(OwnScheduleItem item, OwnScheduleItemOrigin previous)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(previous);
+        return new OwnScheduleItemOrigin(
+            item, previous.SourceVersionId, previous.SourceChainId, previous.SourceName, previous.SourceVersionNumber, previous.SourceOwnerUserId,
+            previous.SourceTaskKey, previous.ChosenDose, previous.TakenByUserId, previous.TakenOn, previous.TakenAtUtc, 1);
+    }
+
     /// <summary>The origin of the own work <paramref name="item"/>, taken from <paramref name="source"/> by <paramref name="takenBy"/>.</summary>
     public static OwnScheduleItemOrigin Of(
         OwnScheduleItem item,

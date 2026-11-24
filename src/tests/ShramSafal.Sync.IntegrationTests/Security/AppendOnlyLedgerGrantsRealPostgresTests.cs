@@ -345,6 +345,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    on its own farm_id, the existing owner/place trigger). It GRANTs SELECT, INSERT and REVOKEs UPDATE, DELETE, TRUNCATE on that new table only; no ledger this suite
         //    asserts about is touched. Down() REFUSES while any origin exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
         "20261124124837_AddOwnScheduleItemOrigins",
+        // ── Reviewed 2026-11-25 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, slice 11); Up() and Down() read in full: Up() creates ssf.own_schedule_season_carries (FORCE RLS
+        //    on its own farm_id, the existing owner/place trigger). It GRANTs SELECT, INSERT and REVOKEs UPDATE, DELETE, TRUNCATE on that new table only; no ledger this suite
+        //    asserts about is touched. Down() REFUSES while any row exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
+        "20261124220806_AddOwnScheduleSeasonCarries",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

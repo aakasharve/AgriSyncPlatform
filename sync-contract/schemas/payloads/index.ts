@@ -82,6 +82,8 @@ export { OwnScheduleMakeMainPayload } from './ownschedule_make_main.zod';
 export { OwnScheduleItemPlanPayload } from './ownschedule_item_plan.zod';
 // slice 9 (schedule mechanism): one tap takes a work of a followed schedule into the farmer's own schedule, origin kept (schedule.take_task).
 export { ScheduleTakeTaskPayload } from './schedule_take_task.zod';
+// slice 11 (schedule mechanism): at season end the own schedule becomes next season's, asking once (ownschedule.carry_forward).
+export { OwnScheduleCarryForwardPayload } from './ownschedule_carry_forward.zod';
 export { ScheduleTaskEventPayload } from './schedule_task_event.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss

@@ -38,4 +38,13 @@ public interface IOwnScheduleStore
 
     /// <summary>Stages the origin of a work taken from a schedule (written once with the work, never changed).</summary>
     void Stage(OwnScheduleItemOrigin origin);
+
+    /// <summary>Every season-end answer of one plot for the pair of seasons (slice 11), NOT tracked; empty = the review was never answered.</summary>
+    Task<IReadOnlyList<OwnScheduleSeasonCarry>> GetCarriesAsync(Guid plotId, Guid fromCropCycleId, Guid cropCycleId, CancellationToken ct = default);
+
+    /// <summary>Every season-end answer of these farms, NOT tracked: the pull's read.</summary>
+    Task<IReadOnlyList<OwnScheduleSeasonCarry>> GetCarriesOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
+
+    /// <summary>Stages one season-end answer (written once, never changed).</summary>
+    void Stage(OwnScheduleSeasonCarry carry);
 }

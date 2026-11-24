@@ -60,6 +60,7 @@ export const SYNC_MUTATION_TYPES = [
   "ownschedule.item.plan",
   "schedule.task_event",
   "schedule.take_task",
+  "ownschedule.carry_forward",
 ] as const;
 
 export type SyncMutationType = typeof SYNC_MUTATION_TYPES[number];
@@ -130,6 +131,7 @@ export const SYNC_MUTATION_CATALOG: Readonly<Record<SyncMutationType, SyncMutati
   "ownschedule.item.plan": { name: "ownschedule.item.plan", ownerAggregate: "PlannedWork", sinceVersion: "1.0.18", payloadSchema: "OwnScheduleItemPlan" },
   "schedule.task_event": { name: "schedule.task_event", ownerAggregate: "ScheduleTaskEvent", sinceVersion: "1.0.18", payloadSchema: "ScheduleTaskEvent" },
   "schedule.take_task": { name: "schedule.take_task", ownerAggregate: "OwnScheduleItem", sinceVersion: "1.0.18", payloadSchema: "ScheduleTakeTask" },
+  "ownschedule.carry_forward": { name: "ownschedule.carry_forward", ownerAggregate: "OwnScheduleItem", sinceVersion: "1.0.18", payloadSchema: "OwnScheduleCarryForward" },
 });
 
 export function isSyncMutationType(value: string): value is SyncMutationType {
@@ -200,4 +202,5 @@ export const SyncMutationName = {
   OwnscheduleItemPlan: "ownschedule.item.plan",
   ScheduleTaskEvent: "schedule.task_event",
   ScheduleTakeTask: "schedule.take_task",
+  OwnscheduleCarryForward: "ownschedule.carry_forward",
 } as const satisfies Record<string, SyncMutationType>;

@@ -314,6 +314,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventHandler>();
         // spec: plr-d10 schedule slice 9 - one tap takes a work of a followed schedule into the own schedule, origin kept (schedule.take_task).
         services.AddScoped<ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler>();
+        // spec: plr-d10 schedule slice 11 - season end: the own schedule becomes next season's, asked once (ownschedule.carry_forward).
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

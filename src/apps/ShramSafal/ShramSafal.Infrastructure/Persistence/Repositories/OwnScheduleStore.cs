@@ -110,4 +110,30 @@ internal sealed class OwnScheduleStore(ShramSafalDbContext context) : IOwnSchedu
         ArgumentNullException.ThrowIfNull(origin);
         context.OwnScheduleItemOrigins.Add(origin);
     }
+
+    public async Task<IReadOnlyList<OwnScheduleSeasonCarry>> GetCarriesAsync(Guid plotId, Guid fromCropCycleId, Guid cropCycleId, CancellationToken ct = default) =>
+        await context.OwnScheduleSeasonCarries.AsNoTracking()
+            .Where(c => c.PlotId == plotId && c.FromCropCycleId == fromCropCycleId && c.CropCycleId == cropCycleId)
+            .OrderBy(c => c.TaskKey)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<OwnScheduleSeasonCarry>> GetCarriesOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = farmIds.Select(id => new AgriSync.SharedKernel.Contracts.Ids.FarmId(id)).ToList();
+        return await context.OwnScheduleSeasonCarries.AsNoTracking()
+            .Where(c => ids.Contains(c.FarmId))
+            .OrderBy(c => c.PlotId).ThenBy(c => c.CropCycleId).ThenBy(c => c.TaskKey)
+            .ToListAsync(ct);
+    }
+
+    public void Stage(OwnScheduleSeasonCarry carry)
+    {
+        ArgumentNullException.ThrowIfNull(carry);
+        context.OwnScheduleSeasonCarries.Add(carry);
+    }
 }

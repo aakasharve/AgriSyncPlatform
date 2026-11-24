@@ -142,7 +142,30 @@ public sealed record SyncPullResponseDto(
     // spec: plr-d10 schedule slice 3 - every save and removal of those works (their append-only history), oldest first, under the same rule: new-format phones,
     // switch-on farms, the plots he reads; FULL on every pull; never a key otherwise.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<OwnScheduleItemRevisionDto>? OwnScheduleItemRevisions = null);
+    IReadOnlyList<OwnScheduleItemRevisionDto>? OwnScheduleItemRevisions = null,
+    // spec: plr-d10 schedule slice 11 - the answers of the season-end review of these plots (one per work), FULL on every pull; same rule: new-format phones, switch-on farms,
+    // the plots he reads; never a key otherwise. A pair of seasons with rows here was answered: the review is asked once.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnScheduleSeasonCarryDto>? OwnScheduleCarries = null);
+
+/// <summary>
+/// spec: plr-d10 schedule slice 11 - one answer of the season-end review: the work of the season that ended (<see cref="PreviousItemId"/>, null for a plan-only work picked), the copy
+/// it made (<see cref="NewItemId"/>, null when it was not carried), what was said (<c>schedule</c>, <c>mine</c>, <c>skip</c>, <c>planonly</c>) and whether the farmer answered it
+/// (<see cref="Answered"/> false = it was carried as written).
+/// </summary>
+public sealed record OwnScheduleSeasonCarryDto(
+    Guid Id,
+    Guid FarmId,
+    Guid PlotId,
+    Guid FromCropCycleId,
+    Guid CropCycleId,
+    string TaskKey,
+    Guid? PreviousItemId,
+    Guid? NewItemId,
+    string Choice,
+    bool Answered,
+    int? RecordedStoredDay,
+    DateTime DecidedAtUtc);
 
 /// <summary>spec: plr-d10 schedule slice 3 - one save or removal of one own work, as the server keeps it (append-only). <see cref="Action"/> is <c>saved</c> or <c>removed</c>.</summary>
 public sealed record OwnScheduleItemRevisionDto(

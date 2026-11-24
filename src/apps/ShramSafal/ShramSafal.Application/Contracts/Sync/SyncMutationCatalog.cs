@@ -70,6 +70,7 @@ public static class SyncMutationCatalog
     public const string OwnscheduleItemPlan = "ownschedule.item.plan";
     public const string ScheduleTaskEvent = "schedule.task_event";
     public const string ScheduleTakeTask = "schedule.take_task";
+    public const string OwnscheduleCarryForward = "ownschedule.carry_forward";
 
     public static readonly ImmutableArray<SyncMutationDescriptor> All = ImmutableArray.Create(
         new SyncMutationDescriptor(Name: "create_farm", OwnerAggregate: "Farm", SinceVersion: "0.1.0", PayloadSchema: "CreateFarm"),
@@ -126,7 +127,8 @@ public static class SyncMutationCatalog
         new SyncMutationDescriptor(Name: "ownschedule.make_main", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleMakeMain"),
         new SyncMutationDescriptor(Name: "ownschedule.item.plan", OwnerAggregate: "PlannedWork", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleItemPlan"),
         new SyncMutationDescriptor(Name: "schedule.task_event", OwnerAggregate: "ScheduleTaskEvent", SinceVersion: "1.0.18", PayloadSchema: "ScheduleTaskEvent"),
-        new SyncMutationDescriptor(Name: "schedule.take_task", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "ScheduleTakeTask")
+        new SyncMutationDescriptor(Name: "schedule.take_task", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "ScheduleTakeTask"),
+        new SyncMutationDescriptor(Name: "ownschedule.carry_forward", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleCarryForward")
     );
 
     public static readonly ImmutableHashSet<string> Names =

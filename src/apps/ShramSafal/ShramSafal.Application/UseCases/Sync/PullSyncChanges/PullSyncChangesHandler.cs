@@ -827,6 +827,7 @@ public sealed class PullSyncChangesHandler(
         // off has none: the switch refuses every write of them). The plots he reads only. Phase-1 style like the switch read: a failure fails the pull.
         IReadOnlyList<OwnScheduleItemDto>? ownScheduleItems = null;
         IReadOnlyList<OwnScheduleItemRevisionDto>? ownScheduleItemRevisions = null;
+        IReadOnlyList<OwnScheduleSeasonCarryDto>? ownScheduleCarries = null;
         if (query.ScheduleFormat is >= 2 && scheduleMechanismFarms.Count > 0)
         {
             ownScheduleItemRevisions = (await ownScheduleStore.GetRevisionsOfFarmsAsync(scheduleMechanismFarms, ct))
@@ -845,6 +846,19 @@ public sealed class PullSyncChangesHandler(
                     i.State == Domain.Planning.OwnScheduleItemState.Active ? "active" : "removed",
                     System.Text.Json.JsonDocument.Parse(i.Content.ToCanonicalJson()).RootElement.Clone(),
                     i.ContentHash, i.Origin, i.MainVersionId, i.UpdatedAtUtc))
+                .ToList();
+            ownScheduleCarries = (await ownScheduleStore.GetCarriesOfFarmsAsync(scheduleMechanismFarms, ct))
+                .Where(c => window.ScopeOf((Guid)c.FarmId) is { } scope && scope.CoversPlot(c.PlotId))
+                .Select(c => new OwnScheduleSeasonCarryDto(
+                    c.Id, (Guid)c.FarmId, c.PlotId, c.FromCropCycleId, c.CropCycleId, c.TaskKey, c.PreviousItemId, c.NewItemId,
+                    c.Choice switch
+                    {
+                        Domain.Planning.ScheduleCarryChoice.AsIDid => "mine",
+                        Domain.Planning.ScheduleCarryChoice.Skip => "skip",
+                        Domain.Planning.ScheduleCarryChoice.PlanOnlyPicked => "planonly",
+                        _ => "schedule",
+                    },
+                    c.Answered, c.RecordedStoredDay, c.DecidedAtUtc))
                 .ToList();
         }
 
@@ -943,7 +957,8 @@ public sealed class PullSyncChangesHandler(
                 : new SyncCapabilitiesDto(new ScheduleMechanismCapabilityDto(scheduleMechanismFarms)),
             // slice 3 - his own schedules' works (new-format phones only, switch-on farms only; never a key otherwise).
             OwnScheduleItems: ownScheduleItems,
-            OwnScheduleItemRevisions: ownScheduleItemRevisions);
+            OwnScheduleItemRevisions: ownScheduleItemRevisions,
+            OwnScheduleCarries: ownScheduleCarries);
 
         return Result.Success(response);
     }

@@ -44,14 +44,15 @@ describe('mutation-types.json', () => {
   // about a work's sign); NEW names (sinceVersion 1.0.18), never a new key on an old payload, refused by the switch for a farm it is off for; 1.17.0 -> 1.18.0.
   // 54 -> 55 on 2026-11-24 (schedule mechanism slice 9): schedule.take_task (one tap takes a work of a followed schedule into the farmer's own schedule, origin
   // kept; writes the own work and its origin only, never a plan); a NEW name (sinceVersion 1.0.18); 1.18.0 -> 1.19.0.
-  it('declares 55 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(55);
+  // 55 -> 56 on 2026-11-25 (schedule mechanism slice 11): ownschedule.carry_forward (at season end the own schedule becomes next season's, asked once).
+  it('declares 56 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(56);
   });
 
   it('is contract version 1.19.0 and names the own-schedule and feed mutations as new', () => {
     expect(json.version).toBe('1.19.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
-    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task']) {
+    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task', 'ownschedule.carry_forward']) {
       const entry = json.mutationTypes.find((m) => m.name === name);
       expect(entry, name).toBeDefined();
       expect(entry!.sinceVersion).toBe('1.0.18');

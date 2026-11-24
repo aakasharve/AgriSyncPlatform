@@ -122,7 +122,7 @@ public sealed class ScheduleMechanismSwitchTests
         // here and costs no read of the flag (the repository throws if it is read).
         var sw = new ScheduleMechanismSwitch(new ThrowingRepo());
         ScheduleMechanismSwitch.ReservedMutationNames.Should().BeEquivalentTo(
-            ["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main", "ownschedule.item.plan", "schedule.task_event", "schedule.take_task"]);
+            ["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main", "ownschedule.item.plan", "schedule.task_event", "schedule.take_task", "ownschedule.carry_forward"]);
 
         foreach (var name in SyncMutationCatalog.Names.Where(n => !ScheduleMechanismSwitch.ReservedMutationNames.Contains(n)))
         {

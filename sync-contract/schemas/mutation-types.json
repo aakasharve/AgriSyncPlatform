@@ -57,6 +57,7 @@
     { "name": "ownschedule.make_main",   "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleMakeMain" },
     { "name": "ownschedule.item.plan",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemPlan" },
     { "name": "schedule.task_event",     "ownerAggregate": "ScheduleTaskEvent", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTaskEvent" },
-    { "name": "schedule.take_task",      "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTakeTask" }
+    { "name": "schedule.take_task",      "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTakeTask" },
+    { "name": "ownschedule.carry_forward", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleCarryForward" }
   ]
 }

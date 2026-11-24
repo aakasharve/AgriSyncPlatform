@@ -5779,6 +5779,81 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.OwnScheduleSeasonCarry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Answered")
+                        .HasColumnType("boolean")
+                        .HasColumnName("answered");
+
+                    b.Property<short>("Choice")
+                        .HasColumnType("smallint")
+                        .HasColumnName("choice");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("FromCropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_crop_cycle_id");
+
+                    b.Property<Guid?>("NewItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("new_item_id");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<Guid?>("PreviousItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("previous_item_id");
+
+                    b.Property<int?>("RecordedStoredDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("recorded_stored_day");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_own_schedule_season_carries_farm");
+
+                    b.HasIndex("PlotId", "FromCropCycleId", "CropCycleId", "TaskKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_own_schedule_season_carries_pair_key");
+
+                    b.ToTable("own_schedule_season_carries", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_own_schedule_season_carries_choice", "choice BETWEEN 0 AND 3");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedActivity", b =>
                 {
                     b.Property<Guid>("Id")

@@ -202,7 +202,9 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Planning.PlannedWork.PlanFromOwnScheduleHandler planFromOwnScheduleHandler,
     ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventHandler recordScheduleTaskEventHandler,
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 9) - one tap takes a work of a followed schedule into the own schedule, origin kept (schedule.take_task).
-    ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler takeScheduleTaskHandler)
+    ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler takeScheduleTaskHandler,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 11) - at season end the own schedule becomes next season's, asked once (ownschedule.carry_forward).
+    ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardHandler carryForwardHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1281,6 +1283,9 @@ public sealed class PushSyncBatchHandler(
             // spec: plr-d10 schedule slice 9 - one tap takes a work of a followed schedule into the own schedule, origin kept. A reserved name (the switch, above).
             case "schedule.take_task":
                 return await HandleScheduleTakeTaskAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 schedule slice 11 - the season-end review's answers carry the own schedule into the next season. A reserved name (the switch, above).
+            case "ownschedule.carry_forward":
+                return await HandleOwnScheduleCarryForwardAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3493,6 +3498,50 @@ public sealed class PushSyncBatchHandler(
             ct);
         return ToOutcome(result);
     }
+
+    // spec: plr-d10 schedule slice 11 - ownschedule.carry_forward. A NEW name (strict push rule). The payload names the farm, whose scope is opened from it (a farm the sender is
+    // no Active member of is refused with no farm GUC ever set). The plot, the seasons, who may (SM-10) and every copy are the handler's. The allow-list is one line:
+    // allowlist-parity.test.ts parses it.
+    private async Task<MutationExecutionOutcome> HandleOwnScheduleCarryForwardAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "fromCropCycleId", "toCropCycleId", "answers", "planOnly"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "ownschedule.carry_forward payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<OwnScheduleCarryForwardPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty || request.FromCropCycleId == Guid.Empty || request.ToCropCycleId == Guid.Empty
+            || request.Answers is null || request.Answers.Any(a => !Enum.TryParse<Domain.Planning.ScheduleCarryChoice>(CarryChoiceName(a.Choice), out _)))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for ownschedule.carry_forward.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await carryForwardHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardCommand(
+                request.FarmId, request.PlotId, request.FromCropCycleId, request.ToCropCycleId,
+                request.Answers.Select(a => new ShramSafal.Application.UseCases.Planning.CarryForward.CarryAnswer(
+                    a.TaskKey ?? string.Empty, Enum.Parse<Domain.Planning.ScheduleCarryChoice>(CarryChoiceName(a.Choice)))).ToList(),
+                (request.PlanOnly ?? []).Select(p => new ShramSafal.Application.UseCases.Planning.CarryForward.CarryPlanOnlyPick(p.TaskKey ?? string.Empty)).ToList(),
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    /// <summary>The wire words of a carry answer ("schedule", "mine", "skip") as the names of <see cref="Domain.Planning.ScheduleCarryChoice"/>; anything else maps to a name that parses to nothing.</summary>
+    private static string CarryChoiceName(string? choice) => choice switch
+    {
+        "schedule" => nameof(Domain.Planning.ScheduleCarryChoice.AsScheduled),
+        "mine" => nameof(Domain.Planning.ScheduleCarryChoice.AsIDid),
+        "skip" => nameof(Domain.Planning.ScheduleCarryChoice.Skip),
+        _ => "not-a-choice",
+    };
 
     /// <summary>The stage line is strict too (F5): an entry with a key the contract does not name is refused, never silently dropped.</summary>
     private static bool OwnScheduleStageLineHasOnlyKnownKeys(JsonElement payload)

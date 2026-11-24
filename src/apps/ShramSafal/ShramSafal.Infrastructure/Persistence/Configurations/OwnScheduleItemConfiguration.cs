@@ -144,6 +144,39 @@ internal sealed class OwnScheduleItemOriginConfiguration : IEntityTypeConfigurat
     }
 }
 
+/// <summary>
+/// spec: plr-d10 schedule slice 11 - <c>ssf.own_schedule_season_carries</c>: one answer of the season-end review per work (and per plan-only work picked), the previous-item
+/// link and the copy it made. APPEND-ONLY by privilege (SELECT + INSERT for the application role); FORCE row security on its own <c>farm_id</c>; the same owner and place trigger
+/// as the work (on <c>crop_cycle_id</c>, the season carried INTO). See the migration <c>AddOwnScheduleSeasonCarries</c>.
+/// </summary>
+internal sealed class OwnScheduleSeasonCarryConfiguration : IEntityTypeConfiguration<OwnScheduleSeasonCarry>
+{
+    public void Configure(EntityTypeBuilder<OwnScheduleSeasonCarry> builder)
+    {
+        builder.ToTable("own_schedule_season_carries", t => t.HasCheckConstraint("ck_own_schedule_season_carries_choice", "choice BETWEEN 0 AND 3"));
+
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+        builder.Property(x => x.FarmId).HasColumnName("farm_id").HasConversion(TypedIdConverters.FarmId).IsRequired();
+        builder.Property(x => x.PlotId).HasColumnName("plot_id").IsRequired();
+        builder.Property(x => x.FromCropCycleId).HasColumnName("from_crop_cycle_id").IsRequired();
+        builder.Property(x => x.CropCycleId).HasColumnName("crop_cycle_id").IsRequired();
+        builder.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").HasConversion(TypedIdConverters.UserId).IsRequired();
+        builder.Property(x => x.TaskKey).HasColumnName("task_key").HasMaxLength(80).IsRequired();
+        builder.Property(x => x.PreviousItemId).HasColumnName("previous_item_id");
+        builder.Property(x => x.NewItemId).HasColumnName("new_item_id");
+        builder.Property(x => x.Choice).HasColumnName("choice").HasConversion<short>().IsRequired();
+        builder.Property(x => x.Answered).HasColumnName("answered").IsRequired();
+        builder.Property(x => x.RecordedStoredDay).HasColumnName("recorded_stored_day");
+        builder.Property(x => x.DecidedByUserId).HasColumnName("decided_by_user_id").HasConversion(TypedIdConverters.UserId).IsRequired();
+        builder.Property(x => x.DecidedAtUtc).HasColumnName("decided_at_utc").IsRequired();
+
+        builder.HasIndex(x => new { x.PlotId, x.FromCropCycleId, x.CropCycleId, x.TaskKey }).IsUnique().HasDatabaseName("ux_own_schedule_season_carries_pair_key");
+        builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_own_schedule_season_carries_farm");
+        builder.Ignore(x => x.DomainEvents);
+    }
+}
+
 /// <summary>The content columns both tables share: the canonical task JSON, its hash and the name.</summary>
 internal static class OwnScheduleContent
 {

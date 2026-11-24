@@ -649,6 +649,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // no existing policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any origin exists (none does in this proof) and otherwise
         // drops exactly what Up() added. Safe mid-proof.
         "20261124124837_AddOwnScheduleItemOrigins",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 11) - Up() and Down() read in full: Up() creates ssf.own_schedule_season_carries (FORCE RLS on its own
+        // farm_id, the existing owner/place trigger). Its read policy READS ssf.farms and ssf.farm_memberships in the Active-only form (m.status = 3) from birth. It alters
+        // no existing policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any row exists (none does in this proof) and otherwise
+        // drops exactly what Up() added. Safe mid-proof.
+        "20261124220806_AddOwnScheduleSeasonCarries",
     ];
 
     /// <summary>
@@ -696,6 +701,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_own_schedule_item_revisions",
         // slice 9: 20261124124837_AddOwnScheduleItemOrigins creates ssf.own_schedule_item_origins with this policy ALREADY narrowed (m.status = 3). Down() drops the table with it.
         "p_user_select_own_schedule_item_origins",
+        // slice 11: 20261124220806_AddOwnScheduleSeasonCarries creates ssf.own_schedule_season_carries with this policy ALREADY narrowed (m.status = 3). Down() drops the table with it.
+        "p_user_select_own_schedule_season_carries",
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - 20261123071136_AddScheduleFeed creates ssf.schedule_task_events with a p_user_select_* policy
         // written ALREADY narrowed (m.status = 3). Down() drops the table with its policy.
         "p_user_select_schedule_task_events",

@@ -569,6 +569,11 @@
 //     Completes and the rows are untouched.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.own_schedule_season_carries (plr-d10 schedule mechanism, slice 11) - KEEP. One row per answer of the season-end review says what the farmer said about one work of a season
+//     that ended and which copy it made in the next: the two seasons, the task key, the two own-work ids (the work and its copy), the choice, one stored day, and two PERSONS as opaque
+//     ids (owner_user_id, decided_by_user_id). KEEP, as ssf.own_schedule_items (P6: anonymise the person, never the work): erasing the person who tapped must neither take the
+//     farmer's copy away nor undo the answer that made it. The table is APPEND-ONLY BY PRIVILEGE (SELECT + INSERT), so no scrub is wired. No free words.
+//
 //   - ssf.own_schedule_item_origins (plr-d10 schedule mechanism, slice 9) - KEEP. One row per TAKE ACT (the latest row is the current origin; older rows are history) says where one own work came from when it was TAKEN from a schedule the plot
 //     follows: the source version, its chain, its name and number then, the task key, the dose picked, the day, and two PERSONS as opaque ids (source_owner_user_id,
 //     taken_by_user_id) beside the farm owner at the time. KEEP, as ssf.own_schedule_items above (P6: anonymise the person, never the work; the approved spec: "origin never
