@@ -79,7 +79,7 @@ describe("Dexie v28 - the farm's tasks and reminders", () => {
         const db = new AgriLogDatabase(NAME);
         await db.open();
         expect(db.verno).toBeGreaterThanOrEqual(28);
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'plannedWork', 'schedulePictures', 'ownScheduleItems', 'ownScheduleItemRevisions'].sort()); // schedulePictures is v29's (lane SCH-ID-P), the own schedule stores v30's (slice 3)
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'plannedWork', 'schedulePictures', 'ownScheduleItems', 'ownScheduleItemRevisions', 'scheduleDayCards'].sort()); // scheduleDayCards is v32's (slice 8); schedulePictures is v29's (lane SCH-ID-P), the own schedule stores v30's (slice 3)
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect(await db.table('inputLibrary').get('current')).toBeDefined();
         expect((await db.scheduleSubscriptions.get('sub-1'))?.state).toBe('Active');

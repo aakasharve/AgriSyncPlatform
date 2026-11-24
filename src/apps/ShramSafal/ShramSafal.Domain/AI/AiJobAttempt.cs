@@ -88,6 +88,25 @@ public sealed class AiJobAttempt
         ConfidenceScore = null;
     }
 
+    /// <summary>
+    /// Stamps the real model once it is known (attempts are created with "unknown"). Same columns as before - no migration.
+    /// </summary>
+    public void UpdateProvenance(string modelVersion)
+    {
+        if (string.IsNullOrWhiteSpace(modelVersion))
+        {
+            throw new ArgumentException("modelVersion is required", nameof(modelVersion));
+        }
+
+        Provenance = new Provenance(
+            source: Provenance.Source,
+            modelVersion: modelVersion,
+            promptVersion: Provenance.PromptVersion,
+            promptContentHash: Provenance.PromptContentHash,
+            appVersion: Provenance.AppVersion,
+            extractorCodeSha: Provenance.ExtractorCodeSha);
+    }
+
     public void SetEstimatedCostUnits(decimal? estimatedCostUnits)
     {
         if (estimatedCostUnits is null)

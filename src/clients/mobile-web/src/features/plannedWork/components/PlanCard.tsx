@@ -31,6 +31,7 @@ import { crewLine, isReminderTask, trailStage, TRAIL_STATUSES } from '../planCar
 import { whenView } from '../planDates';
 import { plannedWorkWords } from '../plannedWorkWords';
 import { ScheduleFeedLines } from './ScheduleFeedLines';
+import { JobCardCardButton } from '../../scheduler/dayCards/DayCardsEntries';
 
 const MR_FONT = "'Noto Sans Devanagari', sans-serif";
 const EN_FONT = "'DM Sans', sans-serif";
@@ -152,7 +153,11 @@ export const PlanCard: React.FC<PlanCardProps> = ({
             )}
             {task.ownItemId && (
                 // Schedule mechanism slice 5: a plan made from his own schedule says so, why it waits, the day it was expected, and asks about a sign.
-                <ScheduleFeedLines task={task} language={language} today={localDay(today)} />
+                // Slice 8: and opens that work's day cards (the one viewer) from the work the phone holds.
+                <>
+                    <ScheduleFeedLines task={task} language={language} today={localDay(today)} />
+                    <div className="mt-1.5"><JobCardCardButton ownItemId={task.ownItemId} /></div>
+                </>
             )}
             {crew && <p className="m-0 mt-1 text-[13px] font-extrabold text-stone-800" data-testid="plan-card-crew">{crew}</p>}
             {details.length > 0 && (
