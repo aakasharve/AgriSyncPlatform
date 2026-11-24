@@ -139,7 +139,7 @@ internal sealed class SarvamAiProvider(
             var cleaned = GeminiJsonCleaner.Clean(structured.Content ?? "{}");
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
             // PLR lane V-1 — the server holds the transcript; the model no longer repeats it (its answer must fit).
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: transcript);
+            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, pipelineVersion: "sarvam-server-v1", promptVersion: promptVersion, serverTranscript: transcript);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
 
             return new VoiceParseCanonicalResult
