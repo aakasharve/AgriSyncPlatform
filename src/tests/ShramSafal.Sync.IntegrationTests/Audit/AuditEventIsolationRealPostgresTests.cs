@@ -1456,6 +1456,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // ssf.ai_provider_configs.(transcriber_provider, structurer_provider, modified_at_utc). No schema, policy, grant or trigger; it never
         // touches ssf.audit_events. Safe to revert and re-apply mid-proof.
         "20261124090000_SetVoiceProvidersToSarvam",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 9) - Up() and Down() read in full: Up() creates ssf.own_schedule_item_origins only (FORCE RLS on its own
+        // farm_id, the existing owner/place trigger function reused, SELECT + INSERT for the app role). It never touches ssf.audit_events, its policies or its grants.
+        // Down() refuses while any origin exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261124124837_AddOwnScheduleItemOrigins",
     ];
 
     /// <summary>

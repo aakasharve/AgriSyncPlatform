@@ -29,4 +29,13 @@ public interface IOwnScheduleStore
     void Stage(OwnScheduleItem item);
 
     void Stage(OwnScheduleItemRevision revision);
+
+    /// <summary>The origin of one own work (the work's id), NOT tracked, or null when the work was made by hand (slice 9).</summary>
+    Task<OwnScheduleItemOrigin?> GetOriginAsync(Guid itemId, CancellationToken ct = default);
+
+    /// <summary>The origins of the works of these farms, NOT tracked: the pull's read.</summary>
+    Task<IReadOnlyList<OwnScheduleItemOrigin>> GetOriginsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
+
+    /// <summary>Stages the origin of a work taken from a schedule (written once with the work, never changed).</summary>
+    void Stage(OwnScheduleItemOrigin origin);
 }

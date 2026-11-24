@@ -569,6 +569,13 @@
 //     Completes and the rows are untouched.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.own_schedule_item_origins (plr-d10 schedule mechanism, slice 9) - KEEP. One row is where one own work came from when it was TAKEN from a schedule the plot
+//     follows: the source version, its chain, its name and number then, the task key, the dose picked, the day, and two PERSONS as opaque ids (source_owner_user_id,
+//     taken_by_user_id) beside the farm owner at the time. KEEP, as ssf.own_schedule_items above (P6: anonymise the person, never the work; the approved spec: "origin never
+//     changes"): erasing the person who owns the source schedule or who tapped must neither take the farmer's copy away nor edit its origin; a later reading shows
+//     an erased creator as anonymised (slice 13), the row stays. The table is APPEND-ONLY BY PRIVILEGE (SELECT + INSERT), so no scrub is wired. No free words.
+//     KEEP - conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.schedule_task_events and the slice-5 columns of ssf.planned_work (plr-d10 schedule mechanism, slice 5) - KEEP. One schedule_task_events row is one
 //     answer about the sign of an own work (seen / not yet / unsure) with the day it was looked at; it carries recorded_by_user_id (who answered, an opaque id)
 //     and NO free words. The planned_work columns (own_item_id, schedule_task_key, occurrence, schedule_due_on, expected_from / expected_to, sign_answer) carry

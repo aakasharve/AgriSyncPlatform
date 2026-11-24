@@ -64,7 +64,8 @@ const HANDLER_PATH = resolve(
 // 35 -> 36 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set, its own PayloadHasOnly.
 // 36 -> 39 on 2026-11-23 (schedule mechanism slice 3): ownschedule.item.save, ownschedule.item.remove and ownschedule.make_main, each its own PayloadHasOnly.
 // 39 -> 41 on 2026-11-23 (schedule mechanism slice 5): ownschedule.item.plan and schedule.task_event, each its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 41;
+// 41 -> 42 on 2026-11-24 (schedule mechanism slice 9): schedule.take_task, its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 42;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -128,6 +129,8 @@ const EXPECTED_GUARDED_MUTATIONS = [
     // schedule mechanism slice 5 - an own work feeds planning ("plan", then who) and an answer about a work's sign.
     'ownschedule.item.plan',
     'schedule.task_event',
+    // schedule mechanism slice 9 - one tap takes a work of a followed schedule into the own schedule, origin kept.
+    'schedule.take_task',
 ].sort();
 
 interface CatalogEntry {

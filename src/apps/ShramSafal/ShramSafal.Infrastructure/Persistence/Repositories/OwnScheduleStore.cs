@@ -84,4 +84,30 @@ internal sealed class OwnScheduleStore(ShramSafalDbContext context) : IOwnSchedu
         ArgumentNullException.ThrowIfNull(revision);
         context.OwnScheduleItemRevisions.Add(revision);
     }
+
+    public async Task<OwnScheduleItemOrigin?> GetOriginAsync(Guid itemId, CancellationToken ct = default) =>
+        await context.OwnScheduleItemOrigins.AsNoTracking().FirstOrDefaultAsync(o => o.Id == itemId, ct)
+        ?? context.ChangeTracker.Entries<OwnScheduleItemOrigin>().Select(e => e.Entity).FirstOrDefault(o => o.Id == itemId);
+
+    public async Task<IReadOnlyList<OwnScheduleItemOrigin>> GetOriginsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        if (farmIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = farmIds.Select(id => new AgriSync.SharedKernel.Contracts.Ids.FarmId(id)).ToList();
+        return await context.OwnScheduleItemOrigins
+            .AsNoTracking()
+            .Where(o => ids.Contains(o.FarmId))
+            .OrderBy(o => o.TakenAtUtc)
+            .ThenBy(o => o.Id)
+            .ToListAsync(ct);
+    }
+
+    public void Stage(OwnScheduleItemOrigin origin)
+    {
+        ArgumentNullException.ThrowIfNull(origin);
+        context.OwnScheduleItemOrigins.Add(origin);
+    }
 }

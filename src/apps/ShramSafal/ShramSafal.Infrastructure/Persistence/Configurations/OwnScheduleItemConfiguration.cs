@@ -101,6 +101,45 @@ internal sealed class OwnScheduleItemRevisionConfiguration : IEntityTypeConfigur
     }
 }
 
+/// <summary>
+/// spec: plr-d10 schedule slice 9 - <c>ssf.own_schedule_item_origins</c>: where an own work came from when it was TAKEN from a schedule the plot follows. One row per own
+/// work (its id is the work's id), written once with the work and never changed: APPEND-ONLY by privilege (SELECT + INSERT for the application role). FORCE row
+/// security on its own <c>farm_id</c>; the same owner and place trigger as the work. See the migration <c>AddOwnScheduleItemOrigins</c>.
+/// </summary>
+internal sealed class OwnScheduleItemOriginConfiguration : IEntityTypeConfiguration<OwnScheduleItemOrigin>
+{
+    public void Configure(EntityTypeBuilder<OwnScheduleItemOrigin> builder)
+    {
+        builder.ToTable("own_schedule_item_origins", t =>
+        {
+            t.HasCheckConstraint("ck_own_schedule_item_origins_version_number", "source_version_number >= 1");
+        });
+
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+
+        builder.Property(x => x.FarmId).HasColumnName("farm_id").HasConversion(TypedIdConverters.FarmId).IsRequired();
+        builder.Property(x => x.PlotId).HasColumnName("plot_id").IsRequired();
+        builder.Property(x => x.CropCycleId).HasColumnName("crop_cycle_id").IsRequired();
+        builder.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").HasConversion(TypedIdConverters.UserId).IsRequired();
+        builder.Property(x => x.TaskKey).HasColumnName("task_key").HasMaxLength(80).IsRequired();
+        builder.Property(x => x.SourceVersionId).HasColumnName("source_version_id").IsRequired();
+        builder.Property(x => x.SourceChainId).HasColumnName("source_chain_id");
+        builder.Property(x => x.SourceName).HasColumnName("source_name").HasMaxLength(200).IsRequired();
+        builder.Property(x => x.SourceVersionNumber).HasColumnName("source_version_number").IsRequired();
+        builder.Property(x => x.SourceOwnerUserId).HasColumnName("source_owner_user_id");
+        builder.Property(x => x.SourceTaskKey).HasColumnName("source_task_key").HasMaxLength(80).IsRequired();
+        builder.Property(x => x.ChosenDose).HasColumnName("chosen_dose").HasMaxLength(2000);
+        builder.Property(x => x.TakenByUserId).HasColumnName("taken_by_user_id").HasConversion(TypedIdConverters.UserId).IsRequired();
+        builder.Property(x => x.TakenOn).HasColumnName("taken_on").HasColumnType("date").IsRequired();
+        builder.Property(x => x.TakenAtUtc).HasColumnName("taken_at_utc").IsRequired();
+
+        builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_own_schedule_item_origins_farm");
+        builder.HasIndex(x => x.SourceVersionId).HasDatabaseName("ix_own_schedule_item_origins_source");
+        builder.Ignore(x => x.DomainEvents);
+    }
+}
+
 /// <summary>The content columns both tables share: the canonical task JSON, its hash and the name.</summary>
 internal static class OwnScheduleContent
 {

@@ -200,7 +200,9 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - "plan", then who, on one own work (ownschedule.item.plan) and an answer about a work's sign
     // (schedule.task_event). Reserved names: refused by the switch for a farm it is not on for.
     ShramSafal.Application.UseCases.Planning.PlannedWork.PlanFromOwnScheduleHandler planFromOwnScheduleHandler,
-    ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventHandler recordScheduleTaskEventHandler)
+    ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventHandler recordScheduleTaskEventHandler,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 9) - one tap takes a work of a followed schedule into the own schedule, origin kept (schedule.take_task).
+    ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler takeScheduleTaskHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1276,6 +1278,9 @@ public sealed class PushSyncBatchHandler(
                 return await HandleOwnScheduleItemPlanAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "schedule.task_event":
                 return await HandleScheduleTaskEventAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 schedule slice 9 - one tap takes a work of a followed schedule into the own schedule, origin kept. A reserved name (the switch, above).
+            case "schedule.take_task":
+                return await HandleScheduleTakeTaskAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3454,6 +3459,37 @@ public sealed class PushSyncBatchHandler(
             new ShramSafal.Application.UseCases.Planning.PlannedWork.RecordScheduleTaskEventCommand(
                 request.EventId, request.FarmId, request.PlotId, request.CropCycleId, request.TaskKey ?? string.Empty, answer, request.ObservedOn,
                 PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    // spec: plr-d10 schedule slice 9 - schedule.take_task. A NEW name (strict push rule). The payload names the farm, whose scope is opened from it (a farm the sender is
+    // no Active member of is refused with no farm GUC ever set). The plot, the season, who may (SM-10), the followed and not withdrawn source and the work are the
+    // handler's. It writes the own work and its origin and NOTHING else. The allow-list is one line: allowlist-parity.test.ts parses it.
+    private async Task<MutationExecutionOutcome> HandleScheduleTakeTaskAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "sourceVersionId", "taskKey", "dose"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "schedule.take_task payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<ScheduleTakeTaskPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.SourceVersionId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.take_task.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await takeScheduleTaskHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskCommand(
+                request.FarmId, request.PlotId, request.CropCycleId, request.SourceVersionId, request.TaskKey ?? string.Empty, request.Dose,
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
             ct);
         return ToOutcome(result);
     }

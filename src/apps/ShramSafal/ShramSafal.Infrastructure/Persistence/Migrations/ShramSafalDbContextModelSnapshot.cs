@@ -5590,6 +5590,93 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.OwnScheduleItemOrigin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChosenDose")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("chosen_dose");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<Guid?>("SourceChainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_chain_id");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("source_name");
+
+                    b.Property<Guid?>("SourceOwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_owner_user_id");
+
+                    b.Property<string>("SourceTaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("source_task_key");
+
+                    b.Property<Guid>("SourceVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_version_id");
+
+                    b.Property<int>("SourceVersionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_version_number");
+
+                    b.Property<DateTime>("TakenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at_utc");
+
+                    b.Property<Guid>("TakenByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("taken_by_user_id");
+
+                    b.Property<DateOnly>("TakenOn")
+                        .HasColumnType("date")
+                        .HasColumnName("taken_on");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_own_schedule_item_origins_farm");
+
+                    b.HasIndex("SourceVersionId")
+                        .HasDatabaseName("ix_own_schedule_item_origins_source");
+
+                    b.ToTable("own_schedule_item_origins", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_own_schedule_item_origins_version_number", "source_version_number >= 1");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.OwnScheduleItemRevision", b =>
                 {
                     b.Property<Guid>("Id")
