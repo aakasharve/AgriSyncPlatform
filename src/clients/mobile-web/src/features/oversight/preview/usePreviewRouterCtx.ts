@@ -55,13 +55,14 @@
  * history (never Dexie), and the real result screen opens on them. Without
  * the flag the stub is exactly the notice above.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { openCorrection } from '../../../core/speak/speakStore';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import type { VoiceResultState } from '../../../app/hooks/useVoiceAutoSave';
 import type { LastSavedLogSummaryItem } from '../../../app/uiRuntimeTypes';
 import { recordingMs, runPreviewVoiceJourney } from './previewVoiceJourney';
 import { noWorkError } from '../../voice/noWorkAnswer';
+import { isJob23, isNoWork, job23Draft, putPreviewClip, putPreviewPull } from './previewJob23';
 
 import { useLogContext } from '../../../app/context/LogContext';
 import type { ManualSubmitOutcome } from '../../../app/hooks/useLogCommands.types';
@@ -124,6 +125,8 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const [recordingSegment, setRecordingSegment] = useState<LogSegment | null>(null);
     const [draftLog, setDraftLog] = useState<AgriLogResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // Dev preview (`&answer=job23` / `&nowork=1`): the phone has completed its first pull, so the month chip may show.
+    useEffect(() => { if (isJob23() || isNoWork()) void putPreviewPull(); }, []);
     const [errorTranscript, setErrorTranscript] = useState<string | undefined>(undefined);
 
     // spec voice-flow-v2-2026-11-23 (Task 13b) — the result screen's inputs (the real app's useVoiceAutoSave / runtime).
@@ -136,6 +139,7 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         if (!setHistory) return;
         await runPreviewVoiceJourney({
             input, durationMs, scope: logScope, crops, profile: farmerProfile,
+            ...(isJob23() && { draft: job23Draft(), onLogs: async (logs: DailyLog[]) => { await putPreviewPull(); return putPreviewClip(logs[0]?.id); } }),
             setStatus, setHistory, setVoiceResult,
             setLastSaved: (ids, summary) => { setLastSavedLogIds(ids); setLastSavedLogSummary(summary); },
             // `&queued=1`: behave as a phone whose save queued the record, so the 30 s self-close can be seen (dev only).
@@ -146,8 +150,10 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const handleAudioReady = useCallback(async (audio?: AudioData) => {
         // Dev preview only (`&nowork=1`): answer like the server does for a day with no work (the real answer job_38ebf49a), so the
         // nothing-understood card can be seen. Nothing is saved.
-        if (FEATURE_FLAGS.voiceFlowV2 && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('nowork') === '1') {
+        if (FEATURE_FLAGS.voiceFlowV2 && typeof window !== 'undefined' && isNoWork()) {
             setStatus('processing');
+            await putPreviewPull();
+            await putPreviewClip();
             await new Promise(r => setTimeout(r, 600));
             setError(noWorkError({ summary: 'कोणतेही कृषी काम नोंदवले नाही.', unclearSegments: [{ userMessage: 'कृपया स्पष्ट करा: हे पाणी पिकाला देण्यासाठी (सिंचन) होते, की इतर कोणत्याही कामासाठी?', userMessageEn: 'Please clarify: was this water for the crop (irrigation) or for something else?' }] }));
             setErrorTranscript('I want an full screen utilization of the mobile screen.');

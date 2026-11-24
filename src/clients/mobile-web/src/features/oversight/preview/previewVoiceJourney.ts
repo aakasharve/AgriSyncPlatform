@@ -52,6 +52,8 @@ export interface PreviewVoiceJourneyInput {
     simulateQueued?: boolean;
     /** Test seam: the clock. */
     now?: () => number;
+    /** Dev preview (`&answer=job23`): called with the logs once built, before the result is shown; returns the clip id to show with them. */
+    onLogs?: (logs: DailyLog[]) => Promise<string | null>;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => { setTimeout(resolve, ms); });
@@ -91,7 +93,8 @@ export async function runPreviewVoiceJourney(run: PreviewVoiceJourneyInput): Pro
     await wait(PREVIEW_JOURNEY_DELAYS_MS.written);
     const ids = logs.map(l => l.id);
     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
-    run.setVoiceResult({ logIds: ids, clipId: null, key: `preview|${now()}`, unclear, written: logs, ...(run.input === 'text' && { typed: true }) });
+    const clipId = run.onLogs ? await run.onLogs(logs) : null;
+    run.setVoiceResult({ logIds: ids, clipId, key: `preview|${now()}`, unclear, written: logs, ...(run.input === 'text' && { typed: true }) });
     run.setLastSaved(ids, summaryOf(logs, run.simulateQueued === true));
     noteVoiceJourney({ kind: 'written', logIds: ids }, now());
     // The real save queues the logs for sync (a Dexie write) between the phone write and 'success', so the finished list

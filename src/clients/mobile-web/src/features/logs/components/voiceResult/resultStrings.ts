@@ -126,7 +126,7 @@ export const RESULT_STR_EN: ResultStr = {
     you: 'You',
     unknownPerson: 'Unknown',
     todayWho: 'Who told today',
-    times: (n: number) => `${n} times`,
+    times: (n: number) => (n === 1 ? 'once' : `${n} times`),
     foot: 'What was told earlier stays as it is. What you say now is added to it.',
     linksSub: 'Tap a part — see which words it came from',
     wrote: 'Shram Sathi wrote',

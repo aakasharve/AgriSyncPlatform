@@ -141,4 +141,13 @@ describe('SavedPartsGrid — the eight parts with his values', () => {
         expect(screen.getByTestId('vr2-part-detail-inputs').textContent).toBe('किती दिलं ते सांगा');
         expect(tile.textContent).not.toContain('स्पष्ट समजू शकले नाही');
     });
+    it('F1: a verified product with no amount is understood (told) AND the missing amount is named', () => {
+        const l = log({ inputs: [{ id: 'i1', productName: '0-52-34', sourceText: '05234 चं खत', provenanceVerified: true }] });
+        const deps: WhoDeps = { youIds: new Set(['op-me']), nameOf: () => undefined, ownName: 'सुनील', unknownLabel: 'अज्ञात', language: 'mr', nativeDigits: true };
+        render(<SavedPartsGrid day={buildDayView([l], [l], deps)} onTellMore={vi.fn()} />);
+        const tile = screen.getByTestId('vr2-part-inputs');
+        expect(tile.textContent).toContain('0-52-34');
+        expect(tile.textContent).not.toContain('स्पष्ट समजू शकले नाही');
+        expect(screen.getByTestId('vr2-part-detail-inputs').textContent).toBe('किती दिलं ते सांगा');
+    });
 });

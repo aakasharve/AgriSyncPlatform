@@ -529,6 +529,13 @@ export interface RecordingView {
 
 /** The clock label of a recording: the app's fixed Marathi time words; in Devanagari digits only where the screen asked (IT-D2). */
 const timeLabelOf = (log: DailyLog, deps: WhoDeps): string => {
+    // English mode is English only: "9:09 pm", never the Marathi time-of-day word.
+    if (deps.language === 'en') {
+        const at = new Date(log.meta?.createdAtISO ?? '');
+        if (Number.isNaN(at.getTime())) return '';
+        const h = at.getHours(), m = String(at.getMinutes()).padStart(2, '0');
+        return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'am' : 'pm'}`;
+    }
     const label = formatFarmerLogTime(log.meta?.createdAtISO);
     return deps.nativeDigits && deps.language !== 'en' ? toDevanagariDigits(label) : label;
 };
