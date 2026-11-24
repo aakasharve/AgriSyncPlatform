@@ -22,7 +22,7 @@ import { entryText, partNameIn } from '../voiceResult/partNames';
 import { resultDayStr, useResultStr } from '../voiceResult/resultStrings';
 import { Bd, SANS } from './savedBits';
 import SavedClip from './SavedClip';
-import { savedWords } from './savedWords';
+import { savedWords } from './savedCopy';
 
 /** One line of what a recording told, as recorded. */
 const toldLine = (rec: RecordingView, language: string | undefined, unsureWord: string): string => {

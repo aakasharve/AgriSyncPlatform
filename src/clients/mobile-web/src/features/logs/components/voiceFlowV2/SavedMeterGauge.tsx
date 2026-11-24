@@ -28,7 +28,7 @@ import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import { PARTS, type PartKey } from '../voiceResult/resultModel';
 import { useResultStr } from '../voiceResult/resultStrings';
 import { SANS } from './savedBits';
-import { savedWords } from './savedWords';
+import { savedWords } from './savedCopy';
 
 /** The server's stored classification for a day he said had no work. Compared, never computed. */
 const DECLARED_NO_WORK_DAY = 'DeclaredNoWorkDay';

@@ -17,7 +17,7 @@ import { mmss } from '../voiceResult/ClipPlayer';
 import { usePlaybackSwitch, usePlaybackUnavailableWords } from '../voiceResult/playbackSwitch';
 import { useResultStr } from '../voiceResult/resultStrings';
 import { SANS } from './savedBits';
-import { savedWords } from './savedWords';
+import { savedWords } from './savedCopy';
 
 /** The design's bar heights (6–22 px), seeded from the clip so the same clip always draws the same picture. */
 const barsOf = (seed: string, n: number): number[] => {

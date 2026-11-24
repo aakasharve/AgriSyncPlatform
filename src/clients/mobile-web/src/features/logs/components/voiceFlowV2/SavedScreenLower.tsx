@@ -23,7 +23,7 @@ import type { DayView, RecordingView } from '../voiceResult/resultModel';
 import { useResultStr, type ResultStr } from '../voiceResult/resultStrings';
 import { SANS } from './savedBits';
 import SavedEarlier from './SavedEarlier';
-import { savedWords } from './savedWords';
+import { savedWords } from './savedCopy';
 
 /** The plots one log of this recording is about, as named on the farm (the result screen's own rule). */
 const plotsOf = (r: RecordingView, RS: ResultStr): string => {
