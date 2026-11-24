@@ -15,6 +15,7 @@ import type { ScheduleChallengeContent } from '../../../../../../../sync-contrac
 import { doseLines, type CardPart } from './dayCardsModel';
 import type { DayCardKind, DayCardTask, DayCardsDetail, ShownDay } from './dayCardsTypes';
 import type { DayCardWords } from './dayCardWords';
+import { checkedByLine, madeByLine } from './sourceLines';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { TakeIntoMyScheduleButton, type TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 
@@ -252,11 +253,8 @@ const ChallengeCard: React.FC<{ challenge: ScheduleChallengeContent; words: DayC
 const SourceCard: React.FC<{ part: Extract<CardPart, { type: 'source' }>; detail: DayCardsDetail; words: DayCardWords }> = ({ part, detail, words }) => {
     const t = part.task.task;
     const sources = t.sources.map(s => (s.page ? `${s.document} · ${s.page}` : s.document));
-    const kindWord = detail.madeBy.ownerType ? words.source.madeByKind[detail.madeBy.ownerType] ?? null : null;
-    const made = detail.kind === 'own' ? words.source.own : [kindWord, detail.madeBy.label].filter(Boolean).join(' · ') || words.source.noMaker;
-    const checked = detail.kind === 'own'
-        ? words.ownLine
-        : detail.check.isChecked && detail.check.checkedBy ? detail.check.checkedBy : words.source.notChecked;
+    const made = madeByLine(detail, words);
+    const checked = checkedByLine(detail, words);
     return (
         <CardShell type="source">
             <div className="flex gap-2"><Chip bg="#F5F5F4" fg="#44403C">{words.sourceTitle}</Chip></div>

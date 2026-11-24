@@ -37,6 +37,7 @@ import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningS
 import type { FollowedCheckNote } from './followedCheck';
 import { OwnerVoiceSlot, type OwnerVoice } from './OwnerVoiceSlot';
 import { SameWorkSection } from './SameWorkSection';
+import { ScheduleProfileCard } from './ScheduleProfileCard';
 
 export const PlotScheduleHome: React.FC<{
     cropName: string;
@@ -111,6 +112,7 @@ export const PlotScheduleHome: React.FC<{
                     <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
                 </ScheduleFold>
             )}
+            <ScheduleProfileCard templateId={template.id} plotName={plotName} />
             <SameWorkSection versionIds={followed ? followed.map(f => f.templateId) : []} take={take ? { ...take, todayStored: take.todayStored ?? model.todayDay } : undefined} />
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
