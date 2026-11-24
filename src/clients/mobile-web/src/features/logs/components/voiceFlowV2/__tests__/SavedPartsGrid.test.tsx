@@ -92,13 +92,13 @@ describe('SavedPartsGrid — the eight parts with his values', () => {
         expect(onTellMore).toHaveBeenCalledTimes(1);
     });
 
-    it('a part the server could not find in his words is amber "नक्की समजलं नाही", not a button', () => {
+    it('a part the server could not find in his words is amber "स्पष्ट समजू शकले नाही", not a button', () => {
         const onTellMore = vi.fn();
         render(<SavedPartsGrid day={dayOf('mr')} onTellMore={onTellMore} />);
         const expense = screen.getByTestId('vr2-part-expense');
         expect(expense.getAttribute('data-told')).toBe('unsure');
         expect(expense.tagName).not.toBe('BUTTON');
-        expect(expense.textContent).toContain('नक्की समजलं नाही');
+        expect(expense.textContent).toContain('स्पष्ट समजू शकले नाही');
         expect(expense.textContent).not.toContain('सांगितलं नाही');
         fireEvent.click(expense);
         expect(onTellMore).not.toHaveBeenCalled();

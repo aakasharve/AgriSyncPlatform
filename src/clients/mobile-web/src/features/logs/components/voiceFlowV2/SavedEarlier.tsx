@@ -7,7 +7,7 @@
  * player (when its clip is on this phone), his words, and one line of what it told.
  *
  * Everything is read from the record (`RecordingView`): the parts line is each verified entry's part and value as recorded
- * (`entryText`), then the stoppages; a part the server could not find in his words is named under "नक्की समजलं नाही", never as a
+ * (`entryText`), then the stoppages; a part the server could not find in his words is named under "स्पष्ट समजू शकले नाही", never as a
  * fact (P4). Typed entries show the typed note in place of a player; words withheld by the money rule show the rule card (MU-3).
  */
 import React from 'react';

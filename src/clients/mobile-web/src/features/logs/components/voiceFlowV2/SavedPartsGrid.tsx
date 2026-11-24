@@ -7,7 +7,7 @@
  * Re-uses the result screen's own pieces: the parts and their tints (`PARTS`), the icons (`PartIcon`), the names (`partNameIn`)
  * and an entry's text as recorded (`entryText`). Two columns, so the values are readable at 320 px, drawn with the approved design's
  * sizes and colours (`.rb-sec.b8`, `.b8g`, `.b8t`; F3): the औषध / खत tile spans the row and the grid packs densely. Nothing is summed or worked out (P4): a told part shows the day's newest verified entry as it was recorded, and "+N"
- * counts the screen's own rows. A part he mentioned that the server could not find in his words is "नक्की समजलं नाही" (amber,
+ * counts the screen's own rows. A part he mentioned that the server could not find in his words is "स्पष्ट समजू शकले नाही" (amber,
  * not a button: saying it again would record it twice — the rule of `ResultHero.tsx`). An untold part is a real red button
  * that opens the ONE mic for that part (`onTellMore`).
  */
