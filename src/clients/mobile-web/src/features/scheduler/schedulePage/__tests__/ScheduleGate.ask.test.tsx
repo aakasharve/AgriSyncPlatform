@@ -142,7 +142,7 @@ describe('the ask on the शेड्यूल page (D-83 = 1)', () => {
         expect(adopts[0]).toMatchObject({ plotId: PLOT_1, scheduleTemplateId: T.university });
         expect(await queuedOf(SyncMutationName.MigrateSchedule)).toHaveLength(0);
         // plot B still needs a schedule: its own ask, when he looks at it
-        fireEvent.click(screen.getByText('B'));
+        fireEvent.click(screen.getByTestId(`chip-plot-${PLOT_2}`));
         expect(await screen.findByTestId('schedule-ask')).toBeInTheDocument();
     });
 

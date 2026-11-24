@@ -83,4 +83,13 @@ describe('slice 10: the Schedule tab as version 7', () => {
         expect(screen.getByTestId('look-memories')).toHaveAttribute('data-count', '0');
         expect(screen.getByTestId('look-memories-line').textContent).toMatch(/पाहणी/);
     });
+    it('the plot lists are grouped chips by crop, only the seat own plots, and tapping a chip chooses the plot', () => {
+        render(page());
+        expect(screen.getByTestId('plot-chip-lists')).toBeInTheDocument();
+        expect(screen.getByTestId('chip-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByTestId('chip-plot-plot-9')).toBeNull();
+        fireEvent.click(screen.getByTestId('chip-plot-plot-2'));
+        expect(screen.getByTestId('sched-crop-plot').textContent).toContain('G2');
+        expect(screen.getByTestId('chip-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
+    });
 });

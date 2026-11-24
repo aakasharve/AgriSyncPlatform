@@ -59,6 +59,7 @@ import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
 import { PlacePickerSheet } from '../features/context/components/PlacePickerSheet';
+import { PlotChipLists } from '../features/scheduler/schedulePage/PlotChipLists';
 import { lastWorkedPlot } from '../features/scheduler/schedulePage/lastWorkedPlot';
 
 interface SchedulerPageProps {
@@ -300,8 +301,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     }))), [crops, language]);
     const choosePlot = (nextCropId: string, nextPlotId: string) => { setCropId(nextCropId); setPlotId(nextPlotId); };
     const chooseForPlot = (nextCropId: string, nextPlotId: string) => { choosePlot(nextCropId, nextPlotId); setLibraryMode('crop'); setView('LIBRARY'); };
+    // Version 7: the plot lists are grouped chips (by crop, then by schedule); the picture map, with its schedule lighting and "शेड्यूल निवडा", stays reachable in a row under them.
     const placeMap = crops.length > 0 && (mapModel.plots.length > 0 || mapModel.unscheduled.length > 0 || mapModel.emptyCrops.length > 0) && (
-        <SchedulePictureMap model={mapModel} selectedPlotId={plotId} onPickPlot={choosePlot} onChooseSchedule={chooseForPlot} language={mapLanguage} />
+        <>
+            <PlotChipLists crops={crops} model={mapModel} selectedPlotId={plotId} onPickPlot={choosePlot} language={mapLanguage} />
+            <ScheduleFold id="map" title={mapLanguage === 'en' ? 'Plots and schedules, joined' : 'प्लॉट आणि शेड्यूल, जोडलेले'} summary={mapLanguage === 'en' ? 'The picture map' : 'चित्र-नकाशा'}>
+                <SchedulePictureMap model={mapModel} selectedPlotId={plotId} onPickPlot={choosePlot} onChooseSchedule={chooseForPlot} language={mapLanguage} />
+            </ScheduleFold>
+        </>
     );
 
     const shell = (title: string, back: (() => void) | undefined, body: React.ReactNode) => (
