@@ -32,6 +32,9 @@ import { readPendingQuestionAnswer } from '../../features/logs/services/pendingQ
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 // lane MIC-1 — THE recorder and THE waiting screen, shared with every other speak entry point (`core/speak`).
 import { renderLogRecorder, renderProcessingScreen } from './logRecorder';
+import { placeLabelOf } from './placeLabel';
+import { VoiceLayer } from '../../features/logs/components/voiceFlowV2/VoiceLayer';
+import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
 
 import { AppRouterContext } from './routeContext';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
@@ -261,6 +264,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             onClearLabourIntent={() => ctx.setLogIntent(null)}
                             recordingSegment={recordingSegment}
                             onCancelSegment={cancelSegment}
+                            fullScreen={FEATURE_FLAGS.voiceFlowV2 === true && logIntent !== 'labour'}
                             homeRequested={ctx.logHomePending ?? false}
                             onHomeRequestHandled={ctx.consumeLogHome}
                             // H10 — the हजेरी door only for the owner tier or the owner's labour grant.
@@ -300,7 +304,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
             {/* PROCESSING / CONFIRM / SUCCESS */}
             {/* lane MIC-1 — THE waiting screen (`logRecorder.tsx`), shared with every other speak entry point. */}
-            {status === 'processing' && renderProcessingScreen(ctx)}
+            {status === 'processing' && (FEATURE_FLAGS.voiceFlowV2 ? (
+                // spec voice-flow-v2-2026-11-23 (F2): the step list is the same full-screen layer as the crop, plot and mic steps.
+                <VoiceLayer step="processing" placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
+                    {renderProcessingScreen(ctx)}
+                </VoiceLayer>
+            ) : renderProcessingScreen(ctx))}
 
             {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.
                 Renders only when the ladder produced a durable-but-unstructured

@@ -72,6 +72,8 @@ describe('FOOT-1 sweep — every fixed layer in the app', () => {
             'features/labour/components/HajeriCellDetail.tsx', 'features/finance/components/MoneyLensDrawer.tsx',
             'features/logs/components/correction/CorrectionScreen.tsx', 'core/speak/SpeakScreen.tsx',
             'features/logs/components/voiceResult/ClipGlance.tsx', 'features/tests/components/TestSheetFrame.tsx',
+            // voice flow v2 (F2): the voice journey's one full-screen layer - the app's bar is not drawn while it is open (AppContent)
+            'features/logs/components/voiceFlowV2/VoiceLayer.tsx',
         ]) expect(overlays).toContain(rel);
     });
 
@@ -108,6 +110,21 @@ describe('FOOT-1 — every page\'s last line can scroll clear of the bar', () =>
         const main = app.slice(app.indexOf('<main'), app.indexOf('</main>'));
         expect(main).toMatch(/paddingBottom: isKeyboardOpen \? '1\.5rem' : BOTTOM_BAR_CLEARANCE/);
         expect(main).not.toContain('6rem');
+    });
+
+    it("F2: while the voice journey's full-screen layer is open, AppContent draws no header, tabs, notices or bottom bar", () => {
+        const app = readFileSync(resolve(SRC, 'AppContent.tsx'), 'utf-8');
+        expect(app).toContain('useVoiceLayerOpen()');
+        for (const chrome of ['<AppHeader', '<MeAlertRail', '<AccessStatusNotice', '<HeldWorkNotice', '<AiTestModeBanner']) {
+            expect(app).toContain(`{!voiceFull && ${chrome}`);
+        }
+        expect(app).toContain('hidden={isKeyboardOpen || voiceFull}');
+    });
+
+    it("F3: the saved screen's bottom bar is the voice layer's bottom slot, not a sticky footer in the page flow, while a layer is open", () => {
+        const bar = readFileSync(resolve(SRC, 'features/logs/components/voiceFlowV2/IdleCloseBar.tsx'), 'utf-8');
+        expect(bar).toContain('useVoiceLayerBottom()');
+        expect(bar).toContain('createPortal(bar, slot)');
     });
 
     it('the bar draws its row at the same height the room is counted from', () => {

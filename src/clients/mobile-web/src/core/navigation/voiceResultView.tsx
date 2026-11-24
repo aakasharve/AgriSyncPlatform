@@ -47,6 +47,7 @@ import { TaskCloseConfirmSlot } from './savedView';
 import { TodayAttendanceCard } from '../../features/logs/components/entry/TodayAttendanceCard';
 import { entryAttendance } from '../../features/logs/components/entry/todayAttendance';
 import { leaveDetailIfOpen } from '../../features/logs/components/voiceFlowV2/detailBack';
+import { VoiceLayer } from '../../features/logs/components/voiceFlowV2/VoiceLayer';
 
 /** No plot chosen: the entry flow opens on the work home (`LogEntryFlow` starts at home without a selection). */
 const WORK_HOME_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -130,11 +131,9 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
         </div>
     ) : undefined;
 
-    return (
+    const backBar = <SavedScreenBack onBack={ctx.handleReset} onStepBack={FEATURE_FLAGS.voiceFlowV2 ? leaveDetailIfOpen : undefined} variant={FEATURE_FLAGS.voiceFlowV2 ? 'chip' : 'bar'} />;
+    const container = (
         <>
-            {/* The existing sticky back (BUG-2 2026-08-14): reachable however far he scrolls, and it owns the
-                phone's hardware back. Same one step as the bottom bar's "मागे": the mic of the same plot. */}
-            <SavedScreenBack onBack={ctx.handleReset} onStepBack={FEATURE_FLAGS.voiceFlowV2 ? leaveDetailIfOpen : undefined} />
             {/* Loaded on first show (lazyComponents); the brief wait shows nothing rather than an English "Loading...". */}
             <React.Suspense fallback={<div className="min-h-[40vh]" aria-busy="true" data-testid="voice-result-loading" />}>
                 <VoiceResultContainer
@@ -182,6 +181,19 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     extras={extras}
                 />
             </React.Suspense>
+        </>
+    );
+    // spec voice-flow-v2-2026-11-23 (F2): the saved screen is the last part of the voice journey's ONE full-screen layer: its top row
+    // holds "मागे" and the place chip; the bottom bar ("आणखी सांगा") is the layer's bottom slot.
+    if (FEATURE_FLAGS.voiceFlowV2) {
+        return <VoiceLayer step="saved" back={backBar} placeLabel={language => placeOf(logs, language, ctx.crops)}>{container}</VoiceLayer>;
+    }
+    return (
+        <>
+            {/* The existing sticky back (BUG-2 2026-08-14): reachable however far he scrolls, and it owns the
+                phone's hardware back. Same one step as the bottom bar's "मागे": the mic of the same plot. */}
+            {backBar}
+            {container}
         </>
     );
 };

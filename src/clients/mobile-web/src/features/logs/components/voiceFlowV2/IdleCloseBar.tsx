@@ -11,6 +11,7 @@
  * turns the close off (`offReason`), no countdown is shown — only the mic.
  */
 import React, { useEffect, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { logger } from '../../../../infrastructure/observability/Logger';
 import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
@@ -18,6 +19,7 @@ import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { useResultStr } from '../voiceResult/resultStrings';
 import { MicGlyph, SANS } from './savedBits';
 import { useIdleClose } from './useIdleClose';
+import { useVoiceLayerBottom } from './VoiceLayer';
 const SECONDS = 30;
 
 export interface IdleCloseBarProps {
@@ -41,10 +43,18 @@ export const IdleCloseBar: React.FC<IdleCloseBarProps> = ({ rootRef, pauseReason
         if (offReason) logger.info('voice_v2.saved.auto_close_off', { component: 'SavedScreen', action: 'idle_close_off', reason: offReason });
     }, [offReason]);
     const share = paused ? 1 : Math.max(0, Math.min(1, secondsLeft / SECONDS));
-    return (
-        <div data-testid="vr2-idle-bar" data-state={off ? 'off' : paused ? 'paused' : 'running'}
-            className="sticky z-20 -mx-4 mt-3 flex items-center gap-3 border-t border-[#DDE3DA] bg-white px-3.5 pb-3.5 pt-2.5"
-            style={{ bottom: BOTTOM_BAR_CLEARANCE, fontFamily: SANS }}>
+    // F3: inside the voice layer the bar is the layer's BOTTOM bar (outside the scrolling body, as in shots 07-12), never drawn
+    // over the saved card. Outside a layer it keeps its sticky place in the page.
+    const slot = useVoiceLayerBottom();
+    const inLayer = slot !== undefined;
+    const bar = (
+        <div data-testid="vr2-idle-bar" data-state={off ? 'off' : paused ? 'paused' : 'running'} data-placed={inLayer ? 'bottom' : 'flow'}
+            className={inLayer
+                ? 'flex items-center gap-3 border-t border-[#DDE3DA] bg-white px-3.5 pt-2.5'
+                : 'sticky z-20 -mx-4 mt-3 flex items-center gap-3 border-t border-[#DDE3DA] bg-white px-3.5 pb-3.5 pt-2.5'}
+            style={inLayer
+                ? { fontFamily: SANS, paddingBottom: 'calc(0.875rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }
+                : { bottom: BOTTOM_BAR_CLEARANCE, fontFamily: SANS }}>
             <button type="button" onClick={onAddAnother} data-testid="vr2-add-another" aria-label={RS.addAnother}
                 className="flex flex-none flex-col items-center gap-[3px] active:scale-95">
                 <span className="grid h-[58px] w-[58px] place-items-center rounded-full text-white shadow-[0_6px_16px_rgba(15,107,58,0.35)]"
@@ -63,6 +73,8 @@ export const IdleCloseBar: React.FC<IdleCloseBarProps> = ({ rootRef, pauseReason
             )}
         </div>
     );
+    if (!inLayer) return bar;
+    return slot ? createPortal(bar, slot) : null;
 };
 
 export default IdleCloseBar;
