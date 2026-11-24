@@ -40,6 +40,13 @@ public sealed record VoiceParseCanonicalResult
     public List<string> Warnings { get; init; } = [];
     public string? Error { get; init; }
 
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (Task 0) — how long each server stage of this voice note took. Set by
+    /// the orchestrator's two-stage call on every result it returns; <c>null</c> on results that never went through it
+    /// (a provider's own answer, the streaming parse). Additive: nothing that read this result before reads it.
+    /// </summary>
+    public VoiceStageTimings? StageTimings { get; init; }
+
     // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.8 ────────────────
     // Extended transcript surface. Each provider populates the subset it can
     // emit; nullables are the contract for "this provider does not produce

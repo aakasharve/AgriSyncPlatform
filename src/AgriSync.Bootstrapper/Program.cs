@@ -137,6 +137,10 @@ try
                 // browser or WebView refuses a PATCH in preflight unless the method is listed here, so the day a rename screen
                 // calls it the request would be blocked before it reached the server.
                 .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                // spec: voice-instant-phase-a-2026-11-23 (Task 0) - the voice-parse answer carries a Server-Timing header (where
+                // the server's time went). A browser or WebView hides every response header that is not on this list from the
+                // page's code, so without it the phone could never read the numbers it exists to report.
+                .WithExposedHeaders("Server-Timing")
                 .AllowCredentials();
         });
     });

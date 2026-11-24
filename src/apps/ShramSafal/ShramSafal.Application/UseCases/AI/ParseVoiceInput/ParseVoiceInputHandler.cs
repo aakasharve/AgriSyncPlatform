@@ -302,7 +302,10 @@ public sealed class ParseVoiceInputHandler(
                 // and CreateDailyLogHandler can stamp the same hash on the
                 // resulting DailyLog's Provenance (sub-phase 01.5 wires the
                 // response shape; 01.6 wires the frontend).
-                PromptContentHash: canonicalResult.PromptContentHash);
+                PromptContentHash: canonicalResult.PromptContentHash,
+                // spec: voice-instant-phase-a-2026-11-23 (Task 0) — per-stage server timings for the endpoint's
+                // Server-Timing header and its one log line. Not part of the JSON body.
+                StageTimings: canonicalResult.StageTimings);
 
             // DATA_PRINCIPLE_SPINE sub-phase 02.3 — persist the warm-tier
             // Transcript projection for the winning AiJobAttempt. Supervisor

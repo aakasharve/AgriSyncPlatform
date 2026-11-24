@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Mime;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -651,6 +652,7 @@ public static class AiEndpoints
             // ultimately the structurer prompt's {{captured_at}} token.
             RecordedAtUtc: parsed.RecordedAtUtc);
 
+        var handlerStartedAt = Stopwatch.GetTimestamp();
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)
         {
@@ -664,6 +666,16 @@ public static class AiEndpoints
         }
 
         var job = await aiJobRepository.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
+
+        // spec: voice-instant-phase-a-2026-11-23 (Task 0) — where the server's time went, in the standard Server-Timing
+        // header (the phone reads it; baseline before any speed change, doctrine E6) and in ONE structured log line.
+        WriteVoiceTimings(
+            httpRequest.HttpContext,
+            logger,
+            parseResult.StageTimings,
+            Stopwatch.GetElapsedTime(handlerStartedAt),
+            job?.Id,
+            parsed.InputRawDurationMs);
         // jobId (legacy) and sourceAiJobId (spine) both emitted from the same
         // AiJob.Id. Phase 01.5 forward-declares sourceAiJobId for downstream
         // spine consumers (CreateDailyLog at user-Confirm); jobId stays for
@@ -1594,6 +1606,43 @@ public static class AiEndpoints
             // the historical 400 + {error, message} shape.
             _ => Results.BadRequest(body),
         };
+    }
+
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (Task 0) — writes the <c>Server-Timing</c> response header
+    /// (<c>s3;dur=…, stt;dur=…, struct;dur=…, total;dur=…</c>, whole milliseconds, never negative) and the same four
+    /// numbers as one structured log line. A stage that did not run for this request reads 0 and the log line says which
+    /// path ran, so a 0 is never read as "instant". <c>total</c> is the larger of the orchestrator's own total and the
+    /// time this endpoint spent in the handler (so it also covers the handler's database reads and writes), and is the
+    /// server's share of the wait only: the upload and the reply travel outside it.
+    /// </summary>
+    internal static void WriteVoiceTimings(
+        HttpContext context,
+        ILogger logger,
+        VoiceStageTimings? timings,
+        TimeSpan handlerElapsed,
+        Guid? jobId,
+        int? rawDurationMs)
+    {
+        var handlerMs = (int)Math.Clamp(Math.Round(handlerElapsed.TotalMilliseconds, MidpointRounding.AwayFromZero), 0, int.MaxValue);
+        var measured = timings ?? new VoiceStageTimings(0, 0, 0, 0, VoiceStageTimings.OneCallPath);
+        var effective = new VoiceStageTimings(
+            Math.Max(measured.S3Ms, 0),
+            Math.Max(measured.SttMs, 0),
+            Math.Max(measured.StructMs, 0),
+            Math.Max(Math.Max(measured.TotalMs, 0), handlerMs),
+            measured.Path);
+
+        context.Response.Headers["Server-Timing"] = effective.ToServerTimingHeader();
+        logger.LogInformation(
+            "[voice-timing] jobId={JobId} path={Path} s3Ms={S3Ms} sttMs={SttMs} structMs={StructMs} totalMs={TotalMs} rawDurationMs={RawDurationMs}",
+            jobId,
+            effective.Path,
+            effective.S3Ms,
+            effective.SttMs,
+            effective.StructMs,
+            effective.TotalMs,
+            rawDurationMs);
     }
 
     private static IResult UnexpectedNullResult(string operation)
