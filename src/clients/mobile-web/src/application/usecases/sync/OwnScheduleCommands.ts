@@ -14,6 +14,10 @@ import type { ScheduleTaskContent } from '../../../../../../../sync-contract/sch
  *   - `makeMain`: "हेच मुख्य करा", the only act that makes the own schedule main. `stageLine` (optional after the first time) is listed in DAY ORDER; a work's
  *     `stageIndex` names a stage by its place in that order.
  *
+ *   - `take` (slice 9): ONE tap puts a work of a schedule the plot FOLLOWS into the own schedule, origin kept (`schedule.take_task`). It names the version it
+ *     comes from, the work's key and - when the work has several doses - the one picked. The server writes the own work and its origin and NOTHING else (no plan,
+ *     the main schedule untouched): "plan", then who, is the second act (`planOwnWork`). Taking it back is `remove` (the origin stays on the server).
+ *
  * The queue checks each payload against the contract's own Zod schema before it is queued (a payload the server would refuse by shape never leaves the phone:
  * it throws here). The server refuses all three for a farm the schedule mechanism is not switched on for (`ShramSafal.ScheduleMechanismOff`); that refusal,
  * like every other, parks visibly with plain words (RejectionPolicy, ConflictResolutionService): nothing waiting on the phone is dropped silently.
@@ -58,6 +62,25 @@ export class OwnScheduleCommands {
         await mutationQueue.enqueue(
             SyncMutationName.OwnscheduleItemRemove,
             { farmId: place.farmId, plotId: place.plotId, cropCycleId: place.cropCycleId, taskKey },
+            { clientRequestId, clientCommandId: clientRequestId },
+        );
+        return { clientRequestId };
+    }
+
+    /** Slice 9: "माझ्या वेळापत्रकात घ्या". Offline first: one `schedule.take_task` in the outbox; the server composes the work from the version, so none of its words travel. */
+    static async take(place: OwnSchedulePlace, source: { sourceVersionId: string; taskKey: string; dose?: string | null }): Promise<QueuedOwnScheduleChange> {
+        const clientRequestId = requestIdFor(SyncMutationName.ScheduleTakeTask, place.cropCycleId, source.taskKey);
+        const dose = source.dose?.trim();
+        await mutationQueue.enqueue(
+            SyncMutationName.ScheduleTakeTask,
+            {
+                farmId: place.farmId,
+                plotId: place.plotId,
+                cropCycleId: place.cropCycleId,
+                sourceVersionId: source.sourceVersionId,
+                taskKey: source.taskKey,
+                ...(dose ? { dose } : {}),
+            },
             { clientRequestId, clientCommandId: clientRequestId },
         );
         return { clientRequestId };
