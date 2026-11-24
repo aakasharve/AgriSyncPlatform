@@ -8,7 +8,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import referenceCatalog from '../../../../../../../../../sync-contract/reference/inputs/catalog.json';
-import { AgriLogDatabase } from '../../../../../infrastructure/storage/DexieDatabase';
+import { AgriLogDatabase, DATABASE_VERSION } from '../../../../../infrastructure/storage/DexieDatabase';
 import { CATALOG_VERSION, matchProduct, setStoredLibrary, type CatalogFile } from '../../../../../domain/inputs/inputCatalog';
 import {
     INPUT_LIBRARY_PATH,
@@ -65,7 +65,7 @@ afterEach(async () => {
 
 describe('the library download (lane IT1c Task 4)', () => {
     it('the shipped Dexie version has the inputLibrary store', () => {
-        expect(db.verno).toBe(31); // slice 5's v31 keeps it too; v26 added the inputLibrary store; lane L8b-2's v27, lane L8c-1's v28, lane SCH-ID-P's v29 and slice 3's v30 keep it
+        expect(db.verno).toBe(DATABASE_VERSION); // the current version (slice 8's v32 keeps it too); slice 5's v31 keeps it too; v26 added the inputLibrary store; lane L8b-2's v27, lane L8c-1's v28, lane SCH-ID-P's v29 and slice 3's v30 keep it
         expect(db.tables.map(t => t.name)).toContain('inputLibrary');
     });
 

@@ -131,6 +131,16 @@ describe('the button', () => {
         expect((await plans())[0].payload).toMatchObject({ taskKey: 't-prune', assigneeUserId: ME, cropCycleId: PLACE.cropCycleId });
     });
 
+    it('who is a real who: a seat that may assign is offered the people of the farm, and the plan carries the one picked', async () => {
+        const WORKER = 'b0b0b0b0-0000-4000-8000-0000000000b2';
+        mount(PRUNE, { planning: { mayAssign: true, assignees: [{ userId: WORKER, displayName: 'राजू', role: 'Worker' } as never], myUserId: ME } });
+        fireEvent.click(await screen.findByTestId('take-btn-t-prune'));
+        fireEvent.click(await screen.findByTestId('take-plan-t-prune'));
+        fireEvent.click(screen.getByTestId(`plan-assign-${WORKER}`));
+        await waitFor(async () => expect(await plans()).toHaveLength(1));
+        expect((await plans())[0].payload).toMatchObject({ taskKey: 't-prune', assigneeUserId: WORKER });
+    });
+
     it('the same work in two schedules is ONE answer: after a take, the other card of the same work says it is in my schedule', async () => {
         render(<><TakeIntoMyScheduleButton place={PLACE} sourceVersionId={SOURCE_A} task={PRUNE} language="mr" /><TakeIntoMyScheduleButton place={PLACE} sourceVersionId={SOURCE_B} task={PRUNE} language="mr" /></>);
         const buttons = await screen.findAllByTestId('take-btn-t-prune');

@@ -37,6 +37,7 @@ import { buildScheduleMap } from '../features/scheduler/schedulePage/scheduleMap
 import { followedCheckNote } from '../features/scheduler/schedulePage/followedCheck';
 import { scheduleCropCode } from '../infrastructure/reference/TemplateCatalog';
 import { PlotScheduleHome } from '../features/scheduler/schedulePage/PlotScheduleHome';
+import { loadAssignees, type AssigneeList } from '../features/plannedWork/data/plannedWorkAssignees';
 import { useScheduleMechanism } from '../core/session/scheduleMechanism';
 import { useOwnWorkPlace } from '../features/scheduler/ownSchedule/ownWorkPlace';
 import type { TakeHost } from '../features/scheduler/ownSchedule/TakeIntoMyScheduleButton';
@@ -87,12 +88,14 @@ interface SchedulerPageProps {
     takeFarmId?: string | null;
     takeUserId?: string | null;
     mayPlanWork?: boolean;
+    /** The planning door's own rule: the owner or a holder of AssignWork may hand a plan to a person from the server's list (`loadAssignees`, kept for offline). */
+    mayAssignWork?: boolean;
     onOpenConflicts?: () => void;
 }
 
 type View = 'HOME' | 'LIBRARY' | 'EDITOR' | 'GRID';
 
-const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule, takeFarmId = null, takeUserId = null, mayPlanWork = false, onOpenConflicts }) => {
+const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule, takeFarmId = null, takeUserId = null, mayPlanWork = false, mayAssignWork = false, onOpenConflicts }) => {
     // spec I18 — a crop's name in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode).
     const language = useOptionalLanguage()?.language ?? 'mr';
     const nameOf = (c: { name: string; masterId?: string }): string => cropNameIn(c.name, language, c.masterId);
@@ -207,10 +210,18 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     // Slice 9: the take on the day cards needs the switch on for the farm, both permissions (SM-10) and the plot's current season on this phone.
     const takeOn = useScheduleMechanism(takeFarmId);
     const mayTake = takeOn && mayMakeOwnSchedule === true && mayPlanWork === true && !!takeFarmId;
+    // The SAME people the planning door lists (PlanWorkPage): the server's assignee list, kept on the phone for the times there is no net.
+    const [takePeople, setTakePeople] = useState<AssigneeList>({ assignees: [], source: 'none', receivedAtUtc: null });
+    useEffect(() => {
+        if (!mayTake || !mayAssignWork || !takeFarmId || !takeUserId) return undefined;
+        let live = true;
+        void loadAssignees(takeUserId, takeFarmId).then(list => { if (live) setTakePeople(list); });
+        return () => { live = false; };
+    }, [mayTake, mayAssignWork, takeFarmId, takeUserId]);
     const takePlace = useOwnWorkPlace(mayTake ? takeFarmId : null, plot?.id ?? null, crops);
     const takeHost: TakeHost | undefined = takePlace.place
         ? { place: { farmId: takePlace.place.farmId, plotId: takePlace.place.plotId, cropCycleId: takePlace.place.cropCycleId }, mayTake: true, onOpenConflicts,
-            planning: { mayAssign: false, assignees: [], myUserId: takeUserId } }
+            planning: { mayAssign: mayAssignWork, assignees: mayAssignWork ? takePeople.assignees : [], myUserId: takeUserId } }
         : undefined;
     const openMaker = () => { if (onMakeOwnSchedule && cropId) onMakeOwnSchedule(cropId); };
 

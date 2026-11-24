@@ -291,6 +291,7 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 takeFarmId={ctx.activeFarmId}
                 takeUserId={ctx.meUserId ?? null}
                 mayPlanWork={ctx.mayOpenPlanner ?? false}
+                mayAssignWork={ctx.mayAssignWork ?? false}
                 onOpenConflicts={() => ctx.setCurrentRoute('offline-conflicts')}
             />
         </div>
