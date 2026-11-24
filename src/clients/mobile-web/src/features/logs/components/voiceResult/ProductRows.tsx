@@ -18,7 +18,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { amountText, nameIsPhrase, productName, type ProductBox, type ProductItem, type ProductWater } from './productModel';
 import { inputWords } from '../../../../domain/inputs/inputWords';
 import { ingredientLine, type ProductAnswerKit } from './ProductCard';
-import { answersOf, identityOf, isAnswerable, nameForMatching, statusOf, TYPE_STYLE, typeKeyOf, type ItemStatus } from './inputIdentityModel';
+import { answersOf, identityOf, isAnswerable, nameForMatching, statusOf, TYPE_STYLE, typeKeyOfItem, type ItemStatus } from './inputIdentityModel';
 import { nearProducts } from '../../../../domain/inputs/nearNames';
 import { resultCopy, type ResultCopy } from './resultCopy';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
@@ -152,7 +152,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen
     const copy = resultCopy(language);
     const answers = answersOf(kit.logById.get(logId), item.ref);
     const identity = identityOf(item, answers);
-    const key = typeKeyOf(identity);
+    const key = typeKeyOfItem(item, identity);
     const style = TYPE_STYLE[key];
     const rawStatus = statusOf(identity, item, answers, kit.canCheck);
     // Lane FACTS-2: library names that sound like his word exist - the row says so (the card shows them), instead of "could not identify".
@@ -172,7 +172,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen
             <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
                     <span className="text-[18px] font-extrabold text-stone-900" data-testid="vr-prow-name">{name}</span>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ring-1 ${style.pill}`} data-testid="vr-prow-type">{copy.typeNames[key]}</span>
+                    {key !== 'unknown' && <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ring-1 ${style.pill}`} data-testid="vr-prow-type">{copy.typeNames[key]}</span>}
                 </span>
                 {ingredient && <span className="mt-0.5 block text-[15px] font-bold text-stone-800" data-testid="vr-prow-ingredient">{ingredient}</span>}
                 {status && Icon && (

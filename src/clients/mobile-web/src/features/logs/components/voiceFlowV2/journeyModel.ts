@@ -16,7 +16,7 @@ import { previewLogs } from '../checkSave/checkSaveModel';
 import { partEntriesOf, primaryOf, type PartKey } from '../voiceResult/resultModel';
 import { entryText, partNameIn } from '../voiceResult/partNames';
 import { productBoxesOf, productName } from '../voiceResult/productModel';
-import { identityOf, typeKeyOf, type TypeKey } from '../voiceResult/inputIdentityModel';
+import { identityOf, typeKeyOfItem, type TypeKey } from '../voiceResult/inputIdentityModel';
 import { resultCopy } from '../voiceResult/resultCopy';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 
@@ -103,8 +103,8 @@ export function journeyFactsOf(
     const typeNames = resultCopy(language ?? undefined).typeNames;
     const products = unique(productBoxesOf(primary).flatMap(box => box.items.map(item => {
         const name = productName(item, language);
-        const type = typeKeyOf(identityOf(item));
-        return { part: 'inputs' as const, text: name ? `${name} · ${typeNames[type]}` : '', product: { name, typeName: typeNames[type], type } };
+        const type = typeKeyOfItem(item, identityOf(item));
+        return { part: 'inputs' as const, text: name ? (type === 'unknown' ? name : `${name} · ${typeNames[type]}`) : '', product: { name, typeName: type === 'unknown' ? '' : typeNames[type], type } };
     })));
     return { excerpt, parts, products, places };
 }

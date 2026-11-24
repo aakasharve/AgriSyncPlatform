@@ -15,7 +15,7 @@ import { Camera, CircleDot, CircleHelp, Clock, ShieldCheck, UserCheck, X } from 
 import { nearProducts } from '../../../../domain/inputs/nearNames';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
-import { answersOf, identityOf, isAnswerable, nameForMatching, statusOf, TYPE_STYLE, typeKeyOf, type TypeKey } from '../voiceResult/inputIdentityModel';
+import { answersOf, identityOf, isAnswerable, nameForMatching, statusOf, TYPE_STYLE, typeKeyOfItem, type TypeKey } from '../voiceResult/inputIdentityModel';
 import { ingredientLine, type ProductAnswerKit } from '../voiceResult/ProductCard';
 import { statusWords } from '../voiceResult/ProductRows';
 import { amountText, nameIsPhrase, productName, type ProductBox, type ProductItem, type ProductWater } from '../voiceResult/productModel';
@@ -57,7 +57,7 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
     const copy = resultCopy(language);
     const answers = answersOf(kit.logById.get(logId), item.ref);
     const identity = identityOf(item, answers);
-    const key = typeKeyOf(identity);
+    const key = typeKeyOfItem(item, identity);
     const style = TYPE_STYLE[key];
     const rawStatus = statusOf(identity, item, answers, kit.canCheck);
     const hasNear = rawStatus.kind === 'notFound' && !rawStatus.photo && isAnswerable(item) && nearProducts(nameForMatching(item)).length > 0;
@@ -75,7 +75,7 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
             <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-1.5">
                     <b className="text-[17px] font-extrabold" data-testid="vr-prow-name">{name}</b>
-                    <em className={`rounded-full bg-white px-[9px] py-px text-[12px] font-extrabold not-italic shadow-[inset_0_0_0_1px_currentColor] ${PILL_INK[key]}`} data-testid="vr-prow-type">{copy.typeNames[key]}</em>
+                    {key !== 'unknown' && <em className={`rounded-full bg-white px-[9px] py-px text-[12px] font-extrabold not-italic shadow-[inset_0_0_0_1px_currentColor] ${PILL_INK[key]}`} data-testid="vr-prow-type">{copy.typeNames[key]}</em>}
                 </span>
                 {ingredient && <span className="mt-px block text-[14px] font-bold text-[#44403C]" data-testid="vr-prow-ingredient">{ingredient}</span>}
                 {status && Icon && (

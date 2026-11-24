@@ -34,7 +34,7 @@ import {
     isAnswerable,
     nameForMatching,
     TYPE_STYLE,
-    typeKeyOf,
+    typeKeyOfItem,
     type ItemAnswers,
     type ItemIdentity,
 } from './inputIdentityModel';
@@ -158,7 +158,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const log = kit.logById.get(logId);
     const answers: ItemAnswers = answersOf(log, item.ref);
     const identity = identityOf(item, answers);
-    const style = TYPE_STYLE[typeKeyOf(identity)];
+    const style = TYPE_STYLE[typeKeyOfItem(item, identity)];
     const found = identity.state === 'found';
     const answerable = isAnswerable(item);
     const name = productName(item, language) || (item.matchName ?? '');
@@ -210,13 +210,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" data-testid="vr-product-sheet" role="dialog" aria-modal="true"
             style={{ fontFamily: SANS }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-            <div className="max-h-[85%] overflow-auto rounded-t-[28px] bg-white px-4 pb-5 pt-2.5" data-testid="vr-product-card" data-type={typeKeyOf(identity)}>
+            <div className="max-h-[85%] overflow-auto rounded-t-[28px] bg-white px-4 pb-5 pt-2.5" data-testid="vr-product-card" data-type={typeKeyOfItem(item, identity)}>
                 <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300" aria-hidden="true" />
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[22px] font-extrabold text-stone-900" data-testid="vr-card-name">{name}</span>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[13.5px] font-extrabold ring-1 ${style.pill}`} data-testid="vr-card-type">
-                        {copy.typeNames[typeKeyOf(identity)]}
-                    </span>
+                    {typeKeyOfItem(item, identity) !== 'unknown' && (
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[13.5px] font-extrabold ring-1 ${style.pill}`} data-testid="vr-card-type">
+                            {copy.typeNames[typeKeyOfItem(item, identity)]}
+                        </span>
+                    )}
                 </div>
                 {identity.state === 'found' && identity.byPick && (
                     <div className="mt-1.5 rounded-xl bg-sky-50 px-3 py-1.5 text-[14px] font-bold leading-snug text-sky-900 ring-1 ring-sky-200" data-testid="vr-card-picked">
