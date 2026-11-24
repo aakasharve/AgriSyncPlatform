@@ -641,6 +641,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // and one index. No policy is created or altered (no farm_memberships or farm_join_requests object, no seat). Down() refuses while any of the columns holds a
         // value (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261123113122_AddScheduleReferenceFormat",
+        // spec: voice-instant-phase-a-2026-11-23 - Up() and Down() read in full: each is ONE data-only UPDATE of ssf.ai_provider_configs
+        // (transcriber_provider, structurer_provider, modified_at_utc). No table, policy, grant or seat; safe to revert and re-apply mid-proof.
+        "20261124090000_SetVoiceProvidersToSarvam",
     ];
 
     /// <summary>

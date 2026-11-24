@@ -338,6 +338,9 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    SELECT / INSERT only (grants are per table). Down() REFUSES while any of the columns holds a value and otherwise drops exactly what Up() added, so on this
         //    harness's empty schema it reverts and re-applies.
         "20261123113122_AddScheduleReferenceFormat",
+        // spec: voice-instant-phase-a-2026-11-23 - Up() and Down() read in full: each is ONE data-only UPDATE of ssf.ai_provider_configs
+        // (transcriber_provider, structurer_provider, modified_at_utc). No table, policy, grant or seat; safe to revert and re-apply mid-proof.
+        "20261124090000_SetVoiceProvidersToSarvam",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

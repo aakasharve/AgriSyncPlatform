@@ -43,7 +43,8 @@ public sealed class DfesQuestionContextMigrationRealPostgresTests(Xunit.Abstract
     /// </summary>
     /// 20261123113122_AddScheduleReferenceFormat (plr-d10 schedule slice 7): four nullable columns (a chain on schedule_templates; ticked keys and a content hash on schedule_checks) and one index;
     /// Down() refuses while any of them holds a value (none does in this proof) and otherwise drops exactly what Up() added. It touches no question table.
-    private static readonly string[] ReviewedLaterMigrations = ["20261123020241_AddScheduleTaskFormat", "20261123040137_AddOwnScheduleItems", "20261123071136_AddScheduleFeed", "20261123113122_AddScheduleReferenceFormat"];
+    // 20261124090000_SetVoiceProvidersToSarvam (voice-instant-phase-a-2026-11-23): one data-only UPDATE of ssf.ai_provider_configs each way; it touches no question table.
+    private static readonly string[] ReviewedLaterMigrations = ["20261123020241_AddScheduleTaskFormat", "20261123040137_AddOwnScheduleItems", "20261123071136_AddScheduleFeed", "20261123113122_AddScheduleReferenceFormat", "20261124090000_SetVoiceProvidersToSarvam"];
     private const string AppRole = "agrisync_app";
 
     private static readonly string[] NewColumns =
