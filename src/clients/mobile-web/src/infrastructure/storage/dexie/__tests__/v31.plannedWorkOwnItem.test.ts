@@ -57,9 +57,9 @@ afterEach(async () => { await Dexie.delete(NAME); });
 
 describe('Dexie v31 - plans made from an own work are found by the work', () => {
     it('is the current version and indexes plannedWork by ownItemId', () => {
-        expect(DATABASE_VERSION).toBe(31);
+        expect(DATABASE_VERSION).toBeGreaterThanOrEqual(31); // v32 (slice 8) follows; its own test pins the number
         const db = new AgriLogDatabase(NAME);
-        expect(db.verno).toBe(31);
+        expect(db.verno).toBeGreaterThanOrEqual(31);
         expect(db.table('plannedWork').schema.indexes.map(i => i.name)).toEqual(['farmId', 'status', 'assigneeUserId', 'modifiedAtUtc', 'ownItemId']);
         expect(db.table('ownScheduleItems').schema.indexes.map(i => i.name)).toEqual(['farmId', 'plotId', 'cropCycleId', '[cropCycleId+taskKey]', 'state']);
         db.close();
@@ -78,8 +78,8 @@ describe('Dexie v31 - plans made from an own work are found by the work', () => 
 
         const db = new AgriLogDatabase(NAME);
         await db.open();
-        expect(db.verno).toBe(31);
-        expect(db.tables.map(t => t.name).sort()).toEqual(before);
+        expect(db.verno).toBeGreaterThanOrEqual(31);
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleDayCards'].sort()); // scheduleDayCards is v32's (slice 8)
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect((await db.plannedWork.get('task-1'))?.status).toBe('Open');
         expect(await db.ownScheduleItems.count()).toBe(1);

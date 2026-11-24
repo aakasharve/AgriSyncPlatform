@@ -30,6 +30,7 @@ import { PlanAssigneeChips, type AssigneeChoice } from '../../plannedWork/compon
 import { usePlannedWork } from '../../plannedWork/data/usePlannedWork';
 import { ownItemIdFor, planOwnWork, planStateOf } from './ownWorkPlan';
 import { OWN_WORK_PLAN_WORDS, refusalWords } from './ownWorkPlanWords';
+import { OwnWorkCardButton } from '../dayCards/DayCardsEntries';
 
 /** Who may be chosen for a plan of an own work: the planning form's rule (the server decides every request). */
 export interface OwnWorkPlanning {
@@ -163,6 +164,7 @@ export const OwnWorkList: React.FC<OwnWorkListProps> = ({ place, language, onAdd
                     )}
                     {planLine(w.task, w.refused)}
                     <div className="mt-1 flex flex-wrap">
+                        <OwnWorkCardButton task={w.task} scheduleId={ownItemIdFor(place.cropCycleId, w.taskKey)} />
                         <Tap onClick={() => onEdit(w.taskKey)} data-testid={`own-list-edit-${w.taskKey}`} className="min-h-[48px] rounded-full px-3 text-[15px] font-extrabold text-sky-800">{words.change}</Tap>
                         <Tap onClick={() => { void remove(w.task); }} disabled={busy} data-testid={`own-list-remove-${w.taskKey}`} className="min-h-[48px] rounded-full px-3 text-[15px] font-extrabold text-rose-700">{words.remove}</Tap>
                     </div>
