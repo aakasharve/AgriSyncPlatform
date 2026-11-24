@@ -22,6 +22,8 @@ import { VoiceLevelRing } from './VoiceLevelRing';
 import { TypedLink, TypedSheet, TypedTag } from './TypedEntry';
 import type { RecorderFlowV2 } from './flowV2Types';
 import { MicCard } from './MicCard';
+import { SathiRecording } from './SathiRecording';
+import { NothingUnderstood } from './NothingUnderstood';
 import { HintSlot, useSilenceHelp, type AutoCancelReason } from './SilenceHelp';
 import { AUTO_START_SEC, noteLevelUnmeasurable, noteMicGranted, useAutoStartCountdown } from './useAutoStartCountdown';
 import { logger } from '../../../../infrastructure/observability/Logger';
@@ -34,6 +36,8 @@ const SANS = "'Noto Sans Devanagari', sans-serif";
 export const CANCELLED_NOTE_MS = 1600;
 /** spec voice-flow-v2-2026-11-23 (M1) — a start that never answers frees the mic button again after this. */
 const START_GUARD_MS = 5000;
+/** How long the stamp stays on Sathi after stop. */
+const STAMP_MS = 1400;
 
 export interface RecorderFaceProps {
     isRecording: boolean;
@@ -77,13 +81,17 @@ interface RecordingProps {
     /** This recording was started by the mic card's ring, not by his tap. */
     autoStarted?: boolean;
     onAutoCancel?: (reason: AutoCancelReason) => void;
+    /** F4: "द्राक्ष · प्लॉट १", for the field picture of the v2 recording screen. */
+    place?: string;
 }
 
-const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel }) => {
+const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel, place }) => {
     const [hintDismissed, setHintDismissed] = useState(false);
     const language = useOptionalLanguage()?.language;
     const help = useSilenceHelp({ on: silenceHelp || autoStarted, level, autoStarted, onAutoCancel });
     const hintOn = !silenceHelp && !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
+    // spec voice-flow-v2-2026-11-23 (F4): with the flow on, the recording screen is Sathi's (ring of the parts, bubble, field, bottom stop).
+    if (silenceHelp) return <SathiRecording seconds={seconds} level={level} onStop={onStop} onCancel={onCancel} help={help} place={place} />;
     return (
         <div data-testid="mic-ui" data-recording="yes" style={{ fontFamily: SANS }}
             className="relative flex w-full flex-col items-center overflow-hidden rounded-[28px] border border-emerald-200 bg-[#FCFCFC] px-3 pb-3 pt-3 text-stone-800 shadow-[0_8px_30px_rgba(16,185,129,0.12)]">
@@ -130,6 +138,7 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
     isRecording, seconds, level, disabled, suggest, error, keptNote, errorCode, transcript, lastInputTyped, micRefused,
     onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2,
 }) => {
+    const language = useOptionalLanguage()?.language;
     const [typedOpen, setTypedOpen] = useState(false);
     const [justCancelled, setJustCancelled] = useState(false);
     const cancelTimer = useRef<number | null>(null);
@@ -142,6 +151,11 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
     const v2On = flowV2 !== undefined;
     const [autoStarted, setAutoStarted] = useState(false);
     const [heldNote, setHeldNote] = useState(false);
+    // F4: right after stop, Sathi shows the "लक्षात ठेवलं" stamp for a moment (the waiting list replaces it as soon as the save starts).
+    const [stamped, setStamped] = useState(false);
+    const stampTimer = useRef<number | null>(null);
+    useEffect(() => () => { if (stampTimer.current) window.clearTimeout(stampTimer.current); }, []);
+    useEffect(() => { if (isRecording) setStamped(false); }, [isRecording]);
     // M1 — one start at a time: a tap at 6.9 s and the 7 s timer can never open two recorders.
     const startingRef = useRef(false);
     const startGuardTimer = useRef<number | null>(null);
@@ -183,10 +197,23 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
             setHeldNote(true);
             onCancel();
         };
+        const stop = () => {
+            if (flowV2?.silenceHelp) {
+                hapticFeedback.success?.();
+                setStamped(true);
+                if (stampTimer.current) window.clearTimeout(stampTimer.current);
+                stampTimer.current = window.setTimeout(() => setStamped(false), STAMP_MS);
+            }
+            onStop();
+        };
         return (
-            <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel}
-                silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel} />
+            <Recording seconds={seconds} level={level} onStop={stop} onCancel={cancel}
+                silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel}
+                place={card?.placeLabel(language)} />
         );
+    }
+    if (stamped && flowV2?.silenceHelp) {
+        return <SathiRecording seconds={seconds} onStop={onStop} onCancel={onCancel} help={{ stage: 'none', listening: false }} place={card?.placeLabel(language)} stamped />;
     }
 
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;
@@ -222,7 +249,9 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
                 </div>
             )}
 
-            {error && (
+            {/* F7: with the flow on, an answer with no work (he said something, nothing was found) is Sathi's calm screen, not the red box. */}
+            {error && flowV2?.silenceHelp && transcript && !errorCode && <NothingUnderstood transcript={transcript} />}
+            {error && !(flowV2?.silenceHelp && transcript && !errorCode) && (
                 <div className="mt-3 w-full rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-center text-red-700 shadow-sm" data-testid="mic-error" data-error-code={errorCode ?? undefined}>
                     <p className="m-0 flex items-center justify-center gap-2 text-[16px] font-bold"><AlertCircle size={20} aria-hidden="true" />{REC_WORDS.checkInput}</p>
                     <p className="m-0 mt-1 text-[16px] font-medium">{error}</p>

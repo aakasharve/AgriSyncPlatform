@@ -22,6 +22,21 @@ export interface VoiceFlowWords {
     holdLink: string;
     held: string;
     sathiListening: string;
+    // recording screen (F4/F5)
+    sathiListeningSub: string;
+    recOnPhone: (seconds: number) => string;
+    wordsStrip: string;
+    fieldCaption: (place: string) => string;
+    stopLabel: string;
+    stampTitle: string;
+    stampSub: string;
+    // nothing understood (F7)
+    nuTitle: string;
+    nuSub: string;
+    nuMeterTitle: string;
+    nuAsk: string;
+    nuHow: string;
+    nuHeard: string;
     // silence help
     coachOne: string;
     coachTitle: string;
@@ -34,6 +49,7 @@ export interface VoiceFlowWords {
     journeySub: string;
     stepKept: string;
     keptSub: (seconds: number) => string;
+    keptSubServer: (seconds: number) => string;
     stepKeptTyped: string;
     stepWords: string;
     stepParts: string;
@@ -73,6 +89,19 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     holdLink: 'थांबा, अजून प्लॉट निवडायचे आहेत', // PROPOSED (Marathi)
     held: 'माइक दाबल्यावरच ऐकेल', // PROPOSED (Marathi)
     sathiListening: 'आता बोला — मी ऐकतोय', // PROPOSED (Marathi)
+    sathiListeningSub: 'आज शेतात काय काम झालं ते सांगा', // PROPOSED (Marathi)
+    recOnPhone: (n: number) => `✓ ${digitsFor(String(n), 'mr')} सेकंद आवाज फोनवर`, // PROPOSED (Marathi) - "फोनवर" only: the server has not answered while he speaks (P10)
+    wordsStrip: 'बोला... साथी ऐकतोय', // PROPOSED (Marathi) - no live words exist today (P4)
+    fieldCaption: (place: string) => `तुमचं शेत · ${place}`, // PROPOSED (Marathi)
+    stopLabel: 'झालं की थांबवा', // PROPOSED (Marathi)
+    stampTitle: 'लक्षात ठेवलं ✓', // PROPOSED (Marathi)
+    stampSub: 'तुमचा आवाज सुरक्षित आहे.', // PROPOSED (Marathi)
+    nuTitle: 'आवाज जतन झाला', // FOUNDER-APPROVED prototype (shot 12)
+    nuSub: 'काम सापडलं नाही — खालचा माइक दाबून सांगा', // FOUNDER-APPROVED prototype (shot 12)
+    nuMeterTitle: 'साथीला किती समजलं', // approved prototype
+    nuAsk: 'आज कोणतं काम केलं?', // approved prototype
+    nuHow: 'कसं सांगायचं?', // approved prototype
+    nuHeard: 'तुम्ही म्हणालात', // approved prototype
     coachOne: 'बोला… मी ऐकतोय. उदा. “आज छाटणी केली”', // PROPOSED (Marathi)
     coachTitle: 'काय सांगायचं? यापैकी काहीही', // PROPOSED (Marathi)
     prompts: [
@@ -87,6 +116,7 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     journeySub: 'शांतपणे बघा — पुन्हा बोलायची गरज नाही', // PROPOSED (Marathi)
     stepKept: 'आवाज जतन केला', // PROPOSED (Marathi)
     keptSub: (n: number) => `${digitsFor(String(n), 'mr')} सेकंदांचा आवाज · फोनवर सुरक्षित`, // PROPOSED (Marathi)
+    keptSubServer: (n: number) => `${digitsFor(String(n), 'mr')} सेकंदांचा आवाज · फोनवर आणि सर्व्हरवर सुरक्षित`, // approved prototype (shot 06) - only once the server answered (P10)
     stepKeptTyped: 'तुम्ही लिहिलेलं मिळालं', // PROPOSED (Marathi)
     stepWords: 'शब्द लिहून घेतले', // PROPOSED (Marathi)
     stepParts: 'कामं वेगळी केली', // PROPOSED (Marathi)
@@ -124,6 +154,19 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     holdLink: 'Wait, I want to choose more plots', // PROPOSED (English)
     held: 'Listens only when you press the mic', // PROPOSED (English)
     sathiListening: 'Speak now — I am listening', // PROPOSED (English)
+    sathiListeningSub: 'Tell me what work was done on the farm today', // PROPOSED (English)
+    recOnPhone: (n: number) => `✓ ${n} seconds of voice on the phone`, // PROPOSED (English)
+    wordsStrip: 'Speak... Sathi is listening', // PROPOSED (English)
+    fieldCaption: (place: string) => `Your field · ${place}`, // PROPOSED (English)
+    stopLabel: 'Press stop when done', // PROPOSED (English)
+    stampTitle: 'Noted ✓', // PROPOSED (English)
+    stampSub: 'Your voice is safe.', // PROPOSED (English)
+    nuTitle: 'Voice saved', // PROPOSED (English)
+    nuSub: 'No work found — press the mic below and tell it', // PROPOSED (English)
+    nuMeterTitle: 'How much Sathi understood', // PROPOSED (English)
+    nuAsk: 'What work did you do today?', // PROPOSED (English)
+    nuHow: 'How to say it?', // PROPOSED (English)
+    nuHeard: 'You said', // PROPOSED (English)
     coachOne: 'Speak… I am listening. E.g. "Did pruning today"', // PROPOSED (English)
     coachTitle: 'What to say? Any of these', // PROPOSED (English)
     prompts: [
@@ -138,6 +181,7 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     journeySub: 'Just watch — no need to speak again', // PROPOSED (English)
     stepKept: 'Voice kept', // PROPOSED (English)
     keptSub: (n: number) => `${n} seconds of voice · safe on the phone`, // PROPOSED (English)
+    keptSubServer: (n: number) => `${n} seconds of voice · safe on the phone and the server`, // PROPOSED (English)
     stepKeptTyped: 'Your typed words received', // PROPOSED (English)
     stepWords: 'Words written down', // PROPOSED (English)
     stepParts: 'Work sorted into parts', // PROPOSED (English)

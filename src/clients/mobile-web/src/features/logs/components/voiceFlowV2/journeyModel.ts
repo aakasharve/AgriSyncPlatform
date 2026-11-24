@@ -119,7 +119,8 @@ export function journeyStepsOf(journey: VoiceJourneySnapshot | null, facts: Jour
     const drafts: Draft[] = [
         {
             key: 'kept', label: typed ? w.stepKeptTyped : w.stepKept, state: journey?.keptAt !== undefined ? 'done' : 'pending',
-            ...(seconds !== undefined && { sub: w.keptSub(seconds) }),
+            // F5 (P10): "फोनवर" until the server has answered (`understood`), then "फोनवर आणि सर्व्हरवर".
+            ...(seconds !== undefined && { sub: understood ? w.keptSubServer(seconds) : w.keptSub(seconds) }),
         },
         {
             key: 'words', label: w.stepWords, state: understood ? (facts.excerpt ? 'done' : 'skipped') : 'pending',

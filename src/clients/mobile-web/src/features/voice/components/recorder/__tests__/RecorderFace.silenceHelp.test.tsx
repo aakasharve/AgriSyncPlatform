@@ -35,7 +35,7 @@ describe('RecorderFace — silence help (flowV2.silenceHelp)', () => {
         expect(slot).toHaveAttribute('aria-live', 'off');
         expect(slot.textContent).toBe('');
         // in the flow ABOVE the stop ring, never over it
-        expect(slot.compareDocumentPosition(screen.getByTestId('mic-orb')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(slot.compareDocumentPosition(screen.getByTestId('mic-stop')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         advance(9000);
         expect(screen.getByTestId('mic-hint-slot')).toBe(slot);
         expect(screen.queryAllByRole('status')).toHaveLength(0);
