@@ -349,20 +349,23 @@ internal sealed class AiOrchestrator(
         var promptContextWithCapture = promptContext with { CapturedAtUtc = capturedAtUtc };
         var systemPrompt = promptBuilder.BuildVoiceParsingPrompt(promptContextWithCapture);
 
-        // Resolve provider tuple. If the transcriber column equals the
-        // structurer column, OR no ITranscriberProvider is registered for
-        // the requested transcriber, fall back to the legacy single-call
-        // multimodal path so the AiJob still lands on the same idempotency
-        // row.
+        // Resolve provider tuple. If no ITranscriberProvider is registered for the requested transcriber, fall back
+        // to the legacy single-call path so the AiJob still lands on the same idempotency row.
+        //
+        // spec: voice-instant-phase-a-2026-11-23 (S6) — the tuple does NOT collapse merely because the transcriber
+        // and the structurer name the same provider. Sarvam / Sarvam is the pair every environment now runs, and it runs
+        // the two-stage path (Saaras pieces, then ChunkedStructuring with the Sarvam provider on text/plain). Before,
+        // equal values collapsed the call to the one-call path, so an environment whose row said Gemini / Gemini ran
+        // different code from one that said Sarvam / Gemini. Typed text (no audio) also goes straight to the one-call
+        // path: there is nothing to transcribe, and sending text to speech-to-text only made it fail first.
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var transcriberType = ParseProviderTypeOrDefault(config.TranscriberProvider, AiProviderType.Gemini);
         var structurerType = ParseProviderTypeOrDefault(config.StructurerProvider, AiProviderType.Gemini);
 
-        if (transcriberType == structurerType ||
-            !_transcribers.TryGetValue(transcriberType, out var transcriber))
+        if (!_transcribers.TryGetValue(transcriberType, out var transcriber) ||
+            mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
         {
-            // Tuple collapses to a single provider OR transcriber port is
-            // not wired — delegate to the legacy multimodal one-call path.
+            // No transcriber port is wired (or the input is already text) — delegate to the one-call path.
             return await ParseVoiceWithFallbackAsync(
                 userId,
                 farmId,
@@ -380,6 +383,18 @@ internal sealed class AiOrchestrator(
         }
 
         clock.Path = VoiceStageTimings.TwoStagePath;
+
+        // spec: voice-instant-phase-a-2026-11-23 (S6) — a failed two-stage call is handed to the one-call path only when
+        // that path can give the recording to ANOTHER provider that takes voice. Where none can (today none can: Gemini
+        // answers CanHandle(voice) = false), the one-call path would only run the same Sarvam call again, billed again,
+        // and fail the same way. Then the job is marked failed with the recording and any transcript already stored on it,
+        // and the failure is flagged Retryable so the endpoint answers 503 and the phone sends it again later.
+        var voicePrimary = ResolveProvider(
+            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
+            AiOperationType.VoiceToStructuredLog);
+        var anotherProviderCanTakeVoice = ResolveFallbackProvider(
+            voicePrimary?.ProviderType,
+            AiOperationType.VoiceToStructuredLog) is not null;
 
         var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
         var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
@@ -477,6 +492,23 @@ internal sealed class AiOrchestrator(
         var sttOutcome = await sttTask!;
         if (sttOutcome.Error is { } transcribeError)
         {
+            if (!anotherProviderCanTakeVoice)
+            {
+                logger.LogWarning(
+                    transcribeError,
+                    "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}); no other provider takes voice, so the recording stays stored on the job and the phone is told to try again.",
+                    job.Id,
+                    transcriberType);
+                return await FailVoiceJobAsync(
+                    job,
+                    $"Speech-to-text failed: {transcribeError.Message}",
+                    transcriberType,
+                    retryable: true,
+                    promptContentHash,
+                    transcript: null,
+                    ct);
+            }
+
             logger.LogWarning(
                 transcribeError,
                 "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}). Falling back to legacy multimodal path.",
@@ -532,7 +564,8 @@ internal sealed class AiOrchestrator(
             {
                 if (transcribeResult.FailureCode == TranscribeFailureCodes.PartFailed &&
                     transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces &&
-                    config.FallbackEnabled)
+                    config.FallbackEnabled &&
+                    anotherProviderCanTakeVoice)
                 {
                     clock.Path = VoiceStageTimings.OneCallPath;
                     return await RunVoiceParseAsync(
@@ -552,21 +585,19 @@ internal sealed class AiOrchestrator(
                         ct);
                 }
 
-                job.MarkFailed();
-                await aiJobRepository.SaveChangesAsync(ct);
-                return (
-                    new VoiceParseCanonicalResult
-                    {
-                        Success = false,
-                        Error = transcribeResult.Error ?? "Transcription failed.",
-                        PromptContentHash = promptContentHash
-                    },
-                    job.Id,
+                // A recording that is too long is refused for good; a piece that failed after its own retry is a provider
+                // fault the phone may simply send again later (the pieces that succeeded are cached by content hash).
+                return await FailVoiceJobAsync(
+                    job,
+                    transcribeResult.Error ?? "Transcription failed.",
                     transcriberType,
-                    false);
+                    retryable: transcribeResult.FailureCode == TranscribeFailureCodes.PartFailed,
+                    promptContentHash,
+                    transcript: null,
+                    ct);
             }
 
-            if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass))
+            if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass) && anotherProviderCanTakeVoice)
             {
                 clock.Path = VoiceStageTimings.OneCallPath;
                 return await ParseVoiceWithFallbackAsync(
@@ -585,18 +616,14 @@ internal sealed class AiOrchestrator(
                     ct);
             }
 
-            job.MarkFailed();
-            await aiJobRepository.SaveChangesAsync(ct);
-            return (
-                new VoiceParseCanonicalResult
-                {
-                    Success = false,
-                    Error = transcribeResult.Error ?? "Transcribe returned empty transcript.",
-                    PromptContentHash = promptContentHash
-                },
-                job.Id,
+            return await FailVoiceJobAsync(
+                job,
+                transcribeResult.Error ?? "Transcribe returned empty transcript.",
                 transcriberType,
-                false);
+                retryable: failureClassifier.IsFallbackEligible(failureClass),
+                promptContentHash,
+                transcript: null,
+                ct);
         }
 
         // Stamp the transcript on the AiJob (Task 1.1 mutator) BEFORE the
@@ -628,6 +655,18 @@ internal sealed class AiOrchestrator(
                 "[parse-voice-two-stage] no structurer registered for type {Structurer}; falling back to legacy path for job {JobId}.",
                 structurerType,
                 job.Id);
+            if (!anotherProviderCanTakeVoice)
+            {
+                return await FailVoiceJobAsync(
+                    job,
+                    $"No structurer is registered for type {structurerType}.",
+                    structurerType,
+                    retryable: true,
+                    promptContentHash,
+                    transcribeResult.Transcript,
+                    ct);
+            }
+
             clock.Path = VoiceStageTimings.OneCallPath;
             return await ParseVoiceWithFallbackAsync(
                 userId,
@@ -696,6 +735,7 @@ internal sealed class AiOrchestrator(
         var fallbackCanAnswer = !split || transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces;
         if (config.FallbackEnabled &&
             fallbackCanAnswer &&
+            anotherProviderCanTakeVoice &&
             failureClassifier.IsFallbackEligible(structurerExecution.FailureClass) &&
             !AiErrorMarkers.Has(structurerExecution.Result.Error, AiErrorMarkers.NoFallback))
         {
@@ -724,10 +764,52 @@ internal sealed class AiOrchestrator(
 
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
+
+        // A real failure (not a kept low-confidence answer, which arrives here as Success = true) that the phone may send
+        // again later: the sorting provider was unreachable or slow and no other provider can take voice. The recording
+        // and the transcript are stored on the job above; the endpoint answers such a failure with a 503.
+        var structurerFailureIsRetryable =
+            !structurerExecution.Result.Success &&
+            failureClassifier.IsFallbackEligible(structurerExecution.FailureClass);
         return (
-            structurerExecution.Result with { PromptContentHash = promptContentHash, TranscriptCodemix = transcribeResult.Transcript },
+            structurerExecution.Result with
+            {
+                PromptContentHash = promptContentHash,
+                TranscriptCodemix = transcribeResult.Transcript,
+                Retryable = structurerFailureIsRetryable,
+            },
             job.Id,
             structurerExecution.ProviderUsed,
+            false);
+    }
+
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (S6) — ends a two-stage call that failed with the recording (and, when it
+    /// exists, its transcript) already stored on the job: the job is marked failed and saved, and the failure says whether
+    /// the phone may simply send the same recording again later.
+    /// </summary>
+    private async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> FailVoiceJobAsync(
+        AiJob job,
+        string? error,
+        AiProviderType providerUsed,
+        bool retryable,
+        string? promptContentHash,
+        string? transcript,
+        CancellationToken ct)
+    {
+        job.MarkFailed();
+        await aiJobRepository.SaveChangesAsync(ct);
+        return (
+            new VoiceParseCanonicalResult
+            {
+                Success = false,
+                Error = error,
+                PromptContentHash = promptContentHash,
+                TranscriptCodemix = transcript,
+                Retryable = retryable,
+            },
+            job.Id,
+            providerUsed,
             false);
     }
 

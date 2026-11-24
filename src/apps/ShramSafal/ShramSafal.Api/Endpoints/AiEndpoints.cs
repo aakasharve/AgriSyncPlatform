@@ -656,7 +656,14 @@ public static class AiEndpoints
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)
         {
-            return ToErrorResult(result.Error);
+            // spec: voice-instant-phase-a-2026-11-23 (S6) - the recording is stored and no provider could finish it right
+            // now: 503 (the phone classes 5xx as retryable and sends the same recording again), not the 400 that means
+            // "your input is wrong". The body keeps the usual {error, message} shape.
+            return string.Equals(result.Error.Code, ShramSafalErrors.AiVoiceUnavailable.Code, StringComparison.Ordinal)
+                ? Results.Json(
+                    new { error = result.Error.Code, message = result.Error.Description },
+                    statusCode: StatusCodes.Status503ServiceUnavailable)
+                : ToErrorResult(result.Error);
         }
 
         var parseResult = result.Value;
@@ -1616,7 +1623,7 @@ public static class AiEndpoints
     /// time this endpoint spent in the handler (so it also covers the handler's database reads and writes), and is the
     /// server's share of the wait only: the upload and the reply travel outside it.
     /// </summary>
-    internal static void WriteVoiceTimings(
+    public static void WriteVoiceTimings(
         HttpContext context,
         ILogger logger,
         VoiceStageTimings? timings,

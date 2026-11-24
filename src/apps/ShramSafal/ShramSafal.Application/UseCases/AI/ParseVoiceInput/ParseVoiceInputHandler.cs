@@ -256,6 +256,13 @@ public sealed class ParseVoiceInputHandler(
                     fieldConfidenceCount: null,
                     ct: ct);
 
+                // spec: voice-instant-phase-a-2026-11-23 (S6) - the recording is stored and no provider could finish it
+                // right now: a distinct error, which the endpoint answers with 503 so the phone sends it again later.
+                if (!canonicalResult.Success && canonicalResult.Retryable)
+                {
+                    return Result.Failure<VoiceParseResult>(ShramSafalErrors.AiVoiceUnavailable);
+                }
+
                 return Result.Failure<VoiceParseResult>(
                     new Error(
                         ShramSafalErrors.AiParsingFailed.Code,

@@ -47,6 +47,14 @@ public sealed record VoiceParseCanonicalResult
     /// </summary>
     public VoiceStageTimings? StageTimings { get; init; }
 
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (S6) — a FAILED result the phone may simply send again later: the failure
+    /// came from a provider being unreachable or slow, no other provider can take voice, and the recording (and its
+    /// transcript, when there is one) are already stored on the job. The endpoint answers such a failure with a 503,
+    /// which the phone classes as retryable; every other failure keeps its status. Never set on a success.
+    /// </summary>
+    public bool Retryable { get; init; }
+
     // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.8 ────────────────
     // Extended transcript surface. Each provider populates the subset it can
     // emit; nullables are the contract for "this provider does not produce

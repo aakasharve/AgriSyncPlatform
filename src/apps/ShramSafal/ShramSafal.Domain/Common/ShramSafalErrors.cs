@@ -454,6 +454,10 @@ public static class ShramSafalErrors
     // --- Internal (server-side fault / config / external service) --------------------------
     public static readonly Error InvalidAiResponse = Error.Internal("ShramSafal.InvalidAiResponse", "AI parser returned an invalid response payload.");
     public static readonly Error AiParsingFailed = Error.Internal("ShramSafal.AiParsingFailed", "Voice parsing failed.");
+    // spec: voice-instant-phase-a-2026-11-23 (S6) - the recording is stored and Sarvam could not finish it right now; no other
+    // provider takes voice. The voice-parse endpoint answers this with HTTP 503 (not the 400 of AiParsingFailed) so the phone
+    // classes it as retryable and sends the same recording again later - the farmer never has to speak again.
+    public static readonly Error AiVoiceUnavailable = Error.Internal("ShramSafal.AiVoiceUnavailable", "Voice understanding is not available right now. The recording is saved; try again in a moment.");
 
     // --- CEI Phase 2 §4.5 (Tests) ----------------------------------------------------------
     public static readonly Error TestProtocolNotFound = Error.NotFound("ShramSafal.TestProtocolNotFound", "Test protocol was not found.");
