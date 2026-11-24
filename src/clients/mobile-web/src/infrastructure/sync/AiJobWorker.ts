@@ -10,8 +10,16 @@ import { recordAiFailureSignature } from './AiDoomLoopDetector';
 // no-op when the user has not granted FullHistoryJournal.
 import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
 import { reclaimAbandonedAiJobs } from './abandonedStateRecovery';
+// spec: voice-instant-phase-a-2026-11-23 (P4) — a failure that is the SERVER'S or the LINE'S, not a verdict on his note.
+import { isRetryableParseFailure } from '../voice/keptForLater';
 
 const MAX_RETRIES = 5;
+// P4 — a note kept because the SERVER or the line failed (no answer, 5xx, 408, 429, "the AI failed this time") is a good
+// note on a bad day: five tries inside a minute would give up long before a speech-to-text outage ends, and tell him to
+// try again for something that was never his. It keeps trying with growing waits (2 s doubling to 5 minutes: about an
+// hour and a half in all) and only then is "stuck" — his sound still on the phone, one tap puts it back.
+const MAX_RETRIES_SERVER_FAILURE = 24;
+const SERVER_FAILURE_BACKOFF_CAP_MS = 5 * 60 * 1000;
 const BATCH_LIMIT = 10;
 const AI_JOB_TOAST_EVENT = 'agrisync:toast';
 const PERMANENT_FAILURE_MESSAGE_MR = 'कार्य प्रक्रिया अयशस्वी — पुन्हा प्रयत्न करा';
@@ -180,10 +188,13 @@ export class AiJobWorker {
             }
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
+            const serverFailure = job.operationType === 'voice_parse' && isRetryableParseFailure(error);
             const doomLoopDecision = recordAiFailureSignature(job, error);
-            const isDoomLoop = isVoiceDoomLoopDetectorEnabled() && doomLoopDecision.shouldStop;
-            const isPermanentFailure = isDoomLoop || nextRetryCount >= MAX_RETRIES;
-            const backoffMs = Math.min(1000 * Math.pow(2, nextRetryCount), 60000);
+            // The detector is for a note that keeps failing the SAME way for its own reasons; a server that is down fails
+            // every note the same way, and says nothing about this one.
+            const isDoomLoop = !serverFailure && isVoiceDoomLoopDetectorEnabled() && doomLoopDecision.shouldStop;
+            const isPermanentFailure = isDoomLoop || nextRetryCount >= (serverFailure ? MAX_RETRIES_SERVER_FAILURE : MAX_RETRIES);
+            const backoffMs = Math.min(1000 * Math.pow(2, nextRetryCount), serverFailure ? SERVER_FAILURE_BACKOFF_CAP_MS : 60000);
             const nextRetryAfterMs = Date.now() + backoffMs;
             const errorMessage = getErrorMessage(error);
 
