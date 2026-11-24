@@ -28,6 +28,8 @@ export interface VoiceFlowWords {
     wordsStrip: string;
     fieldCaption: (place: string) => string;
     stopLabel: string;
+    cancelLabel: string;
+    ringLabels: Readonly<Record<string, string>>;
     stampTitle: string;
     stampSub: string;
     // nothing understood (F7)
@@ -94,6 +96,8 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     wordsStrip: 'बोला... साथी ऐकतोय', // PROPOSED (Marathi) - no live words exist today (P4)
     fieldCaption: (place: string) => `तुमचं शेत · ${place}`, // PROPOSED (Marathi)
     stopLabel: 'झालं की थांबवा', // PROPOSED (Marathi)
+    cancelLabel: 'काही चुकीचे बोलले गेले असेल तर रद्द करा', // the recorder's own founder-worded cancel (REC_WORDS.cancel)
+    ringLabels: {},
     stampTitle: 'लक्षात ठेवलं ✓', // PROPOSED (Marathi)
     stampSub: 'तुमचा आवाज सुरक्षित आहे.', // PROPOSED (Marathi)
     nuTitle: 'आवाज जतन झाला', // FOUNDER-APPROVED prototype (shot 12)
@@ -159,6 +163,9 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     wordsStrip: 'Speak... Sathi is listening', // PROPOSED (English)
     fieldCaption: (place: string) => `Your field · ${place}`, // PROPOSED (English)
     stopLabel: 'Press stop when done', // PROPOSED (English)
+    cancelLabel: 'Cancel if you said something wrong', // PROPOSED (English)
+    // the parts' names on the recording ring, English mode (the Marathi names are the ring's own)
+    ringLabels: { work: 'Work done', labour: 'Labour', inputs: 'Fertilizers & sprays', water: 'Water', machinery: 'Machinery', blockers: 'Disturbance', expenses: 'Other costs', observations: 'Observations', reminders: 'Reminders' }, // PROPOSED (English)
     stampTitle: 'Noted ✓', // PROPOSED (English)
     stampSub: 'Your voice is safe.', // PROPOSED (English)
     nuTitle: 'Voice saved', // PROPOSED (English)

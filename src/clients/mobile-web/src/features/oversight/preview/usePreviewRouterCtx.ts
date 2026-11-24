@@ -61,6 +61,7 @@ import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import type { VoiceResultState } from '../../../app/hooks/useVoiceAutoSave';
 import type { LastSavedLogSummaryItem } from '../../../app/uiRuntimeTypes';
 import { recordingMs, runPreviewVoiceJourney } from './previewVoiceJourney';
+import { noWorkError } from '../../voice/noWorkAnswer';
 
 import { useLogContext } from '../../../app/context/LogContext';
 import type { ManualSubmitOutcome } from '../../../app/hooks/useLogCommands.types';
@@ -122,7 +123,8 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const [mode, setMode] = useState<InputMode>('voice');
     const [recordingSegment, setRecordingSegment] = useState<LogSegment | null>(null);
     const [draftLog, setDraftLog] = useState<AgriLogResponse | null>(null);
-    const [error] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [errorTranscript, setErrorTranscript] = useState<string | undefined>(undefined);
 
     // spec voice-flow-v2-2026-11-23 (Task 13b) — the result screen's inputs (the real app's useVoiceAutoSave / runtime).
     const [voiceResult, setVoiceResult] = useState<VoiceResultState | null>(null);
@@ -142,6 +144,16 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     }, [setHistory, logScope, crops, farmerProfile]);
 
     const handleAudioReady = useCallback(async (audio?: AudioData) => {
+        // Dev preview only (`&nowork=1`): answer like the server does for a day with no work (the real answer job_38ebf49a), so the
+        // nothing-understood card can be seen. Nothing is saved.
+        if (FEATURE_FLAGS.voiceFlowV2 && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('nowork') === '1') {
+            setStatus('processing');
+            await new Promise(r => setTimeout(r, 600));
+            setError(noWorkError({ summary: 'कोणतेही कृषी काम नोंदवले नाही.', unclearSegments: [{ userMessage: 'कृपया स्पष्ट करा: हे पाणी पिकाला देण्यासाठी (सिंचन) होते, की इतर कोणत्याही कामासाठी?', userMessageEn: 'Please clarify: was this water for the crop (irrigation) or for something else?' }] }));
+            setErrorTranscript('I want an full screen utilization of the mobile screen.');
+            setStatus('idle');
+            return;
+        }
         if (FEATURE_FLAGS.voiceFlowV2 && setHistory) {
             await runJourney('audio', await recordingMs(audio));
             return;
@@ -297,7 +309,7 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         mode, setMode,
         recordingSegment, setRecordingSegment,
         handleAudioReady, handleTextReady,
-        error, errorTranscript: undefined,
+        error, errorTranscript,
         draftLog, setDraftLog, provenance: null,
         voiceStreamingPhase: 'idle',
         liveCaption: '',

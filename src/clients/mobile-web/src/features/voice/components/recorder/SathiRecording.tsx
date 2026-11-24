@@ -35,7 +35,7 @@ const BOX = 288;
 const RADIUS = 104;
 
 /** The ring of the parts, in the app's own v2 order and names. While he speaks every part stays quiet (P4). */
-const PartsRing: React.FC = () => {
+const PartsRing: React.FC<{ labels: Readonly<Record<string, string>> }> = ({ labels }) => {
     const nodes = ringNodesV2(Object.fromEntries(ALL.map(id => [id, 'neutral' as const])));
     return (
         <div className="relative mx-auto shrink-0" style={{ width: BOX, height: BOX - 24, maxWidth: '100%' }} data-testid="sathi-ring" data-lit="0">
@@ -44,10 +44,10 @@ const PartsRing: React.FC = () => {
                 const x = BOX / 2 + RADIUS * Math.cos(a);
                 const y = (BOX - 24) / 2 + RADIUS * Math.sin(a) * 0.92;
                 return (
-                    <span key={n.id} data-testid={`sathi-ring-${n.id}`} data-state="quiet" className="absolute flex w-[66px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
+                    <span key={n.id} data-testid={`sathi-ring-${n.id}`} data-state="quiet" className="absolute flex w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
                         style={{ left: x, top: y }}>
                         <span className="grid h-[34px] w-[34px] place-items-center rounded-full border border-[#DDE3DA] bg-white"><CategoryIcon name={CATEGORY_META[n.id].icon} size={20} /></span>
-                        <span className="w-full truncate text-center text-[11px] font-extrabold leading-tight text-[#5F6B63]">{n.label}</span>
+                        <span className="line-clamp-2 w-full text-center text-[10.5px] font-extrabold leading-[1.15] text-[#5F6B63]" data-testid={`sathi-ring-label-${n.id}`}>{labels[n.id] ?? n.label.replace(/<br\s*\/?>/g, ' ')}</span>
                     </span>
                 );
             })}
@@ -91,7 +91,7 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
                 <p className="m-0 text-[12.5px] font-semibold leading-[1.45] text-[#5F6B63]">{bubble.s}</p>
                 <span aria-hidden="true" className="absolute -bottom-[7px] left-1/2 h-[14px] w-[14px] -translate-x-1/2 rotate-45 border-b border-r border-[#9ACBAD] bg-white" />
             </div>
-            <PartsRing />
+            <PartsRing labels={W.ringLabels} />
             <FieldPicture caption={W.fieldCaption(place ?? '')} />
             <p className="m-0 text-center text-[13px] font-extrabold text-[#0F6B3A]" data-testid="sathi-status" aria-live="off">
                 {seconds >= 1 ? W.recOnPhone(seconds) : ' '}
@@ -120,7 +120,7 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
             )}
             <button type="button" onClick={onCancel} data-testid="mic-cancel"
                 className="mt-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-rose-300 bg-white px-4 text-[14px] font-extrabold text-rose-700 active:scale-95">
-                <X size={16} strokeWidth={3} aria-hidden="true" /> <span>{REC_WORDS.cancel}</span>
+                <X size={16} strokeWidth={3} aria-hidden="true" /> <span>{W.cancelLabel || REC_WORDS.cancel}</span>
             </button>
         </div>
     );

@@ -46,7 +46,7 @@ describe('F4 - the recording screen', () => {
     it('P4: no part lights while he speaks - and no words appear (there is no live transcript)', () => {
         face();
         expect(screen.getByTestId('sathi-ring').getAttribute('data-lit')).toBe('0');
-        for (const node of screen.getByTestId('sathi-ring').querySelectorAll('[data-testid^="sathi-ring-"]')) expect(node.getAttribute('data-state')).toBe('quiet');
+        for (const node of screen.getByTestId('sathi-ring').querySelectorAll('[data-state]')) expect(node.getAttribute('data-state')).toBe('quiet');
         expect(screen.getByTestId('sathi-words-strip')).toHaveTextContent('बोला... साथी ऐकतोय');
     });
 

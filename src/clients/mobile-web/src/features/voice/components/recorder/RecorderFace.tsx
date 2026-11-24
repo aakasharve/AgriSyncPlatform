@@ -199,6 +199,8 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;
     return (
         <div className="flex w-full flex-col" style={{ fontFamily: SANS }}>
+            {/* F7: with the flow on, an answer with no work (he said something, nothing was found) is Sathi's calm screen, not the red box. */}
+            {error && flowV2?.silenceHelp && transcript && !errorCode && <NothingUnderstood transcript={transcript} />}
             {card ? (
                 <MicCard spec={card} disabled={disabled} suggest={suggest} secondsLeft={countdown.secondsLeft} total={AUTO_START_SEC} heldNote={heldNote}
                     onMicPress={() => { countdown.hold('tap'); startOnce(false); }}
@@ -229,8 +231,6 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
                 </div>
             )}
 
-            {/* F7: with the flow on, an answer with no work (he said something, nothing was found) is Sathi's calm screen, not the red box. */}
-            {error && flowV2?.silenceHelp && transcript && !errorCode && <NothingUnderstood transcript={transcript} />}
             {error && !(flowV2?.silenceHelp && transcript && !errorCode) && (
                 <div className="mt-3 w-full rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-center text-red-700 shadow-sm" data-testid="mic-error" data-error-code={errorCode ?? undefined}>
                     <p className="m-0 flex items-center justify-center gap-2 text-[16px] font-bold"><AlertCircle size={20} aria-hidden="true" />{REC_WORDS.checkInput}</p>
