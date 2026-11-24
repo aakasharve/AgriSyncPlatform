@@ -58,6 +58,7 @@ import { useScheduleGate } from '../features/scheduler/schedulePage/useScheduleG
 import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
+import { PlacePickerSheet } from '../features/context/components/PlacePickerSheet';
 import { lastWorkedPlot } from '../features/scheduler/schedulePage/lastWorkedPlot';
 
 interface SchedulerPageProps {
@@ -104,6 +105,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const [plotId, setPlotId] = useState('');
     const [view, setView] = useState<View>('HOME');
     const plotListsRef = React.useRef<HTMLDivElement | null>(null);
+    // Slice 10 (CTX-1): "प्लॉट बदला" opens the ONE canonical crop then plot selector, the same sheet the log flow and planning use.
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [openDayKey, setOpenDayKey] = useState<string | null>(null);
     const [moneyOpen, setMoneyOpen] = useState(false);
     const [choiceNote, setChoiceNote] = useState<string | null>(null);
@@ -305,6 +308,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         <div className="relative mx-auto max-w-4xl animate-in fade-in px-4 pb-28 sm:px-6" style={{ fontFamily: SANS }} data-testid="schedule-page" data-view={view}>
             <PageBar title={title} onBack={back} />
             <div className="space-y-4">{body}</div>
+            {pickerOpen && (
+                <PlacePickerSheet crops={crops} onClose={() => setPickerOpen(false)}
+                    onPick={scope => {
+                        const id = scope.selectedPlotIds[0];
+                        const owner = id ? crops.find(c => c.plots.some(p => p.id === id)) : undefined;
+                        if (owner && id) choosePlot(owner.id, id);
+                        setPickerOpen(false);
+                    }} />
+            )}
             <MoneyLensDrawer isOpen={moneyOpen} onClose={() => setMoneyOpen(false)} filters={moneyFilters} />
             {toast && (
                 // Above the bottom bar, never behind it (FOOT-1: the bar's room, BOTTOM_BAR_CLEARANCE, not a height of its own).
@@ -392,7 +404,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
-                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} onChangePlot={() => plotListsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}
+                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} onChangePlot={() => setPickerOpen(true)}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
                         <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />

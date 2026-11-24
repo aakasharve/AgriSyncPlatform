@@ -8,7 +8,7 @@
 import React from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../usePlotClips', () => ({ usePlotClips: () => new Map() }));
 vi.mock('../../../finance/components/MoneyLensDrawer', () => ({ MoneyLensDrawer: () => null }));
@@ -57,5 +57,11 @@ describe('slice 10: the Schedule tab as version 7', () => {
         render(page([], { mayMakeOwnSchedule: false, mayPlanWork: false, mayAssignWork: false }));
         expect(document.querySelector('[data-testid^="take-btn-"]')).toBeNull();
         expect(document.querySelector('[data-testid^="take-plan-"]')).toBeNull();
+    });
+    it('"प्लॉट बदला" opens the ONE canonical crop-then-plot selector (CTX-1), not a scroll', () => {
+        render(page());
+        expect(screen.queryByTestId('place-picker')).toBeNull();
+        fireEvent.click(screen.getByTestId('change-plot'));
+        expect(screen.getByTestId('place-picker')).toBeInTheDocument();
     });
 });
