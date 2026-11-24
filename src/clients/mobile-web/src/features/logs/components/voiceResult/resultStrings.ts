@@ -83,6 +83,8 @@ export const RESULT_STR = {
     // PROPOSED (Marathi) — a part he mentioned that the server could not find in his words: "not sure", never "not said".
     // spec: plr-d10-founder-answers-2026-11-23 — the founder's words (MR23).
     unsurePart: 'स्पष्ट समजू शकले नाही',
+    // spec: voice-flow-v2-2026-11-23 (F1) — a product Sathi understood without its amount: name the missing detail.
+    giveHowMuch: 'किती दिलं ते सांगा',
 } as const;
 
 /** The same lines, widened (a function stays a function). */
@@ -136,6 +138,7 @@ export const RESULT_STR_EN: ResultStr = {
     wholeFarm: 'Whole farm',
     dayNotMoved: 'Could not change the day just now — press again.', // PROPOSED (English) — lane OF-S
     unsurePart: 'Could not understand clearly', // PROPOSED (English) — the twin of the founder's MR23
+    giveHowMuch: 'Tell how much was given', // PROPOSED (English) — F1
 };
 
 /**

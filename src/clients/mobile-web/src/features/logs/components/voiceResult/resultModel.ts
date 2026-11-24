@@ -293,12 +293,21 @@ const MIRROR_TAGS = new Set(['planned_task', 'manual_task']);
  * or the task a reminder note produced. Removing one by tap removes its partners, as the spoken rule moves planned work
  * and its reminders together (`correctionModel.mergeCorrection`).
  */
-export function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: PlannedTask[]; partnersOf: (id: string) => string[] } {
+export function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: PlannedTask[]; partnersOf: (id: string) => string[]; titleOf: (id: string) => string } {
     const notes = log.observations ?? [];
     const noteIds = new Set(notes.map(o => o.id));
+    // F8: the same future work can arrive as a note (with its own extracted task) AND as a top-level planned task
+    // with the same title ("उद्या urea टाकायचा आहे" + "युरिया टाकणे"): the note stands for both, shown once, under the
+    // app's own wording of the task.
+    const ownTitle = new Map<string, string>();
+    const sameWork = new Set<string>();
+    const noteHas = (id: string | undefined, title?: string) => { const t = clean(title); if (id && t) { ownTitle.set(id, t); sameWork.add(t); } };
+    notes.forEach(o => (o.extractedTasks ?? []).forEach(t => noteHas(o.id, t.title)));
+    (log.plannedTasks ?? []).forEach(t => { if (t.sourceObservationId && noteIds.has(t.sourceObservationId)) noteHas(t.sourceObservationId, t.title); });
     // A task made FROM one of this log's notes is that note (or that note's own task): the note stands for it.
     // A cancelled task is not something he plans to do (the ring does not count it either).
-    const tasks = (log.plannedTasks ?? []).filter(task => task.status !== 'cancelled' && !(task.sourceObservationId && noteIds.has(task.sourceObservationId)));
+    const tasks = (log.plannedTasks ?? []).filter(task => task.status !== 'cancelled' && !(task.sourceObservationId && noteIds.has(task.sourceObservationId))
+        && !(task.sourceType !== 'manual' && task.sourceType !== 'schedule' && sameWork.has(clean(task.title))));
     const titles = new Set(tasks.map(task => clean(task.title)).filter(Boolean));
     const observations = notes.filter(o => o.noteType !== 'reminder'
         || !((o.tags ?? []).some(tag => MIRROR_TAGS.has(tag)) || titles.has(clean(o.textRaw))));
@@ -310,7 +319,7 @@ export function plannedOnce(log: DailyLog): { observations: ObservationNote[]; t
         }
         return shownNotes.has(id) ? (log.plannedTasks ?? []).filter(t => t.sourceObservationId === id).map(t => t.id) : [];
     };
-    return { observations, tasks, partnersOf };
+    return { observations, tasks, partnersOf, titleOf: (id: string) => ownTitle.get(id) ?? '' };
 }
 
 /**
@@ -376,9 +385,9 @@ export function partEntriesOf(log: DailyLog, language: string | null | undefined
     });
     // A day total he typed on the form (no voice behind it): shown as typed, under its approved name.
     if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${u.dayTotal} ${rupees(log.manualTotalCost, '', num)}`, verified: true });
-    const { observations, tasks } = plannedOnce(log);
-    // An "issue" note is a stoppage (blockersOf), as the ring reads it.
-    observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, saidIn(lang)(o.textRaw)); });
+    const { observations, tasks, titleOf } = plannedOnce(log);
+    // An "issue" note is a stoppage (blockersOf), as the ring reads it. A reminder he said with English words shows under the app's own Marathi wording of its task (F8).
+    observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, (o.noteType === 'reminder' && /[A-Za-z]/.test(o.textRaw ?? '') && inLang(titleOf(o.id))) || saidIn(lang)(o.textRaw)); });
     tasks.forEach((task, i) => add('planned', i, task, inLang(task.title)));
 
     const order = new Map(PARTS.map((p, i) => [p.key, i]));
@@ -613,10 +622,17 @@ export interface DayView {
     /** Parts the day does not tell and holds nothing about: shown in red as "not said", never as 0. */
     missing: PartKey[];
     /**
-     * Parts the day mentions but does not TELL (by the ring's rule): only what the server could not verify. Shown
-     * as "not sure" — never as "not said", for the screen lists what he said right below.
+     * Parts the day mentions but does not TELL (by the ring's rule) and holds NOTHING the server verified: only what
+     * the server could not find in his words. Shown as "not sure" — never as "not said", for the screen lists what he
+     * said right below.
      */
     unsure: PartKey[];
+    /**
+     * F1 ("it must not lie"): parts the ring's rule does not call told yet that hold an entry the server VERIFIED.
+     * Sathi understood that: shown as what he said, never as "not understood"; where the ring wants a detail he did
+     * not give, the screen names it (`missingDetailOf`).
+     */
+    partial: PartKey[];
     /** Parts the recording just made added to. */
     touchedNow: Set<PartKey>;
     /** Stoppages the recording just made reported. */
@@ -666,7 +682,8 @@ export function buildDayView(current: readonly DailyLog[], history: readonly Dai
         recordingByLog,
         byPart,
         missing: notTold.filter(k => byPart[k].length === 0),
-        unsure: notTold.filter(k => byPart[k].length > 0),
+        unsure: notTold.filter(k => byPart[k].length > 0 && !byPart[k].some(e => e.verified)),
+        partial: notTold.filter(k => byPart[k].some(e => e.verified)),
         touchedNow: new Set(now.flatMap(r => r.entries.map(e => e.part))),
         blockersNow: now.flatMap(r => r.blockers),
         speakers,
