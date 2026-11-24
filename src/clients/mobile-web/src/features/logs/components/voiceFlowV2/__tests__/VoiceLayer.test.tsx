@@ -9,7 +9,8 @@
  */
 import React, { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import 'fake-indexeddb/auto';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../../../i18n/LanguageContext', async () => {
     const { t } = await import('../../../../../i18n/translations');
@@ -17,6 +18,9 @@ vi.mock('../../../../../i18n/LanguageContext', async () => {
     return { useLanguage: ctx, useOptionalLanguage: ctx };
 });
 
+import { getDatabase, resetDatabase } from '../../../../../infrastructure/storage/DexieDatabase';
+import { getDateKey } from '../../../../../core/domain/services/DateKeyService';
+import type { DailyLog } from '../../../../../types';
 import IdleCloseBar from '../IdleCloseBar';
 import { VoiceLayer } from '../VoiceLayer';
 import { useVoiceLayerOpen } from '../voiceLayerSignal';
@@ -66,5 +70,26 @@ describe('VoiceLayer', () => {
         expect(screen.getByTestId('voice-layer-bottom').contains(bar)).toBe(true);
         expect(screen.getByTestId('voice-layer-body').contains(bar)).toBe(false);
         expect(bar.className).not.toContain('sticky');
+    });
+});
+
+describe('month chip (F2)', () => {
+    const today = getDateKey();
+    const history = [{ id: 'a', date: today, context: { selection: [{ selectedPlotIds: ['p1'] }] } }] as unknown as DailyLog[];
+    it('is NOT drawn before the phone has completed a pull (coverage cannot be shown), and is drawn after', async () => {
+        await resetDatabase();
+        render(<VoiceLayer step="saved" monthOf={{ history, plotId: 'p1' }} placeLabel="द्राक्ष"><p>x</p></VoiceLayer>);
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByTestId('voice-layer-chip')).toBeNull();
+        cleanup();
+        await getDatabase().syncCursors.put({ tableName: 'shramsafal', lastSyncAt: new Date().toISOString(), version: 1 });
+        render(<VoiceLayer step="saved" monthOf={{ history, plotId: 'p1' }} placeLabel="द्राक्ष"><p>x</p></VoiceLayer>);
+        await waitFor(() => expect(screen.getByTestId('voice-layer-chip').textContent).toBe('या महिन्यात १ दिवस'));
+    });
+    it('no single plot = no chip', async () => {
+        await getDatabase().syncCursors.put({ tableName: 'shramsafal', lastSyncAt: new Date().toISOString(), version: 1 });
+        render(<VoiceLayer step="saved" monthOf={{ history, plotId: null }}><p>x</p></VoiceLayer>);
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByTestId('voice-layer-chip')).toBeNull();
     });
 });

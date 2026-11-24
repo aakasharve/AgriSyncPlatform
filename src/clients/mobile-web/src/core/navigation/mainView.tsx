@@ -265,6 +265,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             recordingSegment={recordingSegment}
                             onCancelSegment={cancelSegment}
                             fullScreen={FEATURE_FLAGS.voiceFlowV2 === true && logIntent !== 'labour'}
+                            history={history}
                             homeRequested={ctx.logHomePending ?? false}
                             onHomeRequestHandled={ctx.consumeLogHome}
                             // H10 — the हजेरी door only for the owner tier or the owner's labour grant.
@@ -306,7 +307,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             {/* lane MIC-1 — THE waiting screen (`logRecorder.tsx`), shared with every other speak entry point. */}
             {status === 'processing' && (FEATURE_FLAGS.voiceFlowV2 ? (
                 // spec voice-flow-v2-2026-11-23 (F2): the step list is the same full-screen layer as the crop, plot and mic steps.
-                <VoiceLayer step="processing" placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
+                <VoiceLayer step="processing" monthOf={{ history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null }} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
                     {renderProcessingScreen(ctx)}
                 </VoiceLayer>
             ) : renderProcessingScreen(ctx))}

@@ -186,7 +186,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
     // spec voice-flow-v2-2026-11-23 (F2): the saved screen is the last part of the voice journey's ONE full-screen layer: its top row
     // holds "मागे" and the place chip; the bottom bar ("आणखी सांगा") is the layer's bottom slot.
     if (FEATURE_FLAGS.voiceFlowV2) {
-        return <VoiceLayer step="saved" back={backBar} placeLabel={language => placeOf(logs, language, ctx.crops)}>{container}</VoiceLayer>;
+        return <VoiceLayer step="saved" back={backBar} monthOf={{ history: ctx.history, plotId: (() => { const ids = [...new Set(logs.flatMap(l => (l.context?.selection ?? []).flatMap(x => x.selectedPlotIds ?? [])))]; return ids.length === 1 ? ids[0] : null; })() }} placeLabel={language => placeOf(logs, language, ctx.crops)}>{container}</VoiceLayer>;
     }
     return (
         <>

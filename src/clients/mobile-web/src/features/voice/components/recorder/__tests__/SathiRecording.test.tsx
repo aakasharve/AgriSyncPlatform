@@ -15,6 +15,7 @@ import { RecorderFace, type RecorderFaceProps } from '../RecorderFace';
 import { VOICE_FLOW_MR } from '../../../flowV2/voiceFlowWords';
 import { journeyStepsOf } from '../../../../logs/components/voiceFlowV2/journeyModel';
 import { VoiceLayer } from '../../../../logs/components/voiceFlowV2/VoiceLayer';
+import { noWorkError, clearNoWorkQuestionForTests } from '../../../noWorkAnswer';
 
 function face(over: Partial<RecorderFaceProps> = {}) {
     const props: RecorderFaceProps = {
@@ -56,14 +57,10 @@ describe('F4 - the recording screen', () => {
         expect(status.textContent).not.toContain('सर्व्हरवर');
     });
 
-    it('the stop stops (and shows the stamp for a moment)', () => {
-        const { props, rerender } = face();
+    it('the stop stops at once (the save is immediate; the stamp is the step list)', () => {
+        const { props } = face();
         fireEvent.click(screen.getByTestId('mic-stop'));
         expect(props.onStop).toHaveBeenCalledTimes(1);
-        rerender({ isRecording: false });
-        expect(screen.getByTestId('sathi-stamp')).toBeInTheDocument();
-        expect(screen.getByTestId('mic-listening')).toHaveTextContent('लक्षात ठेवलं ✓');
-        act(() => { vi.advanceTimersByTime(1500); });
         expect(screen.queryByTestId('sathi-stamp')).not.toBeInTheDocument();
     });
 
@@ -115,6 +112,23 @@ describe('F7 - nothing understood', () => {
         expect(screen.getByTestId('nu-how')).toHaveTextContent('कसं सांगायचं?');
         expect(screen.queryByTestId('mic-error')).not.toBeInTheDocument();
         expect(document.body.textContent).not.toContain('इनपुट तपासा');
+    });
+    it('the server question (unclearSegments.userMessage) is the ask chip in the screen language; none = the fixed ask', async () => {
+        const asked = 'कृपया स्पष्ट करा: हे पाणी पिकाला देण्यासाठी (सिंचन) होते, की इतर कोणत्याही कामासाठी?';
+        act(() => { noWorkError({ summary: 'x', unclearSegments: [{ userMessage: asked }] }); });
+        face({ isRecording: false, error: 'x', transcript: 'आज नेहमीप्रमाणे पाणी प्यायलो.' });
+        expect(screen.getByTestId('nu-ask-text')).toHaveTextContent(asked);
+        expect(screen.getByTestId('nu-ask-text').getAttribute('data-source')).toBe('server');
+        cleanup();
+        act(() => { noWorkError({ summary: 'x', unclearSegments: [] }); });
+        face({ isRecording: false, error: 'x', transcript: 'y' });
+        expect(screen.getByTestId('nu-ask-text')).toHaveTextContent('आज कोणतं काम केलं?');
+        expect(screen.getByTestId('nu-ask-text').getAttribute('data-source')).toBe('fixed');
+        clearNoWorkQuestionForTests();
+    });
+    it('noWorkError keeps returning the summary the recorder always showed', () => {
+        expect(noWorkError({ summary: 'कोणतेही कृषी काम नोंदवले नाही.' })).toBe('कोणतेही कृषी काम नोंदवले नाही.');
+        expect(noWorkError({})).toBe('Input seems unrelated to selected crop.');
     });
     it('a mic failure (an error code) keeps the plain error box', () => {
         face({ isRecording: false, error: 'mic', errorCode: 'NotReadableError', transcript: undefined });

@@ -22,7 +22,7 @@
  * steps (`useBackDismiss`). Tapping the आजची कामे tab again (`homeRequested`) returns here, fresh.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import type { CropProfile } from '../../../../types';
+import type { CropProfile, DailyLog } from '../../../../types';
 import type { LogScope, LogSegment } from '../../../../domain/types/log.types';
 import CropSelector from '../../../context/components/CropSelector';
 import type { StepperStep } from '../../../context/components/CropPlotStepper';
@@ -92,6 +92,8 @@ export interface LogEntryFlowProps {
     forDay?: string;
     /** spec voice-flow-v2-2026-11-23 (F2): draw the crop / plot / mic step as the voice journey's full-screen layer. Off = in the page, as before. */
     fullScreen?: boolean;
+    /** The phone's saved logs: the layer's "या महिन्यात N दिवस" chip counts from them (only for one chosen plot, only when the phone's pull covers the month). */
+    history?: readonly DailyLog[];
 }
 
 /** The app's flat scope as the selector's crop -> plots map (the same mapping the old screen used). */
@@ -107,7 +109,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
         recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost, planDoor,
-        pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay, fullScreen = false,
+        pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay, fullScreen = false, history,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
     const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
@@ -222,7 +224,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     // F2: from the green door on, the whole step is one full-screen layer (no farm header, tabs or bottom bar); the place chip is
     // drawn once a place is chosen. The right-hand chip is left out: the app holds no "days logged this month" number to show.
     return (
-        <VoiceLayer step={entryStep} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
+        <VoiceLayer step={entryStep} monthOf={{ history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null }} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
             {entry}
         </VoiceLayer>
     );

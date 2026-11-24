@@ -209,6 +209,9 @@ describe('voice flow v2 — the saved screen first', () => {
         // waitFor's default 1 s, so this waits longer. What is checked is unchanged.
         await waitFor(() => expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy(), { timeout: 8000 });
         expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-state')).toBe('off');
+        // The cause of the old flake: the badge is committed before React runs the passive effect that stops the idle clock's
+        // interval (the clock is faked here), so the advance below fired the old interval. Let the effects run first, as a phone does.
+        await act(async () => { await Promise.resolve(); });
         act(() => { vi.advanceTimersByTime(120_000); });
         expect(p.onAutoClose).not.toHaveBeenCalled();
     });

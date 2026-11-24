@@ -18,6 +18,8 @@ import { createPortal } from 'react-dom';
 import { MapPin } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { PHONE_COLUMN } from '../phoneColumn';
+import type { DailyLog } from '../../../../types';
+import { useMonthChip } from './monthChip';
 import { enterVoiceLayer } from './voiceLayerSignal';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -33,6 +35,8 @@ export interface VoiceLayerProps {
     placeLabel?: string | ((language: string | undefined) => string | undefined);
     /** The right-hand chip - ONLY a number the app already holds. Absent = none is drawn. */
     rightChip?: string;
+    /** "या महिन्यात N दिवस": the days this month with a saved log on this plot, drawn only when the phone's pull covers it (`monthChip`). */
+    monthOf?: { history: readonly DailyLog[] | undefined; plotId: string | null };
     /** The "मागे" control, when this step has one of its own. */
     back?: React.ReactNode;
     /** Which part of the journey this is (for tests and logs). */
@@ -40,8 +44,10 @@ export interface VoiceLayerProps {
     children: React.ReactNode;
 }
 
-export const VoiceLayer: React.FC<VoiceLayerProps> = ({ placeLabel: place, rightChip, back, step, children }) => {
+export const VoiceLayer: React.FC<VoiceLayerProps> = ({ placeLabel: place, rightChip: given, monthOf, back, step, children }) => {
     const language = useOptionalLanguage()?.language;
+    const month = useMonthChip(monthOf?.history, monthOf?.plotId, language);
+    const rightChip = given ?? month;
     const placeLabel = typeof place === 'function' ? place(language) : place;
     const [bottom, setBottom] = useState<HTMLElement | null>(null);
     useLayoutEffect(() => enterVoiceLayer(), []);

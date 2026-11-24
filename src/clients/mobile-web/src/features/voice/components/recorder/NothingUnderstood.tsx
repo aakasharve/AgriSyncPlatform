@@ -8,27 +8,63 @@
  * shown as he said them (they may hold English words he spoke), and nowhere else. Nothing is invented: no part, no number but the
  * 0 of a day with no work, which is what the server's answer holds.
  */
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Mic } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { CategoryIcon } from '../../../logs/components/shramsathi/understandingRing/CategoryIcon';
 import type { IconName } from '../../../logs/components/shramsathi/understandingRing/icons';
+import { latestUnlinkedClipSince, readClipAudio } from '../../../../infrastructure/voice/clipLogLink';
+import { SavedClip } from '../../../logs/components/voiceFlowV2/SavedClip';
 import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
+import { useNoWorkQuestion } from '../../noWorkAnswer';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const SERIF = "'Noto Serif Devanagari', serif";
 const ICONS: readonly IconName[] = ['work', 'labour', 'inputs'];
 
+/** How far back the answer's own clip can have been recorded (it was recorded seconds ago; this only bounds the scan). */
+const CLIP_WINDOW_MS = 10 * 60 * 1000;
+
+/** His clip of this answer, kept on the phone (a no-work answer saves no log, but the clip row is written before the parse). */
+const OwnClip: React.FC = () => {
+    const [clip, setClip] = useState<{ id: string; seconds: number | null; blob: Blob } | null>(null);
+    const [playing, setPlaying] = useState(false);
+    const audio = useRef<HTMLAudioElement | null>(null);
+    useEffect(() => {
+        let alive = true;
+        void (async () => {
+            try {
+                const row = await latestUnlinkedClipSince(new Date(Date.now() - CLIP_WINDOW_MS).toISOString());
+                const blob = row ? await readClipAudio(row) : null;
+                if (alive && row && blob) setClip({ id: row.id, seconds: row.durationMs ? Math.round(row.durationMs / 1000) : null, blob });
+            } catch { /* no clip to show: nothing is drawn */ }
+        })();
+        return () => { alive = false; audio.current?.pause(); };
+    }, []);
+    if (!clip) return null;
+    const toggle = () => {
+        if (!audio.current) {
+            const a = new Audio(URL.createObjectURL(clip.blob));
+            a.onended = () => setPlaying(false);
+            audio.current = a;
+        }
+        if (playing) { audio.current.pause(); setPlaying(false); } else { void audio.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false)); }
+    };
+    return <SavedClip clipKey={clip.id} durationSec={clip.seconds} playing={playing} big onToggle={toggle} testId="nu-play" />;
+};
+
 export const NothingUnderstood: React.FC<{ transcript?: string }> = ({ transcript }) => {
     const language = useOptionalLanguage()?.language;
     const W = voiceFlowWords(language);
+    const serverQuestion = useNoWorkQuestion(language);
     return (
         <div className="mt-3 flex w-full flex-col gap-2.5" style={{ fontFamily: SANS }} data-testid="nothing-understood">
             <div className="rounded-2xl border-[1.5px] border-[#B7E4C7] bg-[#E9F8EE] px-3.5 py-2.5">
                 <b className="block text-[20px] leading-[1.25] text-[#0F6B3A]" style={{ fontFamily: SERIF }} data-testid="nu-title">{W.nuTitle}</b>
                 <span className="mt-0.5 block text-[14px] font-bold leading-snug text-[#1C1917]" data-testid="nu-sub">{W.nuSub}</span>
             </div>
+            <OwnClip />
             {transcript && (
                 <p className="m-0 rounded-2xl border border-[#DDE3DA] bg-white px-3.5 py-2 text-[15px] leading-snug text-[#1C1917]" data-testid="nu-heard">
                     <span className="block text-[12px] font-extrabold text-[#5F6B63]">{W.nuHeard}</span>
@@ -41,7 +77,7 @@ export const NothingUnderstood: React.FC<{ transcript?: string }> = ({ transcrip
             </div>
             <div className="flex items-center gap-2.5 rounded-2xl border-2 border-[#F3D27A] bg-[#FFFDF3] px-3 py-2" data-testid="nu-ask">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white" style={{ background: 'radial-gradient(circle at 35% 30%,#3ccf78,#0F6B3A)' }}><Mic size={20} aria-hidden="true" /></span>
-                <span className="text-[15px] font-extrabold text-[#1C1917]">{W.nuAsk}</span>
+                <span className="text-[15px] font-extrabold text-[#1C1917]" data-testid="nu-ask-text" data-source={serverQuestion ? 'server' : 'fixed'}>{serverQuestion ?? W.nuAsk}</span>
             </div>
             <div className="rounded-[18px] border border-dashed border-[#7EC09A] bg-white px-3 py-2" data-testid="nu-how">
                 <p className="m-0 mb-1 text-[13px] font-extrabold text-[#0F6B3A]">{W.nuHow}</p>

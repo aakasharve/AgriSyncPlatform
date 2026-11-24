@@ -9,7 +9,7 @@
  * Truth rules (doctrine): there is no live transcript today, so no words appear while he speaks, and NO part lights while he speaks
  * (P4: a part lights only from the server's real answer, which comes after stop, on the saved screen). The status line counts the
  * real seconds of audio held on the PHONE and says "फोनवर", never "सर्व्हरवर" (P10). The field picture is a still picture of his plot
- * with its name; nothing in it is drawn "from his voice". The stamp "लक्षात ठेवलं" is shown only for the moment right after stop.
+ * with its name; nothing in it is drawn "from his voice".
  * Reduced motion: no pulse, no ring animation (P11). The stop is a 72 px target; the cancel keeps its place and its words.
  *
  * The bottom area (silence hints, timer, stop, cancel) is drawn into the voice layer's bottom slot, so the stop never moves and
@@ -35,7 +35,7 @@ const BOX = 288;
 const RADIUS = 104;
 
 /** The ring of the parts, in the app's own v2 order and names. While he speaks every part stays quiet (P4). */
-const PartsRing: React.FC<{ stamp: boolean }> = ({ stamp }) => {
+const PartsRing: React.FC = () => {
     const nodes = ringNodesV2(Object.fromEntries(ALL.map(id => [id, 'neutral' as const])));
     return (
         <div className="relative mx-auto shrink-0" style={{ width: BOX, height: BOX - 24, maxWidth: '100%' }} data-testid="sathi-ring" data-lit="0">
@@ -54,11 +54,6 @@ const PartsRing: React.FC<{ stamp: boolean }> = ({ stamp }) => {
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ marginTop: -2 }}>
                 <img src={SATHI} alt="" width={104} height={104} aria-hidden="true" className="h-[104px] w-[104px] rounded-full object-cover object-top"
                     style={{ background: '#FFF6C6', boxShadow: '0 0 0 3px rgba(30,158,90,.28)' }} />
-                {stamp && (
-                    <span data-testid="sathi-stamp" className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-[#1E9E5A] ring-2 ring-white" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 8.4l3 3L12.5 5" stroke="#fff" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    </span>
-                )}
             </span>
         </div>
     );
@@ -82,23 +77,21 @@ export interface SathiRecordingProps {
     help: SilenceHelpView;
     /** "द्राक्ष · प्लॉट १" - absent when the recorder does not know the place. */
     place?: string;
-    /** Right after stop: the "लक्षात ठेवलं" stamp on Sathi (no timer, no stop). */
-    stamped?: boolean;
 }
 
-export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, onStop, onCancel, help, place, stamped = false }) => {
+export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, onStop, onCancel, help, place }) => {
     const language = useOptionalLanguage()?.language;
     const W = voiceFlowWords(language);
     const slot = useVoiceLayerBottom();
-    const bubble = stamped ? { t: W.stampTitle, s: W.stampSub } : { t: W.sathiListening, s: W.sathiListeningSub };
+    const bubble = { t: W.sathiListening, s: W.sathiListeningSub };
     const body = (
-        <div className="flex w-full flex-col gap-2.5 pb-2" style={{ fontFamily: SANS }} data-testid="mic-ui" data-recording={stamped ? 'stopped' : 'yes'}>
+        <div className="flex w-full flex-col gap-2.5 pb-2" style={{ fontFamily: SANS }} data-testid="mic-ui" data-recording="yes">
             <div className="relative mx-auto mt-1 max-w-full rounded-2xl border border-[#9ACBAD] bg-white px-4 py-2 text-center shadow-[0_2px_10px_rgba(20,60,40,0.07)]" data-testid="sathi-bubble">
                 <p className="m-0 text-[16px] font-bold leading-[1.4] text-[#1C1917]" style={{ fontFamily: SERIF }} data-testid="mic-listening">{bubble.t}</p>
                 <p className="m-0 text-[12.5px] font-semibold leading-[1.45] text-[#5F6B63]">{bubble.s}</p>
                 <span aria-hidden="true" className="absolute -bottom-[7px] left-1/2 h-[14px] w-[14px] -translate-x-1/2 rotate-45 border-b border-r border-[#9ACBAD] bg-white" />
             </div>
-            <PartsRing stamp={stamped} />
+            <PartsRing />
             <FieldPicture caption={W.fieldCaption(place ?? '')} />
             <p className="m-0 text-center text-[13px] font-extrabold text-[#0F6B3A]" data-testid="sathi-status" aria-live="off">
                 {seconds >= 1 ? W.recOnPhone(seconds) : ' '}
@@ -106,7 +99,7 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
             <p className="m-0 rounded-2xl border border-[#DDE3DA] bg-white px-3.5 py-2.5 text-[15px] font-semibold text-[#5F6B63]" data-testid="sathi-words-strip">{W.wordsStrip}</p>
         </div>
     );
-    const bottom = stamped ? null : (
+    const bottom = (
         <div className="flex w-full flex-col items-center gap-1 border-t border-[#DDE3DA] bg-white px-3.5 pt-1" data-testid="sathi-recording-bottom"
             style={{ fontFamily: SANS, paddingBottom: 'calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}>
             <HintSlot stage={help.stage} listening={help.listening} />
@@ -134,7 +127,7 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
     return (
         <>
             {body}
-            {bottom && (slot === undefined ? bottom : slot ? createPortal(bottom, slot) : null)}
+            {slot === undefined ? bottom : slot ? createPortal(bottom, slot) : null}
         </>
     );
 };

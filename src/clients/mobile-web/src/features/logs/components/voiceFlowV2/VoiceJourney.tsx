@@ -136,6 +136,15 @@ export const VoiceJourney: React.FC<VoiceJourneyProps> = ({ crops, farmerProfile
     const done = view.steps.filter(s => s.state === 'done').length;
     const active = view.steps.find(s => s.state === 'active');
 
+    // The save is immediate; on arrival the step list shows Sathi's "लक्षात ठेवलं ✓" stamp for 1.4 s (only once the phone really kept it).
+    const [stamp, setStamp] = useState(false);
+    const kept = journey?.keptAt !== undefined;
+    useEffect(() => {
+        if (!kept) return undefined;
+        setStamp(true);
+        const id = window.setTimeout(() => setStamp(false), 1400);
+        return () => window.clearTimeout(id);
+    }, [kept]);
     const root = useRef<HTMLElement>(null);
     const writtenAt = useRef<number | undefined>(undefined);
     const savedSaid = useRef(false);
@@ -170,15 +179,20 @@ export const VoiceJourney: React.FC<VoiceJourneyProps> = ({ crops, farmerProfile
         <section ref={root} data-testid="voice-journey" data-complete={view.complete ? 'yes' : 'no'}
             className="mx-auto flex w-full max-w-md flex-col gap-3 pt-1.5" style={{ fontFamily: SANS, color: INK }}>
             <div className="flex items-center gap-3 px-0.5 py-1">
-                <img src="/images/sathi/sathi-points-down-both.png" alt="" width={56} height={56} aria-hidden="true"
-                    className="pointer-events-none h-14 w-14 shrink-0 rounded-full object-cover object-top"
-                    style={{ background: '#FFF6C6', boxShadow: '0 0 0 3px rgba(30,158,90,.25)' }} />
+                <span className="relative shrink-0">
+                    <img src="/images/sathi/sathi-points-down-both.png" alt="" width={56} height={56} aria-hidden="true"
+                        className="pointer-events-none h-14 w-14 rounded-full object-cover object-top"
+                        style={{ background: '#FFF6C6', boxShadow: '0 0 0 3px rgba(30,158,90,.25)' }} />
+                    {stamp && (
+                        <span data-testid="vj-stamp" className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full ring-2 ring-white" style={{ background: GREEN }} aria-hidden="true"><Tick /></span>
+                    )}
+                </span>
                 <div className="min-w-0 flex-1">
                     {/* Done: the heading itself says "जतन झालं ✓", so the save is seen even when the list is taller than the screen. */}
                     <h2 className="m-0 text-[19px] font-bold leading-[1.3]" style={{ color: view.complete ? GREEN_DEEP : INK }} data-testid="vj-title">
                         {view.complete ? `${words.stepSaved} ✓` : words.journeyTitle}
                     </h2>
-                    <p className="m-0 text-[13px] leading-[1.55]" style={{ color: MUTED }}>{words.journeySub}</p>
+                    <p className="m-0 text-[13px] leading-[1.55]" style={{ color: MUTED }} data-testid="vj-sub">{stamp ? `${words.stampTitle} ${words.stampSub}` : words.journeySub}</p>
                 </div>
             </div>
             <div className="h-2 overflow-hidden rounded-lg" style={{ background: LINE }} role="progressbar" aria-label={words.journeyTitle}

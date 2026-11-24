@@ -36,8 +36,6 @@ const SANS = "'Noto Sans Devanagari', sans-serif";
 export const CANCELLED_NOTE_MS = 1600;
 /** spec voice-flow-v2-2026-11-23 (M1) — a start that never answers frees the mic button again after this. */
 const START_GUARD_MS = 5000;
-/** How long the stamp stays on Sathi after stop. */
-const STAMP_MS = 1400;
 
 export interface RecorderFaceProps {
     isRecording: boolean;
@@ -151,11 +149,6 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
     const v2On = flowV2 !== undefined;
     const [autoStarted, setAutoStarted] = useState(false);
     const [heldNote, setHeldNote] = useState(false);
-    // F4: right after stop, Sathi shows the "लक्षात ठेवलं" stamp for a moment (the waiting list replaces it as soon as the save starts).
-    const [stamped, setStamped] = useState(false);
-    const stampTimer = useRef<number | null>(null);
-    useEffect(() => () => { if (stampTimer.current) window.clearTimeout(stampTimer.current); }, []);
-    useEffect(() => { if (isRecording) setStamped(false); }, [isRecording]);
     // M1 — one start at a time: a tap at 6.9 s and the 7 s timer can never open two recorders.
     const startingRef = useRef(false);
     const startGuardTimer = useRef<number | null>(null);
@@ -197,25 +190,12 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
             setHeldNote(true);
             onCancel();
         };
-        const stop = () => {
-            if (flowV2?.silenceHelp) {
-                hapticFeedback.success?.();
-                setStamped(true);
-                if (stampTimer.current) window.clearTimeout(stampTimer.current);
-                stampTimer.current = window.setTimeout(() => setStamped(false), STAMP_MS);
-            }
-            onStop();
-        };
         return (
-            <Recording seconds={seconds} level={level} onStop={stop} onCancel={cancel}
+            <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel}
                 silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel}
                 place={card?.placeLabel(language)} />
         );
     }
-    if (stamped && flowV2?.silenceHelp) {
-        return <SathiRecording seconds={seconds} onStop={onStop} onCancel={onCancel} help={{ stage: 'none', listening: false }} place={card?.placeLabel(language)} stamped />;
-    }
-
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;
     return (
         <div className="flex w-full flex-col" style={{ fontFamily: SANS }}>

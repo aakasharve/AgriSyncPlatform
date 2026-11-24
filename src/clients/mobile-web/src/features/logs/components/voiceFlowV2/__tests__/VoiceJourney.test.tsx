@@ -55,6 +55,19 @@ const finish = () => act(() => {
 beforeEach(() => { resetVoiceJourneyForTests(); releaseHoldForTests(); haptic.success.mockClear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }); });
 afterEach(() => { cleanup(); releaseHoldForTests(); resetVoiceJourneyForTests(); vi.useRealTimers(); });
 
+describe('VoiceJourney — the stamp (round 2, item 5)', () => {
+    it('Sathi wears the "लक्षात ठेवलं" stamp for 1.4 s after the phone really kept the voice, and not before', () => {
+        view();
+        expect(screen.queryByTestId('vj-stamp')).toBeNull();
+        act(() => noteVoiceJourney({ kind: 'kept', input: 'audio', durationMs: 12_000 }));
+        expect(screen.getByTestId('vj-stamp')).toBeInTheDocument();
+        expect(screen.getByTestId('vj-sub')).toHaveTextContent('लक्षात ठेवलं ✓');
+        act(() => { vi.advanceTimersByTime(1500); });
+        expect(screen.queryByTestId('vj-stamp')).toBeNull();
+        expect(screen.getByTestId('vj-sub')).toHaveTextContent('पुन्हा बोलायची गरज नाही');
+    });
+});
+
 describe('VoiceJourney — ticks live, only on real events', () => {
     it('each event ticks its steps; the bar moves in whole steps; no percentage is written', () => {
         const { container } = view();
