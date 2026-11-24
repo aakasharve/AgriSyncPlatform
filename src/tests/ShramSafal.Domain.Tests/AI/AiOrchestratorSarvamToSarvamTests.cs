@@ -313,4 +313,75 @@ public sealed class AiOrchestratorSarvamToSarvamTests
         Assert.True(rig.Sarvam.Calls.Concat(rig.Gemini.Calls).Any(c => c.Mime == "audio/webm"), "the recording was not handed to the one-call path");
         Assert.False(result.Retryable);
     }
+
+    // ---- a low-confidence answer when nobody else can take voice (CTO fix, 24 Nov 2026, test-writer finding) ----
+
+    private static VsProvider SarvamAnsweringWithConfidence(decimal confidence) =>
+        new(AiProviderType.Sarvam, answer: (_, _) => Task.FromResult(VsProvider.GoodAnswer() with { OverallConfidence = confidence }));
+
+    [Fact]
+    public async Task A_low_confidence_answer_with_no_other_voice_provider_is_kept_as_the_jobs_success_and_never_billed_twice()
+    {
+        var rig = VsRig.Create(sarvam: SarvamAnsweringWithConfidence(0.40m));
+
+        var first = await rig.RunAsync("s6-lowconf-kept");
+
+        Assert.True(first.Result.Success, first.Result.Error);
+        Assert.Equal(0.40m, first.Result.OverallConfidence); // the low confidence travels with the answer, nothing is hidden
+        Assert.False(first.Result.Retryable);
+        var job = await rig.JobAsync(first.JobId);
+        Assert.Equal(AiJobStatus.Succeeded, job.Status); // the job tells the same story the farmer was shown
+
+        var again = await rig.RunAsync("s6-lowconf-kept");
+
+        Assert.True(again.Result.Success, again.Result.Error);
+        Assert.Equal(first.JobId, again.JobId);
+        Assert.Equal(1, rig.Transcriber!.Calls); // the stored answer came back: no second speech-to-text
+        Assert.Equal(1, rig.Sarvam.VoiceCalls); // no second sorting
+        Assert.Equal(1, rig.Blob.PutCalls); // no second audio write
+        Assert.Equal(0, rig.Gemini.VoiceCalls);
+    }
+
+    [Fact]
+    public async Task Many_low_confidence_notes_in_a_row_never_switch_voice_off_for_everyone()
+    {
+        // A breaker that opens after five failures, like the shipped row. Low confidence is not a provider failure.
+        var config = AiProviderConfig.CreateDefault();
+        config.UpdateSettings(
+            modifiedByUserId: Guid.NewGuid(),
+            defaultProvider: AiProviderType.Sarvam,
+            fallbackEnabled: true,
+            isAiProcessingDisabled: false,
+            maxRetries: 1,
+            circuitBreakerThreshold: 5,
+            circuitBreakerResetSeconds: 60,
+            voiceConfidenceThreshold: 0.60m,
+            receiptConfidenceThreshold: 0.50m,
+            voiceProvider: AiProviderType.Sarvam,
+            receiptProvider: AiProviderType.Gemini,
+            pattiProvider: AiProviderType.Gemini);
+        config.SetProviderTuple("Sarvam", "codemix", "Sarvam", null);
+        var rig = VsRig.Create(config: config, sarvam: SarvamAnsweringWithConfidence(0.40m));
+
+        for (var i = 0; i < 8; i++)
+        {
+            var (result, _, _, _) = await rig.RunAsync($"s6-lowconf-row-{i}");
+            Assert.True(result.Success, $"note {i}: {result.Error}");
+        }
+
+        Assert.Equal(8, rig.Sarvam.VoiceCalls); // every note reached Sarvam: the breaker never opened
+    }
+
+    [Fact]
+    public async Task When_another_provider_can_take_voice_a_low_confidence_answer_is_still_handed_to_it()
+    {
+        var rig = VsRig.Create(geminiTakesVoice: true, sarvam: SarvamAnsweringWithConfidence(0.40m));
+
+        var (result, _, providerUsed, fallbackUsed) = await rig.RunAsync("s6-lowconf-others-can");
+
+        Assert.True(result.Success, result.Error);
+        Assert.True(fallbackUsed);
+        Assert.Equal(AiProviderType.Gemini, providerUsed);
+        Assert.True(rig.Gemini.VoiceCalls >= 1);
+    }
 }

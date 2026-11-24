@@ -1547,10 +1547,16 @@ internal sealed class AiOrchestrator(
             // low-confidence marks — the result screen shows the "not sure" items. Measured live 2026-10-31: six good
             // Sarvam parts at confidence 0.5 went to the Gemini fallback, whose one-call answer for a 10-minute
             // transcript was cut off at its token limit → HTTP 400, and the farmer lost the whole recording.
-            if (result.OverallConfidence < config.VoiceConfidenceThreshold && result.StructuredParts > 1)
+            // 24 Nov 2026 (founder: voice is Sarvam only): the same holds for ANY answer when no other provider can take
+            // voice. A low-confidence answer is then the only answer there is: recording it as a failure marked the job
+            // Failed while the farmer was shown it, made the same recording sent again run (and bill) speech-to-text and
+            // sorting a second time, and counted against Sarvam's circuit breaker, so five low-confidence notes in a row
+            // would have switched voice off for every farmer. It is kept with its low-confidence marks instead.
+            var noOtherProviderTakesVoice = ResolveFallbackProvider(provider.ProviderType, AiOperationType.VoiceToStructuredLog) is null;
+            if (result.OverallConfidence < config.VoiceConfidenceThreshold && (result.StructuredParts > 1 || noOtherProviderTakesVoice))
             {
                 logger.LogInformation(
-                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept: a long recording structured in {Parts} parts is never handed to a fallback that cannot take it.",
+                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept with its low-confidence marks: a recording structured in {Parts} part(s) is never handed to a fallback that cannot take it.",
                     provider.ProviderType,
                     AiOperationType.VoiceToStructuredLog,
                     job.Id,
