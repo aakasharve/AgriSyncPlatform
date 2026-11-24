@@ -400,7 +400,28 @@ internal sealed class AiOrchestrator(
         // voice-rawblob-resilient-2026-06-10 — NON-FATAL (see helper): a
         // cold-tier storage failure leaves blobRef null → rawInputRef null,
         // and the two-stage parse still proceeds.
-        var blobRef = await TimedPutRawBlobAsync(payload, mimeType, clock, ct);
+        //
+        // spec: voice-instant-phase-a-2026-11-23 (Task 4 / S4) — the raw-audio PUT and speech-to-text no longer wait for
+        // each other: both start now and both are awaited together, so the farmer waits for the slower of the two, not
+        // for their sum. What stays exactly as it was:
+        //   - a failed PUT is non-fatal and leaves RawInputRef null (the phone still holds the audio); the PUT's own
+        //     error log, its failure class and its bucket label are the same lines as before;
+        //   - the token cancels BOTH calls, and a speech-to-text failure does not cancel the PUT (the point of this
+        //     lane is that the audio is never lost);
+        //   - the AiJob row is created only after BOTH finished, as before it was created after the PUT.
+        // The PUT's database bookkeeping (UpsertRawBlobIndexAsync) is NOT in the parallel part: speech-to-text reads and
+        // writes its transcript cache through the request's one DbContext, and two operations on a DbContext at the
+        // same moment throw. So the bookkeeping runs on its own, right after both calls are done.
+        // A switched-off AI processing starts no speech-to-text at all (nothing to pay for), only the PUT, as before.
+        var transcribeMode = string.IsNullOrWhiteSpace(config.TranscriberMode) ? "codemix" : config.TranscriberMode!;
+        var putTask = TimedPutRawBlobAsync(payload, mimeType, clock, ct);
+        var sttTask = config.IsAiProcessingDisabled
+            ? null
+            : TimedTranscribeAsync(transcriber, payload, mimeType, languageHint, transcribeMode, clock, ct);
+        Task[] running = sttTask is null ? [putTask] : [putTask, sttTask];
+        await Task.WhenAll(running);
+
+        var blobRef = await putTask;
         if (blobRef is not null)
         {
             blobRef = await TryIndexRawBlobAsync(blobRef, userId, ct);
@@ -452,25 +473,12 @@ internal sealed class AiOrchestrator(
         }
 
         // ─── Stage 1: transcribe via ITranscriberProvider ───────────────
-        TranscribeResult transcribeResult;
-        var transcribeMode = string.IsNullOrWhiteSpace(config.TranscriberMode) ? "codemix" : config.TranscriberMode!;
-        var sttStartedAt = Stopwatch.GetTimestamp();
-        try
+        // (started above, beside the raw-audio PUT; its outcome is read here, after the job row exists)
+        var sttOutcome = await sttTask!;
+        if (sttOutcome.Error is { } transcribeError)
         {
-            await using var transcribeStream = new MemoryStream(payload, writable: false);
-            transcribeResult = await transcriber.TranscribeAsync(
-                transcribeStream,
-                mimeType,
-                languageHint,
-                transcribeMode,
-                ct);
-            clock.Stt = Stopwatch.GetElapsedTime(sttStartedAt);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            clock.Stt = Stopwatch.GetElapsedTime(sttStartedAt);
             logger.LogWarning(
-                ex,
+                transcribeError,
                 "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}). Falling back to legacy multimodal path.",
                 job.Id,
                 transcriberType);
@@ -496,6 +504,8 @@ internal sealed class AiOrchestrator(
                 clientAppVersion,
                 ct);
         }
+
+        var transcribeResult = sttOutcome.Result!;
 
         if (!transcribeResult.Success || string.IsNullOrWhiteSpace(transcribeResult.Transcript))
         {
@@ -1716,6 +1726,40 @@ internal sealed class AiOrchestrator(
             ToLatencyMs(Struct),
             ToLatencyMs(Stopwatch.GetElapsedTime(_startedAt)),
             Path);
+    }
+
+    /// <summary>What speech-to-text came back with: its answer, or the exception it threw (never both).</summary>
+    private sealed record SttOutcome(TranscribeResult? Result, Exception? Error);
+
+    /// <summary>
+    /// Speech-to-text, timed onto <paramref name="clock"/>. A failure other than cancellation comes back as
+    /// <see cref="SttOutcome.Error"/> instead of throwing, so the call can run beside the raw-audio PUT without its
+    /// failure tearing the PUT down; cancellation still throws, and it cancels both through the shared token.
+    /// </summary>
+    private static async Task<SttOutcome> TimedTranscribeAsync(
+        ITranscriberProvider transcriber,
+        byte[] payload,
+        string mimeType,
+        string languageHint,
+        string mode,
+        VoiceStageClock clock,
+        CancellationToken ct)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            await using var transcribeStream = new MemoryStream(payload, writable: false);
+            var result = await transcriber.TranscribeAsync(transcribeStream, mimeType, languageHint, mode, ct);
+            return new SttOutcome(result, null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new SttOutcome(null, ex);
+        }
+        finally
+        {
+            clock.Stt = Stopwatch.GetElapsedTime(startedAt);
+        }
     }
 
     /// <summary>The raw-audio PUT, timed onto <paramref name="clock"/> whether it succeeds, fails or is cancelled.</summary>
