@@ -3,7 +3,7 @@ import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload 
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { expectVersionOnPhone } from './expectedVersion';
-import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { startSyncAfterEnqueue } from './startSyncAfterEnqueue';
 import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
@@ -664,13 +664,15 @@ export interface EnqueueLogsOptions {
      * definition has a backlog.
      */
     triggerSync?: boolean;
+    /** Voice-instant Task 3 — `false`: start the sync, do not wait for it (the voice auto-save). Default `true`. See `startSyncAfterEnqueue`. */
+    awaitSync?: boolean;
 }
 
 export async function enqueueLogsForSync(
     logs: DailyLog[],
     options: EnqueueLogsOptions = {},
 ): Promise<{ queuedLogIds: string[]; skippedLogIds: string[]; detailsKeptOnPhoneLogIds: string[] }> {
-    const { cycleResolution = 'at-capture', triggerSync = true } = options;
+    const { cycleResolution = 'at-capture', triggerSync = true, awaitSync = true } = options;
     const queuedLogIds: string[] = [];
     const skippedLogIds: string[] = [];
     // lane F1 (review S5) — logs whose details did not fit the contract: queued the old way, and said so.
@@ -783,9 +785,7 @@ export async function enqueueLogsForSync(
         queuedLogIds.push(log.id);
     }
 
-    if (triggerSync && queuedLogIds.length > 0) {
-        await backgroundSyncWorker.triggerNow();
-    }
+    if (triggerSync && queuedLogIds.length > 0) await startSyncAfterEnqueue(awaitSync);
 
     return {
         queuedLogIds,

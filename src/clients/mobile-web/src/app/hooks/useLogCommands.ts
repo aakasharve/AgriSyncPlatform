@@ -263,12 +263,14 @@ export const useLogCommands = ({
      */
     const enqueueForSyncAndNoteSkips = async (
         logs: DailyLog[],
+        options?: { awaitSync?: boolean },
     ): Promise<LogSyncEnqueueOutcome | null> => {
         if (isDemoMode) {
             return null;
         }
 
-        const outcome = await enqueueLogsForSync(logs);
+        // `options` only when asked for: every hand-filled save still calls it with the logs alone, and awaits the sync.
+        const outcome = await (options ? enqueueLogsForSync(logs, options) : enqueueLogsForSync(logs));
         noteUnqueueableLogs(outcome.skippedLogIds);
         return outcome;
     };
@@ -345,7 +347,8 @@ export const useLogCommands = ({
             await options.onWritten?.(newLogs);
             // T2 — the result is EVIDENCE, not noise. `null` in demo mode,
             // where nothing is meant to reach a server at all.
-            const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
+            // voice-instant-phase-a (Task 3): the sync is STARTED, not awaited — the result shows as soon as the logs are queued.
+            const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs, { awaitSync: false });
 
             // Lane L8c-4: the planned items become his own reminders (shown at once in the one list; demo: the old list).
             rememberLogTasks(isDemoMode, setPlannedTasks, newLogs);
