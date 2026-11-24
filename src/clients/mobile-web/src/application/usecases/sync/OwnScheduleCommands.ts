@@ -86,6 +86,31 @@ export class OwnScheduleCommands {
         return { clientRequestId };
     }
 
+    /**
+     * Slice 11: the season-end review's answers (`ownschedule.carry_forward`). Offline first: ONE request per (plot, season that ended, next season), so a second tap or a
+     * second finish queues nothing new and the server's replay is one copy. `answers` lists only the works he answered; the server carries any other as written and says so (P8).
+     */
+    static async carryForward(
+        place: { farmId: string; plotId: string; fromCropCycleId: string; toCropCycleId: string },
+        answers: readonly { taskKey: string; choice: 'schedule' | 'mine' | 'skip' }[],
+        planOnly: readonly string[] = [],
+    ): Promise<QueuedOwnScheduleChange> {
+        const clientRequestId = `${SyncMutationName.OwnscheduleCarryForward}:${place.plotId}:${place.fromCropCycleId}:${place.toCropCycleId}`;
+        await mutationQueue.enqueueRepeatable(
+            SyncMutationName.OwnscheduleCarryForward,
+            {
+                farmId: place.farmId,
+                plotId: place.plotId,
+                fromCropCycleId: place.fromCropCycleId,
+                toCropCycleId: place.toCropCycleId,
+                answers: answers.map(a => ({ taskKey: a.taskKey, choice: a.choice })),
+                ...(planOnly.length > 0 ? { planOnly: planOnly.map(taskKey => ({ taskKey })) } : {}),
+            },
+            { clientRequestId, clientCommandId: clientRequestId },
+        );
+        return { clientRequestId };
+    }
+
     static async makeMain(place: OwnSchedulePlace, options: { name?: string; stageLine?: OwnScheduleStageLineItem[] } = {}): Promise<QueuedOwnScheduleChange> {
         const clientRequestId = requestIdFor(SyncMutationName.OwnscheduleMakeMain, place.cropCycleId, 'main');
         const name = options.name?.trim();

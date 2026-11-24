@@ -30,9 +30,17 @@ export interface OwnScheduleReconcileOutcome {
 
 /** Applies the two keys when present. Returns what was kept (zeros when the keys were absent). */
 export async function reconcileOwnScheduleItems(db: AgriLogDatabase, payload: SyncPullResponse): Promise<OwnScheduleReconcileOutcome> {
-    const raw = payload as SyncPullResponse & { ownScheduleItems?: unknown; ownScheduleItemRevisions?: unknown };
+    const raw = payload as SyncPullResponse & { ownScheduleItems?: unknown; ownScheduleItemRevisions?: unknown; ownScheduleCarries?: unknown };
     const outcome: OwnScheduleReconcileOutcome = { items: 0, revisions: 0, skipped: 0 };
     try {
+        // Slice 11: the season-end answers REPLACE the phone's copy whole, like the works (a disposable server cache in `referenceData`; no new store).
+        if (Array.isArray(raw.ownScheduleCarries)) {
+            const rows = raw.ownScheduleCarries.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object'
+                && typeof (r as Record<string, unknown>).plotId === 'string' && typeof (r as Record<string, unknown>).fromCropCycleId === 'string'
+                && typeof (r as Record<string, unknown>).cropCycleId === 'string' && typeof (r as Record<string, unknown>).taskKey === 'string');
+            outcome.skipped += raw.ownScheduleCarries.length - rows.length;
+            await db.referenceData.put({ key: 'ownScheduleCarries', data: rows, versionHash: String(rows.length), updatedAt: new Date().toISOString() });
+        }
         if (Array.isArray(raw.ownScheduleItems)) {
             const rows: OwnScheduleItemRow[] = [];
             for (const dto of raw.ownScheduleItems) {

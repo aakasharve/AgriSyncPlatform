@@ -484,7 +484,7 @@ export type ReferenceDataKey =
     | 'scheduleTemplates'
     | 'cropTypes'
     | 'activityCategories'
-    | 'costCategories';
+    | 'costCategories' | 'ownScheduleCarries'; // slice 11: the season-end answers the pull carries (a disposable server cache; no new store)
 
 export interface ReferenceDataRecord {
     key: ReferenceDataKey;

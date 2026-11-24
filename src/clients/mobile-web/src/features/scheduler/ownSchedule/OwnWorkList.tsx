@@ -31,6 +31,7 @@ import { usePlannedWork } from '../../plannedWork/data/usePlannedWork';
 import { ownItemIdFor, planOwnWork, planStateOf } from './ownWorkPlan';
 import { OWN_WORK_PLAN_WORDS, refusalWords } from './ownWorkPlanWords';
 import { OwnWorkCardButton } from '../dayCards/DayCardsEntries';
+import { SeasonReviewEntry } from './SeasonReviewEntry';
 
 /** Who may be chosen for a plan of an own work: the planning form's rule (the server decides every request). */
 export interface OwnWorkPlanning {
@@ -132,6 +133,8 @@ export const OwnWorkList: React.FC<OwnWorkListProps> = ({ place, language, onAdd
     };
 
     return (
+        <>
+        {planning && <SeasonReviewEntry place={place} language={language} />}
         <section className="space-y-2 rounded-3xl border-2 border-amber-300 bg-amber-50 p-3.5" data-testid="own-list">
             <div>
                 <h4 className="m-0 text-[18px] font-extrabold leading-tight text-amber-950">{words.listTitle(place.plotName)}</h4>
@@ -174,6 +177,7 @@ export const OwnWorkList: React.FC<OwnWorkListProps> = ({ place, language, onAdd
                 <Plus size={22} aria-hidden="true" />{words.add}
             </Tap>
         </section>
+        </>
     );
 };
 
