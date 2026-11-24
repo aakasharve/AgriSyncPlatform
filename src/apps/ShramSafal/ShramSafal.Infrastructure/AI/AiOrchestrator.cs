@@ -1586,6 +1586,11 @@ internal sealed class AiOrchestrator(
             }
 
             attempt.RecordSuccess(result.NormalizedJson ?? "{}", latencyMs, null, result.OverallConfidence);
+            if (!string.IsNullOrWhiteSpace(result.ModelUsed))
+            {
+                attempt.UpdateProvenance(result.ModelUsed);
+            }
+
             attempt.SetEstimatedCostUnits(estimatedCost);
             breaker.RecordSuccess();
             // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — rolling
