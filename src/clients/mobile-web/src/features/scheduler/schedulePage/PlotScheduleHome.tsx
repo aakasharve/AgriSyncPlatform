@@ -31,6 +31,7 @@ import type { ClipsByDay } from './usePlotClips';
 import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
 import { TrialStages, trialStageOf } from './TrialStages';
 import { StagePlanCard } from './StagePlanCard';
+import { DayCardsDayButton } from '../dayCards/DayCardsEntries';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 
@@ -97,6 +98,7 @@ export const PlotScheduleHome: React.FC<{
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
             <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
+            {facts.today && !model.ended && <DayCardsDayButton templateId={template.id} storedDay={facts.today.day} />}
             <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
                 <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
             </ScheduleFold>
