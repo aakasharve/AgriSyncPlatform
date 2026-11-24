@@ -13,7 +13,7 @@
  * When nobody chose the schedule (the app's first one for the crop), the page says so under the card and
  * offers the library, so its राहिलं lines are not read as misses against a plan he picked.
  */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CropScheduleTemplate } from '../scheduler.types';
 import { AheadTab } from './AheadTab';
 import { DoneTab } from './DoneTab';
@@ -28,16 +28,20 @@ import { SC, mrNum } from './scheduleCopy';
 import { THREE_PLUS_ONE_WORDS } from './threePlusOneCopy';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { ClipsByDay } from './usePlotClips';
-import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
+import { BehindBanner, DefaultScheduleNote, FollowedCheckNoteLine, ScheduleHeader, StageProgress } from './WhereYouAre';
 import { TrialStages, trialStageOf } from './TrialStages';
 import { StagePlanCard } from './StagePlanCard';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 import { OwnerVoiceSlot, type OwnerVoice } from './OwnerVoiceSlot';
-import { SameWorkSection } from './SameWorkSection';
 import { ScheduleProfileCard } from './ScheduleProfileCard';
-import { ScheduleTabCalendar } from './ScheduleTabCalendar';
+import { ScheduleCalendarTabs } from './ScheduleCalendarTabs';
+import { ScheduleTabHead } from './ScheduleTabHead';
+import { ScheduleTiles } from './ScheduleTiles';
+import { ScheduleTabDoors } from './ScheduleTabDoors';
+import { scheduleNameIn } from './scheduleNames';
+import type { CropProfile, Plot } from '../../../types';
 import { FollowTotalsSlot, LookMemoriesCard } from './ScheduleTabCards';
 
 export const PlotScheduleHome: React.FC<{
@@ -79,13 +83,20 @@ export const PlotScheduleHome: React.FC<{
     take?: TakeHost;
     /** Slice 10: the new owner voices (slice 12b fills this; empty = the slot shows nothing). */
     ownerVoices?: readonly OwnerVoice[];
+    /** Round 3: the crop and the plot themselves (the head draws the crop's photo and the plot's area from them). */
+    crop?: CropProfile;
+    plot?: Plot;
+    /** Round 3: the planning door of the tab's \"<plot> चं नियोजन करा\" card; absent (a seat that may not plan) = no card. */
+    onPlan?: () => void;
+    /** Round 3: the plot lists, drawn after the calendar and before the old parts of the page. */
+    plotLists?: React.ReactNode;
     /** Slice 10: "change plot" in the plot head - the page takes him to the plot lists. Absent = no button. */
     onChangePlot?: () => void;
     /** UI-8: the maker's picture for the owner bar, when the app has one (none yet; the bar shows the letter or the leaf otherwise). */
     ownerImageUrl?: string | null;
     /** UI-4: the last closed row (the tools), drawn by the page. */
     children?: React.ReactNode;
-}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, ownerVoices = [], onChangePlot, children }) => {
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, ownerVoices = [], onChangePlot, crop, plot, onPlan, plotLists, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -101,26 +112,45 @@ export const PlotScheduleHome: React.FC<{
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const followWords = THREE_PLUS_ONE_WORDS[language];
 
-    // UI-4 (D-146): header, then ONE list "today", then closed rows. Same content as before; only layout, order and open/closed state changed.
+    const profileOptions = followed ? followed.map(f => f.templateId) : [];
+    const [picked, setPicked] = useState<string | null>(null);
+    useEffect(() => { setPicked(null); }, [plotId, template.id]);
+    const profileId = picked && profileOptions.includes(picked) ? picked : template.id;
+    const profilePlace = followed?.find(f => f.templateId === profileId);
+    const names = (n: string) => scheduleNameIn(n, language);
+
+    // Version 7 (slice 10, round 3): plot head, owner voice, the four tiles, the profile, follow totals, the two door cards, the look reminders, the two tabs
+    // (calendar | today of all schedules), then the plot lists. Every older part of the page keeps its place in the closed rows after them.
     return (
         <div className="space-y-3" data-testid="plot-schedule">
             {ask}
-            <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} ownerImageUrl={ownerImageUrl} />
-            {onChangePlot && <button type="button" onClick={onChangePlot} data-testid="change-plot" className="min-h-[48px] rounded-full border-2 border-emerald-700 bg-white px-4 text-[16px] font-extrabold text-emerald-900">{language === 'en' ? 'Change plot' : 'प्लॉट बदला'}</button>}
+            {crop && plot
+                ? <ScheduleTabHead crop={crop} plot={plot} model={model} isGrape={/grape/i.test(template.cropCode)} onChangePlot={onChangePlot} />
+                : <h2 className="m-0 px-1 text-[20px] font-black text-stone-900" data-testid="plot-head-name">{plotName}</h2>}
             <OwnerVoiceSlot voices={ownerVoices} playLabel={language === 'en' ? 'Listen' : 'ऐका'} />
+            {followed && (
+                <ScheduleTiles followed={followed} selectedTemplateId={profileId} onSelect={setPicked} onAdd={onAddSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
+            )}
+            <ScheduleProfileCard templateId={profileId} plotName={plotName} crop={crop} sourceLabel={profilePlace?.template?.sourceLabel ?? (profileId === template.id ? template.sourceLabel : undefined)}>
+                {checkNote && profileId === template.id && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} tone="light" />}
+            </ScheduleProfileCard>
+            {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
+            <FollowTotalsSlot />
+            <ScheduleTabDoors plotName={plotName} onPlan={onPlan} onMake={mayMakeOwn ? onMakeOwn : undefined} />
+            <LookMemoriesCard templateId={profileId} todayStored={model.todayDay} take={take} />
+            <ScheduleCalendarTabs templateId={profileId} versionIds={followed ? followed.map(f => f.templateId) : []} model={model} take={take} scheduleName={names(profilePlace?.template?.name ?? template.name)} />
+            {plotLists}
+            {/* The older parts of the page, closed: the day and stage numbers, the three lists, the stage path, who follows what with "leave", and the tools. */}
+            <ScheduleFold id="header" title={`${SC.dayNow} · ${SC.stage}`}>
+                <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} onLibrary={onLibrary} ownerImageUrl={ownerImageUrl} />
+                <BehindBanner model={model} />
+                <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
+            </ScheduleFold>
             {followed && onAddSchedule && onLeaveSchedule && (
-                <ScheduleFold id="followed" defaultOpen title={followWords.heading} count={followed.length} summary={SC.followedLine(followed.length)}>
+                <ScheduleFold id="followed" title={followWords.heading} count={followed.length} summary={SC.followedLine(followed.length)}>
                     <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
                 </ScheduleFold>
             )}
-            <ScheduleProfileCard templateId={template.id} plotName={plotName} />
-            <SameWorkSection versionIds={followed ? followed.map(f => f.templateId) : []} take={take ? { ...take, todayStored: take.todayStored ?? model.todayDay } : undefined} />
-            {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
-            <FollowTotalsSlot />
-            <LookMemoriesCard templateId={template.id} todayStored={model.todayDay} take={take} />
-            <ScheduleTabCalendar templateId={template.id} model={model} take={take} />
-            <BehindBanner model={model} />
-            <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
             <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
                 <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
             </ScheduleFold>

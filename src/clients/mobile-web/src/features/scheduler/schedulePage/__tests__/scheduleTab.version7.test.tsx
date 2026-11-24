@@ -31,27 +31,27 @@ const page = (logs: any[] = [], props: Record<string, unknown> = {}) => (
 );
 
 describe('slice 10: the Schedule tab as version 7', () => {
-    it('top to bottom: plot head, change plot, the four tiles row, the plot schedule, the plot lists below; no owner-voice line with no voice', () => {
+    it('top to bottom: plot head with change plot, no owner-voice line, the four tiles, the profile, follow totals, the door cards, look reminders, the two tabs, the plot lists; the older parts after', () => {
         render(page());
-        const head = screen.getByTestId('sched-header');
-        const change = screen.getByTestId('change-plot');
-        const tiles = screen.getByTestId('fold-followed');
-        const today = screen.getByTestId('today-card');
-        const lists = screen.getByTestId('plot-lists');
-        expect(before(head, change) || before(change, head)).toBe(true);
-        expect(before(head, tiles)).toBe(true);
-        expect(before(tiles, today)).toBe(true);
-        expect(before(today, lists)).toBe(true);
+        const ids = ['plot-head', 'schedule-tiles', 'schedule-profile', 'follow-totals-slot', 'look-memories', 'schedule-panes', 'plot-lists', 'fold-header'];
+        const els = ids.map(id => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null);
+        // the profile loads from the phone's copy; with no copy in this test it draws nothing, so it is checked in scheduleTab.profile.test
+        ids.forEach((id, i) => { if (id !== 'schedule-profile') expect(els[i], id).not.toBeNull(); });
+        const present = els.filter((e): e is HTMLElement => !!e);
+        for (let i = 1; i < present.length; i += 1) expect(before(present[i - 1], present[i])).toBe(true);
+        expect(screen.getByTestId('plot-head').contains(screen.getByTestId('change-plot'))).toBe(true);
         expect(screen.queryByTestId('owner-voice-line')).toBeNull();
+        expect(screen.getByTestId('schedule-tiles-grid')).toHaveClass('grid-cols-2');
+        expect(screen.getByTestId('schedule-tiles-grid').children.length).toBe(4);
     });
     it('opens on the plot last worked (the phone\'s own logs), not the first plot', () => {
         const log: any = { id: 'l1', date: '2026-10-25', context: { selection: [{ cropId: 'crop-1', cropName: 'Grapes', selectedPlotIds: ['plot-2'], selectedPlotNames: ['G2'] }] } };
         render(page([log]));
-        expect(screen.getByTestId('sched-crop-plot').textContent).toContain('G2');
+        expect(screen.getByTestId('plot-head-name').textContent).toContain('G2');
     });
     it('with no log it opens on the first plot in the canonical order', () => {
         render(page());
-        expect(screen.getByTestId('sched-crop-plot').textContent).toContain('G1');
+        expect(screen.getByTestId('plot-head-name').textContent).toContain('G1');
     });
     it('a seat without the take right (a worker) sees no take or plan button anywhere on the tab', () => {
         render(page([], { mayMakeOwnSchedule: false, mayPlanWork: false, mayAssignWork: false }));
@@ -89,7 +89,7 @@ describe('slice 10: the Schedule tab as version 7', () => {
         expect(screen.getByTestId('chip-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByTestId('chip-plot-plot-9')).toBeNull();
         fireEvent.click(screen.getByTestId('chip-plot-plot-2'));
-        expect(screen.getByTestId('sched-crop-plot').textContent).toContain('G2');
+        expect(screen.getByTestId('plot-head-name').textContent).toContain('G2');
         expect(screen.getByTestId('chip-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
     });
 });

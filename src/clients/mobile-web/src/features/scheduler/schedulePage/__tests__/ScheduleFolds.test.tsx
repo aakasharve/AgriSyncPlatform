@@ -29,21 +29,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 // Version 7 (slice 10): the followed-schedules row (the four tiles) is OPEN under the plot head; every other row stays closed.
-const ROWS = ['owed', 'ahead', 'done', 'stages', 'tools'] as const;
+const ROWS = ['header', 'followed', 'owed', 'ahead', 'done', 'stages', 'tools'] as const;
 
 describe('UI-4: the शेड्यूल tab is one short screen with closed rows', () => {
-    it('the header, the badge and the today card are open; every other row is closed and draws nothing inside', () => {
+    it('the plot head and the four tiles are open; every older row (numbers, followed, lists, stages, tools) is closed and draws nothing inside', () => {
         render(<SchedulerPage crops={[crop()]} logs={[]} tasks={[]} onUpdateCrops={vi.fn()} onBack={vi.fn()} />);
-        expect(screen.getByTestId('sched-header')).toBeInTheDocument();
-        expect(screen.getByTestId('sched-badge')).toBeInTheDocument();
-        expect(screen.getByTestId('today-card')).toBeInTheDocument();
-        expect(screen.getByTestId('day-now')).toBeInTheDocument();
+        expect(screen.getByTestId('plot-head')).toBeInTheDocument();
+        expect(screen.getByTestId('schedule-tiles')).toBeInTheDocument();
         for (const id of ROWS) {
             expect(screen.getByTestId(`fold-${id}`)).toHaveAttribute('data-open', 'no');
             expect(screen.getByTestId(`fold-${id}-toggle`)).toHaveAttribute('aria-expanded', 'false');
             expect(screen.queryByTestId(`fold-${id}-body`)).toBeNull();
         }
-        expect(screen.getByTestId('fold-followed')).toHaveAttribute('data-open', 'yes');
         // the content of the closed rows is not on the screen yet
         expect(screen.queryByTestId('owed-card')).toBeNull();
         expect(screen.queryByTestId('stage-ribbon')).toBeNull();
@@ -89,6 +86,10 @@ describe('UI-4: the round creator badge', () => {
 
     it('the page passes no picture: the header badge is a letter or a leaf, never an image', () => {
         render(<SchedulerPage crops={[crop()]} logs={[]} tasks={[]} onUpdateCrops={vi.fn()} onBack={vi.fn()} />);
+        fireEvent.click(screen.getByTestId('fold-header-toggle'));
+        expect(screen.getByTestId('sched-header')).toBeInTheDocument();
+        expect(screen.getByTestId('today-card')).toBeInTheDocument();
+        expect(screen.getByTestId('day-now')).toBeInTheDocument();
         expect(screen.getByTestId('sched-badge')).not.toHaveAttribute('data-kind', 'image');
     });
 });

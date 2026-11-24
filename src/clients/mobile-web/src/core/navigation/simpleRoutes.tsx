@@ -293,6 +293,7 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 mayPlanWork={ctx.mayOpenPlanner ?? false}
                 mayAssignWork={ctx.mayAssignWork ?? false}
                 onOpenConflicts={() => ctx.setCurrentRoute('offline-conflicts')}
+                onOpenPlanning={() => ctx.setCurrentRoute('plan-work')}
             />
         </div>
     );

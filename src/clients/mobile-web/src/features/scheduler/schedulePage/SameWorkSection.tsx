@@ -13,11 +13,11 @@ import { dayCardWords } from '../dayCards/dayCardWords';
 import { loadDayCards, type DayCardsLoad } from '../dayCards/dayCardsStore';
 import type { DayCardsDetail, ShownDay } from '../dayCards/dayCardsTypes';
 import { TakeIntoMyScheduleButton, type TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
-import { groupSameWork, type SameWorkGroup } from './sameWork';
+import { dueOnDay, groupSameWork, type SameWorkGroup } from './sameWork';
 
 const WORDS = {
-    mr: { title: 'एकच काम, एकापेक्षा जास्त शेड्यूल', pick: 'कोणत्या शेड्यूलमधून घ्यायचं?', unchecked: 'श्रमसफलने अजून तपासलेलं नाही — तपासणीनंतर घेता येईल', doseLater: 'मात्रा तपासणीनंतर दिसेल' },
-    en: { title: 'One work, more than one schedule', pick: 'Take it from which schedule?', unchecked: 'Not yet checked by ShramSafal - it can be taken after the check', doseLater: 'The dose shows after the check' },
+    mr: { title: 'एकच काम, एकापेक्षा जास्त शेड्यूल', none: 'आज या शेड्यूलमध्ये कोणतं काम नाही.', pick: 'कोणत्या शेड्यूलमधून घ्यायचं?', unchecked: 'श्रमसफलने अजून तपासलेलं नाही — तपासणीनंतर घेता येईल', doseLater: 'मात्रा तपासणीनंतर दिसेल' },
+    en: { title: 'One work, more than one schedule', none: 'No work is due today in these schedules.', pick: 'Take it from which schedule?', unchecked: 'Not yet checked by ShramSafal - it can be taken after the check', doseLater: 'The dose shows after the check' },
 } as const;
 
 export const SameWorkSection: React.FC<{
@@ -26,7 +26,9 @@ export const SameWorkSection: React.FC<{
     load?: (id: string) => Promise<DayCardsLoad>;
     /** Absent = no take (a seat without the right); the cards are still read. */
     take?: TakeHost;
-}> = ({ versionIds, load = loadDayCards, take }) => {
+    /** The "today, all schedules" list: only the works due on this stored day, the single-source ones too. Absent = the works two schedules share, on any day. */
+    todayStored?: number;
+}> = ({ versionIds, load = loadDayCards, take, todayStored }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = WORDS[language];
     const dayWords = dayCardWords(language);
@@ -38,11 +40,11 @@ export const SameWorkSection: React.FC<{
             .then(rs => { if (alive) setDetails(rs.flatMap(r => (r.ok ? [r.detail] : []))); });
         return () => { alive = false; };
     }, [idsKey, load]);
-    const groups = useMemo(() => groupSameWork(details), [details]);
-    if (groups.length === 0) return null;
+    const groups = useMemo(() => (todayStored === undefined ? groupSameWork(details) : groupSameWork(details.map(d => dueOnDay(d, todayStored)), 1)), [details, todayStored]);
+    if (groups.length === 0) return todayStored === undefined ? null : <p className="m-0 rounded-2xl bg-stone-50 px-3 py-3 text-[15px] font-bold text-stone-600" data-testid="same-work-none">{words.none}</p>;
     return (
         <section className="space-y-2" data-testid="same-work-section">
-            <h3 className="m-0 px-1 text-[17px] font-black text-stone-900">{words.title}</h3>
+            {todayStored === undefined && <h3 className="m-0 px-1 text-[17px] font-black text-stone-900">{words.title}</h3>}
             {groups.map(g => <SameWorkCard key={g.key} group={g} take={take} language={language} words={words} dayText={d => dayText(d, dayWords)} />)}
         </section>
     );
@@ -57,7 +59,7 @@ const SameWorkCard: React.FC<{ group: SameWorkGroup; take?: TakeHost; language: 
     return (
         <article className="space-y-2 rounded-2xl border-2 border-stone-200 bg-white p-3" data-testid="same-work-card" data-work-key={group.key}>
             <p className="m-0 text-[17px] font-black text-stone-900">{group.name}</p>
-            <p className="m-0 text-[13.5px] font-bold text-stone-600">{words.pick}</p>
+            {group.sources.length > 1 && <p className="m-0 text-[13.5px] font-bold text-stone-600">{words.pick}</p>}
             <div className="flex flex-wrap gap-2" role="radiogroup">
                 {group.sources.map(s => (
                     <button key={s.versionId} type="button" role="radio" aria-checked={s.versionId === picked.versionId} onClick={() => setPickedId(s.versionId)}

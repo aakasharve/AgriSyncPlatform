@@ -67,8 +67,8 @@ const TILE_LOOK: Record<string, { bg: string; fg: string; Icon: React.ComponentT
 };
 const tileLook = (place: FollowedPlace) => TILE_LOOK[place.origin === 'Own' ? 'USER' : place.template?.ownerType ?? 'INSTITUTION'] ?? TILE_LOOK.INSTITUTION;
 
-const Rail: React.FC<{ outside: readonly FollowedPlace[]; own: FollowedPlace | undefined; label: string }> = ({ outside, own, label }) => (
-    <span className="inline-flex items-center gap-1.5" aria-label={label} data-testid="three-plus-one-rail">
+export const Rail: React.FC<{ outside: readonly FollowedPlace[]; own: FollowedPlace | undefined; label: string; testId?: string }> = ({ outside, own, label, testId = 'three-plus-one-rail' }) => (
+    <span className="inline-flex items-center gap-1.5" aria-label={label} data-testid={testId}>
         {[0, 1, 2].map(i => (
             <b key={i} data-filled={outside[i] ? 'true' : 'false'} className="inline-block h-3.5 w-3.5 rounded-full"
                 style={{ background: outside[i] ? PLACE_COLOUR[i] : '#e7e5e4' }} />

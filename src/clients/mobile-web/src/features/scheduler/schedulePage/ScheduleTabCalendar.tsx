@@ -8,26 +8,37 @@
  * viewer on the first day, where its stepper reaches every day of the season. No second renderer. Nothing here needs the network.
  */
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Map as MapIcon } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Map as MapIcon, X } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { DayCardsDayButton } from '../dayCards/DayCardsEntries';
 import { DayCardsViewer } from '../dayCards/DayCardsViewer';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import { mrNum } from './scheduleCopy';
 import { addDays, shownScheduleDay } from './scheduleDates';
-import { dayVerdict, type ScheduleModel } from './scheduleModel';
+import { dayVerdict, type ScheduleDay, type ScheduleModel } from './scheduleModel';
 
 export const CALENDAR_WORDS = {
     mr: {
-        title: 'कॅलेंडर', prev: 'मागचा महिना', next: 'पुढचा महिना', week: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'], ruleLine: 'तारखेखालचा लहान आकडा = शेड्यूलचा दिवस (दिवस १ = सुरुवातीचा दिवस); सुरुवातीआधीचे दिवस − चिन्हासह',
+        title: 'कॅलेंडर', legendDone: 'पाळलं', legendPart: 'काही वेगळं', legendMissed: 'राहिलं, कारण बाकी', legendToday: 'आजचा दिवस', cards: 'आजची कार्डं', prev: 'मागचा महिना', next: 'पुढचा महिना', week: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'], ruleLine: 'तारखेखालचा लहान आकडा = शेड्यूलचा दिवस (दिवस १ = सुरुवातीचा दिवस); सुरुवातीआधीचे दिवस − चिन्हासह',
         fullSeason: 'पूर्ण हंगाम पाहा', tapRule: 'तारीख दाबा: त्या दिवसाची कार्डं', done: 'पाळलं', missed: 'राहिलं', today: 'आज',
     },
     en: {
-        title: 'Calendar', prev: 'Previous month', next: 'Next month', week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], ruleLine: 'The small number under a date = the schedule day (day 1 = the start day); days before the start carry a minus',
+        title: 'Calendar', legendDone: 'Done', legendPart: 'Partly different', legendMissed: 'Left, reason pending', legendToday: 'Today', cards: "Today's cards", prev: 'Previous month', next: 'Next month', week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], ruleLine: 'The small number under a date = the schedule day (day 1 = the start day); days before the start carry a minus',
         fullSeason: 'See the whole season', tapRule: 'Tap a date: that day\'s cards', done: 'Done', missed: 'Left', today: 'Today',
     },
 } as const;
 
+/** One colour per stage, in stage order (the stage's colour on its dates, in the legend and nowhere else). */
+export const STAGE_COLOURS = ['#7C8B99', '#0F766E', '#2563EB', '#7C3AED', '#C2410C', '#92400E', '#0E7490', '#65A30D', '#BE185D', '#A16207'] as const;
+export type DayMark = 'done' | 'part' | 'missed' | null;
+/** A mark only where the phone holds evidence: a day with work the schedule expected, judged from the plot's own logs. A day not yet over is never marked missed (P4). */
+export function dayMark(day: ScheduleDay, todayKey: string): DayMark {
+    if (day.prep || day.key > todayKey) return null;
+    const v = dayVerdict(day);
+    if (v === 'allDone') return 'done';
+    if (day.key === todayKey) return v === 'mixed' ? 'part' : null;
+    return v === 'mixed' ? 'part' : v === 'missed' ? 'missed' : null;
+}
 const monthOf = (key: string) => key.slice(0, 7);
 const firstOf = (month: string) => `${month}-01`;
 const monthStep = (month: string, n: number): string => {
@@ -38,7 +49,7 @@ const monthStep = (month: string, n: number): string => {
 const weekdayOf = (key: string) => new Date(`${key}T00:00:00Z`).getUTCDay();
 const daysIn = (month: string) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
 
-export const ScheduleTabCalendar: React.FC<{ templateId: string; model: ScheduleModel; take?: TakeHost }> = ({ templateId, model, take }) => {
+export const ScheduleTabCalendar: React.FC<{ templateId: string; model: ScheduleModel; take?: TakeHost; scheduleName?: string }> = ({ templateId, model, take, scheduleName }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = CALENDAR_WORDS[language];
     const num = (n: number | string) => (language === 'mr' ? mrNum(n) : String(n));
@@ -60,7 +71,7 @@ export const ScheduleTabCalendar: React.FC<{ templateId: string; model: Schedule
     return (
         <section className="space-y-2 rounded-3xl border border-stone-200 bg-white p-3 shadow-sm" data-testid="schedule-calendar">
             <div className="flex items-center justify-between gap-2">
-                <h3 className="m-0 text-[19px] font-black text-stone-900">{words.title}</h3>
+                <h3 className="m-0 text-[19px] font-black text-emerald-900" data-testid="calendar-title">{words.title}{scheduleName ? ` · ${scheduleName}` : ''}</h3>
                 {todayDay && !model.ended && <DayCardsDayButton templateId={templateId} storedDay={todayDay.day} take={take} />}
             </div>
             <div className="flex items-center justify-between">
@@ -76,10 +87,14 @@ export const ScheduleTabCalendar: React.FC<{ templateId: string; model: Schedule
                     const verdict = day ? dayVerdict(day) : 'none';
                     const isToday = c.key === model.todayKey;
                     const small = day ? (day.day < 0 ? `−${num(-day.day)}` : num(shownScheduleDay(day.day))) : '';
-                    const tone = isToday ? 'border-blue-700 bg-blue-700 text-white' : verdict === 'allDone' ? 'border-emerald-300 bg-emerald-50 text-stone-900' : verdict === 'missed' ? 'border-rose-300 bg-rose-50 text-stone-900' : 'border-stone-200 bg-white text-stone-900';
+                    const colour = STAGE_COLOURS[(model.stages.find(st => st.id === day?.stageId)?.index ?? 0) % STAGE_COLOURS.length];
+                    const mark = day ? dayMark(day, model.todayKey) : null;
                     return day ? (
-                        <button key={c.key} type="button" onClick={() => setOpenDay(shownScheduleDay(day.day))} data-testid={`calendar-day-${c.key}`} data-verdict={verdict} data-today={isToday ? 'yes' : 'no'}
-                            className={`flex min-h-[48px] flex-col items-center justify-center rounded-xl border-2 px-0 leading-none ${tone}`}>
+                        <button key={c.key} type="button" onClick={() => setOpenDay(shownScheduleDay(day.day))} data-testid={`calendar-day-${c.key}`} data-verdict={verdict} data-mark={mark ?? ''} data-today={isToday ? 'yes' : 'no'}
+                            style={{ background: `${colour}22`, borderColor: isToday ? '#1448E6' : `${colour}66` }}
+                            className={`relative flex min-h-[48px] flex-col items-center justify-center rounded-xl border-2 px-0 leading-none text-stone-900 ${isToday ? 'ring-2 ring-[#1448E6]' : ''}`}>
+                            {mark && <span className={`absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full text-[10px] font-black text-white ${mark === 'done' ? 'bg-emerald-600' : mark === 'part' ? 'bg-amber-500' : 'bg-rose-600'}`} data-testid={`calendar-mark-${c.key}`} aria-label={mark === 'done' ? words.legendDone : mark === 'part' ? words.legendPart : words.legendMissed}>
+                                {mark === 'done' ? <Check size={10} aria-hidden="true" /> : mark === 'part' ? '!' : <X size={10} aria-hidden="true" />}</span>}
                             <span className="text-[15px] font-black">{num(c.n)}</span><span className="text-[11px] font-bold opacity-80" data-testid={`calendar-shown-${c.key}`}>{small}</span>
                         </button>
                     ) : (
@@ -87,6 +102,13 @@ export const ScheduleTabCalendar: React.FC<{ templateId: string; model: Schedule
                     );
                 })}
             </div>
+            <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-[12.5px] font-bold text-stone-700" data-testid="calendar-legend">
+                {model.stages.map(st => <li key={st.id} className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm" style={{ background: STAGE_COLOURS[st.index % STAGE_COLOURS.length] }} aria-hidden="true" />{st.name}</li>)}
+                <li className="flex items-center gap-1"><span className="grid h-4 w-4 place-items-center rounded-full bg-emerald-600 text-white"><Check size={10} aria-hidden="true" /></span>{words.legendDone}</li>
+                <li className="flex items-center gap-1"><span className="grid h-4 w-4 place-items-center rounded-full bg-amber-500 text-[10px] font-black text-white">!</span>{words.legendPart}</li>
+                <li className="flex items-center gap-1"><span className="grid h-4 w-4 place-items-center rounded-full bg-rose-600 text-white"><X size={10} aria-hidden="true" /></span>{words.legendMissed}</li>
+                <li className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm ring-2 ring-[#1448E6]" aria-hidden="true" />{words.legendToday}</li>
+            </ul>
             <p className="m-0 text-[13px] font-bold text-stone-600" data-testid="calendar-rule">{words.ruleLine}. {words.tapRule}</p>
             <button type="button" onClick={() => setSeason(true)} data-testid="calendar-full-season" className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-700 bg-white px-4 text-[16px] font-extrabold text-emerald-900">
                 <MapIcon size={20} aria-hidden="true" />{words.fullSeason}

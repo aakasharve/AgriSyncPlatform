@@ -124,6 +124,7 @@ describe('the \'N days behind\' banner', () => {
         fireEvent.change(screen.getByTestId('editor-date'), { target: { value: k(1) } });
         expect(text('editor-today-day')).toBe('म्हणजे आज दिवस ७');
         fireEvent.click(screen.getByTestId('editor-save'));
+        autoOpenFolds();
         expect(text('day-now')).toBe('७');
         expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस ९ · पिकासाठी दिवस ७');
     });
@@ -281,6 +282,7 @@ describe('library + adopt', () => {
         expect(saved[0].activeScheduleId).toBe(TEMPLATE_ID); // that plot's choice, not the crop's (it was crop-wide before)
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: REF, stageOverrides: [], expectationOverrides: [] });
         expect(text('page-title')).toBe('शेड्यूल'); // and the page is back on the शेड्यूल tab
+        autoOpenFolds(); // the older numbers sit in a closed row of the redrawn page
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
     });
 });
@@ -314,6 +316,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         expect(saved[0].activeScheduleId).toBe(TEMPLATE_ID); // spec: lane L8b-2 (founder C2) - the editor's choice is that plot's, not the crop's
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: k(1) });
         expect(text('page-title')).toBe('शेड्यूल');
+        autoOpenFolds();
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
         expect(text('day-now')).toBe('९');
         expect(text('stage-line')).toContain('फुलोऱ्यापूर्वी');

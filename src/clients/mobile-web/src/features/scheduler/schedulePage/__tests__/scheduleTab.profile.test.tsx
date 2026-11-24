@@ -6,7 +6,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { parseScheduleTask } from '../../../../../../../../sync-contract/schemas/schedule-task.zod';
 import { shownDayOfStored, type DayCardsDetail } from '../../dayCards/dayCardsTypes';
 import { ScheduleProfileCard } from '../ScheduleProfileCard';
@@ -20,12 +20,25 @@ const detail = (checked: boolean): DayCardsDetail => ({
 });
 afterEach(() => cleanup());
 describe('profile card', () => {
-    it('three separate lines and no logo', async () => {
+    it('the name is in the screen language: the stored English year name is never shown on a Marathi screen', async () => {
+        const d = { ...detail(false), name: 'Grapes - Pruning to Pruning' };
+        render(<ScheduleProfileCard templateId="x" plotName="G1" load={async () => ({ ok: true, detail: d, source: 'phone', stale: false })} />);
+        expect(await screen.findByTestId('profile-name')).toHaveTextContent('द्राक्ष — फळछाटणी ते फळछाटणी');
+        expect(screen.getByTestId('profile-name').textContent).not.toMatch(/[A-Za-z]/);
+    });
+    it('the full identity opens from the card and lists the stages and the documents', async () => {
         render(<ScheduleProfileCard templateId="x" plotName="G1" load={async () => ({ ok: true, detail: detail(false), source: 'phone', stale: false })} />);
+        fireEvent.click(await screen.findByTestId('profile-full'));
+        expect(screen.getByTestId('profile-identity')).toBeInTheDocument();
+        expect(screen.getByTestId('identity-docs')).toHaveTextContent('ICAR-NRCG ची प्रकाशनं');
+    });
+    it('three separate lines and no logo', async () => {
+        render(<ScheduleProfileCard templateId="x" plotName="G1" sourceLabel="ICAR-NRCG ची प्रकाशनं" load={async () => ({ ok: true, detail: detail(false), source: 'phone', stale: false })} />);
         expect(await screen.findByTestId('line-made-by')).toHaveTextContent('संस्था · श्रमसफल');
         expect(screen.getByTestId('line-source')).toHaveTextContent('ICAR-NRCG ची प्रकाशनं');
         expect(screen.getByTestId('line-checked-by')).toHaveTextContent('अजून कुणी तपासलेलं नाही');
-        expect(screen.getByTestId('profile-unchecked')).toBeInTheDocument();
+        expect(screen.getByTestId('profile-unchecked')).toHaveTextContent('स्रोत: ICAR-NRCG ची प्रकाशनं. ICAR-NRCG ने हे शेड्यूल तपासलेलं किंवा मंजूर केलेलं नाही.');
+        expect(screen.getByTestId('profile-name')).toHaveTextContent('द्राक्ष — फळछाटणी');
         expect(document.querySelectorAll('img').length).toBe(0);
     });
     it('a checked schedule names who checked it and has no unchecked line', async () => {

@@ -94,11 +94,13 @@ interface SchedulerPageProps {
     /** The planning door's own rule: the owner or a holder of AssignWork may hand a plan to a person from the server's list (`loadAssignees`, kept for offline). */
     mayAssignWork?: boolean;
     onOpenConflicts?: () => void;
+    /** The planning door (the route's 'plan-work'); the tab's "<plot> चं नियोजन करा" card opens it, and only for a seat that may plan. */
+    onOpenPlanning?: () => void;
 }
 
 type View = 'HOME' | 'LIBRARY' | 'EDITOR' | 'GRID';
 
-const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule, takeFarmId = null, takeUserId = null, mayPlanWork = false, mayAssignWork = false, onOpenConflicts }) => {
+const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule, takeFarmId = null, takeUserId = null, mayPlanWork = false, mayAssignWork = false, onOpenConflicts, onOpenPlanning }) => {
     // spec I18 — a crop's name in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode).
     const language = useOptionalLanguage()?.language ?? 'mr';
     const nameOf = (c: { name: string; masterId?: string }): string => cropNameIn(c.name, language, c.masterId);
@@ -412,6 +414,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
                     mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} onChangePlot={() => setPickerOpen(true)}
+                    crop={crop} plot={plot} onPlan={mayPlanWork && onOpenPlanning ? onOpenPlanning : undefined}
+                    plotLists={<div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
                         <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />
@@ -421,7 +425,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                 </PlotScheduleHome>
             )}
             {/* Slice 10 (version 7): the plot lists sit BELOW the plot's schedule; "प्लॉट बदला" in the plot head brings him here. */}
-            <div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>
+            {!(crop && plot && resolved && model) && <div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>}
             {!(crop && plot && resolved && model) && <ScheduleFold id="tools" title={SC.toolsTitle} summary={SC.toolsLine}>{toolsBody}</ScheduleFold>}
             {sheet}
         </>

@@ -34,6 +34,7 @@ const SCHEDULE_KIND_MR: Readonly<Record<string, string>> = {
     fertilizer: `${CATEGORY_LABEL_MR.FERTIGATION} शेड्यूल`, // app word + शेड्यूल
     spray: `${CATEGORY_LABEL_MR.FOLIAR_SPRAY} शेड्यूल`, // app word + शेड्यूल
     'pest spray': `कीड ${CATEGORY_LABEL_MR.FOLIAR_SPRAY} शेड्यूल`, // PROPOSED (Marathi)
+    'pruning to pruning': 'फळछाटणी ते फळछाटणी', // version 7 design page (year schedule)
 };
 
 /** "Grapes - Spray" → "द्राक्ष — फवारणी शेड्यूल". Anything else is the schedule's own name, shown as written. */
@@ -80,3 +81,17 @@ const TASK_NAME_MR: Readonly<Record<string, string>> = {
 
 /** A schedule task's own name in Marathi when the app ships it; otherwise the name as written. */
 export const taskNameMr = (name: string): string => TASK_NAME_MR[norm(name)] ?? name.trim();
+
+/**
+ * The schedule's name in the SCREEN'S language (version 7 profile card). Marathi mode never shows the stored English name: a shipped name goes through
+ * `scheduleNameMr`; a "Crop - Something" name the dictionary lacks shows the crop's Marathi name, then the part after the dash as written; a name with no
+ * Latin letters (a person wrote it in Marathi) is shown as written. English mode shows the stored name.
+ */
+export function scheduleNameIn(name: string, language: 'mr' | 'en'): string {
+    if (language === 'en') return name;
+    const mr = scheduleNameMr(name);
+    if (mr !== name || !/[A-Za-z]/.test(name)) return mr;
+    const parts = name.split(' - ');
+    const crop = parts.length === 2 ? cropWordMr(parts[0]) : undefined;
+    return crop ? `${crop} — ${parts[1]}` : name;
+}

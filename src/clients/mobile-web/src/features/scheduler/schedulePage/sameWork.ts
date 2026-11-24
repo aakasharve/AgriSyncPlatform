@@ -26,7 +26,8 @@ export interface SameWorkGroup {
 
 const norm = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 
-export function groupSameWork(details: readonly DayCardsDetail[]): SameWorkGroup[] {
+/** `minSources` 2 = only works that two or more schedules hold; 1 = every work, the single-source ones too (the "today, all schedules" list). */
+export function groupSameWork(details: readonly DayCardsDetail[], minSources = 2): SameWorkGroup[] {
     const groups: SameWorkGroup[] = [];
     const byKey = new Map<string, SameWorkGroup>();
     const byName = new Map<string, SameWorkGroup>();
@@ -49,5 +50,17 @@ export function groupSameWork(details: readonly DayCardsDetail[]): SameWorkGroup
             byName.set(nameKey, g);
         }
     }
-    return groups.filter(g => g.sources.length >= 2);
+    return groups.filter(g => g.sources.length >= minSources);
+}
+
+/** The works of a detail that are due on a stored day (inside their from-to window, or their expected window). Pure. */
+export function dueOnDay(detail: DayCardsDetail, storedDay: number): DayCardsDetail {
+    return {
+        ...detail,
+        tasks: detail.tasks.filter(t => {
+            const from = t.shown.from?.stored ?? t.shown.expectedFrom?.stored ?? null;
+            const to = t.shown.to?.stored ?? t.shown.expectedTo?.stored ?? from;
+            return from !== null && to !== null && storedDay >= from && storedDay <= to;
+        }),
+    };
 }
