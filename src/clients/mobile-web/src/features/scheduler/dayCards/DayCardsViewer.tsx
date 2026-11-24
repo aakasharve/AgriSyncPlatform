@@ -18,6 +18,7 @@ import { deckForShownDay, deckForTask, firstShownDay, lastShownDay, type CardPar
 import { loadDayCards, type DayCardsLoad } from './dayCardsStore';
 import type { DayCardsDetail } from './dayCardsTypes';
 import { dayCardWords, type DayCardWords } from './dayCardWords';
+import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 
 export type DayCardsTarget = { day: number } | { taskKey: string };
 export type DayCardsSource = { templateId: string } | { detail: DayCardsDetail };
@@ -56,7 +57,7 @@ const titleOf = (part: CardPart | undefined): string => {
     return part.task.task.name;
 };
 
-export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCardsTarget; onClose: () => void; load?: (id: string) => Promise<DayCardsLoad> }> = ({ source, target, onClose, load = loadDayCards }) => {
+export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCardsTarget; onClose: () => void; load?: (id: string) => Promise<DayCardsLoad>; /** Slice 9: given only by the schedule page's door (a followed schedule of a place); absent = the deck is exactly as it was. */ take?: TakeHost }> = ({ source, target, onClose, load = loadDayCards, take }) => {
     useBackDismiss(true, onClose);
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words: DayCardWords = dayCardWords(language);
@@ -165,7 +166,7 @@ export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCards
                         </div>
                     )}
                     {detail && !parts && <p className="p-6 text-center text-[17px] font-bold text-stone-700" data-testid="day-cards-none">{words.nothingHere}</p>}
-                    {detail && parts && <DayCardDeck parts={parts} detail={detail} words={words} onAnswer={changes => setAnswer({ changes })} />}
+                    {detail && parts && <DayCardDeck parts={parts} detail={detail} words={words} onAnswer={changes => setAnswer({ changes })} take={take} />}
                 </div>
 
                 {detail && parts && <p className="shrink-0 bg-stone-100 py-1 text-center text-[11px] font-extrabold text-stone-500">{words.swipeHint}</p>}

@@ -28,6 +28,18 @@ import { OWN_WORK_PLAN_WORDS, refusalWords } from './ownWorkPlanWords';
 import { doseChoicesOf, needsDosePick, offersTake, useTakeState } from './takeIntoMySchedule';
 import { TAKE_WORDS, takeRefusalWords } from './takeWords';
 
+/**
+ * What a host (the day-card viewer) needs to offer the take on its cards: the plot-season it is for, whether this seat may take, the plan door's people, and today's
+ * stored day on the plot. Given ONLY for a followed schedule of a place (the schedule page's door); the planning and job-card doors open own work and give none.
+ */
+export interface TakeHost {
+    place: OwnSchedulePlace;
+    mayTake: boolean;
+    planning?: OwnWorkPlanning;
+    todayStored?: number | null;
+    onOpenConflicts?: () => void;
+}
+
 export interface TakeIntoMyScheduleButtonProps {
     place: OwnSchedulePlace;
     /** The version of the followed schedule this card comes from. */

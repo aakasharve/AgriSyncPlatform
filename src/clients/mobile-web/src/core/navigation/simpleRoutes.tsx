@@ -287,6 +287,11 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 // where the maker opens on that crop. Nothing is written here.
                 mayMakeOwnSchedule={ctx.mayMakeOwnSchedule ?? false}
                 onMakeOwnSchedule={cropId => { requestOwnScheduleMaker(cropId); ctx.setCurrentRoute('plan-work'); }}
+                // spec: plr-d10 schedule slice 9 - "माझ्या वेळापत्रकात घ्या" on the followed schedule's day cards (the schedule and the planning permission; the server decides).
+                takeFarmId={ctx.activeFarmId}
+                takeUserId={ctx.meUserId ?? null}
+                mayPlanWork={ctx.mayOpenPlanner ?? false}
+                onOpenConflicts={() => ctx.setCurrentRoute('offline-conflicts')}
             />
         </div>
     );

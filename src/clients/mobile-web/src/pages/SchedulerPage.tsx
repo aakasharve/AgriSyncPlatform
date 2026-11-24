@@ -37,6 +37,9 @@ import { buildScheduleMap } from '../features/scheduler/schedulePage/scheduleMap
 import { followedCheckNote } from '../features/scheduler/schedulePage/followedCheck';
 import { scheduleCropCode } from '../infrastructure/reference/TemplateCatalog';
 import { PlotScheduleHome } from '../features/scheduler/schedulePage/PlotScheduleHome';
+import { useScheduleMechanism } from '../core/session/scheduleMechanism';
+import { useOwnWorkPlace } from '../features/scheduler/ownSchedule/ownWorkPlace';
+import type { TakeHost } from '../features/scheduler/ownSchedule/TakeIntoMyScheduleButton';
 import { ScheduleDaySheet } from '../features/scheduler/schedulePage/ScheduleDaySheet';
 import { ScheduleTools } from '../features/scheduler/schedulePage/ScheduleTools';
 import { ScheduleFold } from '../features/scheduler/schedulePage/ScheduleFold';
@@ -77,11 +80,19 @@ interface SchedulerPageProps {
      */
     mayMakeOwnSchedule?: boolean;
     onMakeOwnSchedule?: (cropId: string) => void;
+    /**
+     * spec: plr-d10 schedule slice 9 - "माझ्या वेळापत्रकात घ्या" on the day cards of the followed schedule: the open farm, who is signed in, and whether this seat may plan
+     * (the planning permission; the schedule permission is `mayMakeOwnSchedule`). Absent = no take (fail closed). The server decides every request (SM-10).
+     */
+    takeFarmId?: string | null;
+    takeUserId?: string | null;
+    mayPlanWork?: boolean;
+    onOpenConflicts?: () => void;
 }
 
 type View = 'HOME' | 'LIBRARY' | 'EDITOR' | 'GRID';
 
-const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule }) => {
+const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule, takeFarmId = null, takeUserId = null, mayPlanWork = false, onOpenConflicts }) => {
     // spec I18 — a crop's name in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode).
     const language = useOptionalLanguage()?.language ?? 'mr';
     const nameOf = (c: { name: string; masterId?: string }): string => cropNameIn(c.name, language, c.masterId);
@@ -193,6 +204,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
 
     // spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा" only asks to go to planning, on this crop; nothing else on the page changes.
     const makeOwn = mayMakeOwnSchedule === true && !!onMakeOwnSchedule;
+    // Slice 9: the take on the day cards needs the switch on for the farm, both permissions (SM-10) and the plot's current season on this phone.
+    const takeOn = useScheduleMechanism(takeFarmId);
+    const mayTake = takeOn && mayMakeOwnSchedule === true && mayPlanWork === true && !!takeFarmId;
+    const takePlace = useOwnWorkPlace(mayTake ? takeFarmId : null, plot?.id ?? null, crops);
+    const takeHost: TakeHost | undefined = takePlace.place
+        ? { place: { farmId: takePlace.place.farmId, plotId: takePlace.place.plotId, cropCycleId: takePlace.place.cropCycleId }, mayTake: true, onOpenConflicts,
+            planning: { mayAssign: false, assignees: [], myUserId: takeUserId } }
+        : undefined;
     const openMaker = () => { if (onMakeOwnSchedule && cropId) onMakeOwnSchedule(cropId); };
 
     // Lane UI-8 (founder D-150, picture L2): the library's three steps end on the big button that NAMES one plot ("<plot> साठी हे शेड्यूल लावा"), so
@@ -357,7 +376,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
-                    mayMakeOwn={makeOwn} onMakeOwn={openMaker}
+                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
                         <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />

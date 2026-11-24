@@ -19,6 +19,7 @@ import { DayCardsViewer } from './DayCardsViewer';
 import { loadDayCards, type DayCardsLoad } from './dayCardsStore';
 import { detailFromOwnTask } from './dayCardsTypes';
 import { dayCardWords } from './dayCardWords';
+import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 
 const useWords = () => dayCardWords(useOptionalLanguage()?.language === 'en' ? 'en' : 'mr');
 
@@ -30,7 +31,7 @@ const OpenButton: React.FC<{ label: string; onClick: () => void; testId: string 
 );
 
 /** The schedule page's door: the followed schedule's cards of `storedDay` (the one helper turns it into the shown day). Hidden until the version is known to open. */
-export const DayCardsDayButton: React.FC<{ templateId: string; storedDay: number; load?: (id: string) => Promise<DayCardsLoad> }> = ({ templateId, storedDay, load = loadDayCards }) => {
+export const DayCardsDayButton: React.FC<{ templateId: string; storedDay: number; load?: (id: string) => Promise<DayCardsLoad>; /** Slice 9: the plot-season this followed schedule is for; the viewer then offers the take on a checked reference. */ take?: TakeHost }> = ({ templateId, storedDay, load = loadDayCards, take }) => {
     const words = useWords();
     const [open, setOpen] = useState(false);
     const [ready, setReady] = useState(false);
@@ -44,7 +45,7 @@ export const DayCardsDayButton: React.FC<{ templateId: string; storedDay: number
     return (
         <>
             <OpenButton label={words.openDay} onClick={() => setOpen(true)} testId="open-day-cards" />
-            {open && <DayCardsViewer source={{ templateId }} target={{ day: Math.max(1, shownScheduleDay(storedDay)) }} onClose={() => setOpen(false)} load={load} />}
+            {open && <DayCardsViewer source={{ templateId }} target={{ day: Math.max(1, shownScheduleDay(storedDay)) }} onClose={() => setOpen(false)} load={load} take={take ? { ...take, todayStored: take.todayStored ?? storedDay } : undefined} />}
         </>
     );
 };

@@ -32,6 +32,7 @@ import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from
 import { TrialStages, trialStageOf } from './TrialStages';
 import { StagePlanCard } from './StagePlanCard';
 import { DayCardsDayButton } from '../dayCards/DayCardsEntries';
+import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 
@@ -70,11 +71,13 @@ export const PlotScheduleHome: React.FC<{
     /** spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा": drawn only for a seat that may make; it only goes to planning. */
     mayMakeOwn?: boolean;
     onMakeOwn?: () => void;
+    /** slice 9: the plot-season and the seat's rights for "माझ्या वेळापत्रकात घ्या" on the day cards of the followed schedule; absent = no take. */
+    take?: TakeHost;
     /** UI-8: the maker's picture for the owner bar, when the app has one (none yet; the bar shows the letter or the leaf otherwise). */
     ownerImageUrl?: string | null;
     /** UI-4: the last closed row (the tools), drawn by the page. */
     children?: React.ReactNode;
-}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, ownerImageUrl, children }) => {
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -98,7 +101,7 @@ export const PlotScheduleHome: React.FC<{
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
             <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
-            {facts.today && !model.ended && <DayCardsDayButton templateId={template.id} storedDay={facts.today.day} />}
+            {facts.today && !model.ended && <DayCardsDayButton templateId={template.id} storedDay={facts.today.day} take={take} />}
             <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
                 <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
             </ScheduleFold>

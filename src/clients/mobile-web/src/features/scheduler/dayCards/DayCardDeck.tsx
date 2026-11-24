@@ -15,6 +15,8 @@ import type { ScheduleChallengeContent } from '../../../../../../../sync-contrac
 import { doseLines, type CardPart } from './dayCardsModel';
 import type { DayCardKind, DayCardTask, DayCardsDetail, ShownDay } from './dayCardsTypes';
 import type { DayCardWords } from './dayCardWords';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { TakeIntoMyScheduleButton, type TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 
 export const KIND_LOOK: Record<DayCardKind, { bg: string; fg: string; chip: string; Icon: React.ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }> }> = {
     irrigation: { bg: '#CFFAFE', fg: '#0E7490', chip: '#A5F3FC', Icon: Droplets },
@@ -102,7 +104,21 @@ const DayCard: React.FC<{ part: Extract<CardPart, { type: 'day' }>; words: DayCa
     </CardShell>
 );
 
-const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: DayCardsDetail; words: DayCardWords }> = ({ part, detail, words }) => {
+/**
+ * Slice 9: "माझ्या वेळापत्रकात घ्या" on the hero card of a work. ONLY for a followed, CHECKED reference opened for a place (`take`): never an unchecked reference (spec decision 5:
+ * following opens after the check), never an own schedule, never without `take` (planning and job-card doors). The button itself hides a past day.
+ */
+const TakeOnHero: React.FC<{ task: DayCardTask; detail: DayCardsDetail; take: TakeHost }> = ({ task, detail, take }) => {
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    if (detail.kind !== 'reference' || !detail.check.isChecked || !take.mayTake) return null;
+    const day = task.shown.to?.stored ?? task.shown.from?.stored ?? null;
+    return (
+        <TakeIntoMyScheduleButton place={take.place} sourceVersionId={detail.templateId} task={task.task} language={language} dayStored={day} todayStored={take.todayStored ?? null}
+            mayTake planning={take.planning} onOpenConflicts={take.onOpenConflicts} />
+    );
+};
+
+const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: DayCardsDetail; words: DayCardWords; take?: TakeHost }> = ({ part, detail, words, take }) => {
     const t = part.task;
     const look = KIND_LOOK[t.task.kind];
     const doses = doseLines(t.task);
@@ -138,6 +154,7 @@ const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: Da
                     ))}
                 </div>
             )}
+            {take && <TakeOnHero task={t} detail={detail} take={take} />}
         </CardShell>
     );
 };
@@ -255,13 +272,13 @@ const SourceCard: React.FC<{ part: Extract<CardPart, { type: 'source' }>; detail
     );
 };
 
-export const DayCardDeck: React.FC<{ parts: readonly CardPart[]; detail: DayCardsDetail; words: DayCardWords; onAnswer?: (changes: string | null) => void }> = ({ parts, detail, words, onAnswer }) => (
+export const DayCardDeck: React.FC<{ parts: readonly CardPart[]; detail: DayCardsDetail; words: DayCardWords; onAnswer?: (changes: string | null) => void; take?: TakeHost }> = ({ parts, detail, words, onAnswer, take }) => (
     <>
         {parts.map((part, i) => {
             const key = `${part.type}-${'task' in part ? part.task.task.taskKey : 'challenge' in part ? part.challenge.challengeKey : 'day'}-${i}`;
             switch (part.type) {
                 case 'day': return <DayCard key={key} part={part} words={words} />;
-                case 'hero': return <HeroCard key={key} part={part} detail={detail} words={words} />;
+                case 'hero': return <HeroCard key={key} part={part} detail={detail} words={words} take={take} />;
                 case 'how': return <HowCard key={key} part={part} words={words} />;
                 case 'safety': return <SafetyCard key={key} part={part} words={words} />;
                 case 'look': return <LookCard key={key} part={part} words={words} />;
