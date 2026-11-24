@@ -123,6 +123,13 @@ internal sealed class AiResponseNormalizer
         StrayLeadingGradeNumberGuard.Apply(root);
         BordeauxBoardGuard.Apply(root);
 
+        // spec: voice-flow-v2-2026-11-23 - false facts off the farmer's screen: a method/activity he did not say is removed, a task
+        // is shown once, display text follows the transcript's script, and a grade's raw digits never reach the summary.
+        UnsaidDetailGuard.Apply(root);
+        DuplicateTaskGuard.Apply(root);
+        DevanagariDisplayScriptGuard.Apply(root);
+        SummaryGradeArtefactGuard.Apply(root);
+
         var dayOutcome = NormalizeDayOutcome(root["dayOutcome"]?.GetValue<string>());
         if (!HasAnyWork(root) && root["disturbance"] is JsonObject)
         {

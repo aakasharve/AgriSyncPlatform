@@ -186,7 +186,22 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        - field condition => noteType "observation"
                        - problem / disease / deficiency => noteType "issue"
                        - future intent / tomorrow work => noteType "reminder"
-                       If reminder observation includes extractedTasks, promote those tasks into plannedTasks[] also.
+                       A reminder's task goes ONLY in plannedTasks[] (keep its link to the note in sourceObservationId).
+                       Leave that observation's extractedTasks EMPTY: the same task must never appear in both.
+
+                       --- METHOD / ACTIVITY / DURATION ONLY IF SAID ---
+                       A method, activity, duration or other detail the farmer did not say is LEFT OUT (omit the field).
+                       - "नेहमीप्रमाणे" / "as usual" is NOT a method: never write flood, drip or any method from it.
+                       - A head count alone ("आज 10 जण आली होती") sets NO activity.
+                       - A product given without a said way ("खत दिलं") has NO method.
+
+                       --- DISPLAY TEXT IN THE TRANSCRIPT'S SCRIPT ---
+                       Titles, textCleaned, summary and task wording are written in the transcript's language and script
+                       (Marathi transcript: "युरिया", never "urea"). sourceText and textRaw stay EXACTLY as heard.
+
+                       --- SUMMARY ---
+                       Use the recognised product name (for example 0-52-34), never the raw digit string (05234).
+                       Add nothing the farmer did not say.
 
                        --- COMPLETE WORD-LEVEL ACCOUNTING ---
                        Every meaningful phrase must map to:
