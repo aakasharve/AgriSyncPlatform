@@ -22,7 +22,7 @@
  * steps (`useBackDismiss`). Tapping the आजची कामे tab again (`homeRequested`) returns here, fresh.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import type { CropProfile } from '../../../../types';
+import type { CropProfile, DailyLog } from '../../../../types';
 import type { LogScope, LogSegment } from '../../../../domain/types/log.types';
 import CropSelector from '../../../context/components/CropSelector';
 import type { StepperStep } from '../../../context/components/CropPlotStepper';
@@ -37,6 +37,9 @@ import { SegmentBanner, SegmentCancel } from './SegmentBanner';
 import { STEPPER_LABELS } from './entryWords';
 import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
+import { placeLabelOf } from '../../../../core/navigation/placeLabel';
+import { resultStr } from '../voiceResult/resultStrings';
+import { VoiceLayer } from '../voiceFlowV2/VoiceLayer';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -87,6 +90,10 @@ export interface LogEntryFlowProps {
     onExit?: () => void;
     /** Lane OF (D-60) — a past day he chose ("30 ऑक्टो"): the crop and plot questions name it. */
     forDay?: string;
+    /** spec voice-flow-v2-2026-11-23 (F2): draw the crop / plot / mic step as the voice journey's full-screen layer. Off = in the page, as before. */
+    fullScreen?: boolean;
+    /** The phone's saved logs: the layer's "या महिन्यात N दिवस" chip counts from them (only for one chosen plot, only when the phone's pull covers the month). */
+    history?: readonly DailyLog[];
 }
 
 /** The app's flat scope as the selector's crop -> plots map (the same mapping the old screen used). */
@@ -102,7 +109,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
         recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost, planDoor,
-        pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay,
+        pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay, fullScreen = false, history,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
     const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
@@ -169,7 +176,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         );
     }
 
-    return (
+    const entry = (
         <div data-testid="log-entry-flow" data-step={entryStep} data-recording={recording ? 'yes' : 'no'}>
             {entryStep === 'crop' && (
                 <div className="flex items-center gap-2 px-3 pt-2">
@@ -212,6 +219,14 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                 />
             </div>
         </div>
+    );
+    if (!fullScreen) return entry;
+    // F2: from the green door on, the whole step is one full-screen layer (no farm header, tabs or bottom bar); the place chip is
+    // drawn once a place is chosen. The right-hand chip is left out: the app holds no "days logged this month" number to show.
+    return (
+        <VoiceLayer step={entryStep} monthOf={{ history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null }} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
+            {entry}
+        </VoiceLayer>
     );
 };
 

@@ -15,7 +15,7 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import { notKeptNoConsentMessage } from './voiceMessages';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
-import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
+import { PendingInterpretationStore } from './continuity/PendingInterpretationStore'; import { noWorkError } from './noWorkAnswer';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
 import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, typedRecordingRef, liveEncodedUpload, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
 
@@ -571,7 +571,7 @@ export const useVoiceRecorder = ({
             }
 
             setStatus('idle');
-            setError(response.summary || "Input seems unrelated to selected crop.");
+            setError(noWorkError(response));
             setErrorTranscript(response.fullTranscript); // Show what was heard
             return true;
         }

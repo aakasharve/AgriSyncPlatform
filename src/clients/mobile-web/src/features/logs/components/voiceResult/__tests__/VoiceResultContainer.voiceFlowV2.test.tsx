@@ -118,7 +118,8 @@ describe('voice flow v2 — the saved screen first', () => {
         mount(props());
         expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
         expect(screen.queryByTestId('voice-result')).toBeNull();
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('लक्षात ठेवलं ✓');
+        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
+        expect(screen.getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
     });
 
     it('the blue button opens today\'s result screen unchanged, with the owner\'s "पक्कं आहे"; its मागे returns', () => {
@@ -165,13 +166,13 @@ describe('voice flow v2 — the saved screen first', () => {
         expect(toasts).toHaveLength(1);
     });
 
-    it('server-acknowledged: the title and the closing toast name the server', async () => {
+    it('server-acknowledged: the badge and the closing toast name the server', async () => {
         await applied();
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
         const p = props();
         mount(p);
         // the server's acknowledgement is read from the queue (Dexie); the DOM change is what is waited for
-        await waitFor(() => expect(screen.getByTestId('vr2-saved-title').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं'));
+        await waitFor(() => expect(screen.getByTestId('vr2-claim-server').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं'));
         fireEvent.pointerDown(screen.getByTestId('vr2-saved-card'));
         act(() => { vi.advanceTimersByTime(31_000); });
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
@@ -208,6 +209,9 @@ describe('voice flow v2 — the saved screen first', () => {
         // waitFor's default 1 s, so this waits longer. What is checked is unchanged.
         await waitFor(() => expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy(), { timeout: 8000 });
         expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-state')).toBe('off');
+        // The cause of the old flake: the badge is committed before React runs the passive effect that stops the idle clock's
+        // interval (the clock is faked here), so the advance below fired the old interval. Let the effects run first, as a phone does.
+        await act(async () => { await Promise.resolve(); });
         act(() => { vi.advanceTimersByTime(120_000); });
         expect(p.onAutoClose).not.toHaveBeenCalled();
     });

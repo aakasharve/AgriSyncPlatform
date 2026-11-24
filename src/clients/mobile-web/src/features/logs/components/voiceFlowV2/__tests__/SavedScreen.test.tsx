@@ -104,7 +104,7 @@ describe('SavedScreen — what he sees first', () => {
     it('the sections come in the founder\'s order: meter, his words, chemicals and nutrients, the other parts', () => {
         render(<SavedScreen {...props()} />);
         // Founder 2026-11-23: "below the meter is text, below the text the chemical and nutrient, and then other parts".
-        const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-speaker-done', 'vr2-words', 'vr2-given', 'vr2-parts', 'vr2-question',
+        const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-speaker-done', 'vr2-given', 'vr2-parts', 'vr2-words', 'vr2-question',
             'extras-slot', 'vr2-edit', 'vr2-earlier', 'vr2-open-detail', 'vr2-idle-bar'];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `${order[i - 1]} before ${order[i]}`).toBe(true);
     });
@@ -117,25 +117,27 @@ describe('SavedScreen — what he sees first', () => {
         expect(before('vr-mix-banner', 'vr2-head')).toBe(true);
     });
 
-    it('on the phone only: the title is "लक्षात ठेवलं ✓" and no server claim anywhere', () => {
-        // (said once: the title; no repeated "लक्षात ठेवलं" badge)
+    it('F6: the headline is "जतन झालं ✓" with who said it under it; on the phone only, the badge says "लक्षात ठेवलं" and no server claim', () => {
         const { container } = render(<SavedScreen {...props()} />);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('लक्षात ठेवलं ✓');
-        expect(screen.queryByTestId('vr2-on-server')).toBeNull();
+        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
+        expect(screen.getByTestId('vr2-saved-who').textContent).toBe('तुम्ही स्वतः सांगितलं');
+        expect(screen.getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
+        expect(screen.queryByTestId('vr2-claim-server')).toBeNull();
+        // it must not repeat the old headline, which is a badge
+        expect(screen.getByTestId('vr2-saved-title').textContent).not.toContain('श्रम सफलमध्ये');
         expect(container.textContent).not.toContain('श्रम सफलमध्ये');
-        // never the bare "जतन झालं", which claims more than the phone knows
-        expect(container.textContent).not.toContain('जतन झालं');
     });
 
-    it('server-acknowledged: the title says the server has it (said once, no repeated badge)', () => {
+    it('server-acknowledged: the badge says the server has it (P10)', () => {
         render(<SavedScreen {...props({ sync: 'onServer' })} />);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं');
-        expect(screen.queryByTestId('vr2-on-server')).toBeNull();
+        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
+        expect(screen.getByTestId('vr2-claim-server').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं');
     });
 
     it('a sync that needs a hand says so, and the title stays the phone\'s claim', () => {
         render(<SavedScreen {...props({ sync: 'needsFix' })} />);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('लक्षात ठेवलं ✓');
+        expect(screen.getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
+        expect(screen.queryByTestId('vr2-claim-server')).toBeNull();
         expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy();
     });
 
@@ -145,9 +147,9 @@ describe('SavedScreen — what he sees first', () => {
         expect(card.queryByTestId('vr2-remembered')).toBeNull();
         expect(card.getByTestId('vr2-not-confirmed-badge')).toBeTruthy();
         expect(card.getByTestId('vr2-latest-who').textContent).toContain('सुनील');
-        expect(card.queryByTestId('vr2-play')).toBeNull();
-        const words = within(screen.getByTestId('vr2-words'));
-        expect(words.getByTestId('vr2-play')).toBeTruthy();
+        // F6: his voice is inside the card, big, right under the badges - no longer with his words
+        expect(card.getByTestId('vr2-play')).toBeTruthy();
+        expect(within(screen.getByTestId('vr2-words')).queryByTestId('vr2-play')).toBeNull();
         expect(card.queryByTestId('vr-parts')).toBeNull();
         // F3: the meter is the saved card's own dial, drawn only with the meter flag (as the result screen's meter is).
         expect(card.queryByTestId('vr2-meter')).toBeNull();

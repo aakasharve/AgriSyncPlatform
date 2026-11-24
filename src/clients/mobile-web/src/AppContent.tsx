@@ -9,6 +9,7 @@
 import React, { useEffect, useMemo } from 'react';
 
 import BottomNavigation from './features/context/components/BottomNavigation';
+import { useVoiceLayerOpen } from './features/logs/components/voiceFlowV2/voiceLayerSignal';
 import AppHeader from './features/context/components/AppHeader';
 import MeAlertRail from './features/context/components/MeAlertRail';
 import AccessStatusNotice from './features/context/components/AccessStatusNotice';
@@ -211,10 +212,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         { setMainView: navigation.setMainView, requestLogHome: navigation.requestLogHome, resetSaved: _handleReset, setMode: voice.setMode },
     );
 
+    // spec: voice-flow-v2-2026-11-23 (F2) — while the voice journey's full-screen layer is open the app's own chrome is not drawn at all.
+    const voiceFull = useVoiceLayerOpen();
+
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
-            <AiTestModeBanner />
-            <AppHeader
+            {!voiceFull && <AiTestModeBanner />}
+            {!voiceFull && <AppHeader
                 currentRoute={navigation.currentRoute}
                 currentView={navigation.mainView}
                 // spec: plr-d10-redesign-real-integration-2026-10-25 (I17, PLR-D9 N3) — the header's
@@ -263,13 +267,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     boundaryUnset: weather.boundaryUnset,
                     onRetry: weather.refetchWeather,
                 }}
-            />
+            />}
 
-            <MeAlertRail />
+            {!voiceFull && <MeAlertRail />}
             {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a waiting request / a paused seat, said plainly. */}
-            <AccessStatusNotice />
+            {!voiceFull && <AccessStatusNotice />}
             {/* spec R-11 (c) — work held back by the farm's trial / plan, said plainly to owner and worker. */}
-            <HeldWorkNotice farm={openFarm} />
+            {!voiceFull && <HeldWorkNotice farm={openFarm} />}
 
             {/* lane FX-1 (founder rule FOOT-1) — the ONE scroll area ends with the bar's whole room (its row, the raised
                 शेड्यूल button above it, a small gap and the phone's safe area), so every page's last line and any
@@ -332,7 +336,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentView={navigation.mainView}
                 onNavigate={(route) => navigation.openPlace(route)}
                 onViewChange={(view) => navigation.setMainView(view)}
-                hidden={isKeyboardOpen}
+                hidden={isKeyboardOpen || voiceFull}
                 attentionCount={attentionCount}
                 doors={doors}
             />

@@ -234,7 +234,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             {/* Founder 2026-11-20, after seeing option B on the test app: "the animation must be on top". The ring and its animation come FIRST, where
                 they always were; HIS WORDS are the card right under it, open, and when the animation settles the page glides down to them (onSettled). */}
             <ResultHero farmId={p.farmId} dayDate={primary.log.date} plotId={plotId} savedLogId={primary.id} recordingKey={p.recordingKey}
-                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} onSettled={toWords} typed={primary.typed} />
+                nodes={p.nodes} missing={day.missing} unsure={day.unsure} partial={day.partial} onTellMore={p.onTellMore} onReadMore={toWords} onSettled={toWords} typed={primary.typed} />
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold">

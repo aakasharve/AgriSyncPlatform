@@ -120,3 +120,13 @@ export async function readClipAudio(row: VoiceClipCacheRecord): Promise<Blob | n
     if (plain) return new Blob([plain as BlobPart], { type: row.mimeType });
     return row.localBlob ?? null;
 }
+
+/**
+ * spec: voice-flow-v2-2026-11-23 (F7) - the newest clip on this phone recorded since `sinceUtc` that holds audio and is not
+ * linked to any log (an answer with no work saves no log; its clip is kept on the phone all the same, `BackendAiClient.
+ * persistProcessingVoiceClip` writes it before the parse). Undefined when there is none. Reads only.
+ */
+export async function latestUnlinkedClipSince(sinceUtc: string): Promise<VoiceClipCacheRecord | undefined> {
+    const rows = await getDatabase().voiceClips.where('recordedAtUtc').aboveOrEqual(sinceUtc).filter(c => !c.dailyLogId && hasAudio(c)).toArray();
+    return rows.sort((a, b) => b.recordedAtUtc.localeCompare(a.recordedAtUtc))[0];
+}

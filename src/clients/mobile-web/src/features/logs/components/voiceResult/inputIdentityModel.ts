@@ -18,7 +18,7 @@
 import type { DailyLog, InputIdentityAnswer } from '../../../../domain/types/log.types';
 import {
     getProduct,
-    matchProduct,
+    matchProduct, normaliseNpkGrade,
     type CatalogBenefit,
     type CatalogProduct,
     type ProductCategory,
@@ -64,6 +64,18 @@ export function identityOf(item: ProductItem, answers?: ItemAnswers): ItemIdenti
 export type TypeKey = ProductCategory | 'unknown';
 
 export const typeKeyOf = (identity: ItemIdentity): TypeKey => (identity.state === 'found' ? identity.product.category : 'unknown');
+
+/** A name that is nothing but an N-P-K grade ("0-52-34", "12:61:00", "००:५२:३४"), read with the phone's own grade reader. */
+const isGradeName = (name: string): boolean => /^[0-9०-९\s:.\-–/]+$/.test(name) && normaliseNpkGrade(name) !== null;
+
+/**
+ * The product's type for the screen: the library's category when it is found; else "fertiliser" when the name is an N-P-K grade
+ * (a grade is only ever a fertiliser); else 'unknown' - and an unknown type shows NO chip at all (no claim either way).
+ */
+export const typeKeyOfItem = (item: ProductItem, identity: ItemIdentity): TypeKey => {
+    const key = typeKeyOf(identity);
+    return key === 'unknown' && (isGradeName(nameForMatching(item)) || isGradeName((item.npkGrade ?? '').trim())) ? 'fertilizer' : key;
+};
 
 /** The founder's colours (Option 3): बुरशीनाशक sky, कीटकनाशक pink, तणनाशक orange, वाढ नियंत्रक emerald, खत violet, unknown dashed stone. */
 export const TYPE_STYLE: Readonly<Record<TypeKey, { pill: string; edge: string; soft: string }>> = {

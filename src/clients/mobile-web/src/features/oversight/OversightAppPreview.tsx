@@ -140,6 +140,7 @@ const IS_ZERO_WAITING_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('waiting') === 'none';
 import { usePreviewRouterCtx } from './preview/usePreviewRouterCtx';
 import { PREVIEW_V2_MUKADAM, previewV2History } from './preview/voiceFlowV2Fixtures';
+import { isJob23, job23Crops, job23History } from './preview/previewJob23';
 import { PREVIEW_DATA_SOURCE } from './preview/previewDataSource';
 
 const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -351,7 +352,7 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
  * `usePreviewRouterCtx` — it never needs to be shared with `LogProvider`.
  */
 const PreviewShell: React.FC = () => {
-    const [crops, setCropsState] = useState<CropProfile[]>(PREVIEW_CROPS);
+    const [crops, setCropsState] = useState<CropProfile[]>(() => (isJob23() ? job23Crops(PREVIEW_CROPS) : PREVIEW_CROPS));
     // spec voice-flow-v2-2026-11-23 — with the flag on, the day's second speaker (a मुकादम) joins the seeded team.
     const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(() => (FEATURE_FLAGS.voiceFlowV2
         ? { ...PREVIEW_FARMER_PROFILE, operators: [...PREVIEW_FARMER_PROFILE.operators, PREVIEW_V2_MUKADAM] }
@@ -362,7 +363,7 @@ const PreviewShell: React.FC = () => {
     // journey's plot carries the मुकादम's one earlier recording instead
     // (`previewV2History`), and the harness adds what it "saves" (in memory).
     const [history, setHistory] = useState<DailyLog[]>(() => (FEATURE_FLAGS.voiceFlowV2
-        ? previewV2History(buildPreviewLogs(), getTodayKey())
+        ? (isJob23() ? job23History : (seed: DailyLog[]) => seed)(previewV2History(buildPreviewLogs(), getTodayKey()), getTodayKey())
         : buildPreviewLogs()));
     const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>(PREVIEW_PLANNED_TASKS);
     const [ledgerDefaults, setLedgerDefaultsState] = useState<LedgerDefaults>(PREVIEW_LEDGER_DEFAULTS);

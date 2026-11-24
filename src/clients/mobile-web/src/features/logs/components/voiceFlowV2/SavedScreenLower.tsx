@@ -48,6 +48,7 @@ export interface SavedScreenLowerProps {
     onEdit: (logId: string) => void;
     questionPanel?: React.ReactNode;
     extras?: React.ReactNode;
+    audience?: React.ReactNode;
     onOpenDetail: () => void;
 }
 
@@ -70,7 +71,7 @@ export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
                     {day.current.map(r => (
                         <div key={r.id} data-testid={`vr2-plot-${r.id}`}>
                             <button type="button" onClick={() => p.onEdit(r.id)} data-testid={`vr2-edit-${r.id}`} className={`${EDITB} text-left`}>
-                                <span className="block truncate">✎ {RS.edit} · {plotsOf(r, RS)}</span>
+                                <span className="block truncate">{RS.edit} · {plotsOf(r, RS)}</span>
                             </button>
                             <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(r.id)} />
                         </div>
@@ -78,9 +79,11 @@ export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
                 </div>
             ) : (
                 <button type="button" onClick={() => p.onEdit(primary.id)} data-testid="vr2-edit" className={`${EDITB} text-center`} style={{ fontFamily: SANS }}>
-                    ✎ {RS.edit}
+                    {RS.edit}
                 </button>
             )}
+
+            {p.audience}
 
             <SavedEarlier earlier={day.earlier} onDay={p.onDay} clips={p.clips} playingId={p.playingId} lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} />
 

@@ -247,7 +247,7 @@ describe('Task 2 - the product rows, the card, and हो / नाही / फ�
         openSpray();
         const row = screen.getByTestId('vr-prow-m-prem');
         expect(row.getAttribute('data-type')).toBe('unknown');
-        expect(within(row).getByTestId('vr-prow-type').textContent).toBe('ओळख नाही');
+        expect(within(row).queryByTestId('vr-prow-type')).toBeNull(); // round 4: an unknown type shows no chip (no claim either way)
         expect(within(row).getByTestId('vr-prow-status').textContent).toBe('हे औषध ओळखता आलं नाही');
         tapRow('m-prem');
         expect(screen.getByTestId('vr-card-unknown-note').textContent).toBe('हे औषध ओळखता आलं नाही');

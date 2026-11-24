@@ -59,6 +59,8 @@ export interface SavedScreenBackProps {
      * hardware / browser back), so the next back still lands here. Absent = exactly the bar as it was.
      */
     onStepBack?: () => boolean;
+    /** `chip` (voice flow v2, F2): just the button, for the full-screen layer's top row. Default `bar`: the sticky strip, as it was. */
+    variant?: 'bar' | 'chip';
 }
 
 function hasBackTrap(): boolean {
@@ -66,7 +68,7 @@ function hasBackTrap(): boolean {
     return Boolean(state && state[BACK_TRAP]);
 }
 
-export function SavedScreenBack({ onBack, onStepBack }: SavedScreenBackProps): React.ReactElement {
+export function SavedScreenBack({ onBack, onStepBack, variant = 'bar' }: SavedScreenBackProps): React.ReactElement {
     const { t } = useLanguage();
 
     // `handleReset` is a fresh function object on every AppRouter render, so it
@@ -106,6 +108,15 @@ export function SavedScreenBack({ onBack, onStepBack }: SavedScreenBackProps): R
         }
     };
 
+    if (variant === 'chip') {
+        return (
+            <button type="button" data-testid="saved-back" aria-label={t('common.back')} onClick={handleClick}
+                className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-stone-300 bg-white pl-1.5 pr-3.5 text-stone-800 shadow-sm active:scale-95">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-stone-100"><ArrowLeft size={18} strokeWidth={2.75} aria-hidden="true" /></span>
+                <span className="text-[14px] font-bold" style={{ fontFamily: MARATHI_BODY }}>{t('common.back')}</span>
+            </button>
+        );
+    }
     return (
         // Opaque, not translucent: the surface scrolls UNDER this bar, and a
         // semi-transparent strip leaves a ghost of Devanagari text bleeding

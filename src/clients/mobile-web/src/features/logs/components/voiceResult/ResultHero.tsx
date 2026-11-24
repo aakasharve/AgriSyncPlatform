@@ -72,6 +72,8 @@ export interface ResultHeroProps {
     missing: readonly PartKey[];
     /** Parts mentioned only by what the server could not verify: "not sure" (amber), never "not said". */
     unsure?: readonly PartKey[];
+    /** F1: parts with a verified entry that the ring does not yet call told: drawn as understood (green), never "not understood". */
+    partial?: readonly PartKey[];
     onTellMore: (part: PartKey) => void;
     onReadMore: () => void;
     /** Lane L6b — he typed it: the ring's "read below" arrow does not offer to listen. */
@@ -89,7 +91,7 @@ export interface ResultHeroProps {
     parts?: boolean;
 }
 
-type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'onTellMore'>;
+type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'partial' | 'onTellMore'>;
 
 /** All eight parts as tiles: what the day tells, what it is unsure of (amber), and the red ones to tell Sathi. */
 const PartsGrid: React.FC<PartsProps> = (props) => {
@@ -98,6 +100,7 @@ const PartsGrid: React.FC<PartsProps> = (props) => {
     const label = (key: PartKey): string => partNameIn(key, language);
     const missing = new Set(props.missing);
     const unsure = new Set(props.unsure ?? []);
+    const partial = new Set(props.partial ?? []);
     return (
         <>
             <div className="mt-3 grid grid-cols-4 gap-1.5" data-testid="vr-parts">
@@ -121,7 +124,7 @@ const PartsGrid: React.FC<PartsProps> = (props) => {
                         <span className="text-[11.5px] font-bold leading-tight text-amber-800">{RS.unsurePart}</span>
                     </span>
                 ) : (
-                    <span key={p.key} data-testid={`vr-part-${p.key}`} data-told="yes"
+                    <span key={p.key} data-testid={`vr-part-${p.key}`} data-told={partial.has(p.key) ? 'partial' : 'yes'}
                         className="flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-center" style={{ background: p.tint }}>
                         <PartIcon part={p.key} size={26} />
                         <span className="text-[12px] font-extrabold leading-tight text-stone-900">{label(p.key)}</span>
@@ -152,7 +155,7 @@ const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'
 };
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed, onSettled, parts = true }) => {
+const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, partial, typed, onSettled, parts = true }) => {
     const RS = useResultStr();
     const heroTop = useRef<HTMLDivElement>(null);
     const language = useOptionalLanguage()?.language;
@@ -177,7 +180,7 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId,
                 onSettled={() => (onSettled ? onSettled() : scrollBelowHeader(heroTop.current))} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
                 onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
                 fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RS.noWorkDay : RS.meterPending}</p>} />
-            {!parts ? null : ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
+            {!parts ? null : ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} partial={partial} onTellMore={onTellMore} />}
         </div>
     );
 };
@@ -197,7 +200,7 @@ export const ResultHero: React.FC<ResultHeroProps> = (props) => {
                     <SathiOrb />
                     <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{sathiLineFor(RS.sathiLine, props.dayDate, language)}</p>
                 </div>
-                {props.parts !== false && <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />}
+                {props.parts !== false && <PartsGrid missing={props.missing} unsure={props.unsure} partial={props.partial} onTellMore={props.onTellMore} />}
             </>
         )}
     </section>
