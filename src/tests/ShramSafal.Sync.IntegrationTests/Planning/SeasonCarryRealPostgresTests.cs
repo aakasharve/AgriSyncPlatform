@@ -347,6 +347,22 @@ public sealed class SeasonCarryRealPostgresTests(ITestOutputHelper output) : Sch
         (await CountAsync("SELECT count(*) FROM ssf.planned_work WHERE own_item_id = @i", ("i", OwnScheduleItem.IdFor(next2, "t-hand")))).Should().Be(0, "a copy is never planned and never done");
     }
 
+    [Fact]
+    public async Task PlanOnlyPick_OfAWorkStillInTheSchedule_IsIgnored_AndTheCarryApplies()
+    {
+        // A phone that has not pulled since the work came back still lists it as plan-only. Its pick must not fail the carry (a failing mutation is replayed for ever):
+        // the work is carried once, by its answer, and no second row of that key is written.
+        await AssertAppRoleIsNotVacuousAsync();
+        var (plot, old, next, _, _, _) = await SeasonEndedAsync(record: false);
+
+        var result = await OkAsync(CarryAsync(Owner, plot, old, next, [("t-hand", "skip")], planOnly: ["t-hand"]));
+
+        Data(result).GetProperty("skipped").GetInt32().Should().Be(1, "the answer stands");
+        Data(result).GetProperty("planOnlyCarried").GetArrayLength().Should().Be(0);
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_items WHERE crop_cycle_id = @c AND task_key = 't-hand'", ("c", next))).Should().Be(0, "skipped, and the stale pick copies nothing");
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_season_carries WHERE plot_id = @p AND task_key = 't-hand'", ("p", plot))).Should().Be(1);
+    }
+
     // ---- origin ----------------------------------------------------------------------------------------------------------
 
     [Fact]

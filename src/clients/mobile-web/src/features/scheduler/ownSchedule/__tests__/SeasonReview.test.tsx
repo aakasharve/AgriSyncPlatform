@@ -90,7 +90,8 @@ describe('the screen', () => {
         for (const c of ['schedule', 'mine', 'skip']) expect(on('w-differs', c)).toBe('false');
         const values = screen.getByTestId('season-values-w-differs');
         expect(values).toHaveTextContent('शेड्यूलमध्ये: दिवस ११ ते १३');
-        expect(values).toHaveTextContent('तुमच्या नोंदीत: दिवस १४ (२०२६-०१-१४)');
+        expect(values).toHaveTextContent('तुमच्या नोंदीत: दिवस १४ (१४ जाने)'); // a machine date never reaches a farmer
+        expect(values).not.toHaveTextContent('२०२६-०१-१४');
         expect(values).toHaveTextContent('स्रोत: तुमचं शेड्यूल');
         expect(values).toHaveTextContent('स्रोत: तुमची नोंद');
     });

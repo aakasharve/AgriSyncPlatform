@@ -154,6 +154,13 @@ public sealed class CarryForwardHandler(
         var planOnly = new List<OwnScheduleSeasonCarry>();
         foreach (var pick in picks)
         {
+            // A pick that names a work still IN the own schedule (a phone that has not pulled since the work came back) is already carried above: it is ignored, never a
+            // second row of the same key (which would fail every replay and hold the phone's queue for ever).
+            if (view.Items.Any(i => i.State == OwnScheduleItemState.Active && string.Equals(i.TaskKey, pick.TaskKey, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
             var gone = view.Items.FirstOrDefault(i => i.State == OwnScheduleItemState.Removed && string.Equals(i.TaskKey, pick.TaskKey, StringComparison.Ordinal)
                 && view.Plans.Any(p => p.OwnItemId == i.Id && p.Status != PlannedWorkStatus.Cancelled));
             Guid? copied = gone is null ? null : await CopyAsync(gone, gone.Content);

@@ -8,7 +8,17 @@
  * work with no record is never called "not done".
  */
 import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
+import { formatWindowRange, parseIsoDate } from '../../labour/marathiDate';
 import type { OwnLanguage } from './ownScheduleWords';
+
+// A machine date never reaches a farmer: the record's date reads "१४ जाने" (the app's shipped month names), "14 Jan" in English. A value that is not an ISO date is
+// shown as it came, never blank.
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dateMr = (iso: string): string => formatWindowRange(iso, iso) || toDevanagariDigits(iso);
+const dateEn = (iso: string): string => {
+    const d = parseIsoDate(iso);
+    return d ? `${d.getDate()} ${EN_MONTHS[d.getMonth()]}` : iso;
+};
 
 export interface SeasonReviewWords {
     entryTitle: string;
@@ -60,7 +70,7 @@ const MR: SeasonReviewWords = {
     mineLabel: 'मी केलं तसं', // DESIGN
     skipLabel: 'नको', // DESIGN
     expectedLine: (from, to) => (to !== null && to !== from ? `शेड्यूलमध्ये: दिवस ${toDevanagariDigits(from)} ते ${toDevanagariDigits(to)}` : `शेड्यूलमध्ये: दिवस ${toDevanagariDigits(from)}`), // PROPOSED (Marathi)
-    recordedLine: (day, date) => `तुमच्या नोंदीत: दिवस ${toDevanagariDigits(day)} (${toDevanagariDigits(date)})`, // PROPOSED (Marathi)
+    recordedLine: (day, date) => `तुमच्या नोंदीत: दिवस ${toDevanagariDigits(day)} (${dateMr(date)})`, // PROPOSED (Marathi)
     partLine: 'हे काम काही वेळा झालं, सगळ्या वेळा नाही.', // PROPOSED (Marathi)
     noRecordLine: 'याची नोंद नाही.', // PROPOSED (Marathi)
     sourceOwn: 'स्रोत: तुमचं शेड्यूल', // PROPOSED (Marathi)
@@ -95,7 +105,7 @@ const EN: SeasonReviewWords = {
     mineLabel: 'As I did it',
     skipLabel: 'Not needed',
     expectedLine: (from, to) => (to !== null && to !== from ? `In the schedule: day ${from} to ${to}` : `In the schedule: day ${from}`),
-    recordedLine: (day, date) => `In your record: day ${day} (${date})`,
+    recordedLine: (day, date) => `In your record: day ${day} (${dateEn(date)})`,
     partLine: 'This work was done some times, not every time.',
     noRecordLine: 'There is no record of this.',
     sourceOwn: 'Source: your schedule',
