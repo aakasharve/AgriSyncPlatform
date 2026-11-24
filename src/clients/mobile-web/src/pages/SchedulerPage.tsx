@@ -58,6 +58,7 @@ import { useScheduleGate } from '../features/scheduler/schedulePage/useScheduleG
 import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
+import { lastWorkedPlot } from '../features/scheduler/schedulePage/lastWorkedPlot';
 
 interface SchedulerPageProps {
     crops: CropProfile[];
@@ -102,6 +103,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const [cropId, setCropId] = useState('');
     const [plotId, setPlotId] = useState('');
     const [view, setView] = useState<View>('HOME');
+    const plotListsRef = React.useRef<HTMLDivElement | null>(null);
     const [openDayKey, setOpenDayKey] = useState<string | null>(null);
     const [moneyOpen, setMoneyOpen] = useState(false);
     const [choiceNote, setChoiceNote] = useState<string | null>(null);
@@ -131,7 +133,11 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     useEffect(() => {
         // First crop and its first plot, as before — and again if the chosen crop is no longer there. UI-8: the first crop that HAS a plot
         // (the picture map only draws plots, so a crop without one cannot be tapped); with none anywhere the page says so.
-        if (crops.length > 0 && !crops.some(c => c.id === cropId)) pick((crops.find(c => c.plots.length > 0) ?? crops[0]).id);
+        // Slice 10 (decision 4): the tab opens on the plot last worked (the phone's own logs), else the first plot in the canonical order.
+        if (crops.length > 0 && !crops.some(c => c.id === cropId)) {
+            const open = lastWorkedPlot(crops, logs);
+            if (open) { setCropId(open.cropId); setPlotId(open.plotId); } else pick((crops.find(c => c.plots.length > 0) ?? crops[0]).id);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cropId, crops]);
 
@@ -372,7 +378,6 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     return shell(SC.title, onBack, (
         <>
             {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
-            {placeMap}
             {crop && !plot && <GlassCard testId="sched-no-plot"><p className="m-0 text-[17px] font-black text-stone-900">{SC.noPlots}</p></GlassCard>}
             {crop && plot && !resolved && (
                 <GlassCard testId="sched-no-schedule">
@@ -387,7 +392,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
-                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost}
+                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} onChangePlot={() => plotListsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
                         <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />
@@ -396,6 +401,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     <ScheduleFold id="tools" title={SC.toolsTitle} summary={SC.toolsLine}>{toolsBody}</ScheduleFold>
                 </PlotScheduleHome>
             )}
+            {/* Slice 10 (version 7): the plot lists sit BELOW the plot's schedule; "प्लॉट बदला" in the plot head brings him here. */}
+            <div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>
             {!(crop && plot && resolved && model) && <ScheduleFold id="tools" title={SC.toolsTitle} summary={SC.toolsLine}>{toolsBody}</ScheduleFold>}
             {sheet}
         </>

@@ -28,7 +28,8 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-const ROWS = ['owed', 'ahead', 'done', 'stages', 'followed', 'tools'] as const;
+// Version 7 (slice 10): the followed-schedules row (the four tiles) is OPEN under the plot head; every other row stays closed.
+const ROWS = ['owed', 'ahead', 'done', 'stages', 'tools'] as const;
 
 describe('UI-4: the शेड्यूल tab is one short screen with closed rows', () => {
     it('the header, the badge and the today card are open; every other row is closed and draws nothing inside', () => {
@@ -42,6 +43,7 @@ describe('UI-4: the शेड्यूल tab is one short screen with closed ro
             expect(screen.getByTestId(`fold-${id}-toggle`)).toHaveAttribute('aria-expanded', 'false');
             expect(screen.queryByTestId(`fold-${id}-body`)).toBeNull();
         }
+        expect(screen.getByTestId('fold-followed')).toHaveAttribute('data-open', 'yes');
         // the content of the closed rows is not on the screen yet
         expect(screen.queryByTestId('owed-card')).toBeNull();
         expect(screen.queryByTestId('stage-ribbon')).toBeNull();

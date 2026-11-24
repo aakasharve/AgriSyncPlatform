@@ -35,6 +35,8 @@ import { DayCardsDayButton } from '../dayCards/DayCardsEntries';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
+import { OwnerVoiceSlot, type OwnerVoice } from './OwnerVoiceSlot';
+import { SameWorkSection } from './SameWorkSection';
 
 export const PlotScheduleHome: React.FC<{
     cropName: string;
@@ -73,11 +75,15 @@ export const PlotScheduleHome: React.FC<{
     onMakeOwn?: () => void;
     /** slice 9: the plot-season and the seat's rights for "माझ्या वेळापत्रकात घ्या" on the day cards of the followed schedule; absent = no take. */
     take?: TakeHost;
+    /** Slice 10: the new owner voices (slice 12b fills this; empty = the slot shows nothing). */
+    ownerVoices?: readonly OwnerVoice[];
+    /** Slice 10: "change plot" in the plot head - the page takes him to the plot lists. Absent = no button. */
+    onChangePlot?: () => void;
     /** UI-8: the maker's picture for the owner bar, when the app has one (none yet; the bar shows the letter or the leaf otherwise). */
     ownerImageUrl?: string | null;
     /** UI-4: the last closed row (the tools), drawn by the page. */
     children?: React.ReactNode;
-}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, children }) => {
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, ownerVoices = [], onChangePlot, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -98,6 +104,14 @@ export const PlotScheduleHome: React.FC<{
         <div className="space-y-3" data-testid="plot-schedule">
             {ask}
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} ownerImageUrl={ownerImageUrl} />
+            {onChangePlot && <button type="button" onClick={onChangePlot} data-testid="change-plot" className="min-h-[48px] rounded-full border-2 border-emerald-700 bg-white px-4 text-[16px] font-extrabold text-emerald-900">{language === 'en' ? 'Change plot' : 'प्लॉट बदला'}</button>}
+            <OwnerVoiceSlot voices={ownerVoices} playLabel={language === 'en' ? 'Listen' : 'ऐका'} />
+            {followed && onAddSchedule && onLeaveSchedule && (
+                <ScheduleFold id="followed" defaultOpen title={followWords.heading} count={followed.length} summary={SC.followedLine(followed.length)}>
+                    <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
+                </ScheduleFold>
+            )}
+            <SameWorkSection versionIds={followed ? followed.map(f => f.templateId) : []} take={take ? { ...take, todayStored: take.todayStored ?? model.todayDay } : undefined} />
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
             <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
@@ -117,11 +131,6 @@ export const PlotScheduleHome: React.FC<{
                 {trial ? <TrialStages model={model} template={template} named={trial.named} /> : <StageProgress model={model} />}
                 {plotId && <StagePlanCard plotId={plotId} followedKey={(followed ?? []).map(f => f.subscriptionId || f.templateId).join(',')} />}
             </ScheduleFold>
-            {followed && onAddSchedule && onLeaveSchedule && (
-                <ScheduleFold id="followed" title={followWords.heading} count={followed.length} summary={SC.followedLine(followed.length)}>
-                    <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
-                </ScheduleFold>
-            )}
             {children}
         </div>
     );

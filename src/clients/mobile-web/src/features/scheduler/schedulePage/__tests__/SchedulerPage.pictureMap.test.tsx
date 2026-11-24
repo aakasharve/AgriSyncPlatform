@@ -199,11 +199,11 @@ describe('tapping', () => {
 });
 
 describe('the owner bar and what the page had before', () => {
-    it('the white owner bar sits under the map; the three numbers, the stage line, the today card and every closed row follow', async () => {
+    it('version 7: the white owner bar, the three numbers, the stage line and the today card come first; the plot lists (the map) sit BELOW them', async () => {
         await seedFarmSubscriptions();
         mount();
         await readyMap();
-        const order = ['schedule-map', 'sched-owner-bar', 'day-now', 'stage-line', 'today-card'].map(id => screen.getByTestId(id));
+        const order = ['sched-owner-bar', 'day-now', 'stage-line', 'today-card', 'schedule-map'].map(id => screen.getByTestId(id));
         for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByTestId('sched-owner-bar').className).toContain('bg-white');
         for (const row of ['owed', 'ahead', 'done', 'stages', 'followed', 'tools']) expect(screen.getByTestId(`fold-${row}`)).toBeInTheDocument();
