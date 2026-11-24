@@ -131,7 +131,7 @@ describe('UncheckedReference_ReadableAndMarked', () => {
     });
 
     it('says nobody has checked it on the checked-by line, and names the checker only for a checked version', () => {
-        expect(render(unchecked(), 's')).toContain('अजून कुणी तपासलेलं नाही');
+        expect(render(unchecked(), 's')).toContain('श्रमसफलने अजून तपासलेलं नाही');
         const checked = render(detailOf([KINDS.spray]), 's');
         expect(checked).toContain('तपासनीस');
         expect(checked).toContain('तपासलेली मात्रा');

@@ -59,7 +59,7 @@ export interface DayCardWords {
     unchecked: string;
     uncheckedLine: string;
     ownLine: string;
-    source: { madeBy: string; source: string; checkedBy: string; notChecked: string; noSource: string; noMaker: string; madeByKind: Record<string, string>; own: string; basis: Record<string, string> };
+    source: { madeBy: string; source: string; checkedBy: string; notChecked: string; noSource: string; noMaker: string; platform: string; madeByKind: Record<string, string>; own: string; basis: Record<string, string> };
     sound: string;
     buzz: string;
     on: string;
@@ -136,9 +136,10 @@ const MR: DayCardWords = {
         madeBy: 'कुणी बनवलं',
         source: 'स्रोत',
         checkedBy: 'कुणी तपासलं',
-        notChecked: 'अजून कुणी तपासलेलं नाही',
+        notChecked: 'श्रमसफलने अजून तपासलेलं नाही',
         noSource: 'या कामाचा स्रोत लिहिलेला नाही',
         noMaker: 'बनवणाऱ्याचं नाव दिलेलं नाही',
+        platform: 'श्रमसफल',
         madeByKind: { INSTITUTION: 'संस्था', EXPERT: 'तज्ज्ञ', USER: 'शेतकरी', SYSTEM_DEFAULT: 'शेतसाथी' },
         own: 'तुम्ही',
         basis: { stated: 'स्रोतात लिहिलेलं', our_choice: 'शेतसाथीची निवड', experience: 'अनुभवातून', assumed: 'गृहीत, कुणी पक्कं केलेलं नाही' },
@@ -217,9 +218,10 @@ const EN: DayCardWords = {
         madeBy: 'Made by',
         source: 'Source',
         checkedBy: 'Checked by',
-        notChecked: 'Nobody has checked it yet',
+        notChecked: 'ShramSafal has not checked it yet',
         noSource: 'No source is written for this work',
         noMaker: 'The maker is not named',
+        platform: 'ShramSafal',
         madeByKind: { INSTITUTION: 'Institution', EXPERT: 'Expert', USER: 'Farmer', SYSTEM_DEFAULT: 'ShramSafal' },
         own: 'You',
         basis: { stated: 'Stated by the source', our_choice: 'ShramSafal choice', experience: 'From experience', assumed: 'Assumed, nobody has confirmed it' },

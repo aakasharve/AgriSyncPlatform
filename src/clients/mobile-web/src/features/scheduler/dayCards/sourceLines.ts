@@ -3,9 +3,11 @@
 import type { DayCardsDetail } from './dayCardsTypes';
 import type { DayCardWords } from './dayCardWords';
 
+/** Every reference (public) schedule is made by ShramSafal: only the platform may import one (ImportScheduleTemplateHandler asks
+ *  MayCheckSchedulesAsync). Its source label says where the CONTENT comes from, never who made it (founder v7: "बनवणारे श्रमसफल",
+ *  "स्रोत ICAR-NRCG ची प्रकाशनं"). */
 export function madeByLine(detail: DayCardsDetail, words: DayCardWords): string {
-    const kindWord = detail.madeBy.ownerType ? words.source.madeByKind[detail.madeBy.ownerType] ?? null : null;
-    return detail.kind === 'own' ? words.source.own : [kindWord, detail.madeBy.label].filter(Boolean).join(' · ') || words.source.noMaker;
+    return detail.kind === 'own' ? words.source.own : words.source.platform;
 }
 
 export function checkedByLine(detail: DayCardsDetail, words: DayCardWords): string {

@@ -15,7 +15,7 @@ const t = parseScheduleTask({ taskKey: 'k', name: 'काम', kind: 'work', bas
 if (!t.ok) throw new Error(t.error);
 const detail = (checked: boolean): DayCardsDetail => ({
     templateId: 'd0d0d0d0-0000-4000-8000-0000000000a1', chainId: null, version: 1, contentHash: 'h', kind: 'reference', name: 'द्राक्ष — फळछाटणी', cropKey: 'grape',
-    madeBy: { ownerType: 'INSTITUTION', label: 'श्रमसफल' }, check: { state: checked ? 'Checked' : 'NotChecked', isChecked: checked, checkedBy: checked ? 'तपासनीस' : null, checkedAtUtc: null }, stages: [],
+    madeBy: { ownerType: 'INSTITUTION', label: 'ICAR-NRCG ची प्रकाशनं' }, check: { state: checked ? 'Checked' : 'NotChecked', isChecked: checked, checkedBy: checked ? 'तपासनीस' : null, checkedAtUtc: null }, stages: [],
     tasks: [{ task: t.value, contentHash: 'x', shown: { from: shownDayOfStored(1), to: shownDayOfStored(1), expectedFrom: null, expectedTo: null, repeatEnd: null }, doseChecked: checked }], challenges: [], skipped: 0,
 });
 afterEach(() => cleanup());
@@ -34,9 +34,11 @@ describe('profile card', () => {
     });
     it('three separate lines and no logo', async () => {
         render(<ScheduleProfileCard templateId="x" plotName="G1" sourceLabel="ICAR-NRCG ची प्रकाशनं" load={async () => ({ ok: true, detail: detail(false), source: 'phone', stale: false })} />);
-        expect(await screen.findByTestId('line-made-by')).toHaveTextContent('संस्था · श्रमसफल');
+        // The maker is ShramSafal even when a source name arrives in the maker's field (an old server sent the source there).
+        expect(await screen.findByTestId('line-made-by')).toHaveTextContent('बनवणारेश्रमसफल');
+        expect(screen.getByTestId('line-made-by')).not.toHaveTextContent('ICAR');
         expect(screen.getByTestId('line-source')).toHaveTextContent('ICAR-NRCG ची प्रकाशनं');
-        expect(screen.getByTestId('line-checked-by')).toHaveTextContent('अजून कुणी तपासलेलं नाही');
+        expect(screen.getByTestId('line-checked-by')).toHaveTextContent('श्रमसफलने अजून तपासलेलं नाही');
         expect(screen.getByTestId('profile-unchecked')).toHaveTextContent('स्रोत: ICAR-NRCG ची प्रकाशनं. ICAR-NRCG ने हे शेड्यूल तपासलेलं किंवा मंजूर केलेलं नाही.');
         expect(screen.getByTestId('profile-name')).toHaveTextContent('द्राक्ष — फळछाटणी');
         expect(document.querySelectorAll('img').length).toBe(0);

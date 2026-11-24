@@ -375,8 +375,9 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         periodicExpectations: periodic,
         oneTimeExpectations: oneTime,
         // spec: plr-d10 lane SCH-A - the server's owner type, not a hard-coded SYSTEM_DEFAULT (a row it does not send one for,
-        // and the built-in catalog, stay SYSTEM_DEFAULT); a source written down is shown as the maker's name.
-        createdBy: referenceTemplate.sourceLabel ?? 'ShramSafal Reference Data',
+        // and the built-in catalog, stay SYSTEM_DEFAULT). A reference is MADE by ShramSafal (only the platform may import one); its
+        // source label is the source, kept apart in `sourceLabel`, never the maker's name (founder v7, slice 10).
+        createdBy: 'ShramSafal Reference Data',
         ownerType: referenceTemplate.ownerType ?? 'SYSTEM_DEFAULT',
         ...(referenceTemplate.sourceLabel ? { sourceLabel: referenceTemplate.sourceLabel } : {}),
         ...(referenceTemplate.check ? { check: referenceTemplate.check } : {}),
