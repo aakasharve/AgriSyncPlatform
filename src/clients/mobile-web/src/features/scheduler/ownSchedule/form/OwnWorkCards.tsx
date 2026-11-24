@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import type { AudioData, CropProfile, FarmerProfile } from '../../../../types';
 import { Tap } from '../../../../shared/components/ui/placeUi';
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { cropNameIn } from '../../../../shared/names/namesIn';
 import { idGenerator } from '../../../../core/domain/services/IdGenerator';
 import { OwnScheduleCommands } from '../../../../application/usecases/sync/OwnScheduleCommands';
@@ -173,7 +174,8 @@ export const OwnWorkCards: React.FC<OwnWorkCardsProps> = ({ place, taskKey, lang
                     <AskCard {...props} />
                 </>
             )}
-            <div className="sticky bottom-0 z-10 -mx-3 space-y-1.5 bg-stone-50/95 px-3 pb-2 pt-2">
+            {/* FOOT-1: sticks just above the bottom bar, never under it. */}
+            <div className="sticky z-10 -mx-3 space-y-1.5 bg-stone-50/95 px-3 pb-2 pt-2" style={{ bottom: BOTTOM_BAR_CLEARANCE }}>
                 {nudge && <p className="m-0 text-[14px] font-bold text-stone-700" data-testid="own-work-need">{nudge}</p>}
                 {failed && <p className="m-0 text-[14px] font-bold text-rose-800" role="alert" data-testid="own-work-failed">{words.saveFailed}</p>}
                 <Tap onClick={() => { void save(); }} disabled={!ok || saving} data-testid="own-work-save"
