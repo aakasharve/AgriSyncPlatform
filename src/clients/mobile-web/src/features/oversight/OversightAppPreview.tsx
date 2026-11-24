@@ -14,7 +14,7 @@
  * `AppRouter.tsx` calls them — never forked, never copied), and the real
  * `BottomNavigation`.
  *
- * Access: http://localhost:3001/?preview=oversight
+ * Access: http://localhost:3000/?preview=oversight (port: `vite.config.ts` `server.port`)
  * Reachability: gated by `IS_OVERSIGHT_PREVIEW_ENABLED` (`app/featureFlags.ts`,
  * wraps `import.meta.env.DEV`) + `React.lazy` in `App.tsx` — proven absent
  * from a real production `vite build` output (task-9 report, re-verified
@@ -62,8 +62,20 @@
  * plot/operator/log data and the farm-switcher's farm list are seeded;
  * every component rendering them, and the oversight/derivation logic
  * running over them, is real and unmodified.
+ *
+ * VOICE FLOW V2 (spec: voice-flow-v2-2026-11-23, Task 13b) — with
+ * `VITE_VOICE_FLOW_V2=1` in `.env.development.local` (gitignored; never in
+ * `.env` / `.env.local`, which Vitest loads), the whole v2 journey can be
+ * clicked here without a backend: work home → Grapes → Grapes A (the mic
+ * card) → recording (silence help) → stop → the step list → the result
+ * screen. The voice stub then walks `preview/previewVoiceJourney.ts` over the
+ * fixtures in `preview/voiceFlowV2Fixtures.ts` (in memory only), and
+ * `agrisync:toast` events are shown with the same `ActionToast`. Without the
+ * flag none of that runs. In both modes a screen that reads `useDataSource()`
+ * (the result screen does) gets the stub in `preview/previewDataSource.ts`,
+ * whose every write is refused — before, such a screen could not render here.
  */
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { AuthProvider } from '../../app/providers/AuthProvider';
 import { FarmContextProvider } from '../../core/session/FarmContext';
@@ -86,6 +98,10 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // uses. This preview is the surface the founder reviews on, so a
 // hand-rolled stand-in here would prove nothing about the shipped screen.
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import { DataSourceValueProvider } from '../../app/providers/DataSourceProvider';
+import { toastFromGlobalDetail, type FeelToast } from '../../shared/hooks/useFeel';
+import { getTodayKey } from '../../core/domain/services/DateKeyService';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
 // Finding F2 — this preview mounts the real `AppHeader`, so the waiting
 // drawer's `approval` row is live here too; these are what stop it being a
@@ -123,6 +139,8 @@ const IS_MULTI_FARM_PREVIEW = typeof window !== 'undefined'
 const IS_ZERO_WAITING_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('waiting') === 'none';
 import { usePreviewRouterCtx } from './preview/usePreviewRouterCtx';
+import { PREVIEW_V2_MUKADAM, previewV2History } from './preview/voiceFlowV2Fixtures';
+import { PREVIEW_DATA_SOURCE } from './preview/previewDataSource';
 
 const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
 
@@ -162,10 +180,29 @@ interface PreviewMainProps {
     farmerProfile: FarmerProfile;
     setFarmerProfile: React.Dispatch<React.SetStateAction<FarmerProfile>>;
     history: DailyLog[];
+    setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
     plannedTasks: PlannedTask[];
     setPlannedTasks: React.Dispatch<React.SetStateAction<PlannedTask[]>>;
     ledgerDefaults: LedgerDefaults;
     setLedgerDefaults: (v: LedgerDefaults) => void;
+}
+
+/**
+ * spec: voice-flow-v2-2026-11-23 (review verifier 8) — the app root shows every `agrisync:toast` (compositionRoot); the
+ * preview has no app root, so it listens itself, with the same checks (`toastFromGlobalDetail`). Flag on only.
+ */
+function usePreviewGlobalToast(): readonly [FeelToast, () => void] {
+    const [toast, setToast] = useState<FeelToast>(null);
+    useEffect(() => {
+        if (!FEATURE_FLAGS.voiceFlowV2) return undefined;
+        const onToast = (event: Event) => {
+            const next = toastFromGlobalDetail((event as CustomEvent).detail);
+            if (next) setToast(next);
+        };
+        window.addEventListener('agrisync:toast', onToast);
+        return () => window.removeEventListener('agrisync:toast', onToast);
+    }, []);
+    return [toast, () => setToast(null)] as const;
 }
 
 /**
@@ -176,6 +213,7 @@ interface PreviewMainProps {
 const PreviewMain: React.FC<PreviewMainProps> = (props) => {
     const { crops, farmerProfile, history, plannedTasks } = props;
     const { ctx, notice, dismissNotice } = usePreviewRouterCtx(props);
+    const [globalToast, dismissGlobalToast] = usePreviewGlobalToast();
 
     // spec: owner-oversight-loop (Ruling 12) — the SAME narrow reducer
     // `AppContent.tsx` uses to feed AppHeader's oversight strip/drawer, run
@@ -299,6 +337,9 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
             {notice && (
                 <ActionToast message={notice} type="partial" onDismiss={dismissNotice} />
             )}
+            {!notice && globalToast && (
+                <ActionToast key={globalToast.message} message={globalToast.message} type={globalToast.type} onDismiss={dismissGlobalToast} />
+            )}
         </div>
     );
 };
@@ -311,28 +352,38 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
  */
 const PreviewShell: React.FC = () => {
     const [crops, setCropsState] = useState<CropProfile[]>(PREVIEW_CROPS);
-    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(PREVIEW_FARMER_PROFILE);
+    // spec voice-flow-v2-2026-11-23 — with the flag on, the day's second speaker (a मुकादम) joins the seeded team.
+    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(() => (FEATURE_FLAGS.voiceFlowV2
+        ? { ...PREVIEW_FARMER_PROFILE, operators: [...PREVIEW_FARMER_PROFILE.operators, PREVIEW_V2_MUKADAM] }
+        : PREVIEW_FARMER_PROFILE));
     // Built once, on mount, relative to the REAL calendar day this preview
     // happens to be opened on — never a fixed narrative date (see
-    // `buildPreviewLogs`'s own header comment).
-    const [history] = useState<DailyLog[]>(() => buildPreviewLogs());
+    // `buildPreviewLogs`'s own header comment). With the voice flow v2 flag the
+    // journey's plot carries the मुकादम's one earlier recording instead
+    // (`previewV2History`), and the harness adds what it "saves" (in memory).
+    const [history, setHistory] = useState<DailyLog[]>(() => (FEATURE_FLAGS.voiceFlowV2
+        ? previewV2History(buildPreviewLogs(), getTodayKey())
+        : buildPreviewLogs()));
     const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>(PREVIEW_PLANNED_TASKS);
     const [ledgerDefaults, setLedgerDefaultsState] = useState<LedgerDefaults>(PREVIEW_LEDGER_DEFAULTS);
 
     return (
-        <LogProvider crops={crops}>
-            <PreviewMain
-                crops={crops}
-                setCrops={setCropsState}
-                farmerProfile={farmerProfile}
-                setFarmerProfile={setFarmerProfile}
-                history={history}
-                plannedTasks={plannedTasks}
-                setPlannedTasks={setPlannedTasks}
-                ledgerDefaults={ledgerDefaults}
-                setLedgerDefaults={setLedgerDefaultsState}
-            />
-        </LogProvider>
+        <DataSourceValueProvider value={PREVIEW_DATA_SOURCE}>
+            <LogProvider crops={crops}>
+                <PreviewMain
+                    crops={crops}
+                    setCrops={setCropsState}
+                    farmerProfile={farmerProfile}
+                    setFarmerProfile={setFarmerProfile}
+                    history={history}
+                    setHistory={setHistory}
+                    plannedTasks={plannedTasks}
+                    setPlannedTasks={setPlannedTasks}
+                    ledgerDefaults={ledgerDefaults}
+                    setLedgerDefaults={setLedgerDefaultsState}
+                />
+            </LogProvider>
+        </DataSourceValueProvider>
     );
 };
 

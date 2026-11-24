@@ -32,6 +32,7 @@ import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/Streaming
 import { StreamingHasher } from '../../../infrastructure/voice/StreamingHasher';
 import { VoicePreprocessor } from '../../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency';
+import type { RecorderFlowV2 } from './recorder/flowV2Types';
 
 interface AudioRecorderStreamingProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -47,6 +48,8 @@ interface AudioRecorderStreamingProps {
   onProcessingStart?: () => void;
   /** Told when the mic starts / stops listening (the entry flow hides its choices meanwhile). */
   onRecordingChange?: (recording: boolean) => void;
+  /** spec voice-flow-v2-2026-11-23 — handed to RecorderFace as is. */
+  flowV2?: RecorderFlowV2;
 }
 
 async function blobToBase64NoPrefix(blob: Blob): Promise<string> {
@@ -76,6 +79,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   onRequestContextSelection,
   onProcessingStart,
   onRecordingChange,
+  flowV2,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -319,6 +323,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       onCancel={cancelRecording}
       onRequestContextSelection={onRequestContextSelection}
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
+      flowV2={flowV2}
     />
   );
 };

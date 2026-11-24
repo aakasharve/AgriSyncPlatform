@@ -18,6 +18,10 @@
  * Lane FX-1 (founder ATT-LOG, 2026-10-31) — when this recording says what work was done but not how many people worked,
  * and the day has no headcount yet, the log page's EMPTY हजेरी card shows here too (only to someone who may take हजेरी).
  * Its "किती जण होते ते सांगा" opens the ONE mic on the crop question first, then the plot (rule CTX-1).
+ *
+ * spec: voice-flow-v2-2026-11-23 (Task 12; amendment M5) — behind `FEATURE_FLAGS.voiceFlowV2` only: the sticky back first takes
+ * the one step inside the surface (the detail page → the saved screen), and the saved screen's 30-second self-close lands on the
+ * WORK HOME (the reset, with no plot chosen: the entry flow opens on its home, so the mic is never armed by it — spec V2-5).
  */
 import React from 'react';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
@@ -35,13 +39,17 @@ import { stashPendingQuestionAnswer } from '../../features/logs/services/pending
 import { requestSpeak, type SpeakRequestInput } from '../speak/speakStore';
 import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
 import { logger } from '../../infrastructure/observability/Logger';
-import type { DailyLog } from '../../types';
+import type { DailyLog, LogScope } from '../../types';
 import { getDateKey } from '../domain/services/DateKeyService';
 import type { AppRouterContext } from './routeContext';
 import { VoiceResultContainer } from './lazyComponents';
 import { TaskCloseConfirmSlot } from './savedView';
 import { TodayAttendanceCard } from '../../features/logs/components/entry/TodayAttendanceCard';
 import { entryAttendance } from '../../features/logs/components/entry/todayAttendance';
+import { leaveDetailIfOpen } from '../../features/logs/components/voiceFlowV2/detailBack';
+
+/** No plot chosen: the entry flow opens on the work home (`LogEntryFlow` starts at home without a selection). */
+const WORK_HOME_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 
 /** The voice result to show: only while it is the latest save (a typed save afterwards gets the saved card). */
 export const currentVoiceResult = (ctx: AppRouterContext): VoiceResultState | null => {
@@ -126,7 +134,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
         <>
             {/* The existing sticky back (BUG-2 2026-08-14): reachable however far he scrolls, and it owns the
                 phone's hardware back. Same one step as the bottom bar's "मागे": the mic of the same plot. */}
-            <SavedScreenBack onBack={ctx.handleReset} />
+            <SavedScreenBack onBack={ctx.handleReset} onStepBack={FEATURE_FLAGS.voiceFlowV2 ? leaveDetailIfOpen : undefined} />
             {/* Loaded on first show (lazyComponents); the brief wait shows nothing rather than an English "Loading...". */}
             <React.Suspense fallback={<div className="min-h-[40vh]" aria-busy="true" data-testid="voice-result-loading" />}>
                 <VoiceResultContainer
@@ -142,6 +150,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     onEdit={ctx.handleEditLog}
                     onMoveDay={ctx.moveSavedDay}
                     onBack={ctx.handleReset}
+                    onAutoClose={FEATURE_FLAGS.voiceFlowV2 ? () => { ctx.handleReset(); ctx.setLogScope(WORK_HOME_SCOPE); } : undefined}
                     onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
                     onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}
                     questionPanel={savedLog ? (

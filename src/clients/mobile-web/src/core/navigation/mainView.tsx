@@ -291,7 +291,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             pinnedQuestion={mode === 'voice' ? readPendingQuestionAnswer()?.selected.resolvedPromptMr ?? null : null}
                             // lane MIC-1 — THE log recorder (`logRecorder.tsx`), the same one every speak entry point opens.
                             // Lane E1 — the typing sheet no longer offers the old hand-filled form ("किंवा फॉर्ममध्ये स्वतः भरा").
-                            renderRecorder={({ onRecordingChange }) => renderLogRecorder(ctx, { onRecordingChange })}
+                            // spec voice-flow-v2-2026-11-23 — armSeq (the mic card's ring) is set by LogEntryFlow only with the flag on.
+                            renderRecorder={({ onRecordingChange, armSeq }) => renderLogRecorder(ctx, { onRecordingChange, armSeq })}
                         />
                     )}
                 </>

@@ -81,6 +81,12 @@ export interface ResultHeroProps {
      * The result screen glides to his words. Absent = the meter scrolls to itself, as before.
      */
     onSettled?: () => void;
+    /**
+     * spec: voice-flow-v2-2026-11-23 (Task 8) — `false`: the caller draws the eight parts itself (the saved screen's own grid, with
+     * his values and real buttons), so neither the tile grid nor the screen-reader copies of the red orbs are drawn here. The
+     * meter itself (the server's score only, the pending line, a no-work day) is unchanged. Default `true`.
+     */
+    parts?: boolean;
 }
 
 type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'onTellMore'>;
@@ -146,7 +152,7 @@ const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'
 };
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed, onSettled }) => {
+const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed, onSettled, parts = true }) => {
     const RS = useResultStr();
     const heroTop = useRef<HTMLDivElement>(null);
     const language = useOptionalLanguage()?.language;
@@ -171,7 +177,7 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId,
                 onSettled={() => (onSettled ? onSettled() : scrollBelowHeader(heroTop.current))} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
                 onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
                 fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RS.noWorkDay : RS.meterPending}</p>} />
-            {ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
+            {!parts ? null : ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
         </div>
     );
 };
@@ -191,7 +197,7 @@ export const ResultHero: React.FC<ResultHeroProps> = (props) => {
                     <SathiOrb />
                     <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{sathiLineFor(RS.sathiLine, props.dayDate, language)}</p>
                 </div>
-                <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />
+                {props.parts !== false && <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />}
             </>
         )}
     </section>

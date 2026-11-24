@@ -36,6 +36,7 @@ import type { TodayAttendance } from './todayAttendance';
 import { SegmentBanner, SegmentCancel } from './SegmentBanner';
 import { STEPPER_LABELS } from './entryWords';
 import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
+import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -45,6 +46,9 @@ export type FlowStep = 'home' | 'entry';
 export interface RecorderHooks {
     /** The recorder says when it starts and stops listening (the choices hide while it listens). */
     onRecordingChange: (recording: boolean) => void;
+    /** spec voice-flow-v2-2026-11-23 — bumps on each plot tap made on this screen (the mic card's 7 s ring); 0 = arrived
+     *  with a plot already chosen (card, no ring). Absent = flag off, the हजेरी door, or one part said again. */
+    armSeq?: number;
 }
 
 export interface LogEntryFlowProps {
@@ -104,6 +108,9 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
     const [entryStep, setEntryStep] = useState<StepperStep>(() => (hasSelection && !homeRequested ? 'plot' : 'crop'));
     const [recording, setRecording] = useState(false);
+    // spec voice-flow-v2-2026-11-23 (H7) — only with the flag on does a plot tap change any new state.
+    const micCountdown = FEATURE_FLAGS.voiceFlowV2 === true && !labourIntent;
+    const [armSeq, setArmSeq] = useState(0);
 
     const goHome = () => {
         setLogScope(EMPTY_SCOPE);
@@ -140,13 +147,13 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         micAnchor.current?.scrollIntoView?.({ block: recording ? 'start' : 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     }, [step, ready, recording]);
 
-    const hooks: RecorderHooks = { onRecordingChange: setRecording };
+    const hooks: RecorderHooks = micCountdown ? { onRecordingChange: setRecording, armSeq } : { onRecordingChange: setRecording };
 
     if (recordingSegment) {
         return (
             <div className="px-1" data-testid="log-entry-flow" data-step="segment" style={{ fontFamily: SANS }}>
                 <SegmentBanner segment={recordingSegment} />
-                {renderRecorder(hooks)}
+                {renderRecorder({ onRecordingChange: setRecording })}
                 {!recording && <SegmentCancel onCancel={onCancelSegment} />}
             </div>
         );
@@ -177,7 +184,10 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                     onSelectionChange={(newCrops, newPlots) => {
                         const plots = Object.values(newPlots).flat();
                         setLogScope({ selectedCropIds: newCrops, selectedPlotIds: plots, mode: plots.length > 1 ? 'multi' : 'single', applyPolicy: 'broadcast' });
-                        if (plots.length > 0 || newCrops.includes('FARM_GLOBAL')) onChooseVoice();
+                        if (plots.length > 0 || newCrops.includes('FARM_GLOBAL')) {
+                            onChooseVoice();
+                            if (micCountdown) setArmSeq(n => n + 1);
+                        }
                     }}
                     stepper={{
                         step: entryStep,
