@@ -297,6 +297,7 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.ImportReferenceScheduleHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetScheduleCheckViewHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleTaskFormatHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleDayCardsHandler>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.

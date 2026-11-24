@@ -80,6 +80,27 @@ public static class ReferenceDataEndpoints
         })
         .WithName("GetScheduleTaskFormat");
 
+        // spec: plr-d10 schedule slice 8 - the detail the day cards draw: one version this caller may see, with its content hash and its check. A NEW route; an unchecked
+        // reference is readable here and marked as unchecked. Without scheduleFormat=2: 400 with words.
+        referenceGroup.MapGet("/schedule-templates/{id:guid}/day-cards", async (
+            Guid id,
+            string? scheduleFormat,
+            ClaimsPrincipal user,
+            GetScheduleDayCardsHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var format = ShramSafal.Application.UseCases.Sync.PullSyncChanges.PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat);
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(callerUserId, id, format, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetScheduleDayCards");
+
         referenceGroup.MapGet("/crop-types", async (
             ClaimsPrincipal user,
             GetCropTypesHandler handler,
