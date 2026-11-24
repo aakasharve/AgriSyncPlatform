@@ -16,10 +16,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AudioData } from '../../../types';
 import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
+import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, keptNoteOf, readableError } from './recorder/recorderWords';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
 
 interface AudioRecorderProps {
@@ -52,7 +53,9 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
   // Combine errors: External (from AI) takes precedence if present, otherwise internal (mic permission).
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
   const language = useOptionalLanguage()?.language;
-  const displayError = externalError ? readableError(externalError, language) : internalError;
+  // P4: his words were kept after a server failure: a calm line (the v2 flow's own words in v2), not the red error box.
+  const keptNote = keptNoteOf(externalError, language, flowV2 !== undefined);
+  const displayError = keptNote ? null : externalError ? readableError(externalError, language) : internalError;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -117,14 +120,14 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
             try { performance.measure('voice:batch-pipeline', 'voice:processing-start', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
             try { performance.measure('voice:batch-total', 'voice:stop', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
 
-            // Lane V-1 — this recorder's sound is already encoded while he speaks: a long recording is sent as
-            // it is (never re-encoded in real time after the stop).
+            // Lane V-1 — this recorder's sound is already encoded while he speaks: a recording of LIVE_ENCODE_AFTER_SEC or more
+            // (today: every one) is sent as it is (never re-encoded in real time after the stop).
             const spokenMs = Date.now() - startedAtRef.current;
             onAudioCaptured({
               blob,
               base64,
               mimeType: 'audio/webm',
-              ...(spokenMs > LIVE_ENCODE_AFTER_SEC * 1000 && { encodedLive: true, durationMs: spokenMs }),
+              ...(spokenMs >= LIVE_ENCODE_AFTER_SEC * 1000 && { encodedLive: true, durationMs: spokenMs }),
             });
           };
         }
@@ -183,7 +186,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — batch path entry mark.
-      try { performance.mark('voice:stop'); } catch { /* observability-only */ }
+      markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (timerRef.current) {
@@ -231,6 +234,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       disabled={disabled}
       suggest={suggestInteraction}
       error={displayError}
+      keptNote={keptNote}
       errorCode={externalError ? null : internalErrorCode}
       transcript={transcript}
       lastInputTyped={lastInputTyped}

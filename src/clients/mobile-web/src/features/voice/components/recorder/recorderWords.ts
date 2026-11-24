@@ -12,7 +12,9 @@
  */
 import { t } from '../../../../i18n/translations';
 import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
+import { ONLINE_KEPT_MESSAGE, isKeptMessage } from '../../../../infrastructure/voice/keptForLater';
 import { ERROR_WORDS, errorKindOf } from '../../../../shared/names/errorWords';
+import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
 
 /** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
 export const MIC_INSTRUCTION = 'हिरव्या रंगाचा माइक चे बटन एकदा दाबून बोलायला सुरवात करा';
@@ -59,12 +61,16 @@ export const AUTO_STOP_SEC = 600;
 export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 30;
 
 /**
- * Lane V-1 — a recording LONGER than this is uploaded as the recorder encoded it while he spoke (`encodedLive`), not
- * re-encoded after stop. The re-encode plays the sound through the browser in real time (`SegmentCompressor`), so a
- * 10-minute recording would wait about 10 minutes after the stop — twice over, once more in the upload preparation —
- * and a phone that sleeps meanwhile could cut it short. Up to this length nothing changes from what is in use today.
+ * A recording of AT LEAST this many seconds is uploaded as the recorder encoded it while he spoke (`encodedLive`), not
+ * re-encoded after the stop. Lane V-1 set it to 60: the re-encode plays the sound through the browser in real time
+ * (`SegmentCompressor`), so a 10-minute recording waited about 10 minutes after the stop, twice over (once more in the
+ * upload preparation), and a phone that slept meanwhile could cut it short. Phase A (voice-instant-phase-a-2026-11-23,
+ * founder 2026-11-24: "the user should not wait for processing") sets it to 0, because a 30-second note waited 30
+ * seconds the same way: every recording now goes the live way. Consequence, accepted (decision A-1): a short note is no
+ * longer silence-trimmed on the phone (about 90 KB for 30 s at 24 kbps). The post-stop encode stays in place for the
+ * recorder that has no live encoder to use.
  */
-export const LIVE_ENCODE_AFTER_SEC = 60;
+export const LIVE_ENCODE_AFTER_SEC = 0;
 
 /**
  * Lane RF2 fix pass (review B004) — the two offline outcomes the parse reports as stable codes, in his language (the
@@ -84,6 +90,12 @@ const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
     [OFFLINE_NOT_KEPT_MESSAGE]: {
         mr: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही ठेवलं नाही — इंटरनेट आलं की पुन्हा सांगा.', // PROPOSED (Marathi)
         en: 'A change needs the internet. Nothing was kept — say it again when you are online.', // PROPOSED (English)
+    },
+    // voice-instant-phase-a (P4): the server failed while he was online; his words are kept and will be understood.
+    // One sentence in both screens: the old one here, the v2 flow's from `voiceFlowWords.keptForLater` (the same words).
+    [ONLINE_KEPT_MESSAGE]: {
+        mr: 'आवाज जतन आहे — साथी थोड्या वेळात समजून घेईल', // PROPOSED (Marathi)
+        en: 'Your voice is kept — Sathi will understand it shortly', // PROPOSED (English)
     },
 };
 
@@ -113,3 +125,13 @@ export const autoStoppingIn = (secondsLeft: number, language?: string | null): s
     t('voice.autoStopping', language === 'en' ? 'en' : 'mr').replace('{seconds}', String(secondsLeft));
 
 export const formatClock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+/**
+ * voice-instant-phase-a (P4) — the calm note when the parse says "kept, will be understood shortly": the line to show
+ * (the v2 flow's own words in the v2 flow, `readableError`'s in the old screen), or null for anything else (an error
+ * stays an error). The face draws it as a status, never in the red error box.
+ */
+export const keptNoteOf = (message: string | null | undefined, language?: string | null, flowV2 = false): string | null => {
+    if (!message || !isKeptMessage(message)) return null;
+    return flowV2 ? voiceFlowWords(language).keptForLater : readableError(message, language);
+};

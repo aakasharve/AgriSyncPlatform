@@ -23,7 +23,7 @@ import { AudioData } from '../../../types';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, keptNoteOf, readableError } from './recorder/recorderWords';
 import { startLiveEncoder, type LiveEncoder } from './recorder/liveEncoder';
 import { mulawWavOf, RAW_UPLOAD_MIME } from './recorder/rawSoundUpload';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
@@ -32,6 +32,7 @@ import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/Streaming
 import { StreamingHasher } from '../../../infrastructure/voice/StreamingHasher';
 import { VoicePreprocessor } from '../../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency';
+import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
 
 interface AudioRecorderStreamingProps {
@@ -95,7 +96,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
 
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
   const language = useOptionalLanguage()?.language;
-  const displayError = externalError ? readableError(externalError, language) : internalError;
+  // P4: his words were kept after a server failure: a calm line (the v2 flow's own words in v2), not the red error box.
+  const keptNote = keptNoteOf(externalError, language, flowV2 !== undefined);
+  const displayError = keptNote ? null : externalError ? readableError(externalError, language) : internalError;
 
   const recordingChangeRef = useRef(onRecordingChange);
   recordingChangeRef.current = onRecordingChange;
@@ -107,7 +110,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   const preprocessorRef = useRef<VoicePreprocessor | null>(null);
   const timerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
-  // Lane V-1 — the same sound encoded while he speaks; a recording longer than LIVE_ENCODE_AFTER_SEC is sent from it.
+  // Lane V-1 — the same sound encoded while he speaks; a recording of LIVE_ENCODE_AFTER_SEC or more (today: every one) is sent from it.
   const liveEncoderRef = useRef<LiveEncoder | null>(null);
   const startedAtRef = useRef(0);
 
@@ -175,7 +178,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     if (!recorderRef.current || !isRecording) return;
 
     // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — streaming path entry mark.
-    try { performance.mark('voice:stop'); } catch { /* observability-only */ }
+    markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
 
     setIsRecording(false);
     setLiveStream(null);
@@ -222,10 +225,11 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       // recorder block) cannot race the in-flight stop.
       onProcessingStart?.();
 
-      // Lane V-1 — a long recording is NEVER re-encoded in real time after the stop: it goes as it was encoded while
-      // he spoke, or — review B002, the live encoding failed — as the recorder's own sound (a complete mu-law WAV,
-      // written in one pass). Either way it is complete; a wall-clock-cut encode is never sent as whole.
-      if (spokenSec > LIVE_ENCODE_AFTER_SEC) {
+      // Lane V-1 / voice-instant-phase-a (Task 1) — a recording is NEVER re-encoded in real time after the stop: it goes as
+      // it was encoded while he spoke, or — review B002, the live encoding failed or returned nothing — as the recorder's
+      // own sound (a complete mu-law WAV, written in one pass). Either way it is complete; a wall-clock-cut encode is
+      // never sent as whole. (`>=`: with the limit at 0 even a recording stopped at once takes this path.)
+      if (spokenSec >= LIVE_ENCODE_AFTER_SEC) {
         const durationMs = Math.round(recording.durationMs || spokenSec * 1000);
         const blob = liveBlob ?? mulawWavOf(recording.pcm, recording.sampleRate);
         onAudioCaptured({
@@ -314,6 +318,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       disabled={disabled}
       suggest={suggestInteraction}
       error={displayError}
+      keptNote={keptNote}
       errorCode={externalError ? null : internalErrorCode}
       transcript={transcript}
       lastInputTyped={lastInputTyped}
