@@ -93,6 +93,30 @@ describe('DoseNeverWithoutUnitAndSource', () => {
     });
 });
 
+describe('UncheckedReference_NoDoseNumber', () => {
+    it('prints no dose number on an unchecked reference whose doses have unit and source, and says it shows after the check', () => {
+        const d = detailOf([KINDS.spray, KINDS.irrigation, KINDS.nutrition], { check: { state: 'NotChecked', isChecked: false, checkedBy: null, checkedAtUtc: null } });
+        for (const key of ['s', 'i', 'n']) {
+            const html = render(d, key);
+            expect(html, key).not.toContain('dose-text');
+            expect(html, key).toContain('मात्रा तपासणीनंतर दिसेल');
+            expect(html, key).not.toMatch(/२ ग्रॅम|२०,४००|७० किलो/);
+        }
+        expect(render(d, 's')).toContain('चाचणी औषध');
+        const day = renderToStaticMarkup(<DayCardDeck parts={deckForShownDay(d, 10)} detail={d} words={dayCardWords('mr')} />);
+        expect(day).not.toContain('dose-text');
+        const en = render(d, 's', 'en');
+        expect(en).toContain('The dose shows after the check');
+        expect(en).not.toContain('dose-text');
+    });
+
+    it('a checked reference and an own schedule still show the dose', () => {
+        expect(render(detailOf([KINDS.spray]), 's')).toContain('dose-text');
+        const own = detailOf([KINDS.spray], { kind: 'own', check: { state: 'Own', isChecked: false, checkedBy: null, checkedAtUtc: null } });
+        expect(render(own, 's')).toContain('dose-text');
+    });
+});
+
 describe('UncheckedReference_ReadableAndMarked', () => {
     const unchecked = (): DayCardsDetail => detailOf([KINDS.spray], { check: { state: 'NotChecked', isChecked: false, checkedBy: null, checkedAtUtc: null } });
 
@@ -102,7 +126,7 @@ describe('UncheckedReference_ReadableAndMarked', () => {
         expect(html).toContain('नीट मिसळा');
         expect(html).toContain('unchecked-mark');
         expect(html).toContain('unchecked-line');
-        expect(html).toContain('मात्रा अजून तपासलेली नाही');
+        expect(html).toContain('मात्रा तपासणीनंतर दिसेल');
         expect(html).not.toContain('तपासलेली मात्रा');
     });
 
@@ -195,6 +219,6 @@ describe('shown days and no empty card', () => {
         expect(html).toContain('Spray');
         expect(html).toContain('Not checked');
         expect(html).toContain('Stay out of the plot for 24 hours after spraying');
-        expect(html).not.toContain('मात्रा अजून तपासलेली नाही');
+        expect(html).not.toContain('The dose is not checked');
     });
 });

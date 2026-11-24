@@ -122,13 +122,14 @@ const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: Da
                     {doses.map((d, i) => (
                         <div key={`${d.name ?? 'dose'}-${i}`} className="mb-1 last:mb-0">
                             {d.name && <p className="text-[14px] font-extrabold text-stone-600">{d.name}</p>}
-                            {d.text ? (
+                            {detail.kind === 'reference' && !(detail.check.isChecked && t.doseChecked) ? (
+                                // Spec decision 5: an unchecked reference is readable, but no dose number is shown until the check.
+                                <p data-testid="dose-after-check" className="text-[15px] font-bold text-amber-900">{words.doseAfterCheck}</p>
+                            ) : d.text ? (
                                 <>
                                     <p data-testid="dose-text" className="text-[22px] font-black leading-tight text-stone-900">{d.text}{d.perWhat ? ` / ${d.perWhat}` : ''}</p>
                                     {d.water && <p className="text-[14px] font-semibold text-stone-600">{words.chips.water}: {d.water}</p>}
-                                    <p data-testid="dose-state" className={`mt-1 text-[13px] font-extrabold ${detail.check.isChecked && t.doseChecked ? 'text-emerald-800' : 'text-amber-800'}`}>
-                                        {detail.check.isChecked && t.doseChecked ? words.doseChecked : detail.kind === 'own' ? '' : words.doseUnchecked}
-                                    </p>
+                                    {detail.kind === 'reference' && <p data-testid="dose-state" className="mt-1 text-[13px] font-extrabold text-emerald-800">{words.doseChecked}</p>}
                                 </>
                             ) : (
                                 <p data-testid="dose-withheld" className="text-[15px] font-bold text-amber-900">{words.doseHidden}</p>

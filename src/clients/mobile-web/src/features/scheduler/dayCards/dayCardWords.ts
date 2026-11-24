@@ -54,7 +54,7 @@ export interface DayCardWords {
         challengesInStage: (n: number) => string;
     };
     doseHidden: string;
-    doseUnchecked: string;
+    doseAfterCheck: string;
     doseChecked: string;
     unchecked: string;
     uncheckedLine: string;
@@ -127,10 +127,10 @@ const MR: DayCardWords = {
         challengesInStage: n => `या टप्प्यातली ${toDevanagari(n)} आव्हानं पुढे आहेत`,
     },
     doseHidden: 'मात्रा दाखवली नाही: एकक किंवा स्रोत दिलेला नाही.',
-    doseUnchecked: 'मात्रा अजून तपासलेली नाही',
+    doseAfterCheck: 'मात्रा तपासणीनंतर दिसेल',
     doseChecked: 'तपासलेली मात्रा',
     unchecked: 'तपासलेलं नाही',
-    uncheckedLine: 'हे वेळापत्रक अजून तपासलेलं नाही. वाचू शकता; मात्रा तपासणीनंतरच खात्रीची.',
+    uncheckedLine: 'हे वेळापत्रक अजून तपासलेलं नाही. वाचू शकता; मात्रा तपासणीनंतर दिसेल.',
     ownLine: 'हे तुमचं स्वतःचं वेळापत्रक आहे; यावर तपासणी लागू नाही.',
     source: {
         madeBy: 'कुणी बनवलं',
@@ -208,10 +208,10 @@ const EN: DayCardWords = {
         challengesInStage: n => `${n} challenges of this stage follow`,
     },
     doseHidden: 'Dose not shown: its unit or source is not given.',
-    doseUnchecked: 'This dose is not checked yet',
+    doseAfterCheck: 'The dose shows after the check',
     doseChecked: 'Checked dose',
     unchecked: 'Not checked',
-    uncheckedLine: 'This schedule has not been checked yet. You can read it; doses are reliable only after the check.',
+    uncheckedLine: 'This schedule has not been checked yet. You can read it; doses show after the check.',
     ownLine: 'This is your own schedule; no check applies to it.',
     source: {
         madeBy: 'Made by',
