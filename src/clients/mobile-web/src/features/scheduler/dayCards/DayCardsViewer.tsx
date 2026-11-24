@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, BellOff, ChevronLeft, ChevronRight, Volume2, VolumeX, X } from 'lucide-react';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { useUiPref } from '../../../shared/hooks/useUiPref';
 import { DayCardDeck, positionText } from './DayCardDeck';
 import { deckForShownDay, deckForTask, firstShownDay, lastShownDay, type CardPart } from './dayCardsModel';
 import { loadDayCards, type DayCardsLoad } from './dayCardsStore';
@@ -23,23 +24,11 @@ import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 export type DayCardsTarget = { day: number } | { taskKey: string };
 export type DayCardsSource = { templateId: string } | { detail: DayCardsDetail };
 
-const SWITCHES_KEY = 'agrisync.dayCards.switches';
+// The farmer's own switches live in the UI prefs (Dexie), never in localStorage (check:storage-discipline). Both start OFF.
+const SOUND_PREF = 'dayCards.sound';
+const BUZZ_PREF = 'dayCards.buzz';
 
 interface Switches { sound: boolean; buzz: boolean }
-
-function readSwitches(): Switches {
-    try {
-        const raw = window.localStorage.getItem(SWITCHES_KEY);
-        const v = raw ? JSON.parse(raw) as Partial<Switches> : {};
-        return { sound: v.sound === true, buzz: v.buzz === true };
-    } catch {
-        return { sound: false, buzz: false };
-    }
-}
-
-function writeSwitches(s: Switches): void {
-    try { window.localStorage.setItem(SWITCHES_KEY, JSON.stringify(s)); } catch { /* a switch that cannot be kept simply starts off next time */ }
-}
 
 export const prefersReducedMotion = (): boolean => {
     try { return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true; } catch { return false; }
@@ -63,7 +52,9 @@ export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCards
     const words: DayCardWords = dayCardWords(language);
     const [state, setState] = useState<DayCardsLoad | null>(() => ('detail' in source ? { ok: true, detail: source.detail, source: 'phone', stale: false } : null));
     const [attempt, setAttempt] = useState(0);
-    const [switches, setSwitches] = useState<Switches>(readSwitches);
+    const [sound, setSound] = useUiPref<boolean>(SOUND_PREF, false);
+    const [buzz, setBuzz] = useUiPref<boolean>(BUZZ_PREF, false);
+    const switches = useMemo<Switches>(() => ({ sound: sound === true, buzz: buzz === true }), [sound, buzz]);
     const [answer, setAnswer] = useState<{ changes: string | null } | null>(null);
     const [active, setActive] = useState(0);
     const lastActive = useRef(0);
@@ -120,9 +111,8 @@ export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCards
     useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* none */ } }, []);
 
     const flip = (key: keyof Switches) => {
-        const next = { ...switches, [key]: !switches[key] };
-        setSwitches(next);
-        writeSwitches(next);
+        if (key === 'sound') setSound(!switches.sound);
+        else setBuzz(!switches.buzz);
     };
 
     const nextLine = parts && parts[active + 1] ? titleOf(parts[active + 1]) : '';
