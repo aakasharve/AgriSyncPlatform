@@ -11,6 +11,7 @@
  * (`wroteOf`). Tapping a tile opens it and dims every other word; tapping it again brings them back. Words withheld by the money
  * rule show the rule card instead (MU-3). Nothing is invented here.
  */
+import { Lightbulb } from 'lucide-react';
 import React, { useState } from 'react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import MoneyWordsWithheldCard from '../originalVoice/MoneyWordsWithheldCard';
@@ -87,7 +88,7 @@ const WhyTiles: React.FC<{ runs: readonly WordRun[]; entries: readonly PartEntry
                                 <span aria-hidden="true" className="text-[19px] font-black text-[#A8A29E]">”</span>
                             </div>
                             <div className="mt-1.5 flex items-center gap-1.5 text-[14px] font-bold text-[#44403C]" data-testid={`vr-why-reason-${shown.part}-${i}`}>
-                                <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[#FEF3C7] text-[12px]" aria-hidden="true">💡</span>
+                                <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[#FEF3C7] text-amber-700" aria-hidden="true"><Lightbulb size={14} /></span>
                                 <span className="min-w-0">{copy.whyReason}</span>
                             </div>
                             {wrote && wrote !== phrase && (

@@ -29,6 +29,7 @@ import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/De
 import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
+import { savedWords } from './savedCopy';
 import { dayRel, dayShort } from '../dayPick/dayWords';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import { LegacyNote, TypedNote } from '../voiceResult/DayParts';
@@ -41,7 +42,9 @@ import type { DayView, PartKey, RecordingView } from '../voiceResult/resultModel
 import { resultDayStr, resultStr, useResultStr } from '../voiceResult/resultStrings';
 import { scrollBelowHeader } from '../voiceResult/scrollBelowHeader';
 import type { LogSyncState } from '../voiceResult/useRecordingTrust';
+import { CalendarDays, MapPin } from 'lucide-react';
 import IdleCloseBar from './IdleCloseBar';
+import { useVoiceLayerBottom } from './VoiceLayer';
 import { Bd, SANS, Tick } from './savedBits';
 import SavedClip from './SavedClip';
 import SavedWords from './SavedWords';
@@ -78,6 +81,8 @@ export interface SavedScreenProps {
     pickingDay?: boolean;
     questionPanel?: React.ReactNode;
     extras?: React.ReactNode;
+    /** "ही नोंद कोण पाहू शकतो" (the holder's row): drawn under "बदला", above the earlier recordings (F6). */
+    audience?: React.ReactNode;
     answerKit?: ProductAnswerKit;
     mixRules?: readonly MixRule[];
     /** Why this screen must NOT close itself (the container's honesty rules); null = it closes after 30 s untouched. */
@@ -118,9 +123,12 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const reds = useMemo(() => verdicts.filter(v => v.result.state === 'red'), [verdicts]);
     const language = useOptionalLanguage()?.language;
     const RS = useResultStr();
+    const inLayer = useVoiceLayerBottom() !== undefined;
     if (!primary) return null;
     const copy = resultCopy(language);
     const DS = resultDayStr(language);
+    const W = voiceFlowWords(language);
+    const SW = savedWords(language);
     const nd = (text: string): string => digitsFor(text, language);
     const onDay = primary.log.date && primary.log.date !== getDateKey() ? nd(dayShort(primary.log.date, language)) : null;
     const count = day.earlier.filter(r => !r.byForm).length + 1;
@@ -152,11 +160,11 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
         <div ref={root} className="space-y-3 pt-1" style={{ fontFamily: SANS }} data-testid="vr2-saved">
             <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
             <div className="flex flex-wrap items-center gap-1.5" data-testid="vr2-head">
-                <span className={CHIP} data-testid="vr2-place"><span aria-hidden="true">📍 </span>{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
+                <span className={CHIP} data-testid="vr2-place"><MapPin size={14} className="mr-1 inline text-[#0F6B3A]" aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
                 {p.onChangeDay ? (
-                    <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className={`${CHIP} border-[#94A3B8]`}><span aria-hidden="true">📅 </span>{dayText} ▾</button>
+                    <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className={`${CHIP} border-[#94A3B8]`}><CalendarDays size={14} className="mr-1 inline text-[#0F6B3A]" aria-hidden="true" />{dayText} ▾</button>
                 ) : (
-                    <span className={CHIP} data-testid="vr2-day"><span aria-hidden="true">📅 </span>{dayText}</span>
+                    <span className={CHIP} data-testid="vr2-day"><CalendarDays size={14} className="mr-1 inline text-[#0F6B3A]" aria-hidden="true" />{dayText}</span>
                 )}
                 <span className="text-[12px] font-bold text-[#5F6B63]" data-testid="vr2-count">{onDay ? (count > 1 ? nd(DS.count(count, onDay)) : DS.first(onDay)) : count > 1 ? nd(RS.todayCount(count)) : RS.firstToday}</span>
             </div>
@@ -175,7 +183,9 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 <div className="flex items-center gap-3 self-stretch rounded-2xl border-[1.5px] border-[#B7E4C7] bg-[#E9F8EE] px-3 py-2.5">
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#1E9E5A] motion-safe:animate-plr-rise"><Tick size={24} /></span>
                     <div className="min-w-0">
-                        <b className="block text-[22px] font-bold leading-[1.2] text-[#0F6B3A]" data-testid="vr2-saved-title" data-sync={p.sync}>{savedClaimOf(p.sync, RS)}</b>
+                        {/* F6: the headline is "जतन झालं ✓" with who said it under it; the sync claim is a badge below (P10: it says only what the sync state says). */}
+                        <b className="block text-[22px] font-bold leading-[1.2] text-[#0F6B3A]" style={{ fontFamily: "'Noto Serif Devanagari', serif" }} data-testid="vr2-saved-title" data-sync={p.sync}>{W.savedTitle} ✓</b>
+                        <span className="block text-[13px] font-bold text-[#5F6B63]" data-testid="vr2-saved-who">{primary.who.you ? SW.selfTold : SW.otherTold(primary.who.name)}</span>
                     </div>
                 </div>
                 {/* One quiet line instead of a badge row (founder 2026-11-23: nothing repeated — the title already says it is kept). */}
@@ -184,12 +194,21 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                     {primary.timeLabel && <span aria-hidden="true">·</span>}
                     {primary.timeLabel && <span>{primary.timeLabel}</span>}
                     {primary.typed && <Bd tone="amber" testId="vr2-latest-typed">{copy.typedTag}</Bd>}
+                    <Bd tone="green" testId="vr2-claim-phone">{RS.remembered}</Bd>
+                    {p.sync === 'onServer' && <Bd tone="blue" testId="vr2-claim-server">{RS.onServer}</Bd>}
                     {p.sync === 'needsFix' && <Bd tone="amber" testId="vr2-needs-fix">{RS.needsFix}</Bd>}
                     {p.confirmed
                         ? <Bd tone="dark" testId="vr2-confirmed-badge">{RS.confirmedBadge}</Bd>
                         : <Bd testId="vr2-not-confirmed-badge">{RS.notConfirmed}</Bd>}
                 </div>
                 {severalNote && <div className="self-stretch empty:hidden">{severalNote}</div>}
+                {/* F6: his voice, big, inside the card (`.clip.big`: "तुमचा आवाज ऐका · जसं बोललात तसंच"), right under the badges. */}
+                <div className="self-stretch" data-testid="vr2-listen">
+                    {primary.typed ? <TypedNote /> : (
+                        <SavedClip clipKey={clip?.id ?? null} durationSec={clip ? p.lengthOf(primary.id) : null} playing={p.playingId === primary.id}
+                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" />
+                    )}
+                </div>
                 {primary.legacyPartial && <div className="self-stretch"><LegacyNote testId="vr2-legacy-note" /></div>}
                 {FEATURE_FLAGS.understandingMeter && (
                     <SavedMeterGauge farmId={p.farmId} dayDate={primary.log.date} plotId={plotIds.length === 1 ? plotIds[0] : null} savedLogId={primary.id}
@@ -200,26 +219,20 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 <p className="m-0 rounded-[14px] border border-[#DDE3DA] bg-white px-3 py-[9px] text-[14px] font-bold text-[#44403C]" data-testid="vr2-speaker-done">{copy.speakerDone}</p>
             )}
 
-            {/* Founder 2026-11-23, the order: the meter (above), then his words, then the chemicals and nutrients, then the other parts. */}
-            <SavedWords transcript={primary.transcript} wordsWithheld={primary.wordsWithheld} entries={day.current.flatMap(r => r.entries)} unclear={p.unclear}
-                player={primary.typed ? <TypedNote /> : (
-                    <div data-testid="vr2-listen">
-                        <SavedClip clipKey={clip?.id ?? null} durationSec={clip ? p.lengthOf(primary.id) : null} playing={p.playingId === primary.id}
-                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr2-play" />
-                    </div>
-                )} />
+            {/* The approved order (F6): the meter (above), what he gave, the eight parts, then his words and why Sathi understood them. */}
             <SavedGiven day={day} kit={kit} verdicts={verdicts} onOpen={kit ? (item, logId) => setCard({ item, logId }) : () => undefined} />
             <SavedPartsGrid day={day} onTellMore={p.onTellMore} />
+            <SavedWords transcript={primary.transcript} wordsWithheld={primary.wordsWithheld} entries={day.current.flatMap(r => r.entries)} unclear={p.unclear} />
 
             <SavedScreenLower day={day} primary={primary} onDay={onDay} unclear={p.unclear} clips={p.clips} playingId={p.playingId}
                 lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}
-                questionPanel={p.questionPanel} extras={p.extras} onOpenDetail={p.onOpenDetail} />
+                questionPanel={p.questionPanel} extras={p.extras} audience={p.audience} onOpenDetail={p.onOpenDetail} />
 
             <IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
                 onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />
             {/* Room under the sticky bar: at the very end of the page the bar rests here, so "आजचा आढावा बघा" and the last
                 rows scroll fully above it and above the app's bottom bar (seen on localhost: they sat under both). */}
-            <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: BOTTOM_BAR_CLEARANCE }} />
+            <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: inLayer ? 8 : BOTTOM_BAR_CLEARANCE }} />
             {card && kit && <SavedProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
         </div>
     );

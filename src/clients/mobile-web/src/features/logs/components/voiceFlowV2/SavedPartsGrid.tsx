@@ -86,7 +86,6 @@ export const SavedPartsGrid: React.FC<SavedPartsGridProps> = ({ day, onTellMore 
                                 <span className={NAME}>{name}</span>
                                 {text && <span className={VALUE} data-testid={`vr2-part-value-${p.key}`}>{text}</span>}
                                 {partial.has(p.key) && p.key === 'inputs' && <span className="block text-[11.5px] font-bold text-amber-800" data-testid="vr2-part-detail-inputs">{RS.giveHowMuch}</span>}
-                                {partial.has(p.key) && p.key === 'inputs' && <span className="block text-[11.5px] font-bold text-amber-800" data-testid="vr2-part-detail-inputs">{RS.giveHowMuch}</span>}
                                 {more > 0 && <span className="block text-[11.5px] font-bold text-[#57534E]">{digitsFor(`+${more}`, language)}</span>}
                             </span>
                             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#16A34A]" aria-hidden="true"><Tick size={11} /></span>

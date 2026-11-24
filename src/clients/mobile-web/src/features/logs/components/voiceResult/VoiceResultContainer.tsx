@@ -199,30 +199,30 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     // goes to the saved card — this keeps it so).
     const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
-    const banners = (
-        <>
-        {refused && (
-            <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
-                {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
-            </div>
-        )}
-        {/* lane PRV (D-26) — who may see this record: the farm's primary account holder only, once it is on its way to
-            the server (the choice is queued after the record itself). Never asked at capture (P9). */}
-        {mayConfirmOwn && farmId && current.every(l => typeof l.contentVersion === 'number' || syncQueuedById.get(l.id) === true) && (
-            <div className="mx-3 mt-2">
-                <AudienceRow kind="DailyLog" recordIds={current.map(l => l.id)} farmId={farmId} selfUserId={sessionUserId}
-                    audience={primary.audience} chosen={primary.audienceUserIds} moneyFollows testId="vr-audience"
-                    madeBySomeoneElse={!!primary.meta?.createdByOperatorId && primary.meta.createdByOperatorId !== 'owner'
-                        && primary.meta.createdByOperatorId !== sessionUserId} />
-            </div>
-        )}
-        {moneyNotFollowed.length > 0 && (
-            <div className="mx-3 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold text-amber-950" data-testid="vr-money-not-followed" role="status">
-                {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
-            </div>
-        )}
-        </>
-    );
+    // lane PRV (D-26) — who may see this record: the farm's primary account holder only, once it is on its way to
+    // the server (the choice is queued after the record itself). Never asked at capture (P9).
+    const audienceRow = mayConfirmOwn && farmId && current.every(l => typeof l.contentVersion === 'number' || syncQueuedById.get(l.id) === true) ? (
+        <div className="mx-3 mt-2">
+            <AudienceRow kind="DailyLog" recordIds={current.map(l => l.id)} farmId={farmId} selfUserId={sessionUserId}
+                audience={primary.audience} chosen={primary.audienceUserIds} moneyFollows testId="vr-audience"
+                madeBySomeoneElse={!!primary.meta?.createdByOperatorId && primary.meta.createdByOperatorId !== 'owner'
+                    && primary.meta.createdByOperatorId !== sessionUserId} />
+        </div>
+    ) : null;
+    const refusedBanner = refused ? (
+        <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
+            {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
+        </div>
+    ) : null;
+    const moneyBanner = moneyNotFollowed.length > 0 ? (
+        <div className="mx-3 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold text-amber-950" data-testid="vr-money-not-followed" role="status">
+            {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
+        </div>
+    ) : null;
+    // The old screen keeps its order (refusal, the audience row, money). The v2 saved screen draws the audience row where the
+    // approved design has it: under "बदला", above the earlier recordings (F6).
+    const banners = <>{refusedBanner}{audienceRow}{moneyBanner}</>;
+    const bannersV2 = <>{refusedBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
             value={primary.date}
@@ -248,8 +248,9 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed' : null;
         return (
             <>
-            {banners}
+            {bannersV2}
             <SavedScreen
+                audience={audienceRow}
                 day={day}
                 recordingKey={result.key}
                 placeLabel={placeLabel}
