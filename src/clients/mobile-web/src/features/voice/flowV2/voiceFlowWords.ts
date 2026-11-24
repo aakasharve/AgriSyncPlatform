@@ -43,6 +43,8 @@ export interface VoiceFlowWords {
     stepProducts: string;
     stepSaved: string;
     waiting: string;
+    /** P4 — the server failed while he was online: his voice is kept on the phone and will be understood shortly. Calm, no number. */
+    keptForLater: string;
     // saved screen
     savedTitle: string;
     listenTitle: string;
@@ -93,6 +95,7 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     stepProducts: 'औषध आणि खत ओळखले', // PROPOSED (Marathi)
     stepSaved: 'जतन झालं', // PROPOSED (Marathi)
     waiting: 'थोडं थांबा… साथी लिहून ठेवतोय', // PROPOSED (Marathi)
+    keptForLater: 'आवाज जतन आहे — साथी थोड्या वेळात समजून घेईल', // PROPOSED (Marathi)
     savedTitle: 'जतन झालं', // PROPOSED (Marathi)
     listenTitle: 'तुमचा आवाज ऐका', // PROPOSED (Marathi)
     listenSub: 'जसं बोललात तसंच', // PROPOSED (Marathi)
@@ -143,6 +146,7 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     stepProducts: 'Sprays and fertiliser recognised', // PROPOSED (English)
     stepSaved: 'Saved', // PROPOSED (English)
     waiting: 'A moment… Sathi is writing it down', // PROPOSED (English)
+    keptForLater: 'Your voice is kept — Sathi will understand it shortly', // PROPOSED (English)
     savedTitle: 'Saved', // PROPOSED (English)
     listenTitle: 'Listen to your voice', // PROPOSED (English)
     listenSub: 'Just as you said it', // PROPOSED (English)

@@ -23,7 +23,7 @@ import { AudioData } from '../../../types';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, keptNoteOf, readableError } from './recorder/recorderWords';
 import { startLiveEncoder, type LiveEncoder } from './recorder/liveEncoder';
 import { mulawWavOf, RAW_UPLOAD_MIME } from './recorder/rawSoundUpload';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
@@ -96,7 +96,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
 
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
   const language = useOptionalLanguage()?.language;
-  const displayError = externalError ? readableError(externalError, language) : internalError;
+  // P4: his words were kept after a server failure: a calm line (the v2 flow's own words in v2), not the red error box.
+  const keptNote = keptNoteOf(externalError, language, flowV2 !== undefined);
+  const displayError = keptNote ? null : externalError ? readableError(externalError, language) : internalError;
 
   const recordingChangeRef = useRef(onRecordingChange);
   recordingChangeRef.current = onRecordingChange;
@@ -316,6 +318,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       disabled={disabled}
       suggest={suggestInteraction}
       error={displayError}
+      keptNote={keptNote}
       errorCode={externalError ? null : internalErrorCode}
       transcript={transcript}
       lastInputTyped={lastInputTyped}

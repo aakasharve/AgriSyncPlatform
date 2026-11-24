@@ -12,7 +12,9 @@
  */
 import { t } from '../../../../i18n/translations';
 import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
+import { ONLINE_KEPT_MESSAGE, isKeptMessage } from '../../../../infrastructure/voice/keptForLater';
 import { ERROR_WORDS, errorKindOf } from '../../../../shared/names/errorWords';
+import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
 
 /** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
 export const MIC_INSTRUCTION = 'हिरव्या रंगाचा माइक चे बटन एकदा दाबून बोलायला सुरवात करा';
@@ -89,6 +91,12 @@ const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
         mr: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही ठेवलं नाही — इंटरनेट आलं की पुन्हा सांगा.', // PROPOSED (Marathi)
         en: 'A change needs the internet. Nothing was kept — say it again when you are online.', // PROPOSED (English)
     },
+    // voice-instant-phase-a (P4): the server failed while he was online; his words are kept and will be understood.
+    // One sentence in both screens: the old one here, the v2 flow's from `voiceFlowWords.keptForLater` (the same words).
+    [ONLINE_KEPT_MESSAGE]: {
+        mr: 'आवाज जतन आहे — साथी थोड्या वेळात समजून घेईल', // PROPOSED (Marathi)
+        en: 'Your voice is kept — Sathi will understand it shortly', // PROPOSED (English)
+    },
 };
 
 const DEVANAGARI = /[ऀ-ॿ]/;
@@ -117,3 +125,13 @@ export const autoStoppingIn = (secondsLeft: number, language?: string | null): s
     t('voice.autoStopping', language === 'en' ? 'en' : 'mr').replace('{seconds}', String(secondsLeft));
 
 export const formatClock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+/**
+ * voice-instant-phase-a (P4) — the calm note when the parse says "kept, will be understood shortly": the line to show
+ * (the v2 flow's own words in the v2 flow, `readableError`'s in the old screen), or null for anything else (an error
+ * stays an error). The face draws it as a status, never in the red error box.
+ */
+export const keptNoteOf = (message: string | null | undefined, language?: string | null, flowV2 = false): string | null => {
+    if (!message || !isKeptMessage(message)) return null;
+    return flowV2 ? voiceFlowWords(language).keptForLater : readableError(message, language);
+};

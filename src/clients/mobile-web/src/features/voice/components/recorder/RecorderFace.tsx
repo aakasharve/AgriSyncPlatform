@@ -15,7 +15,7 @@
  * the open consent decision (PLR-D5 :43, :57, :67) and is deliberately not built here.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Mic, X } from 'lucide-react';
+import { AlertCircle, Check, Mic, X } from 'lucide-react';
 import { hapticFeedback } from '../../../../shared/utils/haptics';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { VoiceLevelRing } from './VoiceLevelRing';
@@ -47,6 +47,8 @@ export interface RecorderFaceProps {
     suggest?: boolean;
     /** What went wrong, already in words he can read. */
     error?: string | null;
+    /** P4 (voice-instant-phase-a): his words were KEPT after a server failure: a calm line, never the red error box. */
+    keptNote?: string | null;
     /** The technical cause of a mic failure (e.g. NotReadableError): never shown, kept on the box for diagnosis. */
     errorCode?: string | null;
     /** The words behind the error (what was heard, or what he typed). */
@@ -125,7 +127,7 @@ const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel,
 };
 
 export const RecorderFace: React.FC<RecorderFaceProps> = ({
-    isRecording, seconds, level, disabled, suggest, error, errorCode, transcript, lastInputTyped, micRefused,
+    isRecording, seconds, level, disabled, suggest, error, keptNote, errorCode, transcript, lastInputTyped, micRefused,
     onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2,
 }) => {
     const [typedOpen, setTypedOpen] = useState(false);
@@ -212,6 +214,12 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
                 <p role="status" data-testid="mic-cancelled" className="m-0 mt-2 flex items-center justify-center gap-2 rounded-2xl bg-rose-50 px-3 py-2 text-[16px] font-extrabold text-rose-800">
                     <X size={18} strokeWidth={3} aria-hidden="true" />{REC_WORDS.cancelled}
                 </p>
+            )}
+
+            {keptNote && (
+                <div role="status" data-testid="mic-kept" className="mt-3 w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-emerald-900 shadow-sm">
+                    <p className="m-0 flex items-center justify-center gap-2 text-[16px] font-bold"><Check size={20} strokeWidth={3} className="shrink-0" aria-hidden="true" /><span>{keptNote}</span></p>
+                </div>
             )}
 
             {error && (
