@@ -102,16 +102,16 @@ export const ScheduleTiles: React.FC<{
                     const sel = place.templateId === selectedTemplateId;
                     return (
                         <button key={kind} type="button" onClick={() => onSelect(place.templateId)} aria-pressed={sel} data-testid={`tile-${kind}`} data-template={place.templateId} data-main={place.isMain ? 'true' : 'false'}
-                            className={`relative flex min-h-[132px] flex-col items-start gap-1 rounded-2xl border-2 p-2.5 text-left ${place.isMain ? 'border-emerald-600 bg-emerald-50' : 'border-stone-200 bg-white'} ${sel ? 'ring-2 ring-emerald-700' : ''}`}>
-                            <span className="flex w-full items-start justify-between gap-1">
+                            className={`relative flex min-h-[132px] flex-col gap-2 rounded-2xl border-2 p-2.5 pt-4 text-left ${place.isMain ? 'border-emerald-600 bg-emerald-50' : 'border-stone-200 bg-white'} ${sel ? 'ring-2 ring-emerald-700' : ''}`}>
+                            {voices > 0 && <span className="absolute -top-2 left-2 rounded-full bg-orange-600 px-2 py-0.5 text-[12px] font-extrabold text-white" data-testid={`tile-voices-${kind}`}>{w.voices(voices)}</span>}
+                            {place.isMain && <span className="absolute -top-2 right-2 rounded-full bg-emerald-700 px-2 py-0.5 text-[12px] font-extrabold text-white" data-testid={`tile-main-${kind}`}>{w.main}</span>}
+                            <span className="flex w-full items-center gap-2">
                                 {icon}
-                                <span className="flex flex-col items-end gap-1">
-                                    {place.isMain && <span className="rounded-full bg-emerald-700 px-2 py-0.5 text-[12px] font-extrabold text-white" data-testid={`tile-main-${kind}`}>{w.main}</span>}
-                                    {voices > 0 && <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[12px] font-extrabold text-white" data-testid={`tile-voices-${kind}`}>{w.voices(voices)}</span>}
+                                <span className="min-w-0">
+                                    <strong className="block text-[16px] font-black leading-tight text-stone-900">{w.title[kind]}</strong>
+                                    <span className="block text-[13px] font-bold leading-snug text-stone-600" data-testid={`tile-maker-${kind}`}>{maker}</span>
                                 </span>
                             </span>
-                            <strong className="text-[16px] font-black leading-tight text-stone-900">{w.title[kind]}</strong>
-                            <span className="text-[13px] font-bold leading-snug text-stone-600" data-testid={`tile-maker-${kind}`}>{maker}</span>
                             <span className="mt-auto w-full rounded-lg bg-white/80 px-2 py-1 text-[13px] font-bold leading-snug text-stone-800" data-testid={`tile-source-${kind}`}>{w.source} {sourceText}</span>
                             {t && <span className="sr-only">{scheduleNameIn(t.name, language)}</span>}
                         </button>

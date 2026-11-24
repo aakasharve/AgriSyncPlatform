@@ -13,6 +13,7 @@ import { dayCardWords } from '../dayCards/dayCardWords';
 import { loadDayCards, type DayCardsLoad } from '../dayCards/dayCardsStore';
 import type { DayCardsDetail, ShownDay } from '../dayCards/dayCardsTypes';
 import { TakeIntoMyScheduleButton, type TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
+import { scheduleNameIn } from './scheduleNames';
 import { dueOnDay, groupSameWork, type SameWorkGroup } from './sameWork';
 
 const WORDS = {
@@ -65,7 +66,7 @@ const SameWorkCard: React.FC<{ group: SameWorkGroup; take?: TakeHost; language: 
                     <button key={s.versionId} type="button" role="radio" aria-checked={s.versionId === picked.versionId} onClick={() => setPickedId(s.versionId)}
                         data-testid={`same-work-source-${s.versionId}`}
                         className={`min-h-[48px] rounded-full border-2 px-3 text-left text-[15px] font-extrabold ${s.versionId === picked.versionId ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-stone-300 bg-white text-stone-800'}`}>
-                        {s.versionName} · {dt(s.day)}
+                        {scheduleNameIn(s.versionName, language)} · {dt(s.day)}
                     </button>
                 ))}
             </div>

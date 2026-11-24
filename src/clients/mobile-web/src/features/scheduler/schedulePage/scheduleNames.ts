@@ -35,6 +35,8 @@ const SCHEDULE_KIND_MR: Readonly<Record<string, string>> = {
     spray: `${CATEGORY_LABEL_MR.FOLIAR_SPRAY} शेड्यूल`, // app word + शेड्यूल
     'pest spray': `कीड ${CATEGORY_LABEL_MR.FOLIAR_SPRAY} शेड्यूल`, // PROPOSED (Marathi)
     'pruning to pruning': 'फळछाटणी ते फळछाटणी', // version 7 design page (year schedule)
+    'fruit pruning (october)': 'फळछाटणी (ऑक्टोबर)', // version 7 design page (plot lists)
+    'expert sprays': 'तज्ज्ञांच्या फवारण्या', // PROPOSED (Marathi)
 };
 
 /** "Grapes - Spray" → "द्राक्ष — फवारणी शेड्यूल". Anything else is the schedule's own name, shown as written. */
