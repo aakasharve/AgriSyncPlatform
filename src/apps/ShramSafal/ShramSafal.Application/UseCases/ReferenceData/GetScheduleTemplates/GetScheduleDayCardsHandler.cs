@@ -107,12 +107,12 @@ public sealed class GetScheduleDayCardsHandler(IShramSafalRepository repository)
             .Select(c => new CheckChallengeDto(c.ChallengeKey, c.ContentHash, GetScheduleCheckViewHandler.Element(c.Content.ToCanonicalJson())))
             .ToList();
 
-        // The maker is named only by kind. A reference is made by ShramSafal (only the platform may import one), and the import's
-        // SourceLabel names where its CONTENT comes from, never the maker (founder v7, slice 10), so no label is sent as the maker's
-        // name. A person who typed an own copy is never named here either.
+        // The maker is named by kind. Only the platform may import a reference: an institution's (or the built-in) one is made by
+        // ShramSafal from that body's publications, so its SourceLabel is the SOURCE and is never sent as the maker (founder v7,
+        // slice 10). An expert's (or a farmer's) reference names that person, its maker. A person who typed an own copy is never named here.
         var madeBy = new DayCardsMadeByDto(
             template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null,
-            null);
+            isReference && template.OwnerType is ScheduleOwnerType.Expert or ScheduleOwnerType.User ? template.SourceLabel : null);
 
         return Result.Success(new ScheduleDayCardsDto(
             template.Id, template.ChainId, template.Version, hash, isReference ? "reference" : "own", template.Name, template.CropKey, madeBy, check,

@@ -3,11 +3,15 @@
 import type { DayCardsDetail } from './dayCardsTypes';
 import type { DayCardWords } from './dayCardWords';
 
-/** Every reference (public) schedule is made by ShramSafal: only the platform may import one (ImportScheduleTemplateHandler asks
- *  MayCheckSchedulesAsync). Its source label says where the CONTENT comes from, never who made it (founder v7: "बनवणारे श्रमसफल",
- *  "स्रोत ICAR-NRCG ची प्रकाशनं"). */
+/** Only the platform may import a reference (ImportScheduleTemplateHandler asks MayCheckSchedulesAsync). An institution's (or the
+ *  built-in) reference is made by ShramSafal from that body's publications: its source label says where the CONTENT comes from, never
+ *  who made it (founder v7: "बनवणारे श्रमसफल", "स्रोत ICAR-NRCG ची प्रकाशनं"). An expert's reference names the expert, its maker. */
 export function madeByLine(detail: DayCardsDetail, words: DayCardWords): string {
-    return detail.kind === 'own' ? words.source.own : words.source.platform;
+    if (detail.kind === 'own') return words.source.own;
+    const owner = detail.madeBy.ownerType;
+    const platformMade = !owner || owner === 'INSTITUTION' || owner === 'SYSTEM_DEFAULT';
+    const label = platformMade ? null : detail.madeBy.label;
+    return label ? [words.source.madeByKind[owner ?? ''], label].filter(Boolean).join(' · ') : words.source.platform;
 }
 
 export function checkedByLine(detail: DayCardsDetail, words: DayCardWords): string {

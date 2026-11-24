@@ -340,6 +340,9 @@ function buildExpectations(
     return { periodic, oneTime };
 }
 
+/** An institution's or the built-in schedule is ShramSafal's own compilation (only the platform may import one). */
+const isPlatformMade = (ownerType: string | null | undefined): boolean => !ownerType || ownerType === 'INSTITUTION' || ownerType === 'SYSTEM_DEFAULT';
+
 function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropScheduleTemplate {
     const templateId = referenceTemplate.id.trim();
     const templateKey = toSafeId(templateId) || `tpl_${toSafeId(referenceTemplate.name)}`;
@@ -375,9 +378,10 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         periodicExpectations: periodic,
         oneTimeExpectations: oneTime,
         // spec: plr-d10 lane SCH-A - the server's owner type, not a hard-coded SYSTEM_DEFAULT (a row it does not send one for,
-        // and the built-in catalog, stay SYSTEM_DEFAULT). A reference is MADE by ShramSafal (only the platform may import one); its
-        // source label is the source, kept apart in `sourceLabel`, never the maker's name (founder v7, slice 10).
-        createdBy: 'ShramSafal Reference Data',
+        // and the built-in catalog, stay SYSTEM_DEFAULT). An institution's (or the built-in) reference is MADE by ShramSafal, which
+        // compiled it from that body's publications: its source label is the source, kept apart in `sourceLabel`, never the maker
+        // (founder v7, slice 10: "बनवणारे श्रमसफल", "स्रोत ICAR-NRCG ची प्रकाशनं"). An expert's or a farmer's schedule names that person.
+        createdBy: isPlatformMade(referenceTemplate.ownerType) ? 'ShramSafal Reference Data' : referenceTemplate.sourceLabel ?? 'ShramSafal Reference Data',
         ownerType: referenceTemplate.ownerType ?? 'SYSTEM_DEFAULT',
         ...(referenceTemplate.sourceLabel ? { sourceLabel: referenceTemplate.sourceLabel } : {}),
         ...(referenceTemplate.check ? { check: referenceTemplate.check } : {}),

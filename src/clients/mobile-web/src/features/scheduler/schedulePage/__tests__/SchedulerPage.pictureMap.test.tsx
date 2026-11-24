@@ -105,7 +105,8 @@ describe('the picture map: who follows what, at a glance', () => {
         await readyMap();
         const badge = screen.getByTestId(`map-badge-${T.university}`);
         expect(badge).toHaveAttribute('data-shape', 'square');
-        expect(badge.textContent).toBe('T');
+        // founder v7 (slice 10): an institution's reference is made by ShramSafal; the source's first letter is not the maker's
+        expect(badge.textContent).not.toBe('T');
         expect(screen.getByTestId(`map-badge-${T.ownCane}`)).toHaveAttribute('data-shape', 'round');
         expect(within(screen.getByTestId(`map-schedule-${T.university}`)).getByText('Grapes - University Schedule')).toBeInTheDocument(); // a body's own name, as written
     });
@@ -145,7 +146,8 @@ describe('tapping', () => {
         await readyMap();
         // opens on the first plot (G1): the university's schedule, a real name, a square badge
         expect(text('sched-crop-plot')).toBe('द्राक्ष · G1');
-        expect(text('sched-owner-name')).toBe('Test University recommendation');
+        // founder v7 (slice 10): the maker of an institution's reference is ShramSafal; "Test University recommendation" is its source
+        expect(text('sched-owner-name')).toBe('श्रमसफल');
         expect(screen.getByTestId('map-plot-' + P.g1)).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('sched-badge')).toHaveAttribute('data-shape', 'square');
 

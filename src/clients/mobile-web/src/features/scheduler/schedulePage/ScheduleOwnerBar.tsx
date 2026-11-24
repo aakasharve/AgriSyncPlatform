@@ -36,7 +36,9 @@ export const ScheduleOwnerBar: React.FC<{
 }> = ({ template, imageUrl = null, children }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = scheduleMapWords(language);
-    const creator = realCreatorName(template);
+    // An institution's reference with no real name is ShramSafal's compilation of that body's publications (founder v7, slice 10):
+    // the maker reads श्रमसफल, never the source and never the bare kind word.
+    const creator = realCreatorName(template) ?? (template.ownerType === 'INSTITUTION' ? (language === 'en' ? 'ShramSafal' : 'श्रमसफल') : null);
     const typeLabel = OWNER_LABEL[template.ownerType] ?? OWNER_LABEL.SYSTEM_DEFAULT;
     const extra = template as unknown as Record<string, unknown>;
     return (
