@@ -17,6 +17,7 @@ export interface TakeWords {
     takeBack: string;
     refusedOff: string;
     refusedSource: string;
+    refusedNotChecked: string;
     refusedNotAllowed: string;
     refusedInUse: string;
     refusedOther: string;
@@ -32,6 +33,7 @@ const MR: TakeWords = {
     takeBack: 'परत काढा', // PROPOSED (Marathi)
     refusedOff: 'या शेतासाठी स्वतःचं शेड्यूल अजून सुरू झालेलं नाही. हे काम घेतलं गेलं नाही.', // PROPOSED (Marathi)
     refusedSource: 'हे शेड्यूल आता वापरात नाही, म्हणून हे काम घेता आलं नाही.', // PROPOSED (Marathi)
+    refusedNotChecked: 'हे शेड्यूल श्रमसफलने अजून तपासलेलं नाही, म्हणून हे काम घेता आलं नाही.', // PROPOSED (Marathi)
     refusedNotAllowed: 'हे काम माझ्या वेळापत्रकात घेण्याची परवानगी तुम्हाला नाही.', // PROPOSED (Marathi)
     refusedInUse: 'माझ्या वेळापत्रकात याच नावाचं काम आधीच आहे.', // PROPOSED (Marathi)
     refusedOther: 'हे काम घेता आलं नाही.', // PROPOSED (Marathi)
@@ -47,6 +49,7 @@ const EN: TakeWords = {
     takeBack: 'Take it back out', // PROPOSED (English)
     refusedOff: 'Your own schedule is not switched on for this farm yet. This work was not taken.', // PROPOSED (English)
     refusedSource: 'This schedule is no longer in use, so this work could not be taken.', // PROPOSED (English)
+    refusedNotChecked: 'This schedule has not been checked yet, so this work could not be taken.', // PROPOSED (English)
     refusedNotAllowed: 'You may not take this work into the schedule.', // PROPOSED (English)
     refusedInUse: 'A work with this name is already in my schedule.', // PROPOSED (English)
     refusedOther: 'This work could not be taken.', // PROPOSED (English)
@@ -60,6 +63,7 @@ export function takeRefusalWords(words: TakeWords, code: string | null | undefin
     if (code?.endsWith('ScheduleMechanismOff')) return words.refusedOff;
     if (code?.endsWith('Forbidden')) return words.refusedNotAllowed;
     if (message?.includes('TakeKeyInUse')) return words.refusedInUse;
+    if (message?.includes('TakeSourceNotChecked')) return words.refusedNotChecked;
     if (message?.includes('TakeSourceWithdrawn') || message?.includes('TakeSourceNotFollowed')) return words.refusedSource;
     return words.refusedOther;
 }

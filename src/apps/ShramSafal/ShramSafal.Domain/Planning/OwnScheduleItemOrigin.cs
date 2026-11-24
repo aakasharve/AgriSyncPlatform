@@ -7,7 +7,7 @@ namespace ShramSafal.Domain.Planning;
 
 /// <summary>
 /// Where an own work came from when the farmer TOOK it from a schedule the plot follows (<c>schedule.take_task</c>): the schedule's owner, the schedule
-/// (version, its chain and its name then) and the task, and the farm-local day it was taken. One row per own work (its id IS the own work's id), written ONCE with
+/// (version, its chain and its name then) and the task, and the farm-local day it was taken. One row per TAKE ACT that puts the own work in, numbered by Sequence within the work (the current origin is the latest row; old rows are history), written ONCE with
 /// the work and never changed: APPEND-ONLY by privilege (the application role has SELECT and INSERT only). Approved spec: "Origin = owner, schedule, version,
 /// task. It never changes. The farmer owns their copy." An edit, a move, a removal, a withdrawal of the source, a transfer of the farm and the next season all
 /// leave this row exactly as it was; a withdrawn source or an erased creator changes how the origin is READ, never the row.
@@ -30,9 +30,12 @@ public sealed class OwnScheduleItemOrigin : Entity<Guid>
         string? chosenDose,
         UserId takenByUserId,
         DateOnly takenOn,
-        DateTime takenAtUtc)
-        : base(item.Id)
+        DateTime takenAtUtc,
+        int sequence)
+        : base(Guid.NewGuid())
     {
+        ItemId = item.Id;
+        Sequence = sequence;
         FarmId = item.FarmId;
         PlotId = item.PlotId;
         CropCycleId = item.CropCycleId;
@@ -50,8 +53,11 @@ public sealed class OwnScheduleItemOrigin : Entity<Guid>
         TakenAtUtc = takenAtUtc;
     }
 
-    /// <summary>The own work this is the origin of (the same id).</summary>
-    public Guid ItemId => Id;
+    /// <summary>The own work this is an origin of.</summary>
+    public Guid ItemId { get; private set; }
+
+    /// <summary>1 for the first take of the work, one more for every later take that put it back; the highest is the current origin.</summary>
+    public int Sequence { get; private set; }
 
     public FarmId FarmId { get; private set; }
     public Guid PlotId { get; private set; }
@@ -102,9 +108,15 @@ public sealed class OwnScheduleItemOrigin : Entity<Guid>
         string? chosenDose,
         UserId takenBy,
         DateOnly takenOn,
-        DateTime takenAtUtc)
+        DateTime takenAtUtc,
+        int sequence = 1)
     {
         ArgumentNullException.ThrowIfNull(item);
+        if (sequence < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sequence));
+        }
+
         ArgumentNullException.ThrowIfNull(source);
         if (takenBy.IsEmpty)
         {
@@ -122,6 +134,7 @@ public sealed class OwnScheduleItemOrigin : Entity<Guid>
             chosenDose,
             takenBy,
             takenOn,
-            takenAtUtc);
+            takenAtUtc,
+            sequence);
     }
 }

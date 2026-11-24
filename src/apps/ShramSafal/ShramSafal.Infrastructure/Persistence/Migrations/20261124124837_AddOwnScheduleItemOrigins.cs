@@ -8,7 +8,7 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 {
     /// <summary>
     /// spec: plr-d10 schedule slice 9 - <c>ssf.own_schedule_item_origins</c>: where an own work came from when the farmer TOOK it from a schedule the plot follows
-    /// (<c>schedule.take_task</c>). One row per taken work (its <c>id</c> is the own work's id): the schedule's owner, the version, its chain, its name and number then, the task,
+    /// (<c>schedule.take_task</c>). One row per TAKE ACT (<c>item_id</c> + <c>sequence</c> unique; the current origin of a work is its latest row): the schedule's owner, the version, its chain, its name and number then, the task,
     /// the dose picked, who took it and the farm-local day. Written ONCE with the work and never changed (approved spec: "Origin = owner, schedule, version, task. It never changes").
     ///
     /// <para><b>Behaviour, classified by behaviour (doctrine E8).</b> ADDITIVE. One new table, its policies, its grants and indexes; the trigger FUNCTION is the one
@@ -137,6 +137,8 @@ END $$;
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
+                    item_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    sequence = table.Column<int>(type: "integer", nullable: false),
                     farm_id = table.Column<Guid>(type: "uuid", nullable: false),
                     plot_id = table.Column<Guid>(type: "uuid", nullable: false),
                     crop_cycle_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -157,7 +159,15 @@ END $$;
                 {
                     table.PrimaryKey("PK_own_schedule_item_origins", x => x.id);
                     table.CheckConstraint("ck_own_schedule_item_origins_version_number", "source_version_number >= 1");
+                    table.CheckConstraint("ck_own_schedule_item_origins_sequence", "sequence >= 1");
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "ux_own_schedule_item_origins_item_sequence",
+                schema: "ssf",
+                table: "own_schedule_item_origins",
+                columns: new[] { "item_id", "sequence" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_own_schedule_item_origins_farm",

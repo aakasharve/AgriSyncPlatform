@@ -113,11 +113,14 @@ internal sealed class OwnScheduleItemOriginConfiguration : IEntityTypeConfigurat
         builder.ToTable("own_schedule_item_origins", t =>
         {
             t.HasCheckConstraint("ck_own_schedule_item_origins_version_number", "source_version_number >= 1");
+            t.HasCheckConstraint("ck_own_schedule_item_origins_sequence", "sequence >= 1");
         });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
 
+        builder.Property(x => x.ItemId).HasColumnName("item_id").IsRequired();
+        builder.Property(x => x.Sequence).HasColumnName("sequence").IsRequired();
         builder.Property(x => x.FarmId).HasColumnName("farm_id").HasConversion(TypedIdConverters.FarmId).IsRequired();
         builder.Property(x => x.PlotId).HasColumnName("plot_id").IsRequired();
         builder.Property(x => x.CropCycleId).HasColumnName("crop_cycle_id").IsRequired();
@@ -134,6 +137,7 @@ internal sealed class OwnScheduleItemOriginConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.TakenOn).HasColumnName("taken_on").HasColumnType("date").IsRequired();
         builder.Property(x => x.TakenAtUtc).HasColumnName("taken_at_utc").IsRequired();
 
+        builder.HasIndex(x => new { x.ItemId, x.Sequence }).IsUnique().HasDatabaseName("ux_own_schedule_item_origins_item_sequence");
         builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_own_schedule_item_origins_farm");
         builder.HasIndex(x => x.SourceVersionId).HasDatabaseName("ix_own_schedule_item_origins_source");
         builder.Ignore(x => x.DomainEvents);

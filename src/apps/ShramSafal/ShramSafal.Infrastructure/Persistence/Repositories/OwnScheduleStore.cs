@@ -86,8 +86,8 @@ internal sealed class OwnScheduleStore(ShramSafalDbContext context) : IOwnSchedu
     }
 
     public async Task<OwnScheduleItemOrigin?> GetOriginAsync(Guid itemId, CancellationToken ct = default) =>
-        await context.OwnScheduleItemOrigins.AsNoTracking().FirstOrDefaultAsync(o => o.Id == itemId, ct)
-        ?? context.ChangeTracker.Entries<OwnScheduleItemOrigin>().Select(e => e.Entity).FirstOrDefault(o => o.Id == itemId);
+        context.ChangeTracker.Entries<OwnScheduleItemOrigin>().Select(e => e.Entity).Where(o => o.ItemId == itemId).OrderByDescending(o => o.Sequence).FirstOrDefault()
+        ?? await context.OwnScheduleItemOrigins.AsNoTracking().Where(o => o.ItemId == itemId).OrderByDescending(o => o.Sequence).FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<OwnScheduleItemOrigin>> GetOriginsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
     {
@@ -101,7 +101,7 @@ internal sealed class OwnScheduleStore(ShramSafalDbContext context) : IOwnSchedu
             .AsNoTracking()
             .Where(o => ids.Contains(o.FarmId))
             .OrderBy(o => o.TakenAtUtc)
-            .ThenBy(o => o.Id)
+            .ThenBy(o => o.Sequence)
             .ToListAsync(ct);
     }
 

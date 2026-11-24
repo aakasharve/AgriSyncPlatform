@@ -26,7 +26,7 @@ import { TakeIntoMyScheduleButton } from '../TakeIntoMyScheduleButton';
 import type { OwnWorkPlanning } from '../OwnWorkList';
 import { ownItemIdFor } from '../ownWorkPlan';
 import { doseChoicesOf, needsDosePick, offersTake, takeStateOf } from '../takeIntoMySchedule';
-import { TAKE_WORDS } from '../takeWords';
+import { TAKE_WORDS, takeRefusalWords } from '../takeWords';
 
 const PLACE = {
     farmId: 'f0f0f0f0-0000-4000-8000-0000000000f1',
@@ -191,6 +191,11 @@ describe('the button', () => {
         mount(PRUNE, { onOpenConflicts: () => undefined });
         expect(await screen.findByTestId('take-refused-t-prune')).toHaveTextContent(TAKE_WORDS.mr.refusedSource);
         expect(screen.queryByTestId('take-in-t-prune')).toBeNull();
+    });
+
+    it('a take from an unchecked reference says so in plain words', () => {
+        expect(takeRefusalWords(TAKE_WORDS.mr, 'ShramSafal.OwnScheduleInvalid', 'TakeSourceNotChecked: gone')).toBe(TAKE_WORDS.mr.refusedNotChecked);
+        expect(takeRefusalWords(TAKE_WORDS.en, 'ShramSafal.OwnScheduleInvalid', 'TakeSourceNotChecked: gone')).toBe(TAKE_WORDS.en.refusedNotChecked);
     });
 
     it('Marathi mode is Marathi only and English mode English only; no emoji, no AI wording', () => {

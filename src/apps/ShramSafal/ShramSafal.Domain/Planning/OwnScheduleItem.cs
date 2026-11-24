@@ -137,7 +137,17 @@ public sealed class OwnScheduleItem : Entity<Guid>
     /// A later save of the same key: the content is replaced WHOLE (origin kept), the state is Active again, and one revision is written. A save that
     /// changes nothing (same content, already active) writes nothing and returns the newest revision number unchanged (<paramref name="revision"/> null).
     /// </summary>
-    public bool Save(ScheduleTaskContent content, UserId ownerUserId, UserId byUserId, DateTime atUtc, out OwnScheduleItemRevision? revision, out ScheduleTaskProblem? problem)
+    public bool Save(ScheduleTaskContent content, UserId ownerUserId, UserId byUserId, DateTime atUtc, out OwnScheduleItemRevision? revision, out ScheduleTaskProblem? problem) =>
+        SaveCore(content, ownerUserId, byUserId, atUtc, takeOver: false, out revision, out problem);
+
+    /// <summary>
+    /// A take that puts a taken-back work in again (slice 9): the content AND the origin text are the new take's (the copy says where it came from NOW; the origin
+    /// rows keep every take as history). Everything else is <see cref="Save"/>.
+    /// </summary>
+    public bool Retake(ScheduleTaskContent content, UserId ownerUserId, UserId byUserId, DateTime atUtc, out OwnScheduleItemRevision? revision, out ScheduleTaskProblem? problem) =>
+        SaveCore(content, ownerUserId, byUserId, atUtc, takeOver: true, out revision, out problem);
+
+    private bool SaveCore(ScheduleTaskContent content, UserId ownerUserId, UserId byUserId, DateTime atUtc, bool takeOver, out OwnScheduleItemRevision? revision, out ScheduleTaskProblem? problem)
     {
         revision = null;
         problem = content is null ? new ScheduleTaskProblem("ScheduleTaskKey", "A task is missing.") : content.Check();
@@ -158,7 +168,12 @@ public sealed class OwnScheduleItem : Entity<Guid>
             return false;
         }
 
-        var normalized = content.Normalized() with { Origin = Origin };
+        var normalized = content.Normalized() with { Origin = takeOver ? content.Origin : Origin };
+        if (takeOver)
+        {
+            Origin = content.Origin;
+        }
+
         var hash = normalized.ContentHash();
         if (State == OwnScheduleItemState.Active && hash == ContentHash && ownerUserId == OwnerUserId)
         {

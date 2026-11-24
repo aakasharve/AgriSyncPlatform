@@ -5609,6 +5609,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("farm_id");
 
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
@@ -5616,6 +5620,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PlotId")
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
 
                     b.Property<Guid?>("SourceChainId")
                         .HasColumnType("uuid")
@@ -5671,8 +5679,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("SourceVersionId")
                         .HasDatabaseName("ix_own_schedule_item_origins_source");
 
+                    b.HasIndex("ItemId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ux_own_schedule_item_origins_item_sequence");
+
                     b.ToTable("own_schedule_item_origins", "ssf", t =>
                         {
+                            t.HasCheckConstraint("ck_own_schedule_item_origins_sequence", "sequence >= 1");
+
                             t.HasCheckConstraint("ck_own_schedule_item_origins_version_number", "source_version_number >= 1");
                         });
                 });

@@ -8,6 +8,7 @@ using ShramSafal.Application.UseCases.Planning.PlannedWork;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.UseCases.Planning.TakeScheduleTask;
 
@@ -68,6 +69,14 @@ public sealed class TakeScheduleTaskHandler(
         {
             return Result.Failure<TakeScheduleTaskResult>(
                 ShramSafalErrors.OwnScheduleInvalid("TakeSourceWithdrawn", "This schedule has been withdrawn, so nothing more is taken from it."));
+        }
+
+        // Spec decision 5 ("following opens after the check"), also here: a reference (a Public row) is taken from only while its check is Checked. A followed own or team
+        // schedule needs no check. (A withdrawn one was refused above.)
+        if (source.TenantScope == TenantScope.Public && ScheduleCheck.StateOf(checks) != ScheduleCheckState.Checked)
+        {
+            return Result.Failure<TakeScheduleTaskResult>(
+                ShramSafalErrors.OwnScheduleInvalid("TakeSourceNotChecked", "This schedule has not been checked, so nothing is taken from it."));
         }
 
         var task = source.Tasks.FirstOrDefault(t => string.Equals(t.TaskKey, command.TaskKey, StringComparison.Ordinal));
@@ -132,12 +141,18 @@ public sealed class TakeScheduleTaskHandler(
             store.Stage(work);
             store.Stage(origin);
         }
-        else if (!work.Save(content, new UserId(season.OwnerUserId), caller, now, out revision, out var problem))
+        else if (!work.Retake(content, new UserId(season.OwnerUserId), caller, now, out revision, out var problem))
         {
             return Result.Failure<TakeScheduleTaskResult>(ShramSafalErrors.OwnScheduleInvalid(problem!.Code, problem.Message));
         }
+        else
+        {
+            // A work taken before and taken back is put back by THIS take: the copy now holds this take's words, so this take is its origin. Origin is history, one row per take
+            // act: the new row is appended (sequence + 1) and the earlier rows never change; the current origin of the work is the latest row.
+            origin = OwnScheduleItemOrigin.Of(work, source, chosen, caller, today, now, origin!.Sequence + 1);
+            store.Stage(origin);
+        }
 
-        // (A work taken before and taken back is put back by the save above; its origin row is the first one and stays.)
         if (revision is not null)
         {
             store.Stage(revision);

@@ -30,10 +30,10 @@ public interface IOwnScheduleStore
 
     void Stage(OwnScheduleItemRevision revision);
 
-    /// <summary>The origin of one own work (the work's id), NOT tracked, or null when the work was made by hand (slice 9).</summary>
+    /// <summary>The CURRENT origin of one own work (its latest take, the highest sequence), or null when the work was made by hand (slice 9).</summary>
     Task<OwnScheduleItemOrigin?> GetOriginAsync(Guid itemId, CancellationToken ct = default);
 
-    /// <summary>The origins of the works of these farms, NOT tracked: the pull's read.</summary>
+    /// <summary>Every origin row (every take) of the works of these farms, NOT tracked, oldest first; the current origin of a work is its highest sequence.</summary>
     Task<IReadOnlyList<OwnScheduleItemOrigin>> GetOriginsOfFarmsAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default);
 
     /// <summary>Stages the origin of a work taken from a schedule (written once with the work, never changed).</summary>

@@ -56,7 +56,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
 
     private bool _seatsSeededHere;
 
-    private async Task<Guid> ImportAndCheckAsync(string name = "द्राक्ष: चाचणी संदर्भ")
+    private async Task<Guid> ImportAndCheckAsync(string name = "द्राक्ष: चाचणी संदर्भ", string pruneName = "फळछाटणी")
     {
         if (!_seatsSeededHere)
         {
@@ -73,7 +73,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
             sourceLabel = "चाचणी पुस्तिका",
             previousVersionId = (Guid?)null,
             stages = TwoStages,
-            tasks = SourceTasks().Select(Canonical).ToArray(),
+            tasks = SourceTasks().Select(t => t.TaskKey == "t-prune" ? t with { Name = pruneName } : t).Select(Canonical).ToArray(),
             challenges = Array.Empty<object>(),
         };
         var (status, text) = await SendJsonAsync(HttpMethod.Post, "/shramsafal/schedule-templates/import/format-2", PlatformOwner, body);
@@ -198,7 +198,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
     }
 
     private Task<string> OriginRowAsync(Guid item) => FingerprintAsync(
-        "SELECT coalesce((SELECT row_to_json(o)::text FROM ssf.own_schedule_item_origins o WHERE o.id = @i), '')", ("i", item));
+        "SELECT coalesce((SELECT row_to_json(o)::text FROM ssf.own_schedule_item_origins o WHERE o.item_id = @i AND o.sequence = 1), '')", ("i", item));
 
     private Task<string> MainFingerprintAsync() => FingerprintAsync("""
         SELECT coalesce((SELECT string_agg(row_to_json(t)::text, '|' ORDER BY row_to_json(t)::text) FROM ssf.schedule_templates t), '')
@@ -251,7 +251,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
         (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_revisions WHERE item_id = @i", ("i", item))).Should().Be(1);
         (await CountAsync("""
             SELECT count(*) FROM ssf.own_schedule_item_origins
-            WHERE id = @i AND source_version_id = @s AND source_task_key = 't-prune' AND source_version_number = 1 AND source_name = 'द्राक्ष: चाचणी संदर्भ'
+            WHERE item_id = @i AND sequence = 1 AND source_version_id = @s AND source_task_key = 't-prune' AND source_version_number = 1 AND source_name = 'द्राक्ष: चाचणी संदर्भ'
               AND taken_by_user_id = @u AND farm_id = @f AND chosen_dose IS NULL AND source_chain_id = @s AND taken_on = @d
             """, ("i", item), ("s", source), ("u", Owner), ("f", FarmA), ("d", TodayIst()))).Should().Be(1, "the origin: schedule, version, task, who and the farm-local day");
         (await PlansAsync()).Should().Be(plansBefore, "take makes no plan (approved spec guardrail)");
@@ -401,7 +401,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
 
         var item = OwnScheduleItem.IdFor(cycle, "t-spray");
         (await FingerprintAsync("SELECT content->>'dose' FROM ssf.own_schedule_items WHERE id = @i", ("i", item))).Should().Be(DoseB);
-        (await FingerprintAsync("SELECT chosen_dose FROM ssf.own_schedule_item_origins WHERE id = @i", ("i", item))).Should().Be(DoseB);
+        (await FingerprintAsync("SELECT chosen_dose FROM ssf.own_schedule_item_origins WHERE item_id = @i", ("i", item))).Should().Be(DoseB);
         (await FingerprintAsync("SELECT content->>'preHarvestDays' FROM ssf.own_schedule_items WHERE id = @i", ("i", item))).Should().Be("30", "the safety gap is never shortened");
     }
 
@@ -445,6 +445,51 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
     }
 
     [Fact]
+    public async Task Retake_FromNewerVersion_AppendsOrigin_CurrentIsNewest()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SwitchOnAsync(FarmA);
+        var (plot, cycle, v1) = await FollowingAsync();
+        var v2 = await ImportAndCheckAsync("द्राक्ष: नवी आवृत्ती", pruneName: "फळछाटणी (नवी आवृत्ती)");
+        await PushAdoptAsync(Owner, plot, cycle, v2);
+        var item = OwnScheduleItem.IdFor(cycle, "t-prune");
+
+        await OkAsync(TakeAsync(Owner, plot, cycle, v1, "t-prune"));
+        var first = await OriginRowAsync(item);
+        await OkAsync(RemoveAsync(Owner, plot, cycle, "t-prune"));
+        await OkAsync(TakeAsync(Owner, plot, cycle, v2, "t-prune"));
+
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_origins WHERE item_id = @i", ("i", item))).Should().Be(2, "one row per take act");
+        (await OriginRowAsync(item)).Should().Be(first, "the first take's row never changes");
+        (await FingerprintAsync("SELECT source_version_id FROM ssf.own_schedule_item_origins WHERE item_id = @i ORDER BY sequence DESC LIMIT 1", ("i", item))).Should().Be(v2.ToString(), "the current origin is the latest row");
+        (await FingerprintAsync("SELECT source_version_id FROM ssf.own_schedule_item_origins WHERE item_id = @i AND sequence = 1", ("i", item))).Should().Be(v1.ToString());
+        (await FingerprintAsync("SELECT name FROM ssf.own_schedule_items WHERE id = @i", ("i", item))).Should().Be("फळछाटणी (नवी आवृत्ती)", "the copy holds version 2's words");
+        (await FingerprintAsync("SELECT origin FROM ssf.own_schedule_items WHERE id = @i", ("i", item))).Should().Be("take:" + v2.ToString("N"), "the origin text on the work names the origin it holds now");
+
+        // A second tap while it is active appends nothing.
+        await OkAsync(TakeAsync(Owner, plot, cycle, v2, "t-prune"));
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_origins WHERE item_id = @i", ("i", item))).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Take_UncheckedReference_Refused()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SwitchOnAsync(FarmA);
+        var (plot, cycle, source) = await FollowingAsync();
+        // The check was sent back after the plot followed it: neither Checked nor Withdrawn.
+        (await CheckAsync(PlatformOwner, source, "Returned", note: "sent back")).Status.Should().Be(HttpStatusCode.OK);
+
+        var refused = await TakeAsync(Owner, plot, cycle, source, "t-prune");
+
+        refused.Status.Should().Be("failed");
+        refused.ErrorCode.Should().Be(Invalid);
+        refused.ErrorMessage.Should().Contain("TakeSourceNotChecked");
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_items")).Should().Be(0);
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_origins")).Should().Be(0);
+    }
+
+    [Fact]
     public async Task TakeBack_RemovesItem_KeepsOriginHistory()
     {
         await AssertAppRoleIsNotVacuousAsync();
@@ -464,7 +509,7 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
         var again = await OkAsync(TakeAsync(Owner, plot, cycle, source, "t-prune"));
         JsonSerializer.SerializeToElement(again.Data, new JsonSerializerOptions(JsonSerializerDefaults.Web)).GetProperty("taken").GetBoolean().Should().BeTrue();
         (await CountAsync("SELECT count(*) FROM ssf.own_schedule_items WHERE id = @i AND state = 0 AND revision = 3", ("i", item))).Should().Be(1);
-        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_origins")).Should().Be(1);
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_item_origins")).Should().Be(2, "every take that puts the work back appends one origin row; the first never changes");
         (await OriginRowAsync(item)).Should().Be(origin);
     }
 
@@ -524,9 +569,9 @@ public sealed class ScheduleTakeRealPostgresTests(ITestOutputHelper output) : Sc
     }
 
     private static string InsertOrigin(Guid farm, Guid plot, Guid cycle, Guid owner, string key, Guid id, Guid source) => $"""
-        INSERT INTO ssf.own_schedule_item_origins (id, farm_id, plot_id, crop_cycle_id, owner_user_id, task_key, source_version_id, source_name, source_version_number,
+        INSERT INTO ssf.own_schedule_item_origins (id, item_id, sequence, farm_id, plot_id, crop_cycle_id, owner_user_id, task_key, source_version_id, source_name, source_version_number,
                                                    source_task_key, taken_by_user_id, taken_on, taken_at_utc)
-        VALUES ('{id}'::uuid, '{farm}'::uuid, '{plot}'::uuid, '{cycle}'::uuid, '{owner}'::uuid, '{key}', '{source}'::uuid, 'चाचणी', 1, '{key}', '{owner}'::uuid, CURRENT_DATE, NOW())
+        VALUES ('{id}'::uuid, '{Guid.NewGuid()}'::uuid, 1, '{farm}'::uuid, '{plot}'::uuid, '{cycle}'::uuid, '{owner}'::uuid, '{key}', '{source}'::uuid, 'चाचणी', 1, '{key}', '{owner}'::uuid, CURRENT_DATE, NOW())
         """;
 
     // ---- old phones --------------------------------------------------------------------------------------------------
