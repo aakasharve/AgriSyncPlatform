@@ -64,4 +64,23 @@ describe('slice 10: the Schedule tab as version 7', () => {
         fireEvent.click(screen.getByTestId('change-plot'));
         expect(screen.getByTestId('place-picker')).toBeInTheDocument();
     });
+    it('the in-tab calendar: today is marked, each date has its small schedule day through the one helper (never day 0), and it names its rule', () => {
+        render(page());
+        const grid = screen.getByTestId('calendar-grid');
+        const today = grid.querySelector('[data-today="yes"]') as HTMLElement;
+        expect(today).not.toBeNull();
+        expect(screen.getByTestId('calendar-rule')).toBeInTheDocument();
+        const smalls = [...grid.querySelectorAll('[data-testid^="calendar-shown-"]')].map(e => e.textContent);
+        expect(smalls.length).toBeGreaterThan(0);
+        expect(smalls).not.toContain('०');
+        expect(smalls).not.toContain('0');
+        expect(screen.getByTestId('calendar-full-season')).toBeInTheDocument();
+    });
+    it('the follow-totals slot shows its rule and no number; the look-memories card shows its rule when nothing is due (never vanishes)', () => {
+        render(page());
+        const slot = screen.getByTestId('follow-totals-slot');
+        expect(slot.textContent).not.toMatch(/[0-9०-९]/);
+        expect(screen.getByTestId('look-memories')).toHaveAttribute('data-count', '0');
+        expect(screen.getByTestId('look-memories-line').textContent).toMatch(/पाहणी/);
+    });
 });

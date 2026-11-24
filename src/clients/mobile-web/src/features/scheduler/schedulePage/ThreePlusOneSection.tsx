@@ -19,7 +19,7 @@
  * Words: Marathi mode Marathi only, English mode English only (`threePlusOneCopy`).
  */
 import React, { useState } from 'react';
-import { BadgeCheck, CircleDashed, Flag, HelpCircle, Lock, Pencil, Plus, X } from 'lucide-react';
+import { BadgeCheck, CircleDashed, ClipboardList, Flag, HelpCircle, Landmark, Lock, Pencil, Plus, Sprout, User, X } from 'lucide-react';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { FollowedPlace } from './resolveSchedule';
@@ -58,6 +58,15 @@ const makerOf = (place: FollowedPlace): string | null => {
     return author && !INTERNAL_AUTHORS.has(author) ? author : null;
 };
 
+/** Version 7: each tile carries the picture of who made it (the app's own icons: institution, expert, advisor or farmer's own; never an institution's logo, SM-17). */
+const TILE_LOOK: Record<string, { bg: string; fg: string; Icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> }> = {
+    INSTITUTION: { bg: '#D1FAE5', fg: '#047857', Icon: Landmark },
+    EXPERT: { bg: '#EDE9FE', fg: '#6D28D9', Icon: Sprout },
+    ADVISOR: { bg: '#CFFAFE', fg: '#0E7490', Icon: ClipboardList },
+    USER: { bg: '#FEF3C7', fg: '#B45309', Icon: User },
+};
+const tileLook = (place: FollowedPlace) => TILE_LOOK[place.origin === 'Own' ? 'USER' : place.template?.ownerType ?? 'INSTITUTION'] ?? TILE_LOOK.INSTITUTION;
+
 const Rail: React.FC<{ outside: readonly FollowedPlace[]; own: FollowedPlace | undefined; label: string }> = ({ outside, own, label }) => (
     <span className="inline-flex items-center gap-1.5" aria-label={label} data-testid="three-plus-one-rail">
         {[0, 1, 2].map(i => (
@@ -91,6 +100,9 @@ const PlaceCard: React.FC<{ place: FollowedPlace; colour: string; language: Thre
             data-slot={place.slot ?? ''} data-origin={place.origin} data-main={place.isMain ? 'true' : 'false'}>
             <span className="w-2 shrink-0" style={{ background: colour }} aria-hidden="true" />
             <div className="min-w-0 flex-1 space-y-1.5 px-3 py-3">
+                <span className="grid h-11 w-11 place-items-center rounded-2xl" style={{ background: tileLook(place).bg, color: tileLook(place).fg }} data-testid={`followed-logo-${place.subscriptionId}`} aria-hidden="true">
+                    {React.createElement(tileLook(place).Icon, { size: 24, 'aria-hidden': true })}
+                </span>
                 <div className="flex flex-wrap items-center gap-2">
                     <strong className="min-w-0 flex-1 text-[18px] font-black leading-snug text-stone-900" data-testid={`followed-name-${place.subscriptionId}`}>{displayName(place, language)}</strong>
                     {place.isMain && (
@@ -163,9 +175,11 @@ export const ThreePlusOneSection: React.FC<ThreePlusOneSectionProps> = ({ follow
             </div>
 
             <p className="m-0 text-[14px] font-extrabold uppercase tracking-wide text-stone-500" data-testid="three-plus-one-outside-label">{words.outsideGroup}</p>
-            {outside.map((place, i) => (
-                <PlaceCard key={place.subscriptionId || `${place.templateId}-${i}`} place={place} colour={PLACE_COLOUR[i] ?? PLACE_COLOUR[2]} language={language} onLeave={onLeave} />
-            ))}
+            <div className="grid grid-cols-2 gap-2" data-testid="three-plus-one-tiles">
+                {outside.map((place, i) => (
+                    <PlaceCard key={place.subscriptionId || `${place.templateId}-${i}`} place={place} colour={PLACE_COLOUR[i] ?? PLACE_COLOUR[2]} language={language} onLeave={onLeave} />
+                ))}
+            </div>
             {!outsideFull ? (
                 <Tap onClick={onAdd} data-testid="three-plus-one-add"
                     className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-50/60 px-3 text-left">

@@ -31,13 +31,14 @@ import type { ClipsByDay } from './usePlotClips';
 import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
 import { TrialStages, trialStageOf } from './TrialStages';
 import { StagePlanCard } from './StagePlanCard';
-import { DayCardsDayButton } from '../dayCards/DayCardsEntries';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 import { OwnerVoiceSlot, type OwnerVoice } from './OwnerVoiceSlot';
 import { SameWorkSection } from './SameWorkSection';
 import { ScheduleProfileCard } from './ScheduleProfileCard';
+import { ScheduleTabCalendar } from './ScheduleTabCalendar';
+import { FollowTotalsSlot, LookMemoriesCard } from './ScheduleTabCards';
 
 export const PlotScheduleHome: React.FC<{
     cropName: string;
@@ -115,9 +116,11 @@ export const PlotScheduleHome: React.FC<{
             <ScheduleProfileCard templateId={template.id} plotName={plotName} />
             <SameWorkSection versionIds={followed ? followed.map(f => f.templateId) : []} take={take ? { ...take, todayStored: take.todayStored ?? model.todayDay } : undefined} />
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
+            <FollowTotalsSlot />
+            <LookMemoriesCard templateId={template.id} todayStored={model.todayDay} take={take} />
+            <ScheduleTabCalendar templateId={template.id} model={model} take={take} />
             <BehindBanner model={model} />
             <TodayCard today={facts.today} totalDays={model.totalDaysShown} ended={model.ended} />
-            {facts.today && !model.ended && <DayCardsDayButton templateId={template.id} storedDay={facts.today.day} take={take} />}
             <ScheduleFold id="owed" title={SC.owedTitle} count={facts.owed.length} summary={facts.owed.length > 0 ? SC.owedCount(facts.owed.length) : SC.nothingOwed}>
                 <OwedCard owed={facts.owed} onOpenDay={onOpenDay} />
             </ScheduleFold>
