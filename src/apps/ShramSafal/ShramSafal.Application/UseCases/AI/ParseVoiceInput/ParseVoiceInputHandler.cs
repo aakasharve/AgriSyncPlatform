@@ -256,6 +256,13 @@ public sealed class ParseVoiceInputHandler(
                     fieldConfidenceCount: null,
                     ct: ct);
 
+                // spec: voice-instant-phase-a-2026-11-23 (S6) - the recording is stored and no provider could finish it
+                // right now: a distinct error, which the endpoint answers with 503 so the phone sends it again later.
+                if (!canonicalResult.Success && canonicalResult.Retryable)
+                {
+                    return Result.Failure<VoiceParseResult>(ShramSafalErrors.AiVoiceUnavailable);
+                }
+
                 return Result.Failure<VoiceParseResult>(
                     new Error(
                         ShramSafalErrors.AiParsingFailed.Code,
@@ -302,7 +309,10 @@ public sealed class ParseVoiceInputHandler(
                 // and CreateDailyLogHandler can stamp the same hash on the
                 // resulting DailyLog's Provenance (sub-phase 01.5 wires the
                 // response shape; 01.6 wires the frontend).
-                PromptContentHash: canonicalResult.PromptContentHash);
+                PromptContentHash: canonicalResult.PromptContentHash,
+                // spec: voice-instant-phase-a-2026-11-23 (Task 0) — per-stage server timings for the endpoint's
+                // Server-Timing header and its one log line. Not part of the JSON body.
+                StageTimings: canonicalResult.StageTimings);
 
             // DATA_PRINCIPLE_SPINE sub-phase 02.3 — persist the warm-tier
             // Transcript projection for the winning AiJobAttempt. Supervisor

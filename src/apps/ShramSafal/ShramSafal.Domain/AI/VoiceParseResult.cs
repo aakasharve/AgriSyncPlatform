@@ -30,4 +30,7 @@ public sealed record VoiceParseResult(
     // Stamped on the resulting Provenance per DATA_PRINCIPLE_SPINE
     // Phase 01 sub-phase 01.2. Nullable for the legacy non-modular path
     // and pre-spine callers; sub-phase 01.4 wires the orchestrator.
-    string? PromptContentHash = null);
+    string? PromptContentHash = null,
+    // spec: voice-instant-phase-a-2026-11-23 (Task 0) — the server's per-stage timings, for the Server-Timing
+    // response header and one structured log line. Never part of the JSON body (the endpoint builds that itself).
+    VoiceStageTimings? StageTimings = null);

@@ -15,9 +15,14 @@ internal sealed class SarvamAiProvider(
     SarvamVisionClient visionClient,
     IOptions<SarvamOptions> optionsAccessor,
     AiResponseNormalizer responseNormalizer,
-    ILogger<SarvamAiProvider> logger) : IAiProvider
+    ILogger<SarvamAiProvider> logger,
+    // spec: voice-instant-phase-a-2026-11-23 (Task 5) — optional so a caller that does not name it keeps the old
+    // behaviour (2 parts sorted at once); the host binds it from Ai:Structuring.
+    IOptions<StructuringOptions>? structuringOptions = null) : IAiProvider
 {
     private readonly SarvamOptions _options = optionsAccessor.Value;
+    private readonly int _structuringMaxParallel = ChunkedStructuring.ResolveMaxParallel(
+        structuringOptions?.Value.MaxParallel ?? ChunkedStructuring.DefaultMaxParallel);
 
     public AiProviderType ProviderType => AiProviderType.Sarvam;
 
@@ -119,7 +124,8 @@ internal sealed class SarvamAiProvider(
                 },
                 logger,
                 ct,
-                allowSplit: !isCorrection);
+                allowSplit: !isCorrection,
+                maxParallel: _structuringMaxParallel);
             if (!structured.IsSuccess)
             {
                 // B005: after a split recording, the error tells the orchestrator not to transcribe it all again.

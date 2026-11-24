@@ -1452,6 +1452,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // ssf.audit_events, its policies or its grants. Down() refuses while any chain or ticked key exists (none does in this proof) and otherwise drops exactly
         // what Up() added. Safe mid-proof.
         "20261123113122_AddScheduleReferenceFormat",
+        // spec: voice-instant-phase-a-2026-11-23 (voice speed + Sarvam-only) - Up() and Down() read in full: each is ONE data-only UPDATE of
+        // ssf.ai_provider_configs.(transcriber_provider, structurer_provider, modified_at_utc). No schema, policy, grant or trigger; it never
+        // touches ssf.audit_events. Safe to revert and re-apply mid-proof.
+        "20261124090000_SetVoiceProvidersToSarvam",
     ];
 
     /// <summary>

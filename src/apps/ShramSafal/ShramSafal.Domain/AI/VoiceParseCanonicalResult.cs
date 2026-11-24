@@ -40,6 +40,21 @@ public sealed record VoiceParseCanonicalResult
     public List<string> Warnings { get; init; } = [];
     public string? Error { get; init; }
 
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (Task 0) — how long each server stage of this voice note took. Set by
+    /// the orchestrator's two-stage call on every result it returns; <c>null</c> on results that never went through it
+    /// (a provider's own answer, the streaming parse). Additive: nothing that read this result before reads it.
+    /// </summary>
+    public VoiceStageTimings? StageTimings { get; init; }
+
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (S6) — a FAILED result the phone may simply send again later: the failure
+    /// came from a provider being unreachable or slow, no other provider can take voice, and the recording (and its
+    /// transcript, when there is one) are already stored on the job. The endpoint answers such a failure with a 503,
+    /// which the phone classes as retryable; every other failure keeps its status. Never set on a success.
+    /// </summary>
+    public bool Retryable { get; init; }
+
     // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.8 ────────────────
     // Extended transcript surface. Each provider populates the subset it can
     // emit; nullables are the contract for "this provider does not produce

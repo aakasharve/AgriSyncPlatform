@@ -286,6 +286,10 @@ internal sealed class AiOrchestrator(
     // Idempotency, AiJob persistence, blob upload, and Provenance stamping
     // mirror ParseVoiceWithFallbackAsync — this method exists ALONGSIDE the
     // legacy path, NOT as a replacement, per the Slice B brief.
+    //
+    // spec: voice-instant-phase-a-2026-11-23 (Task 0) — every result this method returns carries the time each server
+    // stage took (VoiceParseCanonicalResult.StageTimings): the raw-audio write, speech-to-text, sorting and the whole
+    // call. The stopwatches live in a VoiceStageClock the core method fills in as it goes.
     public async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceTwoStageAsync(
         Guid userId,
         Guid farmId,
@@ -304,23 +308,64 @@ internal sealed class AiOrchestrator(
     {
         ArgumentNullException.ThrowIfNull(promptContext);
 
+        var clock = new VoiceStageClock();
+        var (result, jobId, providerUsed, fallbackUsed) = await ParseVoiceTwoStageCoreAsync(
+            userId,
+            farmId,
+            audioStream,
+            mimeType,
+            promptContext,
+            idempotencyKey,
+            languageHint,
+            capturedAtUtc,
+            inputSpeechDurationMs,
+            inputRawDurationMs,
+            segmentMetadataJson,
+            requestPayloadHash,
+            clientAppVersion,
+            clock,
+            ct);
+
+        return (result with { StageTimings = clock.Snapshot() }, jobId, providerUsed, fallbackUsed);
+    }
+
+    private async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceTwoStageCoreAsync(
+        Guid userId,
+        Guid farmId,
+        Stream audioStream,
+        string mimeType,
+        VoiceParseContext promptContext,
+        string idempotencyKey,
+        string languageHint,
+        DateTime? capturedAtUtc,
+        int? inputSpeechDurationMs,
+        int? inputRawDurationMs,
+        string? segmentMetadataJson,
+        string? requestPayloadHash,
+        string clientAppVersion,
+        VoiceStageClock clock,
+        CancellationToken ct)
+    {
         var promptContextWithCapture = promptContext with { CapturedAtUtc = capturedAtUtc };
         var systemPrompt = promptBuilder.BuildVoiceParsingPrompt(promptContextWithCapture);
 
-        // Resolve provider tuple. If the transcriber column equals the
-        // structurer column, OR no ITranscriberProvider is registered for
-        // the requested transcriber, fall back to the legacy single-call
-        // multimodal path so the AiJob still lands on the same idempotency
-        // row.
+        // Resolve provider tuple. If no ITranscriberProvider is registered for the requested transcriber, fall back
+        // to the legacy single-call path so the AiJob still lands on the same idempotency row.
+        //
+        // spec: voice-instant-phase-a-2026-11-23 (S6) — the tuple does NOT collapse merely because the transcriber
+        // and the structurer name the same provider. Sarvam / Sarvam is the pair every environment now runs, and it runs
+        // the two-stage path (Saaras pieces, then ChunkedStructuring with the Sarvam provider on text/plain). Before,
+        // equal values collapsed the call to the one-call path, so an environment whose row said Gemini / Gemini ran
+        // different code from one that said Sarvam / Gemini. Typed text (no audio) also goes straight to the one-call
+        // path: there is nothing to transcribe, and sending text to speech-to-text only made it fail first.
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var transcriberType = ParseProviderTypeOrDefault(config.TranscriberProvider, AiProviderType.Gemini);
         var structurerType = ParseProviderTypeOrDefault(config.StructurerProvider, AiProviderType.Gemini);
 
-        if (transcriberType == structurerType ||
-            !_transcribers.TryGetValue(transcriberType, out var transcriber))
+        if (!_transcribers.TryGetValue(transcriberType, out var transcriber) ||
+            mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
         {
-            // Tuple collapses to a single provider OR transcriber port is
-            // not wired — delegate to the legacy multimodal one-call path.
+            // No transcriber port is wired (or the input is already text) — delegate to the one-call path.
             return await ParseVoiceWithFallbackAsync(
                 userId,
                 farmId,
@@ -337,12 +382,27 @@ internal sealed class AiOrchestrator(
                 ct);
         }
 
+        clock.Path = VoiceStageTimings.TwoStagePath;
+
+        // spec: voice-instant-phase-a-2026-11-23 (S6) — a failed two-stage call is handed to the one-call path only when
+        // that path can give the recording to ANOTHER provider that takes voice. Where none can (today none can: Gemini
+        // answers CanHandle(voice) = false), the one-call path would only run the same Sarvam call again, billed again,
+        // and fail the same way. Then the job is marked failed with the recording and any transcript already stored on it,
+        // and the failure is flagged Retryable so the endpoint answers 503 and the phone sends it again later.
+        var voicePrimary = ResolveProvider(
+            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
+            AiOperationType.VoiceToStructuredLog);
+        var anotherProviderCanTakeVoice = ResolveFallbackProvider(
+            voicePrimary?.ProviderType,
+            AiOperationType.VoiceToStructuredLog) is not null;
+
         var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
         var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
         var promptContentHash = promptBuilder.CurrentVoicePromptContentHash;
 
         if (TryReturnCachedVoiceResult(existing, out var cached, promptContentHash))
         {
+            clock.Path = VoiceStageTimings.CachedPath;
             return cached;
         }
 
@@ -355,7 +415,32 @@ internal sealed class AiOrchestrator(
         // voice-rawblob-resilient-2026-06-10 — NON-FATAL (see helper): a
         // cold-tier storage failure leaves blobRef null → rawInputRef null,
         // and the two-stage parse still proceeds.
-        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, userId, ct);
+        //
+        // spec: voice-instant-phase-a-2026-11-23 (Task 4 / S4) — the raw-audio PUT and speech-to-text no longer wait for
+        // each other: both start now and both are awaited together, so the farmer waits for the slower of the two, not
+        // for their sum. What stays exactly as it was:
+        //   - a failed PUT is non-fatal and leaves RawInputRef null (the phone still holds the audio); the PUT's own
+        //     error log, its failure class and its bucket label are the same lines as before;
+        //   - the token cancels BOTH calls, and a speech-to-text failure does not cancel the PUT (the point of this
+        //     lane is that the audio is never lost);
+        //   - the AiJob row is created only after BOTH finished, as before it was created after the PUT.
+        // The PUT's database bookkeeping (UpsertRawBlobIndexAsync) is NOT in the parallel part: speech-to-text reads and
+        // writes its transcript cache through the request's one DbContext, and two operations on a DbContext at the
+        // same moment throw. So the bookkeeping runs on its own, right after both calls are done.
+        // A switched-off AI processing starts no speech-to-text at all (nothing to pay for), only the PUT, as before.
+        var transcribeMode = string.IsNullOrWhiteSpace(config.TranscriberMode) ? "codemix" : config.TranscriberMode!;
+        var putTask = TimedPutRawBlobAsync(payload, mimeType, clock, ct);
+        var sttTask = config.IsAiProcessingDisabled
+            ? null
+            : TimedTranscribeAsync(transcriber, payload, mimeType, languageHint, transcribeMode, clock, ct);
+        Task[] running = sttTask is null ? [putTask] : [putTask, sttTask];
+        await Task.WhenAll(running);
+
+        var blobRef = await putTask;
+        if (blobRef is not null)
+        {
+            blobRef = await TryIndexRawBlobAsync(blobRef, userId, ct);
+        }
 
         // W1.P2 T3 — ExtractorCodeSha stamped with promptContentHash (same
         // rationale as the one-stage path above: SourceRevisionId not yet wired).
@@ -403,22 +488,29 @@ internal sealed class AiOrchestrator(
         }
 
         // ─── Stage 1: transcribe via ITranscriberProvider ───────────────
-        TranscribeResult transcribeResult;
-        var transcribeMode = string.IsNullOrWhiteSpace(config.TranscriberMode) ? "codemix" : config.TranscriberMode!;
-        try
+        // (started above, beside the raw-audio PUT; its outcome is read here, after the job row exists)
+        var sttOutcome = await sttTask!;
+        if (sttOutcome.Error is { } transcribeError)
         {
-            await using var transcribeStream = new MemoryStream(payload, writable: false);
-            transcribeResult = await transcriber.TranscribeAsync(
-                transcribeStream,
-                mimeType,
-                languageHint,
-                transcribeMode,
-                ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
+            if (!anotherProviderCanTakeVoice)
+            {
+                logger.LogWarning(
+                    transcribeError,
+                    "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}); no other provider takes voice, so the recording stays stored on the job and the phone is told to try again.",
+                    job.Id,
+                    transcriberType);
+                return await FailVoiceJobAsync(
+                    job,
+                    $"Speech-to-text failed: {transcribeError.Message}",
+                    transcriberType,
+                    retryable: true,
+                    promptContentHash,
+                    transcript: null,
+                    ct);
+            }
+
             logger.LogWarning(
-                ex,
+                transcribeError,
                 "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}). Falling back to legacy multimodal path.",
                 job.Id,
                 transcriberType);
@@ -428,6 +520,7 @@ internal sealed class AiOrchestrator(
             // the cold-tier blob ref; the legacy path will resolve the
             // same idempotency key and append a new attempt to this row
             // rather than creating a duplicate.
+            clock.Path = VoiceStageTimings.OneCallPath;
             return await ParseVoiceWithFallbackAsync(
                 userId,
                 farmId,
@@ -443,6 +536,8 @@ internal sealed class AiOrchestrator(
                 clientAppVersion,
                 ct);
         }
+
+        var transcribeResult = sttOutcome.Result!;
 
         if (!transcribeResult.Success || string.IsNullOrWhiteSpace(transcribeResult.Transcript))
         {
@@ -469,8 +564,10 @@ internal sealed class AiOrchestrator(
             {
                 if (transcribeResult.FailureCode == TranscribeFailureCodes.PartFailed &&
                     transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces &&
-                    config.FallbackEnabled)
+                    config.FallbackEnabled &&
+                    anotherProviderCanTakeVoice)
                 {
+                    clock.Path = VoiceStageTimings.OneCallPath;
                     return await RunVoiceParseAsync(
                         userId,
                         farmId,
@@ -488,22 +585,21 @@ internal sealed class AiOrchestrator(
                         ct);
                 }
 
-                job.MarkFailed();
-                await aiJobRepository.SaveChangesAsync(ct);
-                return (
-                    new VoiceParseCanonicalResult
-                    {
-                        Success = false,
-                        Error = transcribeResult.Error ?? "Transcription failed.",
-                        PromptContentHash = promptContentHash
-                    },
-                    job.Id,
+                // A recording that is too long is refused for good; a piece that failed after its own retry is a provider
+                // fault the phone may simply send again later (the pieces that succeeded are cached by content hash).
+                return await FailVoiceJobAsync(
+                    job,
+                    transcribeResult.Error ?? "Transcription failed.",
                     transcriberType,
-                    false);
+                    retryable: transcribeResult.FailureCode == TranscribeFailureCodes.PartFailed,
+                    promptContentHash,
+                    transcript: null,
+                    ct);
             }
 
-            if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass))
+            if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass) && anotherProviderCanTakeVoice)
             {
+                clock.Path = VoiceStageTimings.OneCallPath;
                 return await ParseVoiceWithFallbackAsync(
                     userId,
                     farmId,
@@ -520,18 +616,14 @@ internal sealed class AiOrchestrator(
                     ct);
             }
 
-            job.MarkFailed();
-            await aiJobRepository.SaveChangesAsync(ct);
-            return (
-                new VoiceParseCanonicalResult
-                {
-                    Success = false,
-                    Error = transcribeResult.Error ?? "Transcribe returned empty transcript.",
-                    PromptContentHash = promptContentHash
-                },
-                job.Id,
+            return await FailVoiceJobAsync(
+                job,
+                transcribeResult.Error ?? "Transcribe returned empty transcript.",
                 transcriberType,
-                false);
+                retryable: failureClassifier.IsFallbackEligible(failureClass),
+                promptContentHash,
+                transcript: null,
+                ct);
         }
 
         // Stamp the transcript on the AiJob (Task 1.1 mutator) BEFORE the
@@ -563,6 +655,19 @@ internal sealed class AiOrchestrator(
                 "[parse-voice-two-stage] no structurer registered for type {Structurer}; falling back to legacy path for job {JobId}.",
                 structurerType,
                 job.Id);
+            if (!anotherProviderCanTakeVoice)
+            {
+                return await FailVoiceJobAsync(
+                    job,
+                    $"No structurer is registered for type {structurerType}.",
+                    structurerType,
+                    retryable: true,
+                    promptContentHash,
+                    transcribeResult.Transcript,
+                    ct);
+            }
+
+            clock.Path = VoiceStageTimings.OneCallPath;
             return await ParseVoiceWithFallbackAsync(
                 userId,
                 farmId,
@@ -580,6 +685,7 @@ internal sealed class AiOrchestrator(
         }
 
         var transcriptBytes = Encoding.UTF8.GetBytes(transcribeResult.Transcript!);
+        var structStartedAt = Stopwatch.GetTimestamp();
         var structurerExecution = await ExecuteVoiceAttemptWithRetriesAsync(
             job,
             structurer,
@@ -590,6 +696,7 @@ internal sealed class AiOrchestrator(
             config,
             requestPayloadHash,
             ct);
+        clock.Struct = Stopwatch.GetElapsedTime(structStartedAt);
 
         if (structurerExecution.IsSuccess)
         {
@@ -628,6 +735,7 @@ internal sealed class AiOrchestrator(
         var fallbackCanAnswer = !split || transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces;
         if (config.FallbackEnabled &&
             fallbackCanAnswer &&
+            anotherProviderCanTakeVoice &&
             failureClassifier.IsFallbackEligible(structurerExecution.FailureClass) &&
             !AiErrorMarkers.Has(structurerExecution.Result.Error, AiErrorMarkers.NoFallback))
         {
@@ -636,6 +744,7 @@ internal sealed class AiOrchestrator(
                 job.Id,
                 structurerExecution.FailureClass,
                 split ? "fallback provider only" : "legacy multimodal");
+            clock.Path = VoiceStageTimings.OneCallPath;
             return await RunVoiceParseAsync(
                 userId,
                 farmId,
@@ -655,10 +764,52 @@ internal sealed class AiOrchestrator(
 
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
+
+        // A real failure (not a kept low-confidence answer, which arrives here as Success = true) that the phone may send
+        // again later: the sorting provider was unreachable or slow and no other provider can take voice. The recording
+        // and the transcript are stored on the job above; the endpoint answers such a failure with a 503.
+        var structurerFailureIsRetryable =
+            !structurerExecution.Result.Success &&
+            failureClassifier.IsFallbackEligible(structurerExecution.FailureClass);
         return (
-            structurerExecution.Result with { PromptContentHash = promptContentHash, TranscriptCodemix = transcribeResult.Transcript },
+            structurerExecution.Result with
+            {
+                PromptContentHash = promptContentHash,
+                TranscriptCodemix = transcribeResult.Transcript,
+                Retryable = structurerFailureIsRetryable,
+            },
             job.Id,
             structurerExecution.ProviderUsed,
+            false);
+    }
+
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (S6) — ends a two-stage call that failed with the recording (and, when it
+    /// exists, its transcript) already stored on the job: the job is marked failed and saved, and the failure says whether
+    /// the phone may simply send the same recording again later.
+    /// </summary>
+    private async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> FailVoiceJobAsync(
+        AiJob job,
+        string? error,
+        AiProviderType providerUsed,
+        bool retryable,
+        string? promptContentHash,
+        string? transcript,
+        CancellationToken ct)
+    {
+        job.MarkFailed();
+        await aiJobRepository.SaveChangesAsync(ct);
+        return (
+            new VoiceParseCanonicalResult
+            {
+                Success = false,
+                Error = error,
+                PromptContentHash = promptContentHash,
+                TranscriptCodemix = transcript,
+                Retryable = retryable,
+            },
+            job.Id,
+            providerUsed,
             false);
     }
 
@@ -1396,10 +1547,16 @@ internal sealed class AiOrchestrator(
             // low-confidence marks — the result screen shows the "not sure" items. Measured live 2026-10-31: six good
             // Sarvam parts at confidence 0.5 went to the Gemini fallback, whose one-call answer for a 10-minute
             // transcript was cut off at its token limit → HTTP 400, and the farmer lost the whole recording.
-            if (result.OverallConfidence < config.VoiceConfidenceThreshold && result.StructuredParts > 1)
+            // 24 Nov 2026 (founder: voice is Sarvam only): the same holds for ANY answer when no other provider can take
+            // voice. A low-confidence answer is then the only answer there is: recording it as a failure marked the job
+            // Failed while the farmer was shown it, made the same recording sent again run (and bill) speech-to-text and
+            // sorting a second time, and counted against Sarvam's circuit breaker, so five low-confidence notes in a row
+            // would have switched voice off for every farmer. It is kept with its low-confidence marks instead.
+            var noOtherProviderTakesVoice = ResolveFallbackProvider(provider.ProviderType, AiOperationType.VoiceToStructuredLog) is null;
+            if (result.OverallConfidence < config.VoiceConfidenceThreshold && (result.StructuredParts > 1 || noOtherProviderTakesVoice))
             {
                 logger.LogInformation(
-                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept: a long recording structured in {Parts} parts is never handed to a fallback that cannot take it.",
+                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept with its low-confidence marks: a recording structured in {Parts} part(s) is never handed to a fallback that cannot take it.",
                     provider.ProviderType,
                     AiOperationType.VoiceToStructuredLog,
                     job.Id,
@@ -1630,6 +1787,83 @@ internal sealed class AiOrchestrator(
         return (int)Math.Round(milliseconds, MidpointRounding.AwayFromZero);
     }
 
+    /// <summary>
+    /// spec: voice-instant-phase-a-2026-11-23 (Task 0) — the stopwatches of one two-stage voice call. Each stage's
+    /// duration is written by the one task that runs it and read after every task is awaited, so no lock is needed.
+    /// </summary>
+    private sealed class VoiceStageClock
+    {
+        private readonly long _startedAt = Stopwatch.GetTimestamp();
+
+        /// <summary>The raw-audio PUT (not the index bookkeeping after it).</summary>
+        public TimeSpan S3 { get; set; }
+
+        /// <summary>Speech-to-text.</summary>
+        public TimeSpan Stt { get; set; }
+
+        /// <summary>Sorting the transcript into the day's parts (retries included).</summary>
+        public TimeSpan Struct { get; set; }
+
+        /// <summary>Which path ran: see <see cref="VoiceStageTimings"/>. A call that never reaches the two-stage branch
+        /// stays on the one-call path; the two-stage branch says so when it starts and says it again if it hands over.</summary>
+        public string Path { get; set; } = VoiceStageTimings.OneCallPath;
+
+        public VoiceStageTimings Snapshot() => new(
+            ToLatencyMs(S3),
+            ToLatencyMs(Stt),
+            ToLatencyMs(Struct),
+            ToLatencyMs(Stopwatch.GetElapsedTime(_startedAt)),
+            Path);
+    }
+
+    /// <summary>What speech-to-text came back with: its answer, or the exception it threw (never both).</summary>
+    private sealed record SttOutcome(TranscribeResult? Result, Exception? Error);
+
+    /// <summary>
+    /// Speech-to-text, timed onto <paramref name="clock"/>. A failure other than cancellation comes back as
+    /// <see cref="SttOutcome.Error"/> instead of throwing, so the call can run beside the raw-audio PUT without its
+    /// failure tearing the PUT down; cancellation still throws, and it cancels both through the shared token.
+    /// </summary>
+    private static async Task<SttOutcome> TimedTranscribeAsync(
+        ITranscriberProvider transcriber,
+        byte[] payload,
+        string mimeType,
+        string languageHint,
+        string mode,
+        VoiceStageClock clock,
+        CancellationToken ct)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            await using var transcribeStream = new MemoryStream(payload, writable: false);
+            var result = await transcriber.TranscribeAsync(transcribeStream, mimeType, languageHint, mode, ct);
+            return new SttOutcome(result, null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new SttOutcome(null, ex);
+        }
+        finally
+        {
+            clock.Stt = Stopwatch.GetElapsedTime(startedAt);
+        }
+    }
+
+    /// <summary>The raw-audio PUT, timed onto <paramref name="clock"/> whether it succeeds, fails or is cancelled.</summary>
+    private async Task<RawBlobRef?> TimedPutRawBlobAsync(byte[] payload, string mimeType, VoiceStageClock clock, CancellationToken ct)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            return await TryPutRawBlobAsync(payload, mimeType, ct);
+        }
+        finally
+        {
+            clock.S3 = Stopwatch.GetElapsedTime(startedAt);
+        }
+    }
+
     // voice-rawblob-resilient-2026-06-10 — NON-FATAL cold-tier persistence.
     //
     // The raw-blob store is compliance/audit only (DPDP raw-voice retention).
@@ -1673,14 +1907,25 @@ internal sealed class AiOrchestrator(
     // pass null, which records the blob as unowned rather than mislabelling it.
     private async Task<RawBlobRef?> TryPersistRawBlobAsync(byte[] payload, string mimeType, Guid subjectUserId, CancellationToken ct)
     {
-        RawBlobRef blobRef;
+        var blobRef = await TryPutRawBlobAsync(payload, mimeType, ct);
+        return blobRef is null
+            ? null
+            : await TryIndexRawBlobAsync(blobRef, subjectUserId, ct);
+    }
 
+    // spec: voice-instant-phase-a-2026-11-23 (Task 4 / S4) — the two steps of TryPersistRawBlobAsync, split so the PUT
+    // (a network call that touches no database) can run beside speech-to-text while the bookkeeping (a write on the
+    // request's single DbContext, which speech-to-text also reads and writes for its transcript cache) runs on its
+    // own once both are done. Two operations on one DbContext at the same moment throw, so the split is a correctness
+    // line, not a style choice. Nothing about either step changed: same logs, same failure classes, same returns.
+    private async Task<RawBlobRef?> TryPutRawBlobAsync(byte[] payload, string mimeType, CancellationToken ct)
+    {
         // Step 1 — the PUT. If this fails, nothing was stored and null is the
         // truthful answer.
         try
         {
             using var blobStream = new MemoryStream(payload, writable: false);
-            blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
+            return await blobStore.PutAsync(blobStream, mimeType, ct);
         }
         catch (OperationCanceledException)
         {
@@ -1694,7 +1939,10 @@ internal sealed class AiOrchestrator(
                 ColdTierBucketLabel);
             return null;
         }
+    }
 
+    private async Task<RawBlobRef> TryIndexRawBlobAsync(RawBlobRef blobRef, Guid subjectUserId, CancellationToken ct)
+    {
         // Step 2 — bookkeeping, in its OWN try. Reaching here means the bytes
         // are in the cold tier at this hash; that is a fact about the world and
         // a bookkeeping failure does not un-store them.
