@@ -220,13 +220,15 @@ public sealed class ScheduleMechanismSwitchRealPostgresTests(ITestOutputHelper o
 
         // The new phone's query: `scheduleFormat=2` is a query parameter (no new header, so CORS is untouched). It is accepted, an
         // unreadable value is ignored, and neither changes what the pull carries - except (slice 3) that a phone asking for format 2 or more, on a farm the
-        // switch is on for, is also sent the works of its own schedules and their history (`ownScheduleItems` / `ownScheduleItemRevisions`, empty here).
+        // switch is on for, is also sent the works of its own schedules and their history (`ownScheduleItems` / `ownScheduleItemRevisions`), the season-end carries
+        // (slice 11, `ownScheduleCarries`) and the schedule owner's voice (slice 12b, `ownerMessages` / `ownerClips` / `ownerMessageStates`): all empty here, and
+        // NONE of them reaches a phone that does not ask for format 2 (P11). The full gate of 25 Nov found this list still naming slice 3's two keys only.
         foreach (var query in new[] { "&scheduleFormat=2", "&scheduleFormat=abc", "&scheduleFormat=", "&scheduleFormat=99999999999999" })
         {
             var asked = await Pull1017Async(query);
             FarmsOn(asked).Should().Equal(new[] { FarmA }, $"'{query}' is read leniently: the answer is the same");
             var asksFormat2 = query == "&scheduleFormat=2"; // the other three are unreadable (a number too big for the query is too)
-            foreach (var key in new[] { "ownScheduleItems", "ownScheduleItemRevisions" })
+            foreach (var key in new[] { "ownScheduleItems", "ownScheduleItemRevisions", "ownScheduleCarries", "ownerMessages", "ownerClips", "ownerMessageStates" })
             {
                 if (asksFormat2)
                 {
