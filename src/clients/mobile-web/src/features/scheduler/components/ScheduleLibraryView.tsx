@@ -38,12 +38,11 @@ import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../sha
 import { CropPlotPicker, type PickerCrop } from '../../context/components/CropPlotPicker';
 import { SinglePlotSection } from '../../context/components/PlotSelector';
 import { sortedNaturally } from '../../context/components/plotSelectorRules';
-import { SC, frequencyMr, mrNum, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
 import { libraryRowWords, type LibraryRowWords } from './libraryRowWords';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { shownScheduleDay } from '../schedulePage/scheduleDates';
-import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
-import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
+import { partOf } from '../schedulePage/scheduleModel';
+import { scheduleNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
 import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
 import { scheduleMapWords, type ScheduleMapLanguage } from '../schedulePage/scheduleMapCopy';
@@ -97,17 +96,16 @@ interface ScheduleLibraryViewProps {
     loadTotals?: (id: string) => Promise<TotalsLoad>;
 }
 
-const opLabel = (opId: string): string => opNameMr(opId) ?? PART_LABEL[partOf(getOperationCategory(opId))];
-
-/** The schedule's own name for a task, when it says more than the label or the part. */
-const ownName = (opId: string, notes?: string): string | null => {
-    const own = notes ? taskNameMr(notes) : '';
-    return own && own !== opLabel(opId) && own !== PART_LABEL[partOf(getOperationCategory(opId))] ? own : null;
+/** The schedule's own name for a task, when it says more than the label or the part (in the sheet's language). */
+const ownName = (opId: string, notes: string | undefined, w: LibraryRowWords): string | null => {
+    const own = notes ? w.ownTaskName(notes) : '';
+    const part = partOf(getOperationCategory(opId));
+    return own && own !== w.opLabel(opId, part) && own !== w.opLabel('', part) ? own : null;
 };
 
-const stageTasks = (template: CropScheduleTemplate, stageId: string): Array<{ label: string; detail: string | null; timing: string }> => [
-    ...template.periodicExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: frequencyMr(i.frequencyMode, i.frequencyValue) })),
-    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: SC.dayN(shownScheduleDay(i.targetDayFromRef)) })),
+const stageTasks = (template: CropScheduleTemplate, stageId: string, w: LibraryRowWords): Array<{ label: string; detail: string | null; timing: string }> => [
+    ...template.periodicExpectations.filter(i => i.stageId === stageId).map(i => ({ label: w.opLabel(i.operationTypeId, partOf(getOperationCategory(i.operationTypeId))), detail: ownName(i.operationTypeId, i.notes, w), timing: w.frequency(i.frequencyMode, i.frequencyValue) })),
+    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: w.opLabel(i.operationTypeId, partOf(getOperationCategory(i.operationTypeId))), detail: ownName(i.operationTypeId, i.notes, w), timing: w.dayN(shownScheduleDay(i.targetDayFromRef)) })),
 ];
 
 type Order = 'usual' | 'short';
@@ -154,23 +152,23 @@ export function libraryTemplates(allCrops: readonly CropProfile[]): CropSchedule
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
 const madeBy = (t: CropScheduleTemplate, w: LibraryRowWords) => `${w.owner[t.ownerType] ?? w.owner.SYSTEM_DEFAULT}${t.createdBy && !INTERNAL_AUTHORS.has(t.createdBy) ? ` · ${t.createdBy}` : ''}`;
 
-const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => void }> = ({ template, onClose }) => {
+const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => void; rw: LibraryRowWords; shownName: (name: string) => string }> = ({ template, onClose, rw, shownName }) => {
     useBackDismiss(true, onClose);
     return (
         <div className="fixed inset-0 z-[120] flex justify-center bg-stone-900/40" style={{ fontFamily: SANS }}>
-            <div className="flex h-full w-full max-w-md flex-col bg-stone-50" role="dialog" aria-modal="true" aria-label={scheduleNameMr(template.name)} data-testid="library-stages">
+            <div className="flex h-full w-full max-w-md flex-col bg-stone-50" role="dialog" aria-modal="true" aria-label={shownName(template.name)} data-testid="library-stages">
                 <div className="flex shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-3 py-2.5">
-                    <Tap onClick={onClose} data-testid="library-stages-back" aria-label="मागे" className="flex min-h-[48px] shrink-0 items-center rounded-full border border-stone-300 bg-white px-4 text-[16px] font-extrabold text-stone-800">← मागे</Tap>
-                    <p className="m-0 min-w-0 truncate text-[17px] font-extrabold text-stone-900" data-testid="library-stages-title">{scheduleNameMr(template.name)}</p>
+                    <Tap onClick={onClose} data-testid="library-stages-back" aria-label={rw.back} className="flex min-h-[48px] shrink-0 items-center rounded-full border border-stone-300 bg-white px-4 text-[16px] font-extrabold text-stone-800">← {rw.back}</Tap>
+                    <p className="m-0 min-w-0 truncate text-[17px] font-extrabold text-stone-900" data-testid="library-stages-title">{shownName(template.name)}</p>
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-24 pt-3">
                     {[...template.stages].sort((a, b) => a.orderIndex - b.orderIndex).map(stage => {
-                        const tasks = stageTasks(template, stage.id);
+                        const tasks = stageTasks(template, stage.id, rw);
                         return (
                             <GlassCard key={stage.id} testId={`library-stage-${stage.orderIndex}`}>
                                 <div className="flex items-center justify-between gap-3">
-                                    <h4 className="m-0 text-[17px] font-extrabold text-stone-900">{stageNameMr(stage.name)}</h4>
-                                    <span className="text-[14px] font-bold text-stone-600">{SC.dayN(shownScheduleDay(stage.dayStart))}–{mrNum(shownScheduleDay(stage.dayEnd))}</span>
+                                    <h4 className="m-0 text-[17px] font-extrabold text-stone-900">{rw.stageName(stage.name)}</h4>
+                                    <span className="text-[14px] font-bold text-stone-600">{rw.days(shownScheduleDay(stage.dayStart), shownScheduleDay(stage.dayEnd))}</span>
                                 </div>
                                 <ul className="m-0 mt-2 space-y-1.5 p-0">
                                     {tasks.length === 0
@@ -367,7 +365,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                     </button>
                 )}
             </section>
-            {detail && <StagesSheet template={detail} onClose={() => setDetail(null)} />}
+            {detail && <StagesSheet template={detail} onClose={() => setDetail(null)} rw={rw} shownName={shownName} />}
         </div>
     );
 };

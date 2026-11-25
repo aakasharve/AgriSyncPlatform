@@ -33,6 +33,7 @@ import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import { SathiQuestionCard, type AnswerStatus } from './voiceResult/SathiQuestionCard';
+import { resultCopy } from './voiceResult/resultCopy';
 import { WhyNotAnswer } from './WhyNotAnswer';
 import type { WhyNotReason } from '../services/dfesWhyNot';
 
@@ -94,7 +95,9 @@ export function MeterDisplay({
     onWhyNotReason,
     onDidItNotLogged,
 }: MeterDisplayProps): React.ReactElement | null {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    // The same words Sathi's card says (one set of rules: `resultCopy`).
+    const copy = resultCopy(language);
 
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {
@@ -201,6 +204,19 @@ export function MeterDisplay({
                             {combinedQuestion.taskLine.sourceLabelMr}
                         </p>
                     ) : null}
+                    {answerStatus !== null && (
+                        <p
+                            data-testid="shramsathi-answer-status"
+                            data-state={answerStatus}
+                            role="status"
+                            className={`mt-2 text-xs font-bold ${answerStatus === 'failed' ? 'text-red-800' : 'text-emerald-900'}`}
+                            style={{ fontFamily: SANS }}
+                        >
+                            {{ saving: copy.answerSaving, queued: copy.answerQueued, kept: copy.answerKept, failed: copy.answerNotKept }[answerStatus]}
+                        </p>
+                    )}
+                    {/* Once the answer is queued or kept the buttons go (it is taken); while saving or after a failure they stay (a second tap is real). */}
+                    {answerStatus === 'queued' || answerStatus === 'kept' ? null : (<>
                     <div className="mt-2 flex flex-wrap gap-2">
                         {combinedQuestion.answerOptions.map((option) => (
                             <button
@@ -224,6 +240,7 @@ export function MeterDisplay({
                     >
                         नंतर
                     </button>
+                    </>)}
                 </div>
             ) : combinedQuestion ? (
                 <button

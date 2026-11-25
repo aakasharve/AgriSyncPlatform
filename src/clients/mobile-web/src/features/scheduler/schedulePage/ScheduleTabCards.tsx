@@ -25,11 +25,11 @@ import { shownScheduleDay } from './scheduleDates';
 export const TAB_CARD_WORDS = {
     mr: {
         looks: 'पाहणीच्या आठवणी', looksRule: 'आज पाहणी किंवा प्रश्न असलेलं काम या शेड्यूलमध्ये नाही. असं काम असेल तेव्हा इथे त्याचा प्रश्न दिसेल.', todayQ: 'आजचा प्रश्न: ',
-        totals: 'कोणाची पद्धत किती फॉलो होते?', totalsRule: totalsWords('mr').rule,
+        totals: totalsWords('mr').open, totalsOther: totalsWords('mr').openOther, totalsRule: totalsWords('mr').rule,
     },
     en: {
         looks: 'Look reminders', looksRule: 'No work with a look or a question is due today in this schedule. When there is one, its question shows here.', todayQ: 'Today\'s question: ',
-        totals: 'Whose method is followed how much?', totalsRule: totalsWords('en').rule,
+        totals: totalsWords('en').open, totalsOther: totalsWords('en').openOther, totalsRule: totalsWords('en').rule,
     },
 } as const;
 
@@ -73,7 +73,7 @@ export const LookMemoriesCard: React.FC<{ templateId: string; todayStored: numbe
 };
 
 /** Slice 13: the button under the profile; it opens "कोणाची पद्धत फॉलो होते" with one card per schedule on the plot's tiles. It draws its rule and NEVER a number itself. */
-export const FollowTotalsSlot: React.FC<{ schedules?: readonly TotalsScheduleRef[]; loadTotals?: (id: string) => Promise<TotalsLoad>; loadDetail?: (id: string) => Promise<DayCardsLoad> }> = ({ schedules = [], loadTotals, loadDetail }) => {
+export const FollowTotalsSlot: React.FC<{ /** true under the profile of another selected schedule (not the one the plot follows): the design's second text; the same screen opens. */ other?: boolean; schedules?: readonly TotalsScheduleRef[]; loadTotals?: (id: string) => Promise<TotalsLoad>; loadDetail?: (id: string) => Promise<DayCardsLoad> }> = ({ other = false, schedules = [], loadTotals, loadDetail }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = TAB_CARD_WORDS[language];
     const [open, setOpen] = useState(false);
@@ -82,7 +82,7 @@ export const FollowTotalsSlot: React.FC<{ schedules?: readonly TotalsScheduleRef
             <button type="button" onClick={() => schedules.length > 0 && setOpen(true)} aria-disabled={schedules.length === 0} data-testid="follow-totals-slot"
                 className="flex min-h-[64px] w-full items-start gap-3 rounded-2xl bg-indigo-50 px-3 py-3 text-left">
                 <Users size={22} className="mt-0.5 shrink-0 text-indigo-800" aria-hidden="true" />
-                <span className="min-w-0"><strong className="block text-[17px] font-black text-indigo-900">{words.totals}</strong>
+                <span className="min-w-0"><strong className="block text-[17px] font-black text-indigo-900">{other ? words.totalsOther : words.totals}</strong>
                     <span className="block text-[14px] font-bold text-stone-700" data-testid="follow-totals-rule">{words.totalsRule}</span></span>
             </button>
             {open && <FollowTotalsScreen schedules={schedules} onClose={() => setOpen(false)} loadTotals={loadTotals} loadDetail={loadDetail} />}

@@ -154,7 +154,7 @@ const PlotScheduleHomeBody: React.FC<{
                 {checkNote && profileId === template.id && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} tone="light" />}
             </ScheduleProfileCard>
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
-            <FollowTotalsSlot schedules={totalsSchedules} />
+            <FollowTotalsSlot other={profileId !== template.id} schedules={totalsSchedules} />
             <ScheduleTabDoors plotName={plotName} onPlan={onPlan} onMake={mayMakeOwn ? onMakeOwn : undefined} />
             <LookMemoriesCard templateId={profileId} todayStored={model.todayDay} take={take} />
             <ScheduleCalendarTabs templateId={profileId} versionIds={followed ? followed.map(f => f.templateId) : []} model={model} take={take} scheduleName={names(profilePlace?.template?.name ?? template.name)} />

@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
@@ -53,6 +53,25 @@ describe('ScheduleLibraryView rows by language', () => {
         setScheduleTemplatesFromReferenceData([checkedRow, sampleRow]);
         const view = render(<ScheduleLibraryView crop={grapes} allCrops={[grapes]} onAdopt={vi.fn()} language="en" onMakeOwn={vi.fn()} />);
         expect(view.container.textContent ?? '').not.toMatch(DEVANAGARI);
+    });
+
+    it('English mode: the stages sheet ("View") has no Devanagari and says the English words; Marathi mode keeps Marathi', () => {
+        setScheduleTemplatesFromReferenceData([checkedRow]);
+        render(<ScheduleLibraryView crop={grapes} allCrops={[grapes]} onAdopt={vi.fn()} language="en" />);
+        fireEvent.click(screen.getByTestId(`library-view-${CHECKED_ID}`));
+        const sheet = screen.getByTestId('library-stages');
+        expect(sheet.textContent ?? '').not.toMatch(DEVANAGARI);
+        expect(sheet.getAttribute('aria-label') ?? '').not.toMatch(DEVANAGARI);
+        expect(screen.getByTestId('library-stages-back').getAttribute('aria-label') ?? '').not.toMatch(DEVANAGARI);
+        expect(sheet.textContent).toContain('Back');
+        expect(sheet.textContent).toContain('Post Pruning');
+        expect(sheet.textContent).toContain('Day 1–13');
+        expect(sheet.textContent).toContain('Every 7 days');
+        cleanup();
+        render(<ScheduleLibraryView crop={grapes} allCrops={[grapes]} onAdopt={vi.fn()} />);
+        fireEvent.click(screen.getByTestId(`library-view-${CHECKED_ID}`));
+        expect(screen.getByTestId('library-stages').textContent).toContain('मागे');
+        expect(screen.getByTestId('library-stages').textContent).toContain('दर ');
     });
 
     it('Marathi mode keeps its Marathi labels', () => {

@@ -6,6 +6,8 @@ export type TotalsLanguage = 'mr' | 'en';
 
 export interface TotalsWords {
     open: string;
+    /** The button's text under the profile of ANOTHER selected schedule (not the one the plot follows). */
+    openOther: string;
     title: string;
     rule: string;
     back: string;
@@ -38,6 +40,7 @@ const mr = (n: number): string => toDevanagariDigits(n);
 
 const MARATHI: TotalsWords = {
     open: 'कोणाची पद्धत किती फॉलो होते?',
+    openOther: 'कोण फॉलो करतं?',
     title: 'कोणाची पद्धत फॉलो होते',
     rule: 'फॉलो = शेतकऱ्याने ते काम स्वतःच्या शेड्यूलमध्ये घेतलं. "काम झालं" हे वेगळं मोजलं जातं.',
     back: 'मागे', // PROPOSED
@@ -66,7 +69,8 @@ const MARATHI: TotalsWords = {
 };
 
 const ENGLISH: TotalsWords = {
-    open: 'Whose method is followed how much?',
+    open: 'Whose way is followed, and how much?', // PROPOSED (English)
+    openOther: 'Who follows it?', // PROPOSED (English)
     title: 'Whose method is followed',
     rule: 'Follow = the farmer took that work into his own schedule. "Work done" is counted separately.',
     back: 'Back',

@@ -72,4 +72,31 @@ describe('the slot under the profile', () => {
         fireEvent.click(screen.getByTestId('totals-back'));
         expect(screen.queryByTestId('follow-totals-screen')).toBeNull();
     });
+
+describe('the slot text by whose profile it sits under', () => {
+    const slot = (other: boolean, lang: 'mr' | 'en') => {
+        language.current = lang;
+        return <FollowTotalsSlot other={other} schedules={[{ templateId: SCHED_A }]} loadTotals={answers({ [SCHED_A]: FULL_ANSWER })} />;
+    };
+    it('the followed profile says the first text; the profile of another selected schedule says the second; both open the same screen', async () => {
+        const first = render(slot(false, 'mr'));
+        expect(screen.getByTestId('follow-totals-slot')).toHaveTextContent('कोणाची पद्धत किती फॉलो होते?');
+        fireEvent.click(screen.getByTestId('follow-totals-slot'));
+        expect(screen.getByTestId('follow-totals-screen')).toBeInTheDocument();
+        first.unmount();
+        render(slot(true, 'mr'));
+        expect(screen.getByTestId('follow-totals-slot')).toHaveTextContent('कोण फॉलो करतं?');
+        expect(screen.getByTestId('follow-totals-slot')).not.toHaveTextContent('कोणाची पद्धत किती');
+        fireEvent.click(screen.getByTestId('follow-totals-slot'));
+        expect(screen.getByTestId('follow-totals-screen')).toBeInTheDocument();
+    });
+    it('English twins, no Devanagari', () => {
+        const first = render(slot(false, 'en'));
+        expect(screen.getByTestId('follow-totals-slot')).toHaveTextContent('Whose way is followed, and how much?');
+        first.unmount();
+        render(slot(true, 'en'));
+        expect(screen.getByTestId('follow-totals-slot')).toHaveTextContent('Who follows it?');
+        expect(screen.getByTestId('follow-totals-slot').textContent).not.toMatch(/[ऀ-ॿ]/);
+    });
+});
 });
