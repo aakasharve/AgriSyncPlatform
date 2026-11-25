@@ -52,6 +52,8 @@ export interface DayCardWords {
         nothingToday: string;
         nothingTodayLine: string;
         challengesInStage: (n: number) => string;
+        /** The stage label of a preparation day (before pruning), so the label is never empty. */
+        beforePruning: string;
     };
     doseHidden: string;
     doseAfterCheck: string;
@@ -122,6 +124,7 @@ const MR: DayCardWords = {
         tasks: n => `${toDevanagari(n)} कामं`,
         looks: n => `${toDevanagari(n)} पाहायचं`,
         stage: 'टप्पा',
+        beforePruning: 'छाटणीपूर्वीची तयारी',
         nothingToday: 'आज ठरलेलं काम नाही',
         nothingTodayLine: 'या दिवशी वेळापत्रकात कोणतंही काम लिहिलेलं नाही.',
         challengesInStage: n => `या टप्प्यातली ${toDevanagari(n)} आव्हानं पुढे आहेत`,
@@ -204,6 +207,7 @@ const EN: DayCardWords = {
         tasks: n => `${n} works`,
         looks: n => `${n} to look at`,
         stage: 'Stage',
+        beforePruning: 'Before pruning',
         nothingToday: 'No work set for today',
         nothingTodayLine: 'The schedule lists no work on this day.',
         challengesInStage: n => `${n} challenges of this stage follow`,

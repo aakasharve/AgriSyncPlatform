@@ -6,7 +6,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { parseScheduleTask, type ScheduleTaskContent } from '../../../../../../../../sync-contract/schemas/schedule-task.zod';
+import { parseScheduleChallenge, parseScheduleTask, type ScheduleChallengeContent, type ScheduleTaskContent } from '../../../../../../../../sync-contract/schemas/schedule-task.zod';
 import { DayCardDeck, positionText } from '../DayCardDeck';
 import { cardsOfTask, deckForShownDay, deckForTask, doseHasUnit, doseLines, firstShownDay, lastShownDay, tasksOnShownDay } from '../dayCardsModel';
 import { parseDayCardsDetail, shownDayOfStored, type DayCardsDetail } from '../dayCardsTypes';
@@ -220,5 +220,45 @@ describe('shown days and no empty card', () => {
         expect(html).toContain('Not checked');
         expect(html).toContain('Stay out of the plot for 24 hours after spraying');
         expect(html).not.toContain('The dose is not checked');
+    });
+});
+
+// ---- slice 14 fixes: the count matches its words; a preparation day has a stage label ------------------------------------------------------------------------------
+const challengeOf = (stageIndex: number, n: number): ScheduleChallengeContent => {
+    const r = parseScheduleChallenge({ challengeKey: `c${stageIndex}-${n}`, title: `आव्हान ${stageIndex}-${n}`, stageIndex, order: n, signs: 'लक्षण' });
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+};
+const text = (html: string): string => html.replace(/<[^>]+>/g, ' ');
+
+describe('slice 14: the stage challenge count says what it counts', () => {
+    // Stage 0 has 7 challenges and a work still running on shown day 30; stage 1 (the day's own stage) has 12.
+    const running = base({ taskKey: 'run', name: 'चालू काम', stageIndex: 0, timing: { timer: 'day', fromDay: 10, toDay: 35, repeat: 'once' } });
+    const d = detailOf([running], {
+        stages: [
+            { index: 0, name: 'पहिला', from: shownDayOfStored(0)!, to: shownDayOfStored(19)!, startSign: null, endSign: null },
+            { index: 1, name: 'मण्यांची वाढ', from: shownDayOfStored(20)!, to: shownDayOfStored(60)!, startSign: null, endSign: null },
+        ],
+        challenges: [...Array.from({ length: 7 }, (_, i) => challengeOf(0, i)), ...Array.from({ length: 12 }, (_, i) => challengeOf(1, i))],
+    });
+    it('says 12 (this stage own challenges), not 19, while the earlier stage works still run', () => {
+        const html = renderToStaticMarkup(<DayCardDeck parts={deckForShownDay(d, 30)} detail={d} words={dayCardWords('mr')} />);
+        expect(text(html)).toContain('या टप्प्यातली १२ आव्हानं पुढे आहेत');
+        expect(html).not.toContain('१९ आव्हानं');
+        const en = renderToStaticMarkup(<DayCardDeck parts={deckForShownDay(d, 30)} detail={d} words={dayCardWords('en')} />);
+        expect(text(en)).toContain('12 challenges of this stage follow');
+    });
+});
+
+describe('slice 14: a preparation day never has an empty stage label', () => {
+    it('shows "छाटणीपूर्वीची तयारी" / "Before pruning" before day 1', () => {
+        const pre = base({ taskKey: 'pre', name: 'तयारी', timing: { timer: 'day', fromDay: -5, toDay: -5, repeat: 'once' } });
+        const d = detailOf([pre]);
+        const mr = renderToStaticMarkup(<DayCardDeck parts={deckForShownDay(d, -4)} detail={d} words={dayCardWords('mr')} />);
+        expect(text(mr)).toContain('छाटणीपूर्वीची तयारी');
+        expect(text(mr)).not.toMatch(/टप्पा\s*</);
+        const en = renderToStaticMarkup(<DayCardDeck parts={deckForShownDay(d, -4)} detail={d} words={dayCardWords('en')} />);
+        expect(text(en)).toContain('Before pruning');
+        expect(/data-testid="day-card-stage"[^>]*>([^<]*)</.exec(en)?.[1]).toBe('Before pruning');
     });
 });

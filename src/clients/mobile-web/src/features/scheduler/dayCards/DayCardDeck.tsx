@@ -58,7 +58,7 @@ const Reference: React.FC<{ detail: DayCardsDetail; words: DayCardWords }> = ({ 
 
 const DayCard: React.FC<{ part: Extract<CardPart, { type: 'day' }>; words: DayCardWords }> = ({ part, words }) => (
     <CardShell type="day">
-        {part.shownDay !== null && <p className="text-[18px] font-extrabold text-stone-500">{words.dayCard.stage}{part.stageName ? ` · ${part.stageName}` : ''}</p>}
+        {part.shownDay !== null && <p data-testid="day-card-stage" className="text-[18px] font-extrabold text-stone-500">{part.stageName ? `${words.dayCard.stage} · ${part.stageName}` : part.shownDay < 1 ? words.dayCard.beforePruning : words.dayCard.stage}</p>}
         <p data-testid="day-card-day" className="text-[56px] font-black leading-none text-emerald-800">{part.shownDay !== null ? positionText(part.shownDay, words) : ''}</p>
         {part.empty ? (
             <>
@@ -71,7 +71,7 @@ const DayCard: React.FC<{ part: Extract<CardPart, { type: 'day' }>; words: DayCa
                 <div className="min-w-[96px] rounded-2xl border border-stone-200 px-4 py-3 text-center"><p className="text-[28px] font-black">{mrDigits(part.looks, words)}</p><p className="text-[15px] font-extrabold">{words.dayCard.looks(part.looks).replace(/^\S+\s*/, '')}</p></div>
             </div>
         )}
-        {part.challenges > 0 && <p className="text-[15px] font-bold text-rose-800">{words.dayCard.challengesInStage(part.challenges)}</p>}
+        {part.stageChallenges > 0 && <p data-testid="day-card-challenges" className="text-[15px] font-bold text-rose-800">{words.dayCard.challengesInStage(part.stageChallenges)}</p>}
     </CardShell>
 );
 

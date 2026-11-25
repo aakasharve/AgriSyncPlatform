@@ -96,7 +96,7 @@ export function stageOnShownDay(detail: DayCardsDetail, shownDay: number): DayCa
 // ---- the cards ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 export type CardPart =
-    | { type: 'day'; shownDay: number | null; stageName: string | null; tasks: number; looks: number; challenges: number; empty: boolean }
+    | { type: 'day'; shownDay: number | null; stageName: string | null; tasks: number; looks: number; challenges: number; stageChallenges: number; empty: boolean }
     | { type: 'hero'; task: DayCardTask }
     | { type: 'how'; task: DayCardTask }
     | { type: 'safety'; task: DayCardTask }
@@ -144,6 +144,8 @@ export function deckForShownDay(detail: DayCardsDetail, shownDay: number): CardP
         tasks: tasks.filter(t => !isLook(t.task)).length,
         looks: tasks.filter(t => isLook(t.task)).length,
         challenges: challenges.length,
+        // The number the card SAYS ("this stage's N challenges follow"): this stage's own, not those of an earlier stage whose works still run today.
+        stageChallenges: stage ? challengesOfStage(detail, stage.index).length : 0,
         empty: tasks.length === 0,
     }];
     for (const t of tasks) parts.push(...cardsOfTask(t));
