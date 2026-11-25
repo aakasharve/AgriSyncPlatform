@@ -300,6 +300,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetScheduleCheckViewHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleTaskFormatHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleDayCardsHandler>();
+        // spec: plr-d10 schedule slice 13 - who follows a schedule: counts only, hidden under five farmers.
+        services.AddScoped<ShramSafal.Application.UseCases.Schedules.GetScheduleTotals.GetScheduleTotalsHandler>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.

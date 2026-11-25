@@ -1468,6 +1468,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // ssf.schedule_owner_message_states (FORCE RLS each; the states table has its own owner-and-place trigger function) and adds one nullable column to ssf.own_schedule_item_revisions.
         // It never touches ssf.audit_events, its policies or its grants. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125030530_AddScheduleOwnerVoice",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 13) - Up() and Down() read in full: Up() creates ssf.schedule_totals_excluded_farms (FORCE RLS; no grant and no policy for the app role), the SECURITY DEFINER function
+        // ssf.schedule_chain_totals and one owner-only SELECT policy (p_totals_owner_select) on seven schedule tables, farms and the list. It never touches ssf.audit_events, its policies or its grants. Down() refuses while the list has
+        // any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261125120000_AddScheduleTotals",
     ];
 
     /// <summary>

@@ -583,6 +583,11 @@
 //     APPEND-ONLY BY PRIVILEGE (SELECT + INSERT), so no scrub is wired. The clips' BYTES live in storage under schedule-owner-clips/ and are the owner's recordings, never the farmer's retained voice
 //     (VoiceClipRetained is not used). WHAT A CREATOR'S ERASURE MUST DO (slice 15, when creators send): a creator's recordings are his own voice, so his erasure DELETES his clip files and clip/message
 //     rows (the farmers' state rows hold no words of his and stay; a clip that is gone plays as "not available", never as another voice), with its own whole-worker proof. No such sender exists yet.
+//
+//   - ssf.schedule_totals_excluded_farms (plr-d10 schedule mechanism, slice 13, "who follows which schedule") - KEEP for ShramSafal. One row per farm that ShramSafal staff chose to leave out of the schedule
+//     totals (the founder's and the test farms): a farm id (an opaque id), the staff's words of why (for example "test farm"), who added it (a staff label) and when. Nothing personal of a farmer is stored, so a
+//     farmer's erasure neither reads nor changes it. The application role has NO grant on it and no policy it matches; only the SECURITY DEFINER function ssf.schedule_chain_totals reads it (through its owner's
+//     policy), and that function returns aggregates only (a number under five farmers is never returned). Nothing else of slice 13 is stored: the totals are computed, never kept.
 //     Proven through the WHOLE worker: ErasureWorkerOwnerVoiceRealPostgresTests runs the real worker with rows in all three tables and proves the request Completes and the rows are untouched.
 //     KEEP - conscious gate-4 disposition. No scrub action.
 //

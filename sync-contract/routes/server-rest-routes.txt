@@ -98,6 +98,7 @@ GET /shramsafal/schedule-owner-clips/{clipId:guid}
 GET /shramsafal/schedule-templates/checks/waiting
 GET /shramsafal/schedule-templates/{id:guid}/check-view
 GET /shramsafal/schedule-templates/{id:guid}/owner-messages
+GET /shramsafal/schedule-templates/{id:guid}/totals
 GET /shramsafal/schedule-templates/{rootId}/lineage
 GET /shramsafal/security/tenant-dek
 GET /shramsafal/test-instances

@@ -353,6 +353,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    ssf.schedule_owner_message_states (FORCE RLS each) and adds one nullable column to ssf.own_schedule_item_revisions. It GRANTs SELECT, INSERT and REVOKEs UPDATE, DELETE, TRUNCATE on the three new
         //    tables only; no ledger this suite asserts about is touched. Down() REFUSES while any row exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
         "20261125030530_AddScheduleOwnerVoice",
+        // ── Reviewed 2026-11-25 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, slice 13); Up() and Down() read in full: Up() creates ssf.schedule_totals_excluded_farms (FORCE RLS; every privilege REVOKEd from the app role),
+        //    the SECURITY DEFINER function ssf.schedule_chain_totals (EXECUTE for the app role only) and an owner-only SELECT policy on eight tables. It GRANTs nothing on any ledger this suite asserts about and touches none of them.
+        //    Down() REFUSES while the list has any row and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
+        "20261125120000_AddScheduleTotals",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

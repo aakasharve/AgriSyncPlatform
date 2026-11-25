@@ -658,6 +658,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // ssf.schedule_owner_message_states (FORCE RLS each). Only the states table has a farm-member read policy, written ALREADY narrowed (m.status = 3) from birth. It alters no existing policy,
         // no farm_memberships or farm_join_requests object, no seat. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125030530_AddScheduleOwnerVoice",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 13) - Up() and Down() read in full: Up() creates ssf.schedule_totals_excluded_farms, the SECURITY DEFINER function ssf.schedule_chain_totals and ONE extra policy per table named
+        // p_totals_owner_select (FOR SELECT, TO the function's owner role only, never PUBLIC or the app role) on seven schedule tables, ssf.farms and the list. It alters no existing policy (none is a p_user_select_* policy, so the narrowed/open
+        // counts are unchanged), no farm_memberships or farm_join_requests object, no seat. Down() refuses while the list has any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261125120000_AddScheduleTotals",
     ];
 
     /// <summary>

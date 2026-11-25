@@ -523,6 +523,8 @@ public static class DependencyInjection
         services.AddScoped<IOwnScheduleStore, OwnScheduleStore>();
         // spec: plr-d10 schedule slice 12b - the schedule owner's voice: messages, clips' metadata and the farms' own state of each.
         services.AddScoped<IOwnerVoiceStore, OwnerVoiceStore>();
+        // spec: plr-d10 schedule slice 13 - the totals of who follows a schedule: the ONE cross-farm read, a SECURITY DEFINER function that returns aggregates only.
+        services.AddScoped<IScheduleTotalsStore, ScheduleTotalsStore>();
         // spec: plr-d10 schedule slice 5 - the plans made from an own schedule and the answers about a work's sign.
         services.AddScoped<IScheduleFeedStore, ScheduleFeedStore>();
 

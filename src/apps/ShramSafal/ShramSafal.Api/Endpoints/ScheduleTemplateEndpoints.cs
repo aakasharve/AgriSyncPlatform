@@ -266,6 +266,26 @@ public static class ScheduleTemplateEndpoints
         })
         .WithName("GetScheduleLineage");
 
+        // spec: plr-d10 schedule slice 13 ("Library, profile and honest numbers") - who follows this schedule: counts, task keys and work names only, for any signed-in person, for a
+        // schedule in the library they can see. A schedule belongs to no farm, so it is read under the caller's OWN user scope; the cross-farm numbers come from ONE database function
+        // that returns aggregates only (a number under five farmers is not returned at all). A sample or an own schedule has no totals.
+        group.MapGet("/schedule-templates/{id:guid}/totals", async (
+            Guid id,
+            ClaimsPrincipal user,
+            ShramSafal.Application.UseCases.Schedules.GetScheduleTotals.GetScheduleTotalsHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId) || actorUserId == Guid.Empty)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(actorUserId, id, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetScheduleTotals");
+
         // ── spec: plr-d10 lane SCH-A (Task 4; founder D-74, L8-R) - ShramSafal's schedule check. A PLATFORM act: the handler
         // asks IEntitlementResolver.MayCheckSchedulesAsync (ModuleKey.ScheduleReview); a farm seat of any role is refused. A
         // schedule template belongs to no farm, so each route runs under the caller's OWN user scope (F99). ──
