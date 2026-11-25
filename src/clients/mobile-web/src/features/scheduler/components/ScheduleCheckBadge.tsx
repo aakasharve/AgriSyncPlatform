@@ -12,7 +12,7 @@
 import React from 'react';
 import { BadgeCheck, CircleDashed } from 'lucide-react';
 import type { CropScheduleTemplate } from '../scheduler.types';
-import { SC } from '../schedulePage/scheduleCopy';
+import { checkDateIn, libraryRowWords } from './libraryRowWords';
 
 /** "12 नोव्हें 2026" - Marathi month, the app's Latin digits. Unreadable dates are left out, never guessed. */
 export function checkDateLabel(iso: string | undefined): string | null {
@@ -26,21 +26,23 @@ export function checkDateLabel(iso: string | undefined): string | null {
     }
 }
 
-export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate, 'check' | 'ownerUserId'>; tone?: 'light' | 'dark'; testId?: string }> = ({
+export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate, 'check' | 'ownerUserId'>; tone?: 'light' | 'dark'; testId?: string; language?: 'mr' | 'en' }> = ({
     template,
     tone = 'light',
+    language = 'mr',
     testId = 'schedule-check',
 }) => {
     // spec: plr-d10 lane SCH-OWN-b (F228; founder D-82 = 3) - NO check applies to a person's own schedule: no badge at all, never "not checked".
     if (template.ownerUserId) return null;
     const check = template.check;
+    const rw = libraryRowWords(language);
     const dark = tone === 'dark';
     if (check?.state === 'Checked') {
-        const who = [check.checkerName, checkDateLabel(check.checkedAt)].filter(Boolean).join(' · ');
+        const who = [check.checkerName, checkDateIn(check.checkedAt, language)].filter(Boolean).join(' · ');
         return (
             <div className="mt-1.5" data-testid={testId} data-check-state="Checked">
                 <span className={`inline-flex max-w-full items-center gap-1.5 rounded-2xl px-3 py-1 text-left text-[14px] font-extrabold ${dark ? 'border border-emerald-300/40 bg-emerald-500/25 text-emerald-100' : 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'}`}>
-                    <BadgeCheck size={16} aria-hidden="true" />{SC.checkedByShramSafal}
+                    <BadgeCheck size={16} aria-hidden="true" />{rw.checked}
                 </span>
                 {who && <p className={`m-0 mt-0.5 text-[13px] font-bold ${dark ? 'text-white/75' : 'text-stone-600'}`} data-testid={`${testId}-who`}>{who}</p>}
             </div>
@@ -49,7 +51,7 @@ export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate,
     return (
         <div className="mt-1.5" data-testid={testId} data-check-state="NotChecked">
             <span className={`inline-flex max-w-full items-center gap-1.5 rounded-2xl px-3 py-1 text-left text-[14px] font-extrabold ${dark ? 'border border-white/20 bg-white/10 text-white/70' : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200'}`}>
-                <CircleDashed size={16} aria-hidden="true" />{SC.notCheckedByShramSafal}
+                <CircleDashed size={16} aria-hidden="true" />{rw.notChecked}
             </span>
         </div>
     );

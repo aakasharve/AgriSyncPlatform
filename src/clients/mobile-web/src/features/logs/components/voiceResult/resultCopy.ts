@@ -27,6 +27,11 @@ export interface ResultCopy {
     askHeading: string;
     speakAnswer: string;
     later: string;
+    /** After a tap on Sathi's question: only what is true (plr-d10-final-polish). */
+    answerSaving: string;
+    answerQueued: string;
+    answerKept: string;
+    answerNotKept: string;
     /** No recording behind it. */
     typedTag: string;
     typedNote: string;
@@ -138,6 +143,10 @@ const mr: ResultCopy = {
     speakAnswer: 'बोलून सांगा',
     // DESIGN — model.ts STR.later (the word MeterDisplay already uses).
     later: 'नंतर',
+    answerSaving: 'उत्तर ठेवत आहोत…', // PROPOSED (Marathi)
+    answerQueued: 'उत्तर फोनवर ठेवलं आहे आणि पाठवलं जाईल.', // PROPOSED (Marathi)
+    answerKept: 'तुमचं उत्तर ठेवलं आहे.', // PROPOSED (Marathi)
+    answerNotKept: 'उत्तर आत्ता ठेवता आलं नाही — पुन्हा दाबा', // PROPOSED (Marathi)
     // REUSED — the founder's tag word (RESULT_STR.typedTag) and the typed sheet's no-recording line (TYPED_WORDS.noAudio).
     typedTag: RESULT_STR.typedTag,
     typedNote: TYPED_WORDS.noAudio,
@@ -223,6 +232,10 @@ const en: ResultCopy = {
     askHeading: 'If you explain a little more, Sathi can understand it properly', // PROPOSED (English)
     speakAnswer: 'Answer by speaking', // PROPOSED (English)
     later: 'Later', // PROPOSED (English)
+    answerSaving: 'Keeping your answer…', // PROPOSED (English)
+    answerQueued: 'Your answer is kept on the phone and will be sent.', // PROPOSED (English)
+    answerKept: 'Your answer is kept.', // PROPOSED (English)
+    answerNotKept: 'Could not keep your answer just now — tap again', // PROPOSED (English)
     typedTag: 'Typed', // PROPOSED (English)
     typedNote: 'No voice recording. This was told in writing.', // PROPOSED (English)
     products: 'Sprays / fertiliser', // PROPOSED (English)

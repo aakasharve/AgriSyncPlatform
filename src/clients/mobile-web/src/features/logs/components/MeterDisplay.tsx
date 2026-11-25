@@ -32,7 +32,7 @@ import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
-import { SathiQuestionCard } from './voiceResult/SathiQuestionCard';
+import { SathiQuestionCard, type AnswerStatus } from './voiceResult/SathiQuestionCard';
 import { WhyNotAnswer } from './WhyNotAnswer';
 import type { WhyNotReason } from '../services/dfesWhyNot';
 
@@ -72,6 +72,8 @@ export interface MeterDisplayProps {
      * the same. Default 'card' (every other surface, unchanged).
      */
     look?: 'card' | 'sathi';
+    /** plr-d10-final-polish: what really happened to the tapped answer (the 'sathi' card says it); null = nothing tapped. */
+    answerStatus?: AnswerStatus | null;
     /** Lane DFES-Q (founder D-H) - a why-not question answered with one of the eight reasons (and his अडचण). */
     onWhyNotReason?: (code: WhyNotReason, challenge: string | null) => void;
     /** Lane DFES-Q - "केलं, पण नोंद केली नाही" on a why-not question: the host records it and opens that day. */
@@ -88,6 +90,7 @@ export function MeterDisplay({
     onDismiss,
     onAnswerBySpeaking,
     look = 'card',
+    answerStatus = null,
     onWhyNotReason,
     onDidItNotLogged,
 }: MeterDisplayProps): React.ReactElement | null {
@@ -158,6 +161,7 @@ export function MeterDisplay({
                     onLater={() => onDismiss?.()}
                     onSpeak={() => onAnswerBySpeaking?.()}
                     sourceLabel={combinedQuestion.taskLine?.sourceLabelMr}
+                    answerStatus={answerStatus}
                 />
             </div>
         );

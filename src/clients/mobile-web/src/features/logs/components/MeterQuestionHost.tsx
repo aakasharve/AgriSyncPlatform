@@ -15,7 +15,9 @@
  *
  * spec: dfes-companion-2026-07-11
  */
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import type { AnswerStatus } from './voiceResult/SathiQuestionCard';
+import type { RecordResult } from '../hooks/useDfesQuestion';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { MeterDisplay } from './MeterDisplay';
 import { useDfesQuestion } from '../hooks/useDfesQuestion';
@@ -94,32 +96,43 @@ export function MeterQuestionHost({
     const askable = !selected?.taskLine || selected.taskLine.takesSignEvent || online;
     // Slice 12 - one `schedule.task_event` per shown question, whatever the number of taps or retries of the question's own write.
     const taskEventFor = useRef<SelectedQuestion | null>(null);
+    // What ACTUALLY happened to the tapped answer, for the card to say (null = nothing tapped yet; nothing is claimed before it is true). 'queued' = the answer is in the phone's
+    // own queue and goes out by itself; 'kept' = the server recorded it; 'failed' = it was not kept and a second tap really tries again; 'saving' = asked, no word back yet.
+    const [answerStatus, setAnswerStatus] = useState<AnswerStatus | null>(null);
+    useEffect(() => { setAnswerStatus(null); }, [selected]);
+    const settle = (result: RecordResult | undefined) => {
+        if (result === 'kept') setAnswerStatus(prev => (prev === 'queued' ? prev : 'kept'));
+        else if (result === 'failed') setAnswerStatus(prev => (prev === 'queued' ? prev : 'failed'));
+    };
     const answerTaskQuestion = async (option: DfesAnswerOption) => {
         const line = selected?.taskLine;
         const cropCycleId = selected?.taskCropCycleId;
         const answer = option.value as ScheduleSignAnswerName;
+        setAnswerStatus(prev => (prev === 'queued' ? prev : 'saving'));
         // The answer is QUEUED on the phone first (P10: it works with no internet and is replayed once, by its own request id), and only for an own work that waits for a
         // sign - the one kind of task the server takes an answer about. "Unsure" is kept as its own event and writes NOTHING else: no log, no plan, no date.
         if (selected && line?.takesSignEvent && cropCycleId && farmId && plotId && taskEventFor.current !== selected) {
             taskEventFor.current = selected;
             try {
                 await ScheduleFeedCommands.answerSign({ farmId, plotId, cropCycleId }, line.taskKey, answer, questionInputs.askedOnLocalDate);
+                setAnswerStatus('queued');
             } catch {
                 taskEventFor.current = null; // not queued: a second tap may try again
             }
         }
         // The question's own record. It names no log (the question is about the plot's stage, not about a day's record), and an "unsure" carries no words at all.
-        void recordOutcome({ skipped: false, response: answer === 'unsure' ? null : option.labelMr, dailyLogId: null });
+        settle(await recordOutcome({ skipped: false, response: answer === 'unsure' ? null : option.labelMr, dailyLogId: null }));
     };
     const handleAnswer = (option: DfesAnswerOption) => {
         if (selected?.taskLine) {
             void answerTaskQuestion(option);
             return;
         }
-        void recordOutcome({
+        setAnswerStatus('saving');
+        void Promise.resolve(recordOutcome({
             skipped: false, response: option.value,
             stageConfirmed: option.stageConfirmedValue ?? null, dailyLogId: sourceLogId,
-        });
+        })).then(settle);
     };
     // Lane DFES-Q (founder D-H) - a why-not answer: his reason as the founder's own words, the code, and his अडचण verbatim, in the
     // ONE insert. The record is never changed by it.
@@ -165,6 +178,7 @@ export function MeterQuestionHost({
             onAnswer={handleAnswer}
             onDismiss={() => { void recordOutcome({ skipped: true, dailyLogId: sourceLogId }); }}
             look={look}
+            answerStatus={answerStatus}
             onWhyNotReason={handleWhyNotReason}
             onDidItNotLogged={handleDidItNotLogged}
         />

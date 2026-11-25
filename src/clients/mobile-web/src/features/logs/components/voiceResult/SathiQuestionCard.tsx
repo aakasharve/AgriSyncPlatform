@@ -26,6 +26,9 @@ const Chip: React.FC<{ testId: string; label: string; onClick: () => void }> = (
         className="min-h-[48px] rounded-2xl border border-stone-300 bg-white px-4 text-[15px] font-extrabold text-stone-700 active:scale-95">{label}</button>
 );
 
+/** What really happened to the tapped answer: 'saving' (asked, no word back), 'queued' (kept on the phone, will be sent), 'kept' (the server recorded it), 'failed' (not kept; he may tap again). */
+export type AnswerStatus = 'saving' | 'queued' | 'kept' | 'failed';
+
 export interface SathiQuestionCardProps {
     /** The engine's resolved question (Marathi: the question bank has no other language yet). */
     prompt: string;
@@ -38,17 +41,26 @@ export interface SathiQuestionCardProps {
     onSpeak: () => void;
     /** Slice 12 - "स्रोत: ..." of the task the question was read from, shown under the question; absent = none. */
     sourceLabel?: string;
+    /** plr-d10-final-polish: said under the question after a tap, only as far as it is true; absent = nothing tapped. */
+    answerStatus?: AnswerStatus | null;
 }
 
-export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak, sourceLabel }) => {
+export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak, sourceLabel, answerStatus = null }) => {
     const copy = resultCopy(useOptionalLanguage()?.language);
-    const choices = options ?? [];
+    // Once the answer is queued or kept the buttons go (it is taken); while saving or after a failure they stay (a second tap is real).
+    const taken = answerStatus === 'queued' || answerStatus === 'kept';
+    const choices = taken ? [] : (options ?? []);
+    const statusWords = answerStatus === null ? null : { saving: copy.answerSaving, queued: copy.answerQueued, kept: copy.answerKept, failed: copy.answerNotKept }[answerStatus];
     return (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5" style={{ fontFamily: SANS }} data-testid="vr-question" data-kind={choices.length > 0 ? 'choice' : 'speak'}>
             <p className="m-0 mb-1.5 text-[14px] font-extrabold leading-snug text-amber-900" data-testid="vr-ask-heading">{copy.askHeading}</p>
             <h4 className="mb-3 text-[17px] font-extrabold leading-snug text-amber-950" data-testid="vr-question-prompt">{prompt}</h4>
             {sourceLabel ? <p className="m-0 mb-3 text-[13px] font-bold leading-snug text-amber-900" data-testid="vr-question-source">{sourceLabel}</p> : null}
-            {choices.length > 0 ? (
+            {statusWords && (
+                <p className={`m-0 mb-3 text-[15px] font-extrabold leading-snug ${answerStatus === 'failed' ? 'text-red-800' : 'text-emerald-900'}`}
+                    role="status" data-testid="vr-answer-status" data-state={answerStatus}>{statusWords}</p>
+            )}
+            {taken ? null : choices.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                     {choices.map(o => <Chip key={o.value} testId="vr-answer-option" label={o.labelMr} onClick={() => onAnswer(o)} />)}
                     <Chip testId="vr-later" label={copy.later} onClick={onLater} />

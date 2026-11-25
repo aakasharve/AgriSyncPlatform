@@ -38,7 +38,8 @@ import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../sha
 import { CropPlotPicker, type PickerCrop } from '../../context/components/CropPlotPicker';
 import { SinglePlotSection } from '../../context/components/PlotSelector';
 import { sortedNaturally } from '../../context/components/plotSelectorRules';
-import { OWNER_LABEL, SC, frequencyMr, mrNum, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { SC, frequencyMr, mrNum, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { libraryRowWords, type LibraryRowWords } from './libraryRowWords';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { shownScheduleDay } from '../schedulePage/scheduleDates';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
@@ -110,9 +111,9 @@ const stageTasks = (template: CropScheduleTemplate, stageId: string): Array<{ la
 ];
 
 type Order = 'usual' | 'short';
-const ORDERS: ReadonlyArray<readonly [Order, string]> = [
-    ['usual', 'नेहमीचा क्रम'], // PROPOSED (Marathi)
-    ['short', 'कमी दिवसांचं आधी'], // PROPOSED (Marathi) — the old "Shortest Duration"
+const ordersIn = (w: LibraryRowWords): ReadonlyArray<readonly [Order, string]> => [
+    ['usual', w.orderUsual],
+    ['short', w.orderShort], // the old "Shortest Duration"
 ];
 
 // spec: plr-d10 lane L8b-1 — the library matches crops by THE crop rule (TemplateCatalog.scheduleCropCode, read through the
@@ -151,7 +152,7 @@ export function libraryTemplates(allCrops: readonly CropProfile[]): CropSchedule
 }
 
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
-const madeBy = (t: CropScheduleTemplate) => `${OWNER_LABEL[t.ownerType] ?? OWNER_LABEL.SYSTEM_DEFAULT}${t.createdBy && !INTERNAL_AUTHORS.has(t.createdBy) ? ` · ${t.createdBy}` : ''}`;
+const madeBy = (t: CropScheduleTemplate, w: LibraryRowWords) => `${w.owner[t.ownerType] ?? w.owner.SYSTEM_DEFAULT}${t.createdBy && !INTERNAL_AUTHORS.has(t.createdBy) ? ` · ${t.createdBy}` : ''}`;
 
 const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => void }> = ({ template, onClose }) => {
     useBackDismiss(true, onClose);
@@ -204,6 +205,10 @@ const StepHead: React.FC<{ n: string; title: string; testId: string }> = ({ n, t
 
 const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt, plotAdd, plots, plotId = null, onPickPlot, onMakeOwn, language = 'mr', loadTotals }) => {
     const words = scheduleMapWords(language);
+    const rw = libraryRowWords(language);
+    const lang = language === 'en' ? 'en' : 'mr';
+    // Marathi mode is unchanged (`scheduleNameMr`); English mode shows the stored name as written.
+    const shownName = (name: string): string => (lang === 'en' ? name : scheduleNameMr(name));
     const tw = totalsWords(language === 'en' ? 'en' : 'mr');
     const stepNo = STEP_NO[language === 'en' ? 'en' : 'mr'];
     const [search, setSearch] = useState('');
@@ -213,7 +218,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
     const activeCropCode = crop ? canonicalCropCode(crop.name) : null;
     const sampleCropName = (t: CropScheduleTemplate): string => {
         const own = allCrops.find(c => canonicalCropCode(c.name) === canonicalCropCode(t.cropCode));
-        return own ? cropNameIn(own.name, 'mr', own.masterId) : t.cropCode;
+        return own ? cropNameIn(own.name, lang, own.masterId) : t.cropCode;
     };
     const schedules = useMemo(() => libraryTemplates(allCrops), [allCrops]);
     // Step 2 lists what THE CHOSEN PLOT'S CROP can take (a schedule is only ever for its own crop); with no crop chosen it lists all, none choosable.
@@ -270,7 +275,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
     const plotLabel = plot ? `${plot.cropName} · ${plot.name}` : null;
     const confirmLabel = plotLabel
         ? (plotAdd && !plotAdd.followsNone ? words.confirmAdd(plotLabel) : words.confirm(plotLabel))
-        : plotAdd ? plotAdd.words.follow : 'हे शेड्यूल वापरा'; // PROPOSED (Marathi) - the old button's own words, when no plot is named
+        : plotAdd ? plotAdd.words.follow : rw.useThis; // the old button's own words, when no plot is named
     const full = plotAdd?.full === true;
 
     return (
@@ -300,12 +305,12 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                 <label className="flex min-h-[52px] items-center gap-2 rounded-2xl bg-white px-3 ring-1 ring-stone-300">
                     <Search size={20} className="shrink-0 text-stone-500" aria-hidden="true" />
                     {/* PROPOSED (Marathi) */}
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="शेड्यूल किंवा बनवणाऱ्याचं नाव शोधा" data-testid="library-search"
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder={rw.searchPlaceholder} data-testid="library-search"
                         className="min-w-0 flex-1 bg-transparent text-[16px] font-bold text-stone-900 outline-none" />
                 </label>
-                {forCrop.length > 1 && <ChoiceChips items={ORDERS} value={order} onPick={setOrder} testId="library-order" />}
+                {forCrop.length > 1 && <ChoiceChips items={ordersIn(rw)} value={order} onPick={setOrder} testId="library-order" />}
                 {/* PROPOSED (Marathi) */}
-                {schedules.length === 0 && <p className="m-0 rounded-2xl bg-stone-50 p-3 text-[15px] font-bold text-stone-600 ring-1 ring-stone-200" data-testid="library-empty">तुमच्या पिकांसाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.</p>}
+                {schedules.length === 0 && <p className="m-0 rounded-2xl bg-stone-50 p-3 text-[15px] font-bold text-stone-600 ring-1 ring-stone-200" data-testid="library-empty">{rw.empty}</p>}
                 <div className="space-y-2" role="radiogroup" aria-label={words.step2} data-testid="library-list">
                     {shown.map(t => {
                         const adopted = plotAdd ? false : t.id === adoptedScheduleId;
@@ -324,23 +329,23 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                     </span>
                                     <ScheduleMakerBadge template={t} size={44} tone={on ? 'dark' : 'light'} testId={`library-badge-${t.id}`} />
                                     <span className="min-w-0 flex-1">
-                                        <span className={`block break-words text-[16px] font-black leading-snug ${on ? 'text-white' : 'text-stone-900'}`} data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</span>
+                                        <span className={`block break-words text-[16px] font-black leading-snug ${on ? 'text-white' : 'text-stone-900'}`} data-testid={`library-name-${t.id}`}>{shownName(t.name)}</span>
                                         {/* PROPOSED (Marathi) */}
-                                        <span className={`block text-[14px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>कोणी बनवलं: {madeBy(t)}</span>
-                                        <span className={`block text-[13px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{SC.edMeta(t.totalDurationDays ?? null, t.stages.length)}</span>
+                                        <span className={`block text-[14px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{rw.madeBy}: {madeBy(t, rw)}</span>
+                                        <span className={`block text-[13px] font-bold ${on ? 'text-white' : 'text-stone-600'}`}>{rw.meta(t.totalDurationDays ?? null, t.stages.length)}</span>
                                         {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only (its own dark tone on the dark green row) */}
-                                        <ScheduleCheckBadge template={t} tone={on ? 'dark' : 'light'} testId={`library-check-${t.id}`} />
+                                        <ScheduleCheckBadge template={t} tone={on ? 'dark' : 'light'} language={lang} testId={`library-check-${t.id}`} />
                                         {/* spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample says it will go once its crop has a checked schedule */}
-                                        {isSampleSchedule(t) && <span className={`mt-1 block text-[13.5px] font-bold ${on ? 'text-white' : 'text-stone-600'}`} data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</span>}
+                                        {isSampleSchedule(t) && <span className={`mt-1 block text-[13.5px] font-bold ${on ? 'text-white' : 'text-stone-600'}`} data-testid={`library-sample-line-${t.id}`}>{rw.sampleWillHide(sampleCropName(t))}</span>}
                                         {headlineOf(t) !== null && <span className={`mt-1 block text-[13.5px] font-extrabold ${on ? 'text-white' : 'text-indigo-900'}`} data-testid={`library-follow-${t.id}`}>{headlineOf(t)}</span>}
                                         {adopted && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{words.inUse}</Chip></span>}
                                         {alreadyFollowed && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{plotAdd!.words.alreadyFollowed}</Chip></span>}
                                     </span>
                                 </label>
-                                <Tap onClick={() => setDetail(t)} data-testid={`library-view-${t.id}`} aria-label={`${scheduleNameMr(t.name)} — पाहा`}
+                                <Tap onClick={() => setDetail(t)} data-testid={`library-view-${t.id}`} aria-label={`${shownName(t.name)} — ${rw.view}`}
                                     className="inline-flex min-h-[48px] shrink-0 items-center gap-1.5 self-end rounded-full bg-white px-3 text-[14.5px] font-extrabold text-stone-800 ring-1 ring-stone-300">
                                     {/* PROPOSED (Marathi) */}
-                                    <Eye size={18} aria-hidden="true" />पाहा
+                                    <Eye size={18} aria-hidden="true" />{rw.view}
                                 </Tap>
                             </div>
                         );

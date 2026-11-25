@@ -21,10 +21,13 @@ import {
     readPendingQuestionAnswer, withPendingMerged, abandonStalePendingQuestionAnswer,
 } from '../services/pendingQuestionAnswer';
 
+export type RecordResult = 'kept' | 'failed' | 'ignored';
+
 export interface UseDfesQuestionResult {
     selected: SelectedQuestion | null;
     loading: boolean;
-    recordOutcome: (outcome: QuestionOutcome) => Promise<void>;
+    /** 'kept' = the server took it; 'failed' = it did not (a second try is allowed); 'ignored' = already recorded or no question. */
+    recordOutcome: (outcome: QuestionOutcome) => Promise<RecordResult>;
     /**
      * wave-3.7 — the moment the current question was put in front of the farmer.
      * Exposed because the respeak path defers the write until AFTER a trip to the
@@ -97,8 +100,8 @@ export function useDfesQuestion(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [enabled, farmId, inputs.todayLocalDate]);
 
-    const recordOutcome = useCallback(async (outcome: QuestionOutcome) => {
-        if (!selected || recordedRef.current) return;
+    const recordOutcome = useCallback(async (outcome: QuestionOutcome): Promise<RecordResult> => {
+        if (!selected || recordedRef.current) return 'ignored';
         recordedRef.current = true;
         let wroteToServer = false;
         try {
@@ -107,7 +110,7 @@ export function useDfesQuestion(
         } catch {
             recordedRef.current = false; // allow a retry on transient failure
         }
-        if (!wroteToServer) return;
+        if (!wroteToServer) return 'failed';
         // FIX (review round 1, Task 4) — onAnswered?.() lives OUTSIDE the
         // try/catch above, gated on the `wroteToServer` flag, and in its OWN
         // try/catch. It used to sit INSIDE that try block: if a subscriber
@@ -134,6 +137,7 @@ export function useDfesQuestion(
             // (notifyDfesAnswered also isolates each of ITS listeners, so in
             // production this only guards a directly-injected onAnswered.)
         }
+        return 'kept';
     }, [farmId, plotId, selected, onAnswered]);
 
     return { selected, loading, recordOutcome, shownAtUtc };
