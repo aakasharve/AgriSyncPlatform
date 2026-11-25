@@ -125,6 +125,10 @@ const PlotScheduleHomeBody: React.FC<{
     const followedVersionIds = useMemo(() => (followed ? followed.map(f => f.templateId) : [template.id]), [followed, template.id]);
     const unheardByVersion = useUnheardCounts(followedVersionIds);
     const [listening, setListening] = useState<OwnerMessage | null>(null);
+    // Slice 13: one card per schedule on the plot's tiles (the followed ones; with none followed, the default shown).
+    const totalsSchedules = useMemo(() => (followed && followed.length > 0
+        ? followed.map(f => ({ templateId: f.templateId, name: f.template?.name ?? null, sourceLabel: f.template?.sourceLabel ?? null }))
+        : [{ templateId: template.id, name: template.name, sourceLabel: template.sourceLabel ?? null }]), [followed, template]);
     const makerOfVersion = (versionId: string) => makerOf(followed?.find(f => f.templateId === versionId), language);
 
     // Version 7 (slice 10, round 3): plot head, owner voice, the four tiles, the profile, follow totals, the two door cards, the look reminders, the two tabs
@@ -145,11 +149,12 @@ const PlotScheduleHomeBody: React.FC<{
             {followed && (
                 <ScheduleTiles followed={followed} selectedTemplateId={profileId} onSelect={setPicked} onAdd={onAddSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} unheard={unheardByVersion} />
             )}
-            <ScheduleProfileCard templateId={profileId} plotName={plotName} crop={crop} sourceLabel={profilePlace?.template?.sourceLabel ?? (profileId === template.id ? template.sourceLabel : undefined)}>
+            <ScheduleProfileCard templateId={profileId} plotName={plotName} crop={crop} sourceLabel={profilePlace?.template?.sourceLabel ?? (profileId === template.id ? template.sourceLabel : undefined)}
+                ownTakenFor={take && profilePlace ? { cropCycleId: take.place.cropCycleId } : undefined}>
                 {checkNote && profileId === template.id && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} tone="light" />}
             </ScheduleProfileCard>
             {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
-            <FollowTotalsSlot />
+            <FollowTotalsSlot schedules={totalsSchedules} />
             <ScheduleTabDoors plotName={plotName} onPlan={onPlan} onMake={mayMakeOwn ? onMakeOwn : undefined} />
             <LookMemoriesCard templateId={profileId} todayStored={model.todayDay} take={take} />
             <ScheduleCalendarTabs templateId={profileId} versionIds={followed ? followed.map(f => f.templateId) : []} model={model} take={take} scheduleName={names(profilePlace?.template?.name ?? template.name)} />

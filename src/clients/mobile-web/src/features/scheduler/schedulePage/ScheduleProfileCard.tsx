@@ -6,7 +6,7 @@
  * "<plot> पाळत असलेलं शेड्यूल", the schedule's name IN THE SCREEN'S LANGUAGE, then THREE separate labelled lines (बनवणारे / स्रोत / तपासणी) whose values are read from
  * `dayCards/sourceLines` (the same words the day card's source card uses), the grey note when the source is an institution that did not check it, and "पूर्ण ओळख पाहा" (a sheet
  * built from the phone's own copy of the version: its stages and the documents its works name). NO logo of any institution and no "logo place" box is drawn (no written permission
- * for NRCG's: SM-17); the source is TEXT. Reads the phone's copy first (`loadDayCards`), so it draws with no signal (P10). Draws nothing until the version is known.
+ * for NRCG's: SM-17); the source is TEXT. Reads the phone's copy first (`loadDayCards`), so it draws with no signal (P10). Draws nothing until the version is known. Slice 13: "तुम्ही घेतलेली N कामं" for a followed schedule (`totals/ownTaken`).
  */
 import React, { useEffect, useState } from 'react';
 import { ChevronRight, X } from 'lucide-react';
@@ -17,6 +17,7 @@ import { dayCardWords } from '../dayCards/dayCardWords';
 import { loadDayCards, type DayCardsLoad } from '../dayCards/dayCardsStore';
 import type { DayCardsDetail } from '../dayCards/dayCardsTypes';
 import { checkedByLine, madeByLine, scheduleSources } from '../dayCards/sourceLines';
+import { OwnTakenLine } from '../totals/ownTaken';
 import { mrNum } from './scheduleCopy';
 import { scheduleNameIn } from './scheduleNames';
 
@@ -47,8 +48,10 @@ export const ScheduleProfileCard: React.FC<{
     /** The schedule's own "where it comes from" line as the catalog holds it (e.g. "ICAR-NRCG ची प्रकाशनं"); the documents its works name are the fallback. */
     sourceLabel?: string | null;
     load?: (id: string) => Promise<DayCardsLoad>;
+    /** Slice 13: set for a schedule the plot follows - the profile then says "तुम्ही घेतलेली N कामं" (his own works of this season taken from it). Absent = no such line. */
+    ownTakenFor?: { cropCycleId: string };
     children?: React.ReactNode;
-}> = ({ templateId, plotName, crop, sourceLabel, load = loadDayCards, children }) => {
+}> = ({ templateId, plotName, crop, sourceLabel, load = loadDayCards, ownTakenFor, children }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = dayCardWords(language);
     const pw = PROFILE_WORDS[language];
@@ -75,6 +78,7 @@ export const ScheduleProfileCard: React.FC<{
             <Row id="line-made-by" label={pw.madeBy} lines={[madeByLine(detail, words)]} />
             <Row id="line-source" label={pw.source} lines={detail.kind === 'own' ? [words.source.own] : sourceLines} />
             <Row id="line-checked-by" label={pw.checkedBy} lines={[checkedByLine(detail, words)]} />
+            {ownTakenFor && <OwnTakenLine cropCycleId={ownTakenFor.cropCycleId} versionId={templateId} chainId={detail.chainId} />}
             {showNote && <p className="m-0 rounded-xl bg-stone-100 px-3 py-2 text-[13.5px] font-bold leading-snug text-stone-700" data-testid="profile-unchecked">{language === 'mr' ? `स्रोत: ${sourceLabel}. ${instituteWord(sourceLabel ?? '', 'mr')} ने हे शेड्यूल तपासलेलं किंवा मंजूर केलेलं नाही.` : pw.notChecked(sourceLabel ?? '')}</p>}
             {children}
             <button type="button" onClick={() => setFull(true)} data-testid="profile-full" className="ml-auto flex min-h-[48px] items-center gap-1 text-[16px] font-extrabold text-emerald-800">{pw.full}<ChevronRight size={18} aria-hidden="true" /></button>

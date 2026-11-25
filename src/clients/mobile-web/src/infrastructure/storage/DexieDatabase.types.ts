@@ -486,7 +486,7 @@ export type ReferenceDataKey =
     | 'activityCategories'
     | 'costCategories' | 'ownScheduleCarries' // slice 11: the season-end answers the pull carries (a disposable server cache; no new store)
     // slice 12b: the owner's voice - the three pull lists (replaced in full) and the kept clip bytes (one record per clip and content hash). All disposable server caches; no new store.
-    | 'ownerMessages' | 'ownerClips' | 'ownerMessageStates' | `ownerClipBytes:${string}`;
+    | 'ownerMessages' | 'ownerClips' | 'ownerMessageStates' | `ownerClipBytes:${string}` | `scheduleTotals:${string}`; // slice 13: the last totals answer per schedule
 
 export interface ReferenceDataRecord {
     key: ReferenceDataKey;

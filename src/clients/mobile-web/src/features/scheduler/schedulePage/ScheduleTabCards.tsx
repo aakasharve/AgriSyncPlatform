@@ -5,8 +5,8 @@
  * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 10, items 6 and 7; version 7) - two small cards of the tab.
  *   LookMemoriesCard ("पाहणीच्या आठवणी"): filled from the followed schedule's OWN look and question fields on the day-card detail the phone caches - the works due today
  *     that carry a question or a look. With none today it says its rule (show the rule, never vanish). Tapping opens the ONE viewer on today's cards.
- *   FollowTotalsSlot ("कोणाची पद्धत किती फॉलो होते?"): a slot for slice 13 (follow totals; "follow" = taken; no number without evidence, P4). It shows its rule and NEVER a number:
- *     the prop `totals` is not given by anything yet.
+ *   FollowTotalsSlot ("कोणाची पद्धत किती फॉलो होते?"): slice 13 fills it - the button opens the totals screen (`totals/FollowTotalsScreen`; "follow" = taken; no number without
+ *     evidence, P4). The slot itself shows its rule and NEVER a number.
  * Marathi words are PROPOSED (MARATHI-WORDS.md).
  */
 import React, { useEffect, useState } from 'react';
@@ -16,17 +16,20 @@ import { DayCardsViewer } from '../dayCards/DayCardsViewer';
 import { loadDayCards, type DayCardsLoad } from '../dayCards/dayCardsStore';
 import type { DayCardsDetail } from '../dayCards/dayCardsTypes';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
+import { FollowTotalsScreen, type TotalsScheduleRef } from '../totals/FollowTotalsScreen';
+import type { TotalsLoad } from '../totals/scheduleTotalsStore';
+import { totalsWords } from '../totals/totalsWords';
 import { mrNum } from './scheduleCopy';
 import { shownScheduleDay } from './scheduleDates';
 
 export const TAB_CARD_WORDS = {
     mr: {
         looks: 'पाहणीच्या आठवणी', looksRule: 'आज पाहणी किंवा प्रश्न असलेलं काम या शेड्यूलमध्ये नाही. असं काम असेल तेव्हा इथे त्याचा प्रश्न दिसेल.', todayQ: 'आजचा प्रश्न: ',
-        totals: 'कोणाची पद्धत किती फॉलो होते?', totalsRule: 'फॉलो म्हणजे "माझ्या वेळापत्रकात घेतलं". पुराव्याशिवाय आकडा दाखवत नाही; ही माहिती आल्यावर इथे दिसेल.',
+        totals: 'कोणाची पद्धत किती फॉलो होते?', totalsRule: totalsWords('mr').rule,
     },
     en: {
         looks: 'Look reminders', looksRule: 'No work with a look or a question is due today in this schedule. When there is one, its question shows here.', todayQ: 'Today\'s question: ',
-        totals: 'Whose method is followed how much?', totalsRule: 'Followed means "taken into my schedule". No number is shown without evidence; it will show here when that information arrives.',
+        totals: 'Whose method is followed how much?', totalsRule: totalsWords('en').rule,
     },
 } as const;
 
@@ -69,14 +72,20 @@ export const LookMemoriesCard: React.FC<{ templateId: string; todayStored: numbe
     );
 };
 
-export const FollowTotalsSlot: React.FC<{ totals?: null }> = () => {
+/** Slice 13: the button under the profile; it opens "कोणाची पद्धत फॉलो होते" with one card per schedule on the plot's tiles. It draws its rule and NEVER a number itself. */
+export const FollowTotalsSlot: React.FC<{ schedules?: readonly TotalsScheduleRef[]; loadTotals?: (id: string) => Promise<TotalsLoad>; loadDetail?: (id: string) => Promise<DayCardsLoad> }> = ({ schedules = [], loadTotals, loadDetail }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = TAB_CARD_WORDS[language];
+    const [open, setOpen] = useState(false);
     return (
-        <div className="flex items-start gap-3 rounded-2xl bg-indigo-50 px-3 py-3" data-testid="follow-totals-slot">
-            <Users size={22} className="mt-0.5 shrink-0 text-indigo-800" aria-hidden="true" />
-            <div className="min-w-0"><strong className="block text-[17px] font-black text-indigo-900">{words.totals}</strong>
-                <span className="block text-[14px] font-bold text-stone-700" data-testid="follow-totals-rule">{words.totalsRule}</span></div>
-        </div>
+        <>
+            <button type="button" onClick={() => schedules.length > 0 && setOpen(true)} aria-disabled={schedules.length === 0} data-testid="follow-totals-slot"
+                className="flex min-h-[64px] w-full items-start gap-3 rounded-2xl bg-indigo-50 px-3 py-3 text-left">
+                <Users size={22} className="mt-0.5 shrink-0 text-indigo-800" aria-hidden="true" />
+                <span className="min-w-0"><strong className="block text-[17px] font-black text-indigo-900">{words.totals}</strong>
+                    <span className="block text-[14px] font-bold text-stone-700" data-testid="follow-totals-rule">{words.totalsRule}</span></span>
+            </button>
+            {open && <FollowTotalsScreen schedules={schedules} onClose={() => setOpen(false)} loadTotals={loadTotals} loadDetail={loadDetail} />}
+        </>
     );
 };

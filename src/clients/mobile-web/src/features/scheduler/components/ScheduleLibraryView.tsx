@@ -46,6 +46,9 @@ import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
 import { ScheduleMakerBadge } from '../pictures/ScheduleMakerBadge';
 import { scheduleMapWords, type ScheduleMapLanguage } from '../schedulePage/scheduleMapCopy';
+import type { TotalsLoad } from '../totals/scheduleTotalsStore';
+import { totalsWords } from '../totals/totalsWords';
+import { useScheduleTotals } from '../totals/useScheduleTotals';
 
 /**
  * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - the library opened from a plot's "हे शेड्यूल पण पाळा": a pick FOLLOWS the schedule on
@@ -89,6 +92,8 @@ interface ScheduleLibraryViewProps {
     /** UI-8 step 3: "नवीन शेड्यूल बनवा" - only asks to go to planning (the page decides whether this seat may; absent = no button). */
     onMakeOwn?: () => void;
     language?: ScheduleMapLanguage;
+    /** Slice 13: where a row's "X शेतकरी फॉलो करतात" comes from (the server's totals); absent = the phone's own loader. */
+    loadTotals?: (id: string) => Promise<TotalsLoad>;
 }
 
 const opLabel = (opId: string): string => opNameMr(opId) ?? PART_LABEL[partOf(getOperationCategory(opId))];
@@ -197,8 +202,9 @@ const StepHead: React.FC<{ n: string; title: string; testId: string }> = ({ n, t
     </div>
 );
 
-const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt, plotAdd, plots, plotId = null, onPickPlot, onMakeOwn, language = 'mr' }) => {
+const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt, plotAdd, plots, plotId = null, onPickPlot, onMakeOwn, language = 'mr', loadTotals }) => {
     const words = scheduleMapWords(language);
+    const tw = totalsWords(language === 'en' ? 'en' : 'mr');
     const stepNo = STEP_NO[language === 'en' ? 'en' : 'mr'];
     const [search, setSearch] = useState('');
     const [order, setOrder] = useState<Order>('usual');
@@ -219,6 +225,14 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
             : forCrop;
         return order === 'short' ? sortTemplates(found, 'SHORTEST_DURATION') : found;
     }, [forCrop, search, order]);
+
+    // Slice 13: the headline of a row is the server's number only (a sample is never asked: it has none; a null answer draws nothing, never a 0).
+    const totalsIds = useMemo(() => shown.filter(t => !isSampleSchedule(t)).map(t => t.id), [shown]);
+    const totalsOf = useScheduleTotals(totalsIds, loadTotals);
+    const headlineOf = (t: CropScheduleTemplate): string | null => {
+        const state = totalsOf[t.id];
+        return !isSampleSchedule(t) && state && state !== 'loading' && state.ok && state.totals.kind === 'totals' && state.totals.following !== null ? tw.libraryHeadline(state.totals.following) : null;
+    };
 
     // Step 1: the farm's crops, each holding ALL its plots (so a plot's number is its place among all the crop's plots). The crop is named by its
     // STORED name (`cropRawName`, the photo's key); the picker shows it in his language.
@@ -318,6 +332,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                         <ScheduleCheckBadge template={t} tone={on ? 'dark' : 'light'} testId={`library-check-${t.id}`} />
                                         {/* spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample says it will go once its crop has a checked schedule */}
                                         {isSampleSchedule(t) && <span className={`mt-1 block text-[13.5px] font-bold ${on ? 'text-white' : 'text-stone-600'}`} data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</span>}
+                                        {headlineOf(t) !== null && <span className={`mt-1 block text-[13.5px] font-extrabold ${on ? 'text-white' : 'text-indigo-900'}`} data-testid={`library-follow-${t.id}`}>{headlineOf(t)}</span>}
                                         {adopted && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{words.inUse}</Chip></span>}
                                         {alreadyFollowed && <span className="mt-1 block"><Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{plotAdd!.words.alreadyFollowed}</Chip></span>}
                                     </span>
