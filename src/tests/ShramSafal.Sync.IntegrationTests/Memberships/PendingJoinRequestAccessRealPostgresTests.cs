@@ -662,6 +662,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // p_totals_owner_select (FOR SELECT, TO the function's owner role only, never PUBLIC or the app role) on seven schedule tables, ssf.farms and the list. It alters no existing policy (none is a p_user_select_* policy, so the narrowed/open
         // counts are unchanged), no farm_memberships or farm_join_requests object, no seat. Down() refuses while the list has any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125120000_AddScheduleTotals",
+        // spec: plr-d10-schedule-approved-spec-2026-11-23 (slice 15, the creator door) - Up() and Down() read in full: Up() creates seven creator tables (FORCE RLS each) with their OWN policies (named p_creator_*,
+        // p_door_* and p_staff_*; none is a p_user_select_* policy, so the narrowed/open counts are unchanged) and the function ssf.creator_door_staff(boolean), which reads ssf.organization_memberships and
+        // ssf.organizations only. It alters no existing policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly
+        // what Up() added. Safe mid-proof.
+        "20261125181313_AddCreatorDoor",
     ];
 
     /// <summary>

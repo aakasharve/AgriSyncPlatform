@@ -302,6 +302,13 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates.GetScheduleDayCardsHandler>();
         // spec: plr-d10 schedule slice 13 - who follows a schedule: counts only, hidden under five farmers.
         services.AddScoped<ShramSafal.Application.UseCases.Schedules.GetScheduleTotals.GetScheduleTotalsHandler>();
+        // spec: plr-d10 schedule slice 15 - the creator door (invite-only outside schedule makers): its own sign-in scheme, CORS policy and services. OFF unless
+        // CreatorDoor:Enabled is set (every /creator route then answers 404).
+        ShramSafal.Api.CreatorDoor.CreatorDoorComposition.AddCreatorDoor(services);
+        services.AddScoped<ShramSafal.Application.UseCases.Creators.CreatorSignInService>();
+        services.AddScoped<ShramSafal.Application.UseCases.Creators.CreatorWorkService>();
+        services.AddScoped<ShramSafal.Application.UseCases.Creators.CreatorFileService>();
+        services.AddScoped<ShramSafal.Application.UseCases.Creators.CreatorReviewService>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.

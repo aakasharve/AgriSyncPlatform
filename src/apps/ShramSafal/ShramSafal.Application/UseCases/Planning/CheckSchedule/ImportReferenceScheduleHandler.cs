@@ -55,7 +55,7 @@ public sealed class ImportReferenceScheduleHandler(
     IEntitlementResolver entitlements,
     IClock clock)
 {
-    public const int ReferenceFormat = 2;
+    public const int ReferenceFormat = ReferenceScheduleImporter.ReferenceFormat;
 
     public async Task<Result<ImportReferenceScheduleResult>> HandleAsync(
         ImportReferenceScheduleCommand command, CancellationToken ct = default)
@@ -71,64 +71,22 @@ public sealed class ImportReferenceScheduleHandler(
             return Result.Failure<ImportReferenceScheduleResult>(ShramSafalErrors.Forbidden);
         }
 
-        if (command.Format != ReferenceFormat)
+        // The ONE importer: the creator door's submissions are read, refused and built by these same rules (slice 15).
+        var built = await ReferenceScheduleImporter.BuildAsync(
+            repository,
+            new ReferenceScheduleBody(
+                command.Format, command.Name, command.CropKey, command.OwnerType, command.SourceLabel, command.PreviousVersionId,
+                command.Stages, command.Tasks, command.Challenges),
+            new UserId(command.CallerUserId),
+            Guid.NewGuid(),
+            clock.UtcNow,
+            ct);
+        if (!built.IsSuccess)
         {
-            return Fail("ScheduleImportFormat", $"This door reads format {ReferenceFormat} only (the task format); the old import keeps the old shape.");
+            return Result.Failure<ImportReferenceScheduleResult>(built.Error);
         }
 
-        if (!ScheduleOwnerTypeWire.TryParse(command.OwnerType, out var ownerType))
-        {
-            return Fail("ScheduleImportOwnerType", "The owner type must be one of INSTITUTION, EXPERT, USER, SYSTEM_DEFAULT.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(command.CropKey) && Services.ScheduleLibrary.CropTypeNameFor(command.CropKey) is null)
-        {
-            return Fail("ScheduleImportCrop", $"The crop key \"{command.CropKey.Trim()}\" matches no crop ShramSafal knows.");
-        }
-
-        var tasks = new List<ScheduleTaskContent>(command.Tasks?.Count ?? 0);
-        foreach (var (raw, index) in (command.Tasks ?? []).Select((t, i) => (t, i)))
-        {
-            if (!ScheduleTaskContent.TryParseWire(raw.GetRawText(), out var task, out var problem))
-            {
-                return Fail(problem!.Code, $"Task {index + 1}: {problem.Message}");
-            }
-
-            tasks.Add(task!);
-        }
-
-        var challenges = new List<ScheduleChallengeContent>(command.Challenges?.Count ?? 0);
-        foreach (var (raw, index) in (command.Challenges ?? []).Select((c, i) => (c, i)))
-        {
-            if (!ScheduleChallengeContent.TryParseWire(raw.GetRawText(), out var challenge, out var problem))
-            {
-                return Fail(problem!.Code, $"Challenge {index + 1}: {problem.Message}");
-            }
-
-            challenges.Add(challenge!);
-        }
-
-        ScheduleTemplate? previous = null;
-        if (command.PreviousVersionId is { } previousId)
-        {
-            previous = await repository.GetScheduleTemplateWithTasksByIdAsync(previousId, ct);
-            if (previous is null || previous.TenantScope != TenantScope.Public)
-            {
-                return Result.Failure<ImportReferenceScheduleResult>(ShramSafalErrors.ScheduleTemplateNotFound);
-            }
-        }
-
-        var stages = (command.Stages ?? [])
-            .Select(s => new OwnScheduleStage(s.Name ?? string.Empty, s.StartDay, s.EndDay, s.StartSign, s.EndSign))
-            .ToList();
-        var input = new ReferenceScheduleImport(command.Name ?? string.Empty, ownerType, command.SourceLabel, command.CropKey, stages, tasks, challenges);
-
-        var now = clock.UtcNow;
-        var template = ScheduleTemplate.ImportReference(Guid.NewGuid(), previous, input, new UserId(command.CallerUserId), now, out var importProblem);
-        if (template is null)
-        {
-            return Fail(importProblem!.Code, importProblem.Message);
-        }
+        var template = built.Value;
 
         await repository.AddScheduleTemplateAsync(template, ct);
 
@@ -154,6 +112,4 @@ public sealed class ImportReferenceScheduleHandler(
             template.Tasks.Count, template.Challenges.Count, template.Activities.Count, template.HasStoredDays));
     }
 
-    private static Result<ImportReferenceScheduleResult> Fail(string code, string message) =>
-        Result.Failure<ImportReferenceScheduleResult>(Error.Validation($"ShramSafal.{code}", message));
 }

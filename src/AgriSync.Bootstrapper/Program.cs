@@ -194,6 +194,15 @@ try
                 sp.GetRequiredService<User.Application.Ports.External.ISmsSender>(),
                 builder.Configuration[ShramSafal.Infrastructure.Identity.WorkerPhoneCodeSms.TemplateIdKey] ?? string.Empty));
     }
+    // spec: plr-d10 schedule slice 15 (the creator door) - a creator's sign-in code goes out on the existing SMS gateway (the code itself and its daily ceiling are the
+    // door's own). Registered after the module so it replaces the module's "no SMS wired" default. Unused while CreatorDoor:Enabled is not true (every /creator route is 404).
+    builder.Services.AddScoped<ShramSafal.Application.Ports.External.ICreatorSignInCodeSender>(sp =>
+        new AgriSync.Bootstrapper.Adapters.CreatorSignInCodeSmsBridge(sp.GetRequiredService<User.Application.Ports.External.ISmsSender>()));
+    // The creator drafts older than ninety days are removed once a day, only while the door is on.
+    if (builder.Configuration.GetValue<bool>("CreatorDoor:Enabled"))
+    {
+        builder.Services.AddHostedService<ShramSafal.Infrastructure.Creators.CreatorDraftExpiryJob>();
+    }
     builder.Services.AddAccountsModule(builder.Configuration);
     // DWC v2 §2.4 — analytics ingest handler + validator. Writer
     // (IAnalyticsWriter) is registered by AddAnalytics(...) below.
@@ -546,6 +555,15 @@ try
 
     var app = builder.Build();
 
+    // spec: plr-d10 schedule slice 15 (the creator door) - with the door switched ON the host refuses to start when a creator origin is also on the main CORS list, or, in
+    // Production, when the creator origins are missing or not https, only the built-in file check is the scanner (it is not an anti-virus), or no creator terms version is
+    // set. With the door off (the default) this checks nothing.
+    ShramSafal.Api.CreatorDoor.CreatorDoorStartupGuard.EnsureSafe(
+        app.Environment.IsProduction(),
+        app.Services.GetRequiredService<ShramSafal.Application.Ports.CreatorDoorOptions>(),
+        allowedOrigins,
+        app.Services.GetRequiredService<ShramSafal.Application.Ports.External.ICreatorFileScanner>());
+
     // DATA_PRINCIPLE_SPINE 05.4 — RegionGuard. Verify AWS:Region is
     // ap-south-1 (Mumbai) before any AWS client is invoked. Per OQ-3
     // verdict: warn-on-missing (dev/CI), throw-on-mismatch (any non-
@@ -593,7 +611,11 @@ try
         app.UseHttpsRedirection();
     }
 
-    app.UseCors("AllowFrontend");
+    // spec: plr-d10 schedule slice 15 (the creator door). (1) While CreatorDoor:Enabled is not true, every /creator request is answered 404 here, before CORS, sign-in or
+    // any route. (2) CORS: the AllowFrontend policy above answers every path EXCEPT /creator, exactly as before; the creator door's own policy (origins from
+    // CreatorDoor:AllowedOrigins, never the main list) answers /creator and nothing else.
+    ShramSafal.Api.CreatorDoor.CreatorDoorComposition.UseCreatorDoorGate(app);
+    ShramSafal.Api.CreatorDoor.CreatorDoorComposition.UseCorsKeepingCreatorDoorApart(app, "AllowFrontend");
     app.UseOutputCache();
 
     if (app.Environment.IsDevelopment())

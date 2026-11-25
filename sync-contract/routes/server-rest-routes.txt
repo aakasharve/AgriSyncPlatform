@@ -4,6 +4,8 @@
 # Read by the phone's path test (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts).
 # Do not edit by hand.
 * /metrics
+DELETE /creator/files/{fileId:guid}
+DELETE /creator/submissions/{id:guid}
 DELETE /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
 DELETE /shramsafal/pictures/institution/{rootId:guid}
 DELETE /shramsafal/pictures/person
@@ -13,6 +15,12 @@ GET /accounts/affiliation/stats
 GET /accounts/health
 GET /admin/farmer-health/cohort
 GET /admin/farmer-health/{farmId:guid}
+GET /creator/files/{fileId:guid}
+GET /creator/profile
+GET /creator/submissions
+GET /creator/submissions/{id:guid}
+GET /creator/submissions/{id:guid}/files
+GET /creator/submissions/{id:guid}/totals
 GET /health
 GET /health/ready
 GET /shramsafal/admin/access-extensions
@@ -42,6 +50,10 @@ GET /shramsafal/compare
 GET /shramsafal/compare/stage
 GET /shramsafal/consent/improvement
 GET /shramsafal/consent/me
+GET /shramsafal/creator-door/creators
+GET /shramsafal/creator-door/files/{fileId:guid}
+GET /shramsafal/creator-door/submissions
+GET /shramsafal/creator-door/submissions/{id:guid}
 GET /shramsafal/day-understanding
 GET /shramsafal/day-understanding/plots
 GET /shramsafal/engagement
@@ -120,6 +132,15 @@ POST /accounts/affiliation/code
 POST /accounts/subscriptions/webhook
 POST /analytics/ingest
 POST /bootstrap/first-farm
+POST /creator/auth/logout
+POST /creator/auth/refresh
+POST /creator/auth/start
+POST /creator/auth/verify
+POST /creator/profile/erasure
+POST /creator/profile/terms
+POST /creator/submissions
+POST /creator/submissions/{id:guid}/files
+POST /creator/submissions/{id:guid}/submit
 POST /shramsafal/admin/access-extensions
 POST /shramsafal/admin/breach/report
 POST /shramsafal/admin/erasure/request
@@ -142,6 +163,10 @@ POST /shramsafal/compliance/{signalId:guid}/resolve
 POST /shramsafal/consent-gate/accept
 POST /shramsafal/consent-gate/link
 POST /shramsafal/corrections
+POST /shramsafal/creator-door/creators
+POST /shramsafal/creator-door/creators/{creatorId:guid}/revoke
+POST /shramsafal/creator-door/submissions/{id:guid}/approve
+POST /shramsafal/creator-door/submissions/{id:guid}/return
 POST /shramsafal/cropcycles
 POST /shramsafal/farms
 POST /shramsafal/farms/{farmId:guid}/input-use/rebuild
@@ -234,6 +259,8 @@ POST /user/auth/refresh
 POST /user/auth/register
 POST /user/auth/start-otp
 POST /user/auth/verify-otp
+PUT /creator/profile
+PUT /creator/submissions/{id:guid}
 PUT /shramsafal/ai/config
 PUT /shramsafal/consent/improvement
 PUT /shramsafal/consent/me

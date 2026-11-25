@@ -357,6 +357,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    the SECURITY DEFINER function ssf.schedule_chain_totals (EXECUTE for the app role only) and an owner-only SELECT policy on eight tables. It GRANTs nothing on any ledger this suite asserts about and touches none of them.
         //    Down() REFUSES while the list has any row and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
         "20261125120000_AddScheduleTotals",
+        // ── Reviewed 2026-11-26 (spec: plr-d10-schedule-approved-spec-2026-11-23, slice 15, the creator door); Up() and Down() read in full: Up() creates seven creator tables (FORCE RLS each) and the function
+        //    ssf.creator_door_staff(boolean). It GRANTs and REVOKEs on those seven tables only (SELECT, INSERT alone on creator_submission_decisions and creator_terms_acceptances, with the effective-privilege guard);
+        //    no ledger this suite asserts about is touched. Down() REFUSES while any row exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
+        "20261125181313_AddCreatorDoor",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

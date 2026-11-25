@@ -225,6 +225,16 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerMessage> ScheduleOwnerMessages => Set<ShramSafal.Domain.Planning.ScheduleOwnerMessage>();
     public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerMessageState> ScheduleOwnerMessageStates => Set<ShramSafal.Domain.Planning.ScheduleOwnerMessageState>();
 
+    // spec: plr-d10 schedule slice 15 - the creator door: invited outside schedule makers, their own sign-in, and what they send for a check. FORCE-RLS each
+    // (a creator sees his own rows, a staff checker what was sent, a farm nothing); migration AddCreatorDoor.
+    public DbSet<ShramSafal.Domain.Creators.CreatorProfile> CreatorProfiles => Set<ShramSafal.Domain.Creators.CreatorProfile>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorSignInCode> CreatorSignInCodes => Set<ShramSafal.Domain.Creators.CreatorSignInCode>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorSession> CreatorSessions => Set<ShramSafal.Domain.Creators.CreatorSession>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorSubmission> CreatorSubmissions => Set<ShramSafal.Domain.Creators.CreatorSubmission>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorSubmissionDecision> CreatorSubmissionDecisions => Set<ShramSafal.Domain.Creators.CreatorSubmissionDecision>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorFile> CreatorFiles => Set<ShramSafal.Domain.Creators.CreatorFile>();
+    public DbSet<ShramSafal.Domain.Creators.CreatorTermsAcceptance> CreatorTermsAcceptances => Set<ShramSafal.Domain.Creators.CreatorTermsAcceptance>();
+
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - the answers about the sign of an own work (seen / not yet / unsure). APPEND-ONLY by privilege;
     // FORCE-RLS on its own farm_id (F8); migration AddScheduleFeed.
     public DbSet<ShramSafal.Domain.Planning.ScheduleTaskEvent> ScheduleTaskEvents => Set<ShramSafal.Domain.Planning.ScheduleTaskEvent>();

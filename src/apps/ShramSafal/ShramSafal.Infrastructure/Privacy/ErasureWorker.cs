@@ -591,6 +591,23 @@
 //     Proven through the WHOLE worker: ErasureWorkerOwnerVoiceRealPostgresTests runs the real worker with rows in all three tables and proves the request Completes and the rows are untouched.
 //     KEEP - conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.creator_profiles, ssf.creator_sign_in_codes, ssf.creator_sessions, ssf.creator_submissions, ssf.creator_submission_decisions, ssf.creator_files and
+//     ssf.creator_terms_acceptances (plr-d10 schedule mechanism, slice 15, "the creator door") - the data of an OUTSIDE SCHEDULE MAKER invited by ShramSafal staff, never of a farmer:
+//     a FARMER's erasure matches no row of them. A CREATOR is a person and has the same right: his erasure request names the id of his creator profile (asked at his own door,
+//     POST /creator/profile/erasure; the same ledger and waiting period), and CreatorDoorErasure.EraseAsync then
+//       ANONYMISES ssf.creator_profiles: phone NULL, display_name replaced, status erased (3), erased_at_utc stamped; the row and its id stay (an opaque id with no person behind it);
+//       DELETES ssf.creator_files (every row, and each file's bytes from storage under creator-door-files/; a file the storage refused is COUNTED in the completion audit as
+//         creatorFilesLeftInPlace and logged at Error, never hidden), his UNSENT drafts in ssf.creator_submissions (state 0: never shown to anyone), ssf.creator_sessions and
+//         ssf.creator_sign_in_codes (the codes of his phone);
+//       KEEPS the rounds he SENT in ssf.creator_submissions (state 1, 2, 3) with their body, and ssf.creator_submission_decisions (what staff decided, the reasons in staff's words,
+//         the checker as an opaque id): the history of a check (P3); ssf.creator_terms_acceptances (an opaque id, a version, a time): the record that terms were agreed to; and every
+//         library row (ssf.schedule_templates and its tasks) made from his approved work, with its content and its maker id unchanged - that id now names nobody (P6: anonymise the
+//         person, never the work; a farmer who follows the schedule keeps it). DISCLOSED: a sent body may hold words he wrote about himself (a source label); they are the work and stay.
+//     It runs on the migration-role context under SET LOCAL row_security = off (the seven tables are FORCE-RLS) and then proves no file row and no phone of his is left, or refuses
+//     to report success. Idempotent (a second run changes 0 rows). NOT EXPORTED yet: ExportWorker writes nothing for a creator (said in the slice report).
+//     Proven through the WHOLE worker: CreatorDoorErasureRealPostgresTests runs the real worker for a creator with an approved schedule, a sent round, a draft and files.
+//     ANONYMIZE + DELETE + KEEP - conscious gate-4 disposition.
+//
 //   - ssf.own_schedule_item_origins (plr-d10 schedule mechanism, slice 9) - KEEP. One row per TAKE ACT (the latest row is the current origin; older rows are history) says where one own work came from when it was TAKEN from a schedule the plot
 //     follows: the source version, its chain, its name and number then, the task key, the dose picked, the day, and two PERSONS as opaque ids (source_owner_user_id,
 //     taken_by_user_id) beside the farm owner at the time. KEEP, as ssf.own_schedule_items above (P6: anonymise the person, never the work; the approved spec: "origin never
@@ -933,6 +950,18 @@ public sealed class ErasureWorker(
         perTableCounts["pictures"] = picturesErased.Rows;
         totalAnonymized += picturesErased.Rows;
 
+        // spec: plr-d10 schedule slice 15 (the creator door; P6) - when the person erased is a CREATOR (the request names the id of his creator profile): his phone and name
+        // go, his files (rows and bytes), unsent drafts, sessions and sign-in codes are deleted; the rounds he sent, what staff decided and every library row made from his
+        // approved work stay. For anyone who is no creator (every farmer) the five statements match no row and the counts are 0. Same storage rule as the pictures above.
+        var creatorErased = await ShramSafal.Infrastructure.Creators.CreatorDoorErasure
+            .EraseAsync(admin, pictureStorage, targetUserId, logger, ct).ConfigureAwait(false);
+        perTableCounts["creator_profiles"] = creatorErased.Profiles;
+        perTableCounts["creator_files"] = creatorErased.Files;
+        perTableCounts["creator_submissions"] = creatorErased.Drafts;
+        perTableCounts["creator_sessions"] = creatorErased.Sessions;
+        perTableCounts["creator_sign_in_codes"] = creatorErased.Codes;
+        totalAnonymized += creatorErased.Rows;
+
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
 
@@ -1261,6 +1290,8 @@ public sealed class ErasureWorker(
             perTableCounts,
             // lane SCH-ID-S - picture FILES the storage refused to delete (the rows are gone). 0 = every file deleted.
             pictureFilesLeftInPlace = picturesErased.FilesLeft,
+            // slice 15 - creator FILES the storage refused to delete (the rows are gone). 0 = every file deleted, and 0 for anyone who is no creator.
+            creatorFilesLeftInPlace = creatorErased.FilesLeft,
             voiceClipsRetainedDeferred = voiceClipsDeferred,
 
             // What actually happened to the retained voice tier, stated either

@@ -65,7 +65,10 @@ public sealed class ServerRouteTableTests(ITestOutputHelper output)
     /// configuration it needs only to BUILD (it never connects) is placeholder values; its content root is an empty folder,
     /// so no local appsettings or secrets are read.
     /// </summary>
-    private List<string> LiveRouteTable()
+    private List<string> LiveRouteTable() => ReadLiveRouteTable(output);
+
+    /// <summary>plr-d10 schedule slice 15 - the same table for the crossed-token walk of the creator door (every route the production host serves).</summary>
+    internal static List<string> ReadLiveRouteTable(ITestOutputHelper output)
     {
         var bootstrapper = typeof(RouteTableCommand).Assembly.Location;
         var work = Path.Combine(Path.GetTempPath(), $"agrisync-route-table-{Guid.NewGuid():N}");

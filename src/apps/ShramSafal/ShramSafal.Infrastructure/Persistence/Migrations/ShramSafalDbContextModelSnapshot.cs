@@ -1538,6 +1538,445 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("correction_events", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<string>("ScanWords")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("scan_words");
+
+                    b.Property<DateTime?>("ScannedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scanned_at_utc");
+
+                    b.Property<string>("ScannerName")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("scanner_name");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submission_id");
+
+                    b.Property<Guid>("WorkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorId")
+                        .HasDatabaseName("ix_creator_files_creator");
+
+                    b.HasIndex("WorkId")
+                        .HasDatabaseName("ix_creator_files_work");
+
+                    b.ToTable("creator_files", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_files_blocked_words", "state <> 2 OR scan_words IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_creator_files_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_creator_files_mime", "state = 2 OR mime_type IN ('application/pdf', 'image/jpeg', 'image/png')");
+
+                            t.HasCheckConstraint("ck_creator_files_size", "size_bytes > 0 AND size_bytes <= 10485760");
+
+                            t.HasCheckConstraint("ck_creator_files_state", "state BETWEEN 0 AND 2");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("display_name");
+
+                    b.Property<DateTime?>("ErasedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at_utc");
+
+                    b.Property<DateTime?>("FirstSignedInAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_signed_in_at_utc");
+
+                    b.Property<DateTime>("InvitedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invited_at_utc");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by_user_id");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("phone");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Phone")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_profiles_phone")
+                        .HasFilter("phone IS NOT NULL");
+
+                    b.ToTable("creator_profiles", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_profiles_erased", "(status = 3) = (phone IS NULL)");
+
+                            t.HasCheckConstraint("ck_creator_profiles_phone", "phone IS NULL OR phone ~ '^[6-9][0-9]{9}$'");
+
+                            t.HasCheckConstraint("ck_creator_profiles_status", "status BETWEEN 0 AND 3");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
+                    b.Property<string>("DeviceIdHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("device_id_hash");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at_utc");
+
+                    b.Property<DateTime>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at_utc");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorId")
+                        .HasDatabaseName("ix_creator_sessions_creator");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_sessions_token_hash");
+
+                    b.ToTable("creator_sessions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_sessions_device_hash", "device_id_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_creator_sessions_token_hash", "token_hash ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorSignInCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at_utc");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("phone");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Phone")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_sign_in_codes_pending")
+                        .HasFilter("status = 0");
+
+                    b.HasIndex("Phone", "IssuedAtUtc")
+                        .HasDatabaseName("ix_creator_sign_in_codes_phone_issued");
+
+                    b.ToTable("creator_sign_in_codes", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_sign_in_codes_hash", "code_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_creator_sign_in_codes_status", "status BETWEEN 0 AND 3");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BodyJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("body");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<Guid?>("LibraryTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("library_template_id");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("integer")
+                        .HasColumnName("round");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime?>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at_utc");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid>("WorkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorId")
+                        .HasDatabaseName("ix_creator_submissions_creator");
+
+                    b.HasIndex("State")
+                        .HasDatabaseName("ix_creator_submissions_state");
+
+                    b.HasIndex("WorkId", "Round")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_submissions_work_round");
+
+                    b.ToTable("creator_submissions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_submissions_body_size", "octet_length(body::text) <= 1048576");
+
+                            t.HasCheckConstraint("ck_creator_submissions_expiry", "(state = 0) = (expires_at_utc IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_creator_submissions_library", "(state = 3) = (library_template_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_creator_submissions_round", "round >= 1");
+
+                            t.HasCheckConstraint("ck_creator_submissions_sent", "(state = 0) = (submitted_at_utc IS NULL)");
+
+                            t.HasCheckConstraint("ck_creator_submissions_state", "state BETWEEN 0 AND 3");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorSubmissionDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_user_id");
+
+                    b.Property<short>("Decision")
+                        .HasColumnType("smallint")
+                        .HasColumnName("decision");
+
+                    b.Property<Guid?>("LibraryTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("library_template_id");
+
+                    b.Property<string>("Reasons")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("reasons");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submission_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorId")
+                        .HasDatabaseName("ix_creator_submission_decisions_creator");
+
+                    b.HasIndex("SubmissionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_submission_decisions_submission");
+
+                    b.ToTable("creator_submission_decisions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_creator_submission_decisions_decision", "decision IN (0, 1)");
+
+                            t.HasCheckConstraint("ck_creator_submission_decisions_shape", "(decision = 0 AND reasons IS NOT NULL AND length(btrim(reasons)) > 0 AND library_template_id IS NULL) OR (decision = 1 AND library_template_id IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Creators.CreatorTermsAcceptance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at_utc");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
+                    b.Property<string>("TermsVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("terms_version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorId", "TermsVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_creator_terms_acceptances_creator_version");
+
+                    b.ToTable("creator_terms_acceptances", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Crops.CropCycle", b =>
                 {
                     b.Property<Guid>("Id")

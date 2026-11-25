@@ -574,12 +574,32 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
     {
     }
 
+    /// <summary>plr-d10 schedule slice 15 - more settings for the host (the creator door's switch and origins), for a subclass that needs them.</summary>
+    protected virtual void AddHostConfiguration(IDictionary<string, string?> settings)
+    {
+    }
+
+    /// <summary>
+    /// plr-d10 schedule slice 15 - how the host signs people in. By default the test sign-in (the subject from X-Test-UserId); a subclass that proves the REAL
+    /// token wiring replaces it with the production one.
+    /// </summary>
+    protected virtual void AddHostAuthentication(WebApplicationBuilder builder) =>
+        builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+
+    /// <summary>plr-d10 schedule slice 15 - what the production host runs BEFORE sign-in (the creator door's gate and the CORS split), for a subclass that needs it.</summary>
+    protected virtual void UseBeforeAuthentication(WebApplication app)
+    {
+    }
+
+    /// <summary>plr-d10 schedule slice 15 - a request exactly as built: no test sign-in header is added (a real bearer token, a cookie, an Origin).</summary>
+    protected Task<HttpResponseMessage> SendRawAsync(HttpRequestMessage request) => _client.SendAsync(request);
+
     private async Task<WebApplication> BuildHostAsync(string appConn)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.WebHost.UseTestServer();
         var storageDir = Path.Combine(Path.GetTempPath(), "agrisync-mu3", Guid.NewGuid().ToString("N"));
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        var settings = new Dictionary<string, string?>
         {
             ["ConnectionStrings:ShramSafalDb"] = appConn,
             ["ConnectionStrings:UserDb"] = appConn,
@@ -590,9 +610,11 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
             ["ConnectionStrings:ShramSafalDb_ReadOnly"] = appConn,
             ["ConnectionStrings:UserDb_ReadOnly"] = appConn,
             ["ShramSafal:Storage:DataDirectory"] = storageDir,
-        });
+        };
+        AddHostConfiguration(settings);
+        builder.Configuration.AddInMemoryCollection(settings);
 
-        builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+        AddHostAuthentication(builder);
         builder.Services.AddAuthorization();
         builder.Services.AddBuildingBlocks();
         builder.Services.AddAnalytics(o => o.UseInMemoryDatabase($"mu3-analytics-{Guid.NewGuid()}"));
@@ -601,6 +623,7 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         AddHostServices(builder.Services);
 
         var app = builder.Build();
+        UseBeforeAuthentication(app);
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseMiddleware<TenantTransactionMiddleware>();

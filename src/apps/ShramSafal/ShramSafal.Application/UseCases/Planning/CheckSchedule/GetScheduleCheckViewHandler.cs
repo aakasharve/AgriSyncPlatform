@@ -83,6 +83,35 @@ public sealed class GetScheduleCheckViewHandler(IShramSafalRepository repository
             ? new ScheduleCheckDto(nameof(ScheduleCheckState.NotChecked), null, null, null)
             : new ScheduleCheckDto(ScheduleCheck.StateOf(checks).ToString(), latest.CheckerDisplayName, latest.CheckedAtUtc, latest.Note);
 
+        var (stages, tasks, challenges) = Describe(template);
+
+        return Result.Success(new ScheduleCheckViewDto(
+            template.Id,
+            template.Name,
+            template.Version,
+            template.ChainId,
+            template.PreviousVersionId,
+            template.CropKey,
+            template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null,
+            template.SourceLabel,
+            template.CreatedByUserId?.Value,
+            template.CreatedByUserId?.Value == callerUserId,
+            template.CreatedAtUtc,
+            template.TaskFormatHash(),
+            checkDto,
+            latest?.Decision == ScheduleCheckDecision.Approved ? latest.CheckedTaskKeys : null,
+            stages,
+            tasks,
+            challenges,
+            template.Activities.Count));
+    }
+
+    /// <summary>
+    /// Every stage, task and challenge of a version in the task format, as a checker ticks them. Shared with the creator door (slice 15): a creator's submission is shown to
+    /// its staff checker in this same shape, built by the same importer, before any library row exists.
+    /// </summary>
+    internal static (IReadOnlyList<CheckStageDto> Stages, IReadOnlyList<CheckTaskDto> Tasks, IReadOnlyList<CheckChallengeDto> Challenges) Describe(ScheduleTemplate template)
+    {
         var projected = template.ProjectedTaskKeyByActivity().Values.ToHashSet(StringComparer.Ordinal);
         var stages = template.OwnStages()
             .Select((s, i) => new CheckStageDto(i, s.Name, ShownDayDto.Of(s.StartDay)!, ShownDayDto.Of(s.EndDay)!, s.StartSign, s.EndSign))
@@ -107,25 +136,7 @@ public sealed class GetScheduleCheckViewHandler(IShramSafalRepository repository
             .Select(c => new CheckChallengeDto(c.ChallengeKey, c.ContentHash, Element(c.Content.ToCanonicalJson())))
             .ToList();
 
-        return Result.Success(new ScheduleCheckViewDto(
-            template.Id,
-            template.Name,
-            template.Version,
-            template.ChainId,
-            template.PreviousVersionId,
-            template.CropKey,
-            template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null,
-            template.SourceLabel,
-            template.CreatedByUserId?.Value,
-            template.CreatedByUserId?.Value == callerUserId,
-            template.CreatedAtUtc,
-            template.TaskFormatHash(),
-            checkDto,
-            latest?.Decision == ScheduleCheckDecision.Approved ? latest.CheckedTaskKeys : null,
-            stages,
-            tasks,
-            challenges,
-            template.Activities.Count));
+        return (stages, tasks, challenges);
     }
 
     /// <summary>The canonical JSON as a free-standing element (every field, exactly as stored and hashed).</summary>

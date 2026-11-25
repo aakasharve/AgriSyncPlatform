@@ -525,6 +525,16 @@ public static class DependencyInjection
         services.AddScoped<IOwnerVoiceStore, OwnerVoiceStore>();
         // spec: plr-d10 schedule slice 13 - the totals of who follows a schedule: the ONE cross-farm read, a SECURITY DEFINER function that returns aggregates only.
         services.AddScoped<IScheduleTotalsStore, ScheduleTotalsStore>();
+        // spec: plr-d10 schedule slice 15 - the creator door (invite-only outside schedule makers): its rows, its two database scopes, its own token, the built-in
+        // file check and "no SMS wired" as the default sender. The door is OFF unless CreatorDoor:Enabled is set; the host replaces the sender (and, for Production,
+        // must replace the scanner) - see Program.cs.
+        services.AddSingleton(configuration.GetSection(CreatorDoorOptions.SectionName).Get<CreatorDoorOptions>() ?? new CreatorDoorOptions());
+        services.AddScoped<ICreatorDoorStore, CreatorDoorStore>();
+        services.AddScoped<ICreatorDoorScope, ShramSafal.Infrastructure.Creators.CreatorDoorScope>();
+        services.AddSingleton<ShramSafal.Infrastructure.Creators.CreatorDoorSigningKey>();
+        services.AddSingleton<ICreatorTokenIssuer, ShramSafal.Infrastructure.Creators.CreatorTokenIssuer>();
+        services.TryAddSingleton<ShramSafal.Application.Ports.External.ICreatorFileScanner, ShramSafal.Infrastructure.Creators.BuiltInCreatorFileScanner>();
+        services.TryAddScoped<ShramSafal.Application.Ports.External.ICreatorSignInCodeSender, ShramSafal.Infrastructure.Creators.NoCreatorSignInCodeSender>();
         // spec: plr-d10 schedule slice 5 - the plans made from an own schedule and the answers about a work's sign.
         services.AddScoped<IScheduleFeedStore, ScheduleFeedStore>();
 

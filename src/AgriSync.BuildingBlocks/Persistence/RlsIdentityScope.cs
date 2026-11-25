@@ -187,6 +187,96 @@ public static class RlsIdentityScope
             async token => { await work(token); return null; }, ct);
     }
 
+    /// <summary>
+    /// spec: plr-d10 schedule slice 15 (the creator door) - runs <paramref name="work"/> as one signed-in CREATOR: <c>agrisync.creator_id</c> is set for the
+    /// transaction, and the creator tables' policies show that creator's rows only. It is its OWN setting, never <c>agrisync.user_id</c>: a creator is not a
+    /// farmer's account, so no farm-keyed or person-keyed policy anywhere can match a creator's scope, and no farmer's scope can match a creator's rows.
+    /// The id is the subject of a token this server issued with the creator door's own audience, never a value a caller supplies.
+    /// </summary>
+    public static Task<T> RunAsCreatorAsync<T>(
+        DbContext db,
+        Guid creatorId,
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(work);
+        if (creatorId == Guid.Empty)
+        {
+            throw new ArgumentException("RlsIdentityScope.RunAsCreatorAsync requires a non-empty creatorId.", nameof(creatorId));
+        }
+
+        return RunTextAsync(db, creatorDoorKey: null, creatorId: creatorId.ToString(), work, ct);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 schedule slice 15 (the creator door) - runs <paramref name="work"/> at the creator door BEFORE anyone is signed in:
+    /// <c>agrisync.creator_door_key</c> is set to the one thing the caller presented (the phone asking for a sign-in code, or the hash of a refresh
+    /// credential), and the policies show only the one profile with that phone, the codes of that phone, or the one session with that hash. It names
+    /// no person and opens nothing else.
+    /// </summary>
+    public static Task<T> RunAtCreatorDoorAsync<T>(
+        DbContext db,
+        string doorKey,
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(work);
+        if (string.IsNullOrWhiteSpace(doorKey))
+        {
+            throw new ArgumentException("RlsIdentityScope.RunAtCreatorDoorAsync requires a non-empty key.", nameof(doorKey));
+        }
+
+        return RunTextAsync(db, creatorDoorKey: doorKey, creatorId: null, work, ct);
+    }
+
+    private static async Task<T> RunTextAsync<T>(
+        DbContext db,
+        string? creatorDoorKey,
+        string? creatorId,
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken ct)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return await work(ct);
+        }
+
+        // Same transaction rule as RunAsync below: join the caller's, else own one.
+        var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
+        try
+        {
+            // Parameterised, each its own command, the setting names literal (a closed vocabulary), exactly as ApplyAsync below.
+            if (creatorDoorKey is not null)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT set_config('agrisync.creator_door_key', {creatorDoorKey}, true)", ct);
+            }
+
+            if (creatorId is not null)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT set_config('agrisync.creator_id', {creatorId}, true)", ct);
+            }
+
+            var result = await work(ct);
+            if (owned is not null)
+            {
+                await owned.CommitAsync(ct);
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (owned is not null)
+            {
+                await owned.DisposeAsync();
+            }
+        }
+    }
+
     private static async Task<T> RunAsync<T>(
         DbContext db,
         IReadOnlyList<(string Name, Guid Value)> settings,

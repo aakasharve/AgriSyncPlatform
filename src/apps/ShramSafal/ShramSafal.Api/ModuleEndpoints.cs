@@ -49,6 +49,8 @@ public static class ModuleEndpoints
         group.MapScheduleTemplateEndpoints();
         // spec: plr-d10 schedule slice 12b - the schedule owner's voice (staff send and list, a follower fetches a clip).
         group.MapScheduleOwnerVoiceEndpoints();
+        // spec: plr-d10 schedule slice 15 - ShramSafal staff at the creator door: who is invited, and the check of what creators send (404 while the door is off).
+        ShramSafal.Api.CreatorDoor.CreatorDoorStaffEndpoints.MapCreatorDoorStaffEndpoints(group);
         group.MapScheduleEndpoints();
         // spec: plr-d10 lane L8c-1 (founder D-24c) - the REST reads of planned work and reminders.
         group.MapPlannedWorkEndpoints();
@@ -96,6 +98,9 @@ public static class ModuleEndpoints
         // PiiOptions).
         group.MapPiiReviewEndpoints();
         endpoints.MapSyncEndpoints();
+        // spec: plr-d10 schedule slice 15 - the creator door itself, /creator/* at the root: its own sign-in scheme (a farmer's or staff's token is refused here, and a
+        // creator's token is refused everywhere else). Every route answers 404 while CreatorDoor:Enabled is not true.
+        ShramSafal.Api.CreatorDoor.CreatorDoorEndpoints.MapCreatorDoor(endpoints);
 
         return endpoints;
     }

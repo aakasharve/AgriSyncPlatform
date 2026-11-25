@@ -1472,6 +1472,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // ssf.schedule_chain_totals and one owner-only SELECT policy (p_totals_owner_select) on seven schedule tables, farms and the list. It never touches ssf.audit_events, its policies or its grants. Down() refuses while the list has
         // any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125120000_AddScheduleTotals",
+        // spec: plr-d10-schedule-approved-spec-2026-11-23 (slice 15, the creator door) - Up() and Down() read in full: Up() creates seven tables (ssf.creator_profiles, creator_sign_in_codes, creator_sessions,
+        // creator_submissions, creator_submission_decisions, creator_files, creator_terms_acceptances; FORCE RLS each, their own policies and grants) and the function ssf.creator_door_staff(boolean).
+        // It never touches ssf.audit_events, its policies or its grants. Down() refuses while any row exists in the seven tables (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261125181313_AddCreatorDoor",
     ];
 
     /// <summary>
