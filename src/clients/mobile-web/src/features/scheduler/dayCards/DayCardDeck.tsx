@@ -13,11 +13,13 @@ import React from 'react';
 import { Droplets, Eye, FlaskConical, Leaf, ShieldAlert, Sprout } from 'lucide-react';
 import type { ScheduleChallengeContent } from '../../../../../../../sync-contract/schemas/schedule-task.zod';
 import { doseLines, type CardPart } from './dayCardsModel';
-import type { DayCardKind, DayCardTask, DayCardsDetail, ShownDay } from './dayCardsTypes';
+import type { DayCardKind, DayCardTask, DayCardsDetail } from './dayCardsTypes';
 import type { DayCardWords } from './dayCardWords';
 import { checkedByLine, madeByLine } from './sourceLines';
+import { positionText, timingText } from './dayCardTiming';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { TakeIntoMyScheduleButton, type TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
+import { OwnerChangeBody, OwnerLookBody, TipPlays, type OwnerVoiceProps } from '../ownerVoice/OwnerMessageBodies';
 
 export const KIND_LOOK: Record<DayCardKind, { bg: string; fg: string; chip: string; Icon: React.ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }> }> = {
     irrigation: { bg: '#CFFAFE', fg: '#0E7490', chip: '#A5F3FC', Icon: Droplets },
@@ -29,39 +31,7 @@ export const KIND_LOOK: Record<DayCardKind, { bg: string; fg: string; chip: stri
 
 const mrDigits = (n: number | string, words: DayCardWords): string => (words.back === 'मागे' ? String(n).replace(/[0-9]/g, d => '०१२३४५६७८९'[Number(d)]) : String(n));
 
-/** A day as the farmer reads it: "दिवस १७", or "छाटणीआधी ५ दिवस" (never day 0 or a negative day). */
-export function dayText(d: ShownDay | null, words: DayCardWords): string | null {
-    if (!d) return null;
-    if (d.shown !== null) return words.dayN(d.shown);
-    if (d.daysBeforeStart !== null) return words.daysBefore(d.daysBeforeStart);
-    return null;
-}
-
-/** A step position as the farmer reads it: "दिवस १७" from day 1 on, "छाटणीआधी N दिवस" before it (never day 0 or a negative day). */
-export const positionText = (position: number, words: DayCardWords): string => (position >= 1 ? words.dayN(position) : words.daysBefore(1 - position));
-
-/** When the work is, in words (a window, a repeat, a sign, "after another work", or "as needed"). */
-export function timingText(t: DayCardTask, words: DayCardWords): string {
-    const timing = t.task.timing;
-    const from = dayText(t.shown.from, words);
-    const to = dayText(t.shown.to, words);
-    let base: string;
-    switch (timing.timer) {
-        case 'day':
-            base = from && to && from !== to ? words.dayRange(from, to) : from ?? words.loose;
-            break;
-        case 'sign':
-            base = words.whenSeen(timing.signWords ?? '');
-            break;
-        case 'after':
-            base = words.afterTask;
-            break;
-        default:
-            base = timing.whenWords ?? words.noDay;
-    }
-    if (timing.repeat === 'every_n_days' && timing.repeatInterval) base += ` · ${words.everyN(timing.repeatInterval)}`;
-    return base;
-}
+export { dayText, positionText, timingText } from './dayCardTiming';
 
 const Chip: React.FC<{ bg: string; fg: string; children: React.ReactNode; testId?: string }> = ({ bg, fg, children, testId }) => (
     <span data-testid={testId} className="inline-flex min-h-[28px] items-center rounded-full px-3 text-[13px] font-extrabold" style={{ background: bg, color: fg }}>{children}</span>
@@ -119,7 +89,7 @@ const TakeOnHero: React.FC<{ task: DayCardTask; detail: DayCardsDetail; take: Ta
     );
 };
 
-const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: DayCardsDetail; words: DayCardWords; take?: TakeHost }> = ({ part, detail, words, take }) => {
+const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: DayCardsDetail; words: DayCardWords; take?: TakeHost; voice?: OwnerVoiceProps }> = ({ part, detail, words, take, voice }) => {
     const t = part.task;
     const look = KIND_LOOK[t.task.kind];
     const doses = doseLines(t.task);
@@ -155,6 +125,7 @@ const HeroCard: React.FC<{ part: Extract<CardPart, { type: 'hero' }>; detail: Da
                     ))}
                 </div>
             )}
+            {voice && <TipPlays detail={detail} taskKey={t.task.taskKey} voice={voice} />}
             {take && <TakeOnHero task={t} detail={detail} take={take} />}
         </CardShell>
     );
@@ -270,19 +241,21 @@ const SourceCard: React.FC<{ part: Extract<CardPart, { type: 'source' }>; detail
     );
 };
 
-export const DayCardDeck: React.FC<{ parts: readonly CardPart[]; detail: DayCardsDetail; words: DayCardWords; onAnswer?: (changes: string | null) => void; take?: TakeHost }> = ({ parts, detail, words, onAnswer, take }) => (
+export const DayCardDeck: React.FC<{ parts: readonly CardPart[]; detail: DayCardsDetail; words: DayCardWords; onAnswer?: (changes: string | null) => void; take?: TakeHost; /** Slice 12b: the schedule owner's voice for this plot; absent = the deck is exactly as it was. */ voice?: OwnerVoiceProps }> = ({ parts, detail, words, onAnswer, take, voice }) => (
     <>
         {parts.map((part, i) => {
             const key = `${part.type}-${'task' in part ? part.task.task.taskKey : 'challenge' in part ? part.challenge.challengeKey : 'day'}-${i}`;
             switch (part.type) {
                 case 'day': return <DayCard key={key} part={part} words={words} />;
-                case 'hero': return <HeroCard key={key} part={part} detail={detail} words={words} take={take} />;
+                case 'hero': return <HeroCard key={key} part={part} detail={detail} words={words} take={take} voice={voice} />;
                 case 'how': return <HowCard key={key} part={part} words={words} />;
                 case 'safety': return <SafetyCard key={key} part={part} words={words} />;
                 case 'look': return <LookCard key={key} part={part} words={words} />;
                 case 'ask': return <AskCard key={key} part={part} words={words} onAnswer={onAnswer ?? (() => undefined)} />;
                 case 'challenge': return <ChallengeCard key={key} challenge={part.challenge} words={words} />;
                 case 'source': return <SourceCard key={key} part={part} detail={detail} words={words} />;
+                case 'ownerChange': return voice ? <CardShell key={key} type="ownerChange" accent="#EA580C"><OwnerChangeBody message={part.message} task={part.task} detail={detail} voice={voice} dayWords={words} /></CardShell> : null;
+                case 'ownerLook': return voice ? <CardShell key={key} type="ownerLook" accent="#EA580C"><OwnerLookBody message={part.message} task={part.task} voice={voice} /></CardShell> : null;
                 default: return null;
             }
         })}

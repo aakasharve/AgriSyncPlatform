@@ -235,6 +235,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         ? { place: { farmId: takePlace.place.farmId, plotId: takePlace.place.plotId, cropCycleId: takePlace.place.cropCycleId }, mayTake: true, onOpenConflicts,
             planning: { mayAssign: mayAssignWork, assignees: mayAssignWork ? takePeople.assignees : [], myUserId: takeUserId } }
         : undefined;
+    // Slice 12b: the schedule owner's voice is read for this plot on a farm the mechanism is on for; decide/answer only for the seat that may take (the same rule, SM-10).
+    const voiceHost = takeOn && takeFarmId && plot ? { farmId: takeFarmId, plotId: plot.id, cropCycleId: takePlace.place?.cropCycleId ?? null, mayDecide: !!takeHost } : null;
     const openMaker = () => { if (onMakeOwnSchedule && cropId) onMakeOwnSchedule(cropId); };
 
     // Lane UI-8 (founder D-150, picture L2): the library's three steps end on the big button that NAMES one plot ("<plot> साठी हे शेड्यूल लावा"), so
@@ -413,7 +415,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
-                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} onChangePlot={() => setPickerOpen(true)}
+                    mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} voiceHost={voiceHost} onChangePlot={() => setPickerOpen(true)}
                     crop={crop} plot={plot} onPlan={mayPlanWork && onOpenPlanning ? onOpenPlanning : undefined}
                     plotLists={<div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (

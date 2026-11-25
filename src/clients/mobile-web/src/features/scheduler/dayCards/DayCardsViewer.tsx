@@ -20,6 +20,8 @@ import { loadDayCards, type DayCardsLoad } from './dayCardsStore';
 import type { DayCardsDetail } from './dayCardsTypes';
 import { dayCardWords, type DayCardWords } from './dayCardWords';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
+import { withOwnerCards } from '../ownerVoice/ownerVoiceModel';
+import { useOwnerClipPrefetch, useOwnerVoiceHost, useOwnerVoiceView } from '../ownerVoice/useOwnerVoice';
 
 export type DayCardsTarget = { day: number } | { taskKey: string };
 export type DayCardsSource = { templateId: string } | { detail: DayCardsDetail };
@@ -74,7 +76,15 @@ export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCards
     }, [templateId, attempt, load]);
 
     const detail = state?.ok ? state.detail : null;
-    const parts = useMemo(() => (detail ? deckFor(detail, day !== null ? { day } : { taskKey: targetKey ?? '' }) : null), [detail, targetKey, day]);
+    // Slice 12b: the schedule owner's voice for the plot the page named (none when no door named one: then the deck is exactly as it was).
+    const voiceHost = useOwnerVoiceHost();
+    const voiceView = useOwnerVoiceView(voiceHost !== null);
+    useOwnerClipPrefetch(voiceHost?.farmId, voiceView.messages);
+    const voice = useMemo(() => (voiceHost ? { host: voiceHost, view: voiceView } : undefined), [voiceHost, voiceView]);
+    const parts = useMemo(() => {
+        const base = detail ? deckFor(detail, day !== null ? { day } : { taskKey: targetKey ?? '' }) : null;
+        return base && detail && voiceHost ? withOwnerCards(base, detail, voiceView.messages) : base;
+    }, [detail, targetKey, day, voiceHost, voiceView.messages]);
     const lastDay = detail ? lastShownDay(detail) : 1;
     const firstDay = detail ? firstShownDay(detail) : 1;
     const step = (by: number) => {
@@ -156,7 +166,7 @@ export const DayCardsViewer: React.FC<{ source: DayCardsSource; target: DayCards
                         </div>
                     )}
                     {detail && !parts && <p className="p-6 text-center text-[17px] font-bold text-stone-700" data-testid="day-cards-none">{words.nothingHere}</p>}
-                    {detail && parts && <DayCardDeck parts={parts} detail={detail} words={words} onAnswer={changes => setAnswer({ changes })} take={take} />}
+                    {detail && parts && <DayCardDeck parts={parts} detail={detail} words={words} onAnswer={changes => setAnswer({ changes })} take={take} voice={voice} />}
                 </div>
 
                 {detail && parts && <p className="shrink-0 bg-stone-100 py-1 text-center text-[11px] font-extrabold text-stone-500">{words.swipeHint}</p>}

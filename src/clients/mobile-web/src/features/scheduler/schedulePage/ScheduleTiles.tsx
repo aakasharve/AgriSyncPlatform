@@ -55,6 +55,15 @@ export function placeTiles(followed: readonly FollowedPlace[]): Record<Kind, Fol
     return out;
 }
 
+/** Who made a followed schedule, as the tile says it (his own: "तुम्ही"; the app's own data: "श्रमसफल"; otherwise the author). */
+export function makerOf(place: FollowedPlace | undefined, language: 'mr' | 'en'): string {
+    const w = TILE_WORDS[language];
+    if (!place) return w.maker;
+    if (place.origin === 'Own') return w.own;
+    const author = place.template?.createdBy?.trim();
+    return author && !INTERNAL_AUTHORS.has(author) ? author : w.maker;
+}
+
 export const ScheduleTiles: React.FC<{
     followed: readonly FollowedPlace[];
     selectedTemplateId: string | null;
@@ -62,7 +71,7 @@ export const ScheduleTiles: React.FC<{
     onAdd?: () => void;
     mayMakeOwn?: boolean;
     onMakeOwn?: () => void;
-    /** Unheard owner voices per schedule version (slice 12b). Nothing gives it yet: every tile then shows no count. */
+    /** Unheard owner voices per schedule version (slice 12b). Slice 12b gives it: the page counts the messages of each version this plot has not heard. */
     unheard?: Readonly<Record<string, number>>;
 }> = ({ followed, selectedTemplateId, onSelect, onAdd, mayMakeOwn = false, onMakeOwn, unheard = {} }) => {
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';

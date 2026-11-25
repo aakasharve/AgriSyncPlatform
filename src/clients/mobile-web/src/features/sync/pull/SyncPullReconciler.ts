@@ -26,6 +26,8 @@ import { reconcilePlanningState } from './reconcilers/planningStateReconciler';
 import { reconcileScheduleMechanism } from './reconcilers/scheduleMechanismReconciler';
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { reconcileOwnScheduleItems } from './reconcilers/ownScheduleItemsReconciler';
+import { reconcileOwnerVoice } from './reconcilers/ownerVoiceReconciler';
+import { prefetchOwnerVoiceAfterPull } from '../../scheduler/ownerVoice/ownerVoicePrefetch';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
 import { reconcileInputIdentityAnswers } from './reconcilers/inputIdentityReconciler';
@@ -144,6 +146,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         await reconcileScheduleMechanism(db, payload, receivedAtUtc);
         // slice 3 - the works of each plot-season's own schedule and their history, as the server holds them (an absent key leaves them).
         await reconcileOwnScheduleItems(db, payload);
+        // slice 12b - the schedule owner's messages, clip metadata and what this plot did with them (each key replaces whole; an absent key leaves them).
+        await reconcileOwnerVoice(db, payload);
         await reconcileAttentionBoard(db, payload);
         // lane MU-3 (plan step 4a) — keep only what the server lets this person read: after every other
         // reconciler, so what this pull just wrote is scanned too. An older server sends no scopes: no-op.
@@ -188,6 +192,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     // fetched only when their sha changed, after the pull has landed and outside its transaction. Fire and forget: the step never throws, a
     // refusal or an offline phone just leaves the letter or leaf badge, and nothing it does can fail or delay this pull.
     void Promise.resolve().then(() => syncSchedulePictures(db, (payload as { scheduleTemplates?: unknown }).scheduleTemplates)).catch(() => undefined);
+    // spec: plr-d10 schedule slice 12b (CTO gate; P10) - the schedule owner's clips (and the checked new version a change names), fetched right after the pull lands and outside
+    // its transaction, so they play in the field with no signal even when no schedule screen was opened online. Fire and forget: never throws, never delays this pull.
+    void Promise.resolve().then(() => prefetchOwnerVoiceAfterPull(db)).catch(() => undefined);
     if (withdrawnMoney > 0 && typeof window !== 'undefined') {
         // The money cache merges pulls; a withdrawn money record must leave it too (re-read from the phone's store).
         window.dispatchEvent(new CustomEvent('agrisync:finance-records-withdrawn'));

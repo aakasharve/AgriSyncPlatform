@@ -34,17 +34,20 @@ import { StagePlanCard } from './StagePlanCard';
 import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
-import { OwnerVoiceSlot, type OwnerVoice } from './OwnerVoiceSlot';
+import { OwnerVoiceLine, useUnheardCounts } from '../ownerVoice/OwnerVoiceLine';
+import { OwnerVoiceHostProvider } from '../ownerVoice/useOwnerVoice';
+import type { OwnerMessage, OwnerVoiceHost } from '../ownerVoice/ownerVoiceTypes';
+import { DayCardsViewer } from '../dayCards/DayCardsViewer';
 import { ScheduleProfileCard } from './ScheduleProfileCard';
 import { ScheduleCalendarTabs } from './ScheduleCalendarTabs';
 import { ScheduleTabHead } from './ScheduleTabHead';
-import { ScheduleTiles } from './ScheduleTiles';
+import { ScheduleTiles, makerOf } from './ScheduleTiles';
 import { ScheduleTabDoors } from './ScheduleTabDoors';
 import { scheduleNameIn } from './scheduleNames';
 import type { CropProfile, Plot } from '../../../types';
 import { FollowTotalsSlot, LookMemoriesCard } from './ScheduleTabCards';
 
-export const PlotScheduleHome: React.FC<{
+const PlotScheduleHomeBody: React.FC<{
     cropName: string;
     plotName: string;
     template: CropScheduleTemplate;
@@ -81,8 +84,8 @@ export const PlotScheduleHome: React.FC<{
     onMakeOwn?: () => void;
     /** slice 9: the plot-season and the seat's rights for "माझ्या वेळापत्रकात घ्या" on the day cards of the followed schedule; absent = no take. */
     take?: TakeHost;
-    /** Slice 10: the new owner voices (slice 12b fills this; empty = the slot shows nothing). */
-    ownerVoices?: readonly OwnerVoice[];
+    /** Slice 12b: the plot the schedule owner's voice is read for and whether this seat may decide (the take's own rule). Absent = no owner's voice anywhere on the page. */
+    voiceHost?: OwnerVoiceHost | null;
     /** Round 3: the crop and the plot themselves (the head draws the crop's photo and the plot's area from them). */
     crop?: CropProfile;
     plot?: Plot;
@@ -96,7 +99,7 @@ export const PlotScheduleHome: React.FC<{
     ownerImageUrl?: string | null;
     /** UI-4: the last closed row (the tools), drawn by the page. */
     children?: React.ReactNode;
-}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, ownerVoices = [], onChangePlot, crop, plot, onPlan, plotLists, children }) => {
+}> = ({ cropName, plotName, template, source, model, clips, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn, take, ownerImageUrl, onChangePlot, crop, plot, onPlan, plotLists, children }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -118,6 +121,11 @@ export const PlotScheduleHome: React.FC<{
     const profileId = picked && profileOptions.includes(picked) ? picked : template.id;
     const profilePlace = followed?.find(f => f.templateId === profileId);
     const names = (n: string) => scheduleNameIn(n, language);
+    // Slice 12b: the orange line and the tiles' "N आवाज" are read from what the phone holds for THIS plot; "ऐका" opens the unheard message's own card in the one viewer.
+    const followedVersionIds = useMemo(() => (followed ? followed.map(f => f.templateId) : [template.id]), [followed, template.id]);
+    const unheardByVersion = useUnheardCounts(followedVersionIds);
+    const [listening, setListening] = useState<OwnerMessage | null>(null);
+    const makerOfVersion = (versionId: string) => makerOf(followed?.find(f => f.templateId === versionId), language);
 
     // Version 7 (slice 10, round 3): plot head, owner voice, the four tiles, the profile, follow totals, the two door cards, the look reminders, the two tabs
     // (calendar | today of all schedules), then the plot lists. Every older part of the page keeps its place in the closed rows after them.
@@ -127,9 +135,10 @@ export const PlotScheduleHome: React.FC<{
             {crop && plot
                 ? <ScheduleTabHead crop={crop} plot={plot} model={model} isGrape={/grape/i.test(template.cropCode)} onChangePlot={onChangePlot} />
                 : <h2 className="m-0 px-1 text-[20px] font-black text-stone-900" data-testid="plot-head-name">{plotName}</h2>}
-            <OwnerVoiceSlot voices={ownerVoices} playLabel={language === 'en' ? 'Listen' : 'ऐका'} />
+            <OwnerVoiceLine versionIds={followedVersionIds} fromNameOf={makerOfVersion} onListen={setListening} />
+            {listening && <DayCardsViewer source={{ templateId: listening.scheduleVersionId }} target={{ taskKey: listening.taskKey }} onClose={() => setListening(null)} take={take} />}
             {followed && (
-                <ScheduleTiles followed={followed} selectedTemplateId={profileId} onSelect={setPicked} onAdd={onAddSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
+                <ScheduleTiles followed={followed} selectedTemplateId={profileId} onSelect={setPicked} onAdd={onAddSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} unheard={unheardByVersion} />
             )}
             <ScheduleProfileCard templateId={profileId} plotName={plotName} crop={crop} sourceLabel={profilePlace?.template?.sourceLabel ?? (profileId === template.id ? template.sourceLabel : undefined)}>
                 {checkNote && profileId === template.id && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} tone="light" />}
@@ -170,3 +179,8 @@ export const PlotScheduleHome: React.FC<{
         </div>
     );
 };
+
+/** The page of one plot's schedule, with the schedule owner's voice for that plot available to everything inside it (the orange line, the tiles, the day-card viewer). */
+export const PlotScheduleHome: React.FC<React.ComponentProps<typeof PlotScheduleHomeBody>> = props => (
+    <OwnerVoiceHostProvider host={props.voiceHost}><PlotScheduleHomeBody {...props} /></OwnerVoiceHostProvider>
+);

@@ -6,6 +6,7 @@
 import type { ScheduleChallengeContent } from '../../../../../../../sync-contract/schemas/schedule-task.zod';
 import type { DayCardStage, DayCardTask, DayCardsDetail } from './dayCardsTypes';
 import { storedScheduleDay } from '../schedulePage/scheduleDates';
+import type { OwnerMessage } from '../ownerVoice/ownerVoiceTypes';
 
 type Product = DayCardTask['task']['products'][number];
 
@@ -102,7 +103,10 @@ export type CardPart =
     | { type: 'look'; task: DayCardTask }
     | { type: 'ask'; task: DayCardTask }
     | { type: 'challenge'; challenge: ScheduleChallengeContent }
-    | { type: 'source'; task: DayCardTask };
+    | { type: 'source'; task: DayCardTask }
+    // slice 12b: the schedule owner's own cards, laid in by `withOwnerCards` (a tip is no card: it is a play button on its work's hero card).
+    | { type: 'ownerChange'; message: OwnerMessage; task: DayCardTask }
+    | { type: 'ownerLook'; message: OwnerMessage; task: DayCardTask };
 
 const isLook = (t: DayCardTask['task']): boolean => t.kind === 'observe';
 

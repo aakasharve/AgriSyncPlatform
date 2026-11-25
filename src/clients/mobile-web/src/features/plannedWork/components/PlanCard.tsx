@@ -32,6 +32,7 @@ import { whenView } from '../planDates';
 import { plannedWorkWords } from '../plannedWorkWords';
 import { ScheduleFeedLines } from './ScheduleFeedLines';
 import { JobCardCardButton } from '../../scheduler/dayCards/DayCardsEntries';
+import { JobCardClip } from '../../scheduler/ownerVoice/JobCardClip';
 
 const MR_FONT = "'Noto Sans Devanagari', sans-serif";
 const EN_FONT = "'DM Sans', sans-serif";
@@ -159,6 +160,8 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                     <div className="mt-1.5"><JobCardCardButton ownItemId={task.ownItemId} /></div>
                 </>
             )}
+            {/* Slice 12b: the clip of the owner's message that changed this job travels with it (the owner's and the mukadam's card); nothing for any other job. */}
+            {task.ownItemId && <JobCardClip jobId={task.id} />}
             {crew && <p className="m-0 mt-1 text-[13px] font-extrabold text-stone-800" data-testid="plan-card-crew">{crew}</p>}
             {details.length > 0 && (
                 <div className="mt-1.5 space-y-0.5 rounded-xl bg-stone-50 px-2.5 py-1.5 text-[13px] font-semibold leading-snug text-stone-800" data-testid="plan-card-details">
