@@ -71,6 +71,9 @@ public static class SyncMutationCatalog
     public const string ScheduleTaskEvent = "schedule.task_event";
     public const string ScheduleTakeTask = "schedule.take_task";
     public const string OwnscheduleCarryForward = "ownschedule.carry_forward";
+    public const string ScheduleOwnerMessageHeard = "schedule.owner_message.heard";
+    public const string ScheduleOwnerMessageDecide = "schedule.owner_message.decide";
+    public const string ScheduleOwnerMessageAnswer = "schedule.owner_message.answer";
 
     public static readonly ImmutableArray<SyncMutationDescriptor> All = ImmutableArray.Create(
         new SyncMutationDescriptor(Name: "create_farm", OwnerAggregate: "Farm", SinceVersion: "0.1.0", PayloadSchema: "CreateFarm"),
@@ -128,7 +131,10 @@ public static class SyncMutationCatalog
         new SyncMutationDescriptor(Name: "ownschedule.item.plan", OwnerAggregate: "PlannedWork", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleItemPlan"),
         new SyncMutationDescriptor(Name: "schedule.task_event", OwnerAggregate: "ScheduleTaskEvent", SinceVersion: "1.0.18", PayloadSchema: "ScheduleTaskEvent"),
         new SyncMutationDescriptor(Name: "schedule.take_task", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "ScheduleTakeTask"),
-        new SyncMutationDescriptor(Name: "ownschedule.carry_forward", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleCarryForward")
+        new SyncMutationDescriptor(Name: "ownschedule.carry_forward", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleCarryForward"),
+        new SyncMutationDescriptor(Name: "schedule.owner_message.heard", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageHeard"),
+        new SyncMutationDescriptor(Name: "schedule.owner_message.decide", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageDecide"),
+        new SyncMutationDescriptor(Name: "schedule.owner_message.answer", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageAnswer")
     );
 
     public static readonly ImmutableHashSet<string> Names =

@@ -58,6 +58,9 @@
     { "name": "ownschedule.item.plan",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleItemPlan" },
     { "name": "schedule.task_event",     "ownerAggregate": "ScheduleTaskEvent", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTaskEvent" },
     { "name": "schedule.take_task",      "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "ScheduleTakeTask" },
-    { "name": "ownschedule.carry_forward", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleCarryForward" }
+    { "name": "ownschedule.carry_forward", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleCarryForward" },
+    { "name": "schedule.owner_message.heard",  "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageHeard" },
+    { "name": "schedule.owner_message.decide", "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageDecide" },
+    { "name": "schedule.owner_message.answer", "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageAnswer" }
   ]
 }

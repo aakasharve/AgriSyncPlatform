@@ -61,6 +61,9 @@ export const SYNC_MUTATION_TYPES = [
   "schedule.task_event",
   "schedule.take_task",
   "ownschedule.carry_forward",
+  "schedule.owner_message.heard",
+  "schedule.owner_message.decide",
+  "schedule.owner_message.answer",
 ] as const;
 
 export type SyncMutationType = typeof SYNC_MUTATION_TYPES[number];
@@ -132,6 +135,9 @@ export const SYNC_MUTATION_CATALOG: Readonly<Record<SyncMutationType, SyncMutati
   "schedule.task_event": { name: "schedule.task_event", ownerAggregate: "ScheduleTaskEvent", sinceVersion: "1.0.18", payloadSchema: "ScheduleTaskEvent" },
   "schedule.take_task": { name: "schedule.take_task", ownerAggregate: "OwnScheduleItem", sinceVersion: "1.0.18", payloadSchema: "ScheduleTakeTask" },
   "ownschedule.carry_forward": { name: "ownschedule.carry_forward", ownerAggregate: "OwnScheduleItem", sinceVersion: "1.0.18", payloadSchema: "OwnScheduleCarryForward" },
+  "schedule.owner_message.heard": { name: "schedule.owner_message.heard", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageHeard" },
+  "schedule.owner_message.decide": { name: "schedule.owner_message.decide", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageDecide" },
+  "schedule.owner_message.answer": { name: "schedule.owner_message.answer", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageAnswer" },
 });
 
 export function isSyncMutationType(value: string): value is SyncMutationType {
@@ -203,4 +209,7 @@ export const SyncMutationName = {
   ScheduleTaskEvent: "schedule.task_event",
   ScheduleTakeTask: "schedule.take_task",
   OwnscheduleCarryForward: "ownschedule.carry_forward",
+  ScheduleOwnerMessageHeard: "schedule.owner_message.heard",
+  ScheduleOwnerMessageDecide: "schedule.owner_message.decide",
+  ScheduleOwnerMessageAnswer: "schedule.owner_message.answer",
 } as const satisfies Record<string, SyncMutationType>;

@@ -45,14 +45,16 @@ describe('mutation-types.json', () => {
   // 54 -> 55 on 2026-11-24 (schedule mechanism slice 9): schedule.take_task (one tap takes a work of a followed schedule into the farmer's own schedule, origin
   // kept; writes the own work and its origin only, never a plan); a NEW name (sinceVersion 1.0.18); 1.18.0 -> 1.19.0.
   // 55 -> 56 on 2026-11-25 (schedule mechanism slice 11): ownschedule.carry_forward (at season end the own schedule becomes next season's, asked once).
-  it('declares 56 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(56);
+  // 56 -> 59 on 2026-11-25 (schedule mechanism slice 12b): schedule.owner_message.heard / .decide / .answer (the schedule owner's voice: heard, the farmer's
+  // decision on a change, his answer to a look message); NEW names (sinceVersion 1.0.18).
+  it('declares 59 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(59);
   });
 
   it('is contract version 1.19.0 and names the own-schedule and feed mutations as new', () => {
     expect(json.version).toBe('1.19.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
-    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task', 'ownschedule.carry_forward']) {
+    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task', 'ownschedule.carry_forward', 'schedule.owner_message.heard', 'schedule.owner_message.decide', 'schedule.owner_message.answer']) {
       const entry = json.mutationTypes.find((m) => m.name === name);
       expect(entry, name).toBeDefined();
       expect(entry!.sinceVersion).toBe('1.0.18');

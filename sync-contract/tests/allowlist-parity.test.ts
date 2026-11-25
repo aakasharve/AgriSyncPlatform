@@ -66,7 +66,8 @@ const HANDLER_PATH = resolve(
 // 39 -> 41 on 2026-11-23 (schedule mechanism slice 5): ownschedule.item.plan and schedule.task_event, each its own PayloadHasOnly.
 // 41 -> 42 on 2026-11-24 (schedule mechanism slice 9): schedule.take_task, its own PayloadHasOnly.
 // 42 -> 43 on 2026-11-25 (schedule mechanism slice 11): ownschedule.carry_forward, its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 43;
+// 43 -> 46 on 2026-11-25 (schedule mechanism slice 12b): schedule.owner_message.heard / .decide / .answer, each its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 46;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -133,6 +134,10 @@ const EXPECTED_GUARDED_MUTATIONS = [
     // schedule mechanism slice 9 - one tap takes a work of a followed schedule into the own schedule, origin kept.
     'schedule.take_task',
     'ownschedule.carry_forward',
+    // schedule mechanism slice 12b - the schedule owner's voice.
+    'schedule.owner_message.heard',
+    'schedule.owner_message.decide',
+    'schedule.owner_message.answer',
 ].sort();
 
 interface CatalogEntry {

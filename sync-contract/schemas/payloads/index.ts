@@ -85,6 +85,10 @@ export { ScheduleTakeTaskPayload } from './schedule_take_task.zod';
 // slice 11 (schedule mechanism): at season end the own schedule becomes next season's, asking once (ownschedule.carry_forward).
 export { OwnScheduleCarryForwardPayload } from './ownschedule_carry_forward.zod';
 export { ScheduleTaskEventPayload } from './schedule_task_event.zod';
+// slice 12b (schedule mechanism): the schedule owner's voice - heard, the farmer's decision on a change, his answer to a look message.
+export { ScheduleOwnerMessageHeardPayload } from './schedule_owner_message_heard.zod';
+export { ScheduleOwnerMessageDecidePayload } from './schedule_owner_message_decide.zod';
+export { ScheduleOwnerMessageAnswerPayload } from './schedule_owner_message_answer.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly
