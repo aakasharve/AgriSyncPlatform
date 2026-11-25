@@ -40,7 +40,9 @@ public sealed class RecordQuestionEventHandler(
     IDailyRichnessDerivationService dailyRichnessDerivation,
     IClock clock,
     ILogger<RecordQuestionEventHandler> logger,
-    IQuestionSourceResolver? sourceResolver = null)
+    IQuestionSourceResolver? sourceResolver = null,
+    // slice 12: the sources of a stage question come from the task the plot follows or owns; the embedded schedule above is the fallback only.
+    ITaskQuestionSources? taskSources = null)
 {
     private static readonly HashSet<string> PromptOrigins = new(StringComparer.Ordinal) { "bank", "pattern", "ai" };
     private const int MaxPromptTextLength = 600;
@@ -78,7 +80,7 @@ public sealed class RecordQuestionEventHandler(
         string? sourceRefsJson = null;
         if (QuestionKinds.StatesAgronomy(kind))
         {
-            var sources = cmd.LookLineIds is { Count: > 0 } lineIds ? sourceResolver?.Resolve(lineIds) : null;
+            var sources = await ResolveSourcesAsync(cmd, ct);
             if (sources is not { Count: > 0 })
             {
                 logger.LogWarning(
@@ -272,6 +274,28 @@ public sealed class RecordQuestionEventHandler(
         }
 
         return Result.Success(entity.Id);
+    }
+
+    /// <summary>
+    /// Slice 12 - the sources of the look lines a stage question names. A plot that follows a schedule written in the task format, or has works of its own, answers from
+    /// those tasks (a line is <c>task:{key}:look</c> or <c>:ask</c>); the embedded schedule answers ONLY for a plot with neither. All or nothing; null = refused.
+    /// </summary>
+    private async Task<IReadOnlyList<QuestionSourceRef>?> ResolveSourcesAsync(RecordQuestionEventCommand cmd, CancellationToken ct)
+    {
+        if (cmd.LookLineIds is not { Count: > 0 } lineIds)
+        {
+            return null;
+        }
+
+        var task = taskSources is null
+            ? new TaskQuestionResolution(TaskQuestionGate.NotTaskFormat)
+            : await taskSources.ResolveAsync(cmd.FarmId, cmd.PlotId, lineIds, ct);
+        return task.Gate switch
+        {
+            TaskQuestionGate.Resolved => task.Sources,
+            TaskQuestionGate.Refused => null,
+            _ => lineIds.Any(Domain.Dfes.TaskQuestionLines.IsTaskLine) ? null : sourceResolver?.Resolve(lineIds),
+        };
     }
 
     /// <summary>

@@ -273,6 +273,8 @@ public static class DependencyInjection
         services.AddScoped<GetScheduleTemplatesHandler>();
         // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
+        // slice 12: the stage questions' sources come from the task the plot follows or owns (the embedded schedule is the fallback only).
+        services.AddScoped<ShramSafal.Application.Ports.External.ITaskQuestionSources, ShramSafal.Application.Services.TaskQuestionSourceResolver>();
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - the farm-scoped schedule_mechanism switch: the pull tells the phone
         // which farms it is on for, the push refuses the reserved new mutation names for a farm it is off for.
         services.AddScoped<ShramSafal.Application.Services.ScheduleMechanismSwitch>();
