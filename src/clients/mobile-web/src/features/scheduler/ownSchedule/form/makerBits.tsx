@@ -17,7 +17,7 @@ import type { AudioData, CropProfile, FarmerProfile } from '../../../../types';
 import { Tap } from '../../../../shared/components/ui/placeUi';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { PlanMic } from '../../../plannedWork/components/PlanMic';
-import { understandPlanSpeech, type PlanSpeechResult } from '../../../plannedWork/data/planVoice';
+import { understandPlanSpeech, type PlanSpeech, type PlanSpeechResult } from '../../../plannedWork/data/planVoice';
 import { plannedWorkWords } from '../../../plannedWork/plannedWorkWords';
 import type { ScheduleTaskKind } from '../../../../../../../../sync-contract/schemas/schedule-task.zod';
 import type { OwnLanguage } from '../ownScheduleWords';
@@ -43,23 +43,23 @@ export function useMakerVoice(opts: {
     crops: CropProfile[];
     farmerProfile: FarmerProfile;
     understand?: (audio: AudioData) => Promise<PlanSpeechResult>;
-}): { block: (onTitle: ((title: string) => void) | null) => React.ReactNode; reset: () => void } {
+}): { block: (onTitle: ((title: string, speech: PlanSpeech) => void) | null) => React.ReactNode; reset: () => void } {
     const { language, crops, farmerProfile, understand } = opts;
     const planned = plannedWorkWords(language);
     const [voice, setVoice] = useState<VoiceState>('idle');
     const [heard, setHeard] = useState<string | null>(null);
     const alive = useRef(true);
     useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-    const hear = useCallback(async (audio: AudioData, onTitle: ((title: string) => void) | null) => {
+    const hear = useCallback(async (audio: AudioData, onTitle: ((title: string, speech: PlanSpeech) => void) | null) => {
         setVoice('working');
         const result = await (understand ?? ((a: AudioData) => understandPlanSpeech(a, { crops, profile: farmerProfile })))(audio);
         if (!alive.current) return;
         if (!result.ok) { setVoice(result.reason === 'offline' ? 'offline' : 'failed'); return; }
         setVoice('idle');
         setHeard(result.speech.transcript);
-        onTitle?.(result.speech.title);
+        onTitle?.(result.speech.title, result.speech);
     }, [understand, crops, farmerProfile]);
-    const block = (onTitle: ((title: string) => void) | null) => (
+    const block = (onTitle: ((title: string, speech: PlanSpeech) => void) | null) => (
         <>
             <PlanMic onAudio={audio => { void hear(audio, onTitle); }} onProcessingStart={() => setVoice('working')} disabled={voice === 'working'} />
             {voice === 'working' && <p className="m-0 mt-1 text-[13px] font-bold text-stone-700" role="status" data-testid="own-voice-working">{planned.understanding}</p>}

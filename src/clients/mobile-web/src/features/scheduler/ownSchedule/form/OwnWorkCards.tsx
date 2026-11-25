@@ -23,7 +23,7 @@ import { idGenerator } from '../../../../core/domain/services/IdGenerator';
 import { OwnScheduleCommands } from '../../../../application/usecases/sync/OwnScheduleCommands';
 import { backgroundSyncWorker } from '../../../../infrastructure/sync/BackgroundSyncWorker';
 import { plannedWorkWords } from '../../../plannedWork/plannedWorkWords';
-import type { PlanSpeechResult } from '../../../plannedWork/data/planVoice';
+import { readSpokenTimer, type PlanSpeechResult } from '../../../plannedWork/data/planVoice';
 import type { OwnLanguage } from '../ownScheduleWords';
 import { checkedSourceFor, useOwnSchedules } from '../useOwnSchedules';
 import { startWordFor, useOfferedStages, useOwnWorks, type OwnWorkPlace } from '../ownWorkPlace';
@@ -31,6 +31,7 @@ import { AmberCard, MakerHeader, useMakerVoice } from './makerBits';
 import { AskCard, HowCard, KindCard, LookCard, StageCard, WhatCard, WhenCard } from './WorkCards';
 import { blankDraft, buildTask, canSave, draftFromCheckedWork, draftFromTask, type WorkDraft } from './workDraft';
 import { draftKey, dropWorkDraft, keepWorkDraft, readWorkDraft } from './workDraftStore';
+import { applySpokenTimer, marksAfterEdit, type SpokenMarks } from './spokenTimer';
 import { dayLabel } from './workLine';
 import { WORK_MAKER_WORDS } from './workMakerWords';
 
@@ -66,7 +67,9 @@ export const OwnWorkCards: React.FC<OwnWorkCardsProps> = ({ place, taskKey, lang
     const [earlyOpen, setEarlyOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [failed, setFailed] = useState(false);
+    const [spoken, setSpoken] = useState<SpokenMarks | null>(null);
     const savingRef = useRef(false);
+    const anchorsRef = useRef<ReadonlyArray<{ key: string; name: string }>>([]);
     const alive = useRef(true);
     useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -84,6 +87,9 @@ export const OwnWorkCards: React.FC<OwnWorkCardsProps> = ({ place, taskKey, lang
         keepWorkDraft(key, next);
         return next;
     });
+
+    // A timer box he changes by hand is no longer "from his words" (P8).
+    const setByHand = (patch: Partial<WorkDraft>) => { setSpoken(m => marksAfterEdit(m, patch)); set(patch); };
 
     const cropShown = cropNameIn(place.cropName, language, place.cropMasterId);
     const header = <MakerHeader title={taskKey ? words.editTitle : words.makerTitle} onBack={onBack} sub={`${cropShown} · ${place.plotName}`} backLabel={planned.back} />;
@@ -133,6 +139,7 @@ export const OwnWorkCards: React.FC<OwnWorkCardsProps> = ({ place, taskKey, lang
 
     const ok = canSave(draft);
     const anchors = (works ?? []).filter(w => w.taskKey !== taskKey).map(w => ({ key: w.taskKey, name: w.task.name }));
+    anchorsRef.current = anchors; // read when the speech comes back, so works loaded in between count
     const props = { draft, set, words, language } as const;
 
     const save = async () => {
@@ -164,11 +171,17 @@ export const OwnWorkCards: React.FC<OwnWorkCardsProps> = ({ place, taskKey, lang
         <div className="space-y-3 pb-2" data-testid="own-work-maker">
             {header}
             <KindCard {...props} />
-            {draft.kind && <WhatCard {...props} voice={voice.block(title => set({ name: title }))} />}
+            {draft.kind && <WhatCard {...props} voice={voice.block((title, speech) => {
+                // F215 (slice 16): the timer he spoke fills the "when" card; every box it fills is marked, and nothing is saved by speech alone.
+                const heard = readSpokenTimer(speech.spokenTimer);
+                const timer = heard ? applySpokenTimer(heard, anchorsRef.current) : null;
+                set({ name: title, ...(timer ? timer.patch : {}) });
+                setSpoken(timer ? timer.marks : null);
+            })} />}
             {ok && (
                 <>
                     <StageCard {...props} stages={stages} start={start} />
-                    <WhenCard {...props} start={start} anchors={anchors} earlyOpen={earlyOpen} openEarly={() => setEarlyOpen(true)} />
+                    <WhenCard {...props} set={setByHand} spoken={spoken} start={start} anchors={anchors} earlyOpen={earlyOpen} openEarly={() => setEarlyOpen(true)} />
                     <HowCard {...props} />
                     <LookCard {...props} />
                     <AskCard {...props} />

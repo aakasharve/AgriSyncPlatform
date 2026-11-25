@@ -147,7 +147,7 @@ const MR: WorkMakerWords = {
     refsQ: 'कोणतं काम घ्यायचं?', // PROPOSED
     kindQ: 'कोणतं काम जोडायचं?', // v7 "make" deck
     whatQ: 'काम काय?', // v7 MAKERDECK
-    whatSub: 'बोलण्यातून फक्त काम भरतं; दिवस आणि किती वेळा पुढच्या कार्डांवर.', // v7 MAKERDECK
+    whatSub: 'बोलण्यातून काम भरतं; दिवस, कामानंतर किंवा खूण सांगितली तर तीही भरते. बाकी पुढच्या कार्डांवर.', // PROPOSED (slice 16)
     typeHere: 'बोलता येत नसेल तर इथे लिहा', // app word (planning)
     namePh: 'उदा. वांज काढणे', // maker preview
     nameChips: ['खत टाकणे', 'फवारणी', 'पाणी सोडणे', 'छाटणी', 'तण काढणे'], // v7 MAKERDECK
@@ -245,7 +245,7 @@ const EN: WorkMakerWords = {
     refsQ: 'Which work do you take?',
     kindQ: 'Which kind of work?',
     whatQ: 'What is the work?',
-    whatSub: 'Speaking fills only the work; the day and how often are on the next cards.',
+    whatSub: 'Speaking fills the work; a day, a work it follows or a sign you say is filled too. The rest is on the next cards.',
     typeHere: 'Cannot speak? Type here',
     namePh: 'e.g. remove extra shoots',
     nameChips: ['Give fertiliser', 'Spray', 'Water', 'Pruning', 'Weeding'],

@@ -26,6 +26,36 @@ import { BackendAiClient } from '../../../infrastructure/ai/BackendAiClient';
 import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, setOfflineVoiceQueueGate } from '../../../infrastructure/ai/offlineVoiceQueue';
 import { mayKeepOffline } from '../../../core/speak/speakFlow';
 
+/**
+ * Slice 16 (F215): the timer the SERVER read from his own words (a deterministic reader, no model), riding inside the ONE planned-work item. A work holds
+ * one timer. `heardWords` are the exact words it was read from (P8: the phone shows them beside each box it fills). Days here are the STORED day.
+ */
+export type SpokenTimer =
+    | { kind: 'day'; fromDay: number; heardWords: string }
+    | { kind: 'after'; afterWorkWords: string; usualDays: number; heardWords: string }
+    | { kind: 'sign'; signWords: string; heardWords: string };
+
+const wholeDay = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 3650;
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
+
+/** Reads the timer defensively from what the nested item carried; anything malformed is no timer (never a partial one). */
+export function readSpokenTimer(raw: unknown): SpokenTimer | null {
+    if (typeof raw !== 'object' || raw === null) return null;
+    const o = raw as Record<string, unknown>;
+    const heardWords = text(o.heardWords);
+    if (!heardWords) return null;
+    if (o.kind === 'day') return wholeDay(o.fromDay) ? { kind: 'day', fromDay: o.fromDay, heardWords } : null;
+    if (o.kind === 'after') {
+        const afterWorkWords = text(o.afterWorkWords);
+        return afterWorkWords && wholeDay(o.usualDays) ? { kind: 'after', afterWorkWords, usualDays: o.usualDays, heardWords } : null;
+    }
+    if (o.kind === 'sign') {
+        const signWords = text(o.signWords);
+        return signWords ? { kind: 'sign', signWords, heardWords } : null;
+    }
+    return null;
+}
+
 export interface PlanSpeech {
     /** What he said, as words (the result's transcript; the first item's title when the result carries none). */
     transcript: string;
@@ -39,6 +69,8 @@ export interface PlanSpeech {
      * in someone's mouth (the तुलना reason box) reads this one.
      */
     words?: string;
+    /** Slice 16: the timer he spoke, when the server was sure of one; absent otherwise. */
+    spokenTimer?: SpokenTimer;
 }
 
 export type PlanSpeechResult =
@@ -95,7 +127,8 @@ export async function understandPlanSpeech(audio: AudioData, deps: PlanVoiceDeps
         const words = (result.rawTranscript ?? result.data.fullTranscript ?? '').trim();
         const title = task?.title.trim() ?? words;
         if (!title) return { ok: false, reason: 'failed' };
-        return { ok: true, speech: { transcript: words || title, title, dueHint: task?.dueHint?.trim() || null, words } };
+        const spokenTimer = readSpokenTimer((result.data.plannedTasks?.[0] as Record<string, unknown> | undefined)?.spokenTimer);
+        return { ok: true, speech: { transcript: words || title, title, dueHint: task?.dueHint?.trim() || null, words, ...(spokenTimer ? { spokenTimer } : {}) } };
     } catch {
         return { ok: false, reason: isOffline() ? 'offline' : 'failed' };
     }

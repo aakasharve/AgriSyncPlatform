@@ -17,6 +17,8 @@ import { AmberCard, KIND_TONE, Stepper, TextBox } from './makerBits';
 import { dayLabel } from './workLine';
 import type { RepeatPick, WhenPick, WorkDraft } from './workDraft';
 import { MAX_SHOWN_DAY } from './workDraft';
+import { SpokenMark } from './SpokenMark';
+import type { SpokenMarks } from './spokenTimer';
 import type { StartWord, WorkMakerWords } from './workMakerWords';
 
 export interface CardProps {
@@ -85,8 +87,8 @@ export const StageCard: React.FC<CardProps & { stages: readonly OwnStage[]; star
 const WHEN_ORDER: readonly Exclude<WhenPick, 'unset'>[] = ['day', 'after', 'sign', 'later'];
 const REPEATS: readonly RepeatPick[] = ['once', 'every_n_days', 'per_week'];
 
-export const WhenCard: React.FC<CardProps & { start: StartWord; anchors: ReadonlyArray<{ key: string; name: string }>; earlyOpen: boolean; openEarly: () => void }> = ({
-    draft, set, words, language, start, anchors, earlyOpen, openEarly,
+export const WhenCard: React.FC<CardProps & { start: StartWord; anchors: ReadonlyArray<{ key: string; name: string }>; earlyOpen: boolean; openEarly: () => void; spoken?: SpokenMarks | null }> = ({
+    draft, set, words, language, start, anchors, earlyOpen, openEarly, spoken,
 }) => {
     const step = { language, lessLabel: words.less, moreLabel: words.more } as const;
     const whenLabel: Record<Exclude<WhenPick, 'unset'>, string> = { day: words.whenDay, after: words.whenAfter, sign: words.whenSign, later: words.whenLater };
@@ -108,6 +110,7 @@ export const WhenCard: React.FC<CardProps & { start: StartWord; anchors: Readonl
                         : (
                             <>
                                 <Stepper testId="own-step-from" label={words.fromDay(start)} unit={words.days} value={draft.fromShown} min={1} max={MAX_SHOWN_DAY} onChange={n => set({ fromShown: n })} {...step} />
+                                {spoken?.from && <SpokenMark testId="own-spoken-from" heard={spoken.heardWords} language={language} />}
                                 <Stepper testId="own-step-to" label={words.toDay} unit={words.days} value={draft.toShown} min={draft.fromShown ?? 1} max={MAX_SHOWN_DAY} onChange={n => set({ toShown: n })} {...step} />
                             </>
                         )}
@@ -119,13 +122,20 @@ export const WhenCard: React.FC<CardProps & { start: StartWord; anchors: Readonl
                     {anchors.length === 0
                         ? <p className="m-0 mt-1 rounded-2xl bg-stone-100 px-3 py-2 text-[13.5px] font-bold text-stone-700" data-testid="own-after-none">{words.afterNone}</p>
                         : <div className="mt-1 flex flex-wrap gap-2">{anchors.map(a => <PlanChip key={a.key} tone="amber" on={draft.afterKey === a.key} onClick={() => set({ afterKey: a.key })} testId={`own-after-${a.key}`}>{a.name}</PlanChip>)}</div>}
+                    {spoken?.afterWork && <SpokenMark testId="own-spoken-after-work" heard={spoken.heardWords} language={language} />}
                     <Stepper testId="own-step-usual" label={words.usualDays} unit={words.days} value={draft.usualDays} min={0} max={MAX_SHOWN_DAY} onChange={n => set({ usualDays: n })} {...step} />
+                    {spoken?.afterDays && <SpokenMark testId="own-spoken-after-days" heard={spoken.heardWords} language={language} />}
                     {earlyOpen || draft.earliestDays !== null
                         ? <Stepper testId="own-step-early" label={words.earlyDays} unit={words.days} value={draft.earliestDays} min={0} max={MAX_SHOWN_DAY} onChange={n => set({ earliestDays: n })} {...step} />
                         : <Tap onClick={openEarly} data-testid="own-early-open" className="mt-1 min-h-[48px] rounded-full px-1 text-[15px] font-extrabold text-sky-800 underline underline-offset-2">{words.earlyLink}</Tap>}
                 </div>
             )}
-            {draft.when === 'sign' && <TextBox testId="own-sign-words" label={words.signQ} value={draft.signWords} placeholder={words.signPh} maxLength={1000} onChange={v => set({ signWords: v })} />}
+            {draft.when === 'sign' && (
+                <>
+                    <TextBox testId="own-sign-words" label={words.signQ} value={draft.signWords} placeholder={words.signPh} maxLength={1000} onChange={v => set({ signWords: v })} />
+                    {spoken?.sign && <SpokenMark testId="own-spoken-sign" heard={spoken.heardWords} language={language} />}
+                </>
+            )}
             {timed && (
                 <div className="mt-3" data-testid="own-repeat-box">
                     <div className="text-[14px] font-extrabold text-stone-700">{words.repeatQ}</div>
