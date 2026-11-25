@@ -280,5 +280,22 @@ public sealed class OwnScheduleItemRevision : Entity<Guid>
     public UserId ByUserId { get; private set; }
     public DateTime AtUtc { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 schedule slice 12b - the owner's message this revision was written for (an accepted change, or the take-back of it), or null. A revision is written once and never
+    /// changed; the name is set before it is saved.
+    /// </summary>
+    public Guid? OwnerMessageId { get; private set; }
+
+    /// <summary>Names the owner's message this revision answers (before it is saved).</summary>
+    public void NameOwnerMessage(Guid messageId)
+    {
+        if (messageId == Guid.Empty)
+        {
+            throw new ArgumentException("A message id is required.", nameof(messageId));
+        }
+
+        OwnerMessageId = messageId;
+    }
+
     internal static OwnScheduleItemRevision Of(OwnScheduleItem item, OwnScheduleItemAction action) => new(Guid.NewGuid(), item, action);
 }

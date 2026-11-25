@@ -118,11 +118,12 @@ public sealed class ScheduleMechanismSwitchTests
     [Fact]
     public async Task The_shipped_reserved_set_refuses_nothing_that_exists_today()
     {
-        // Slice 1 shipped the gate with its set empty; slice 3 reserves its three own-schedule names. Every OTHER name of the catalog is refused by nothing
+        // Slice 1 shipped the gate with its set empty; slice 3 reserves its three own-schedule names (and each later slice its own: 12b adds the three owner-message names). Every OTHER name of the catalog is refused by nothing
         // here and costs no read of the flag (the repository throws if it is read).
         var sw = new ScheduleMechanismSwitch(new ThrowingRepo());
         ScheduleMechanismSwitch.ReservedMutationNames.Should().BeEquivalentTo(
-            ["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main", "ownschedule.item.plan", "schedule.task_event", "schedule.take_task", "ownschedule.carry_forward"]);
+            ["ownschedule.item.save", "ownschedule.item.remove", "ownschedule.make_main", "ownschedule.item.plan", "schedule.task_event", "schedule.take_task", "ownschedule.carry_forward",
+             "schedule.owner_message.heard", "schedule.owner_message.decide", "schedule.owner_message.answer"]);
 
         foreach (var name in SyncMutationCatalog.Names.Where(n => !ScheduleMechanismSwitch.ReservedMutationNames.Contains(n)))
         {

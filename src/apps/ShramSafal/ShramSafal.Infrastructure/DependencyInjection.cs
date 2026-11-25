@@ -521,6 +521,8 @@ public static class DependencyInjection
         services.AddScoped<IScheduleStepMoveStore, ScheduleStepMoveStore>();
         // spec: plr-d10 schedule slice 3 - the works of a farmer's own schedule while it is built.
         services.AddScoped<IOwnScheduleStore, OwnScheduleStore>();
+        // spec: plr-d10 schedule slice 12b - the schedule owner's voice: messages, clips' metadata and the farms' own state of each.
+        services.AddScoped<IOwnerVoiceStore, OwnerVoiceStore>();
         // spec: plr-d10 schedule slice 5 - the plans made from an own schedule and the answers about a work's sign.
         services.AddScoped<IScheduleFeedStore, ScheduleFeedStore>();
 

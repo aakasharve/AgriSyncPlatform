@@ -5738,6 +5738,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
+                    b.Property<Guid?>("OwnerMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_message_id");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
@@ -6432,6 +6436,248 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_schedule_checks_decision", "decision IN ('Approved', 'Returned', 'Withdrawn')");
 
                             t.HasCheckConstraint("ck_schedule_checks_note_when_not_approved", "decision = 'Approved' OR (note IS NOT NULL AND length(btrim(note)) > 0)");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleOwnerClip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chain_id");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<Guid>("ScheduleVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_version_id");
+
+                    b.Property<Guid>("SentByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_by_user_id");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("storage_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChainId")
+                        .HasDatabaseName("ix_schedule_owner_clips_chain");
+
+                    b.ToTable("schedule_owner_clips", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_owner_clips_duration", "duration_ms > 0 AND duration_ms <= 90000");
+
+                            t.HasCheckConstraint("ck_schedule_owner_clips_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_schedule_owner_clips_mime", "mime_type IN ('audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/webm', 'audio/wav')");
+
+                            t.HasCheckConstraint("ck_schedule_owner_clips_size", "size_bytes > 0 AND size_bytes <= 5242880");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleOwnerMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AnswerFirst")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("answer_first");
+
+                    b.Property<string>("AnswerSecond")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("answer_second");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chain_id");
+
+                    b.Property<Guid>("ClipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clip_id");
+
+                    b.Property<Guid?>("FollowUpFirstClipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("followup_first_clip_id");
+
+                    b.Property<Guid?>("FollowUpSecondClipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("followup_second_clip_id");
+
+                    b.Property<short>("Kind")
+                        .HasColumnType("smallint")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("NewVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("new_version_id");
+
+                    b.Property<Guid>("ScheduleVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_version_id");
+
+                    b.Property<DateTime>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at_utc");
+
+                    b.Property<Guid>("SentByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_by_user_id");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("task_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChainId")
+                        .HasDatabaseName("ix_schedule_owner_messages_chain");
+
+                    b.ToTable("schedule_owner_messages", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_owner_messages_kind", "kind IN (0, 1, 2)");
+
+                            t.HasCheckConstraint("ck_schedule_owner_messages_shape", "(kind = 0 AND new_version_id IS NULL AND answer_first IS NULL AND answer_second IS NULL AND followup_first_clip_id IS NULL AND followup_second_clip_id IS NULL) OR (kind = 1 AND new_version_id IS NOT NULL AND answer_first IS NULL AND answer_second IS NULL AND followup_first_clip_id IS NULL AND followup_second_clip_id IS NULL) OR (kind = 2 AND new_version_id IS NULL AND answer_first IS NOT NULL AND answer_second IS NOT NULL AND answer_first <> answer_second AND followup_first_clip_id IS NOT NULL AND followup_second_clip_id IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleOwnerMessageState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<short?>("Answer")
+                        .HasColumnType("smallint")
+                        .HasColumnName("answer");
+
+                    b.Property<DateTime>("AtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at_utc");
+
+                    b.Property<Guid>("ByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("by_user_id");
+
+                    b.Property<Guid?>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<bool>("ItemCreated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("item_created");
+
+                    b.Property<Guid?>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int?>("ItemRevisionAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_revision_after");
+
+                    b.Property<int?>("ItemRevisionBefore")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_revision_before");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("JobQuantityBefore")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("job_quantity_before");
+
+                    b.Property<string>("JobTitleBefore")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("job_title_before");
+
+                    b.Property<short>("Kind")
+                        .HasColumnType("smallint")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_schedule_owner_message_states_farm");
+
+                    b.HasIndex("PlotId", "MessageId")
+                        .HasDatabaseName("ix_schedule_owner_message_states_plot_message");
+
+                    b.HasIndex("PlotId", "MessageId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ux_schedule_owner_message_states_once")
+                        .HasFilter("kind IN (0, 4)");
+
+                    b.HasIndex("PlotId", "CropCycleId", "MessageId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ux_schedule_owner_message_states_decision")
+                        .HasFilter("kind IN (1, 2, 3)");
+
+                    b.ToTable("schedule_owner_message_states", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_owner_message_states_answer", "(kind = 4 AND answer IN (0, 1)) OR (kind <> 4 AND answer IS NULL)");
+
+                            t.HasCheckConstraint("ck_schedule_owner_message_states_kind", "kind BETWEEN 0 AND 4");
+
+                            t.HasCheckConstraint("ck_schedule_owner_message_states_season", "(kind = 0 AND crop_cycle_id IS NULL) OR (kind <> 0 AND crop_cycle_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_schedule_owner_message_states_sequence", "(kind IN (0, 4) AND sequence = 0) OR (kind IN (1, 2, 3) AND sequence >= 1)");
                         });
                 });
 

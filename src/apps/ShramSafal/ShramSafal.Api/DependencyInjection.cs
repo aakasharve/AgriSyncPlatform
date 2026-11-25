@@ -318,6 +318,13 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler>();
         // spec: plr-d10 schedule slice 11 - season end: the own schedule becomes next season's, asked once (ownschedule.carry_forward).
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardHandler>();
+        // spec: plr-d10 schedule slice 12b - the schedule owner's voice: staff send and list messages (REST), a follower hears, decides and answers (push), and fetches a clip.
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.SendOwnerMessageHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.ListOwnerMessagesHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.GetOwnerClipHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageHeardHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageDecideHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

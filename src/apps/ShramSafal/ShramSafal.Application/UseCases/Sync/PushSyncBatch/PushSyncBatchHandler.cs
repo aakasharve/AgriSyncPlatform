@@ -204,7 +204,11 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 9) - one tap takes a work of a followed schedule into the own schedule, origin kept (schedule.take_task).
     ShramSafal.Application.UseCases.Planning.TakeScheduleTask.TakeScheduleTaskHandler takeScheduleTaskHandler,
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 11) - at season end the own schedule becomes next season's, asked once (ownschedule.carry_forward).
-    ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardHandler carryForwardHandler)
+    ShramSafal.Application.UseCases.Planning.CarryForward.CarryForwardHandler carryForwardHandler,
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 12b) - the schedule owner's voice: heard, the farmer's decision on a change, the answer to a look message.
+    ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageHeardHandler ownerMessageHeardHandler,
+    ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageDecideHandler ownerMessageDecideHandler,
+    ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerHandler ownerMessageAnswerHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1286,6 +1290,13 @@ public sealed class PushSyncBatchHandler(
             // spec: plr-d10 schedule slice 11 - the season-end review's answers carry the own schedule into the next season. A reserved name (the switch, above).
             case "ownschedule.carry_forward":
                 return await HandleOwnScheduleCarryForwardAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 schedule slice 12b - the schedule owner's voice. Reserved names (the switch, above): refused for a farm it is not on for.
+            case "schedule.owner_message.heard":
+                return await HandleOwnerMessageHeardAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "schedule.owner_message.decide":
+                return await HandleOwnerMessageDecideAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "schedule.owner_message.answer":
+                return await HandleOwnerMessageAnswerAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3532,6 +3543,89 @@ public sealed class PushSyncBatchHandler(
                 OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
             ct);
         return ToOutcome(result);
+    }
+
+    // spec: plr-d10 schedule slice 12b - schedule.owner_message.heard / .decide / .answer. NEW names (strict push rule). Each payload names the farm, whose scope is opened from it (a farm the
+    // sender is no Active member of is refused with no farm GUC ever set). The plot, the season, who may (the own-schedule gate AND the planning permission for a decision and an answer;
+    // any Active seat for a heard), that the plot follows the message's schedule, and every row are the handlers'. The three allow-lists are one line each: allowlist-parity.test.ts parses them.
+    private async Task<MutationExecutionOutcome> HandleOwnerMessageHeardAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "messageId"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "schedule.owner_message.heard payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<ScheduleOwnerMessageHeardPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty || request.MessageId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.owner_message.heard.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        return ToOutcome(await ownerMessageHeardHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageHeardCommand(
+                request.FarmId, request.PlotId, request.MessageId, OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct));
+    }
+
+    private async Task<MutationExecutionOutcome> HandleOwnerMessageDecideAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "messageId", "decision"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "schedule.owner_message.decide payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<ScheduleOwnerMessageDecidePayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty || request.CropCycleId == Guid.Empty || request.MessageId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.owner_message.decide.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        return ToOutcome(await ownerMessageDecideHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageDecideCommand(
+                request.FarmId, request.PlotId, request.CropCycleId, request.MessageId, request.Decision ?? string.Empty,
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct));
+    }
+
+    private async Task<MutationExecutionOutcome> HandleOwnerMessageAnswerAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "messageId", "answer"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "schedule.owner_message.answer payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<ScheduleOwnerMessageAnswerPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty || request.CropCycleId == Guid.Empty || request.MessageId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.owner_message.answer.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        return ToOutcome(await ownerMessageAnswerHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerCommand(
+                request.FarmId, request.PlotId, request.CropCycleId, request.MessageId, request.Answer ?? string.Empty,
+                OwnScheduleCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct));
     }
 
     /// <summary>The wire words of a carry answer ("schedule", "mine", "skip") as the names of <see cref="Domain.Planning.ScheduleCarryChoice"/>; anything else maps to a name that parses to nothing.</summary>

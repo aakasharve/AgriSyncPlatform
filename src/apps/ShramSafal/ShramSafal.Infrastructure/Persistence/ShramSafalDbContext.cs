@@ -219,6 +219,12 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // spec: plr-d10 schedule slice 11 - the season-end review's answers; FORCE-RLS on its own farm_id; migration AddOwnScheduleSeasonCarries.
     public DbSet<ShramSafal.Domain.Planning.OwnScheduleSeasonCarry> OwnScheduleSeasonCarries => Set<ShramSafal.Domain.Planning.OwnScheduleSeasonCarry>();
 
+    // spec: plr-d10 schedule slice 12b - the schedule owner's voice: clips' metadata, messages (FORCE-RLS by schedule chain) and what each farm's plots did with them (FORCE-RLS on farm_id);
+    // migration AddScheduleOwnerVoice.
+    public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerClip> ScheduleOwnerClips => Set<ShramSafal.Domain.Planning.ScheduleOwnerClip>();
+    public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerMessage> ScheduleOwnerMessages => Set<ShramSafal.Domain.Planning.ScheduleOwnerMessage>();
+    public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerMessageState> ScheduleOwnerMessageStates => Set<ShramSafal.Domain.Planning.ScheduleOwnerMessageState>();
+
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - the answers about the sign of an own work (seen / not yet / unsure). APPEND-ONLY by privilege;
     // FORCE-RLS on its own farm_id (F8); migration AddScheduleFeed.
     public DbSet<ShramSafal.Domain.Planning.ScheduleTaskEvent> ScheduleTaskEvents => Set<ShramSafal.Domain.Planning.ScheduleTaskEvent>();

@@ -63,7 +63,11 @@ public sealed class ScheduleMechanismSwitch
         // Slice 9: one tap takes a work of a followed schedule into the own schedule, origin kept (schedule.take_task); the payload names its farmId.
         "schedule.take_task",
         // Slice 11: at season end the own schedule becomes next season's, asked once (ownschedule.carry_forward); the payload names its farmId.
-        "ownschedule.carry_forward");
+        "ownschedule.carry_forward",
+        // Slice 12b: the schedule owner's voice - heard, the decision on a change, the answer to a look message; each payload names its farmId.
+        "schedule.owner_message.heard",
+        "schedule.owner_message.decide",
+        "schedule.owner_message.answer");
 
     private readonly IShramSafalRepository repository;
     private readonly IReadOnlySet<string> reservedNames;

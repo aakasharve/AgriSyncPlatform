@@ -574,6 +574,18 @@
 //     ids (owner_user_id, decided_by_user_id). KEEP, as ssf.own_schedule_items (P6: anonymise the person, never the work): erasing the person who tapped must neither take the
 //     farmer's copy away nor undo the answer that made it. The table is APPEND-ONLY BY PRIVILEGE (SELECT + INSERT), so no scrub is wired. No free words.
 //
+//   - ssf.schedule_owner_clips, ssf.schedule_owner_messages and ssf.schedule_owner_message_states (plr-d10 schedule mechanism, slice 12b, "the schedule owner's voice") - KEEP for ShramSafal.
+//     The first two are the SCHEDULE OWNER's voice about a schedule (ShramSafal staff until slice 15): the clip metadata (hash, mime, size, length, storage key) and the message (kind, the work, the
+//     two answers of a look, the ids of its clips), each with the sender as an opaque id (sent_by_user_id). They are not a farmer's data and no farm owns them, so a FARMER's erasure never reads
+//     or changes them. The third holds what a farm's plot did with a message: heard, accepted, kept the old one, took it back, answered (first or second) - opaque ids, a choice and a time, the
+//     farm owner and who tapped as opaque ids, and the job's title and quantity words BEFORE an accepted change (the schedule's own words, kept so a take-back restores them; a name of no person).
+//     KEEP, as ssf.own_schedule_items (P6: anonymise the person, never the work): erasing the person who tapped must neither undo a decision nor take the farmer's schedule away. All three tables are
+//     APPEND-ONLY BY PRIVILEGE (SELECT + INSERT), so no scrub is wired. The clips' BYTES live in storage under schedule-owner-clips/ and are the owner's recordings, never the farmer's retained voice
+//     (VoiceClipRetained is not used). WHAT A CREATOR'S ERASURE MUST DO (slice 15, when creators send): a creator's recordings are his own voice, so his erasure DELETES his clip files and clip/message
+//     rows (the farmers' state rows hold no words of his and stay; a clip that is gone plays as "not available", never as another voice), with its own whole-worker proof. No such sender exists yet.
+//     Proven through the WHOLE worker: ErasureWorkerOwnerVoiceRealPostgresTests runs the real worker with rows in all three tables and proves the request Completes and the rows are untouched.
+//     KEEP - conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.own_schedule_item_origins (plr-d10 schedule mechanism, slice 9) - KEEP. One row per TAKE ACT (the latest row is the current origin; older rows are history) says where one own work came from when it was TAKEN from a schedule the plot
 //     follows: the source version, its chain, its name and number then, the task key, the dose picked, the day, and two PERSONS as opaque ids (source_owner_user_id,
 //     taken_by_user_id) beside the farm owner at the time. KEEP, as ssf.own_schedule_items above (P6: anonymise the person, never the work; the approved spec: "origin never

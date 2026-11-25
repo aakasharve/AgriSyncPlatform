@@ -412,6 +412,18 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         return await _client.SendAsync(request);
     }
 
+    /// <summary>spec: plr-d10 schedule slice 12b - a request the caller built (a multipart upload), signed in as <paramref name="user"/> like <see cref="SendAsync(HttpMethod, string, Guid, object?, string?)"/>.</summary>
+    protected async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request, Guid user, string? appVersion = "1.0.18")
+    {
+        request.Headers.Add("X-Test-UserId", user.ToString());
+        if (appVersion is not null)
+        {
+            request.Headers.Add("X-App-Version", appVersion);
+        }
+
+        return await _client.SendAsync(request);
+    }
+
     protected static IReadOnlyList<JsonElement> ArrayOf(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
             ? value.EnumerateArray().ToList()

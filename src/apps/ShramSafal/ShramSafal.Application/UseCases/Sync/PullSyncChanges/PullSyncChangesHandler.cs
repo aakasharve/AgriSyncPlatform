@@ -33,7 +33,9 @@ public sealed class PullSyncChangesHandler(
     ScheduleMechanismSwitch scheduleMechanismSwitch,
     ILogger<PullSyncChangesHandler> logger,
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the works of each plot-season's own schedule still being built.
-    IOwnScheduleStore ownScheduleStore)
+    IOwnScheduleStore ownScheduleStore,
+    // spec: plr-d10 schedule slice 12b - the owner's voice (messages, clips' metadata, the farms' own state of each).
+    IOwnerVoiceStore ownerVoiceStore)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
     // DegradedComponent.ComponentName. Frontend keys on these.
@@ -828,6 +830,9 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyList<OwnScheduleItemDto>? ownScheduleItems = null;
         IReadOnlyList<OwnScheduleItemRevisionDto>? ownScheduleItemRevisions = null;
         IReadOnlyList<OwnScheduleSeasonCarryDto>? ownScheduleCarries = null;
+        IReadOnlyList<OwnerMessageSyncDto>? ownerMessages = null;
+        IReadOnlyList<OwnerClipSyncDto>? ownerClips = null;
+        IReadOnlyList<OwnerMessageStateSyncDto>? ownerMessageStates = null;
         if (query.ScheduleFormat is >= 2 && scheduleMechanismFarms.Count > 0)
         {
             ownScheduleItemRevisions = (await ownScheduleStore.GetRevisionsOfFarmsAsync(scheduleMechanismFarms, ct))
@@ -859,6 +864,21 @@ public sealed class PullSyncChangesHandler(
                         _ => "schedule",
                     },
                     c.Answered, c.RecordedStoredDay, c.DecidedAtUtc))
+                .ToList();
+
+            // spec: plr-d10 schedule slice 12b - the owner's voice: messages of the schedules these farms follow or own copies from, their clips' metadata, and the farms' own
+            // state of each. A state is read for the plots he reads only; the messages and clips are the schedule owner's, so they are not plot-keyed.
+            var messages = await ownerVoiceStore.GetMessagesForFarmsAsync(scheduleMechanismFarms, ct);
+            ownerMessages = messages.Select(m => new OwnerMessageSyncDto(
+                m.Id, m.ChainId, m.ScheduleVersionId, m.TaskKey, Domain.Planning.ScheduleOwnerMessageKindWire.ToWire(m.Kind), m.ClipId, m.NewVersionId,
+                m.AnswerFirst, m.AnswerSecond, m.FollowUpFirstClipId, m.FollowUpSecondClipId, m.SentAtUtc)).ToList();
+            ownerClips = (await ownerVoiceStore.GetClipsAsync(messages.SelectMany(m => m.ClipIds()).Distinct().ToList(), ct))
+                .Select(c => new OwnerClipSyncDto(c.Id, c.ChainId, c.MimeType, c.SizeBytes, c.DurationMs, c.ContentHash, c.CreatedAtUtc)).ToList();
+            ownerMessageStates = (await ownerVoiceStore.GetStatesOfFarmsAsync(scheduleMechanismFarms, ct))
+                .Where(s => window.ScopeOf((Guid)s.FarmId) is { } scope && scope.CoversPlot(s.PlotId))
+                .Select(s => new OwnerMessageStateSyncDto(
+                    s.Id, (Guid)s.FarmId, s.PlotId, s.CropCycleId, s.MessageId, UseCases.Planning.OwnerVoice.OwnerMessageWire.Kind(s.Kind), s.Sequence,
+                    s.Answer is { } a ? (a == 0 ? "first" : "second") : null, s.ItemId, s.ItemCreated, s.JobId, s.ByUserId.Value, s.AtUtc))
                 .ToList();
         }
 
@@ -958,7 +978,10 @@ public sealed class PullSyncChangesHandler(
             // slice 3 - his own schedules' works (new-format phones only, switch-on farms only; never a key otherwise).
             OwnScheduleItems: ownScheduleItems,
             OwnScheduleItemRevisions: ownScheduleItemRevisions,
-            OwnScheduleCarries: ownScheduleCarries);
+            OwnScheduleCarries: ownScheduleCarries,
+            OwnerMessages: ownerMessages,
+            OwnerClips: ownerClips,
+            OwnerMessageStates: ownerMessageStates);
 
         return Result.Success(response);
     }

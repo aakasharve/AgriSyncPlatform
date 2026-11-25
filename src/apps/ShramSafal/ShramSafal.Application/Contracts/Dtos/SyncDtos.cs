@@ -146,7 +146,57 @@ public sealed record SyncPullResponseDto(
     // spec: plr-d10 schedule slice 11 - the answers of the season-end review of these plots (one per work), FULL on every pull; same rule: new-format phones, switch-on farms,
     // the plots he reads; never a key otherwise. A pair of seasons with rows here was answered: the review is asked once.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<OwnScheduleSeasonCarryDto>? OwnScheduleCarries = null);
+    IReadOnlyList<OwnScheduleSeasonCarryDto>? OwnScheduleCarries = null,
+    // spec: plr-d10 schedule slice 12b - the owner's voice. Messages of the schedules these farms follow or own copies from (FULL on every pull), their clips' METADATA (never bytes: the phone
+    // fetches those online and keeps them) and the farms' own state of each (heard / decided / answered, append-only). Same rule as the keys above: new-format phones, switch-on farms, the
+    // plots he reads; NEVER A KEY otherwise, so an old phone's pull is byte for byte what it was (P11).
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnerMessageSyncDto>? OwnerMessages = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnerClipSyncDto>? OwnerClips = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<OwnerMessageStateSyncDto>? OwnerMessageStates = null);
+
+/// <summary>
+/// spec: plr-d10 schedule slice 12b - one message of a schedule owner. <see cref="Kind"/> is <c>tip</c>, <c>change</c> or <c>look</c>. A change names <see cref="NewVersionId"/> (the checked
+/// version whose task is the "now"; the "before" is the task of <see cref="ScheduleVersionId"/>); a look carries its two answers in words and the follow-up clip played after each.
+/// </summary>
+public sealed record OwnerMessageSyncDto(
+    Guid Id,
+    Guid ChainId,
+    Guid ScheduleVersionId,
+    string TaskKey,
+    string Kind,
+    Guid ClipId,
+    Guid? NewVersionId,
+    string? AnswerFirst,
+    string? AnswerSecond,
+    Guid? FollowUpFirstClipId,
+    Guid? FollowUpSecondClipId,
+    DateTime SentAtUtc);
+
+/// <summary>spec: plr-d10 schedule slice 12b - the metadata of one clip (never its bytes): fetch them from <c>GET /shramsafal/schedule-owner-clips/{id}?farmId=</c> while online.</summary>
+public sealed record OwnerClipSyncDto(Guid Id, Guid ChainId, string MimeType, long SizeBytes, int DurationMs, string ContentHash, DateTime CreatedAtUtc);
+
+/// <summary>
+/// spec: plr-d10 schedule slice 12b - one fact about what a farm's plot did with a message. <see cref="Kind"/> is <c>heard</c>, <c>accepted</c>, <c>kept_old</c>, <c>taken_back</c> or
+/// <c>answered</c>; a decision's <see cref="Sequence"/> counts from 1 (the highest standing decision of a plot-season and message is its state); an answer is <c>first</c> or <c>second</c>.
+/// An accept names the own work it moved (<see cref="ItemId"/>) and the job (<see cref="JobId"/>): the job's card plays the clip of the message that changed it.
+/// </summary>
+public sealed record OwnerMessageStateSyncDto(
+    Guid Id,
+    Guid FarmId,
+    Guid PlotId,
+    Guid? CropCycleId,
+    Guid MessageId,
+    string Kind,
+    int Sequence,
+    string? Answer,
+    Guid? ItemId,
+    bool ItemCreated,
+    Guid? JobId,
+    Guid ByUserId,
+    DateTime AtUtc);
 
 /// <summary>
 /// spec: plr-d10 schedule slice 11 - one answer of the season-end review: the work of the season that ended (<see cref="PreviousItemId"/>, null for a plan-only work picked), the copy

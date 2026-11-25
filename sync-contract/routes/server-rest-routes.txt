@@ -94,8 +94,10 @@ GET /shramsafal/reference/schedule-templates/{id:guid}
 GET /shramsafal/reference/schedule-templates/{id:guid}/day-cards
 GET /shramsafal/reference/schedule-templates/{id:guid}/tasks
 GET /shramsafal/reports/farm-week/{farmId:guid}
+GET /shramsafal/schedule-owner-clips/{clipId:guid}
 GET /shramsafal/schedule-templates/checks/waiting
 GET /shramsafal/schedule-templates/{id:guid}/check-view
+GET /shramsafal/schedule-templates/{id:guid}/owner-messages
 GET /shramsafal/schedule-templates/{rootId}/lineage
 GET /shramsafal/security/tenant-dek
 GET /shramsafal/test-instances
@@ -210,6 +212,7 @@ POST /shramsafal/schedule-templates
 POST /shramsafal/schedule-templates/import
 POST /shramsafal/schedule-templates/import/format-2
 POST /shramsafal/schedule-templates/{id:guid}/check
+POST /shramsafal/schedule-templates/{id:guid}/owner-messages
 POST /shramsafal/schedule-templates/{id}/clone
 POST /shramsafal/schedule-templates/{id}/edit
 POST /shramsafal/schedule-templates/{id}/publish

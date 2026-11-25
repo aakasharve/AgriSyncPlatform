@@ -1464,6 +1464,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // farm_id, the existing owner/place trigger function reused, SELECT + INSERT for the app role). It never touches ssf.audit_events, its policies or its grants.
         // Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261124220806_AddOwnScheduleSeasonCarries",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 12b) - Up() and Down() read in full: Up() creates ssf.schedule_owner_clips, ssf.schedule_owner_messages and
+        // ssf.schedule_owner_message_states (FORCE RLS each; the states table has its own owner-and-place trigger function) and adds one nullable column to ssf.own_schedule_item_revisions.
+        // It never touches ssf.audit_events, its policies or its grants. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261125030530_AddScheduleOwnerVoice",
     ];
 
     /// <summary>

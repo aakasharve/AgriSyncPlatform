@@ -94,6 +94,8 @@ internal sealed class OwnScheduleItemRevisionConfiguration : IEntityTypeConfigur
         OwnScheduleContent.Map(builder);
         builder.Property(x => x.ByUserId).HasColumnName("by_user_id").HasConversion(TypedIdConverters.UserId).IsRequired();
         builder.Property(x => x.AtUtc).HasColumnName("at_utc").IsRequired();
+        // spec: plr-d10 schedule slice 12b - the owner's message this revision was written for (an accepted change and its take-back); null for every other revision. Migration AddScheduleOwnerVoice.
+        builder.Property(x => x.OwnerMessageId).HasColumnName("owner_message_id");
 
         builder.HasIndex(x => new { x.ItemId, x.RevisionNumber }).IsUnique().HasDatabaseName("ux_own_schedule_item_revisions_item_number");
         builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_own_schedule_item_revisions_farm");

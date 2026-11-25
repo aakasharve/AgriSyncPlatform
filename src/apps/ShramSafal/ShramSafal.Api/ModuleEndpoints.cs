@@ -47,6 +47,8 @@ public static class ModuleEndpoints
         group.MapPlanningEndpoints();
         group.MapPlannedActivityEndpoints();
         group.MapScheduleTemplateEndpoints();
+        // spec: plr-d10 schedule slice 12b - the schedule owner's voice (staff send and list, a follower fetches a clip).
+        group.MapScheduleOwnerVoiceEndpoints();
         group.MapScheduleEndpoints();
         // spec: plr-d10 lane L8c-1 (founder D-24c) - the REST reads of planned work and reminders.
         group.MapPlannedWorkEndpoints();

@@ -612,6 +612,38 @@ public sealed class PlannedWork : Entity<Guid>
         ReminderAudienceChangedAtUtc = ModifiedAtUtc;
     }
 
+    /// <summary>
+    /// spec: plr-d10 schedule slice 12b - the farmer accepted (or took back) a change of the schedule's owner for the work this plan was made from: the plan's words follow the work
+    /// (its title and, when <c>changeQuantity</c> is set - the work states one, or a take-back restores one - its quantity words) and, when a person holds the job, his trail RESTARTS (not seen, not accepted: he sees a changed job). A closed
+    /// plan is history and never changes. The day, the person and the note are untouched. Returns false when nothing needed to change or the plan is closed.
+    /// </summary>
+    public bool ChangeFromOwnerMessage(string title, string? quantityText, bool changeQuantity, DateTime nowUtc)
+    {
+        if (IsClosed || OwnItemId is null)
+        {
+            return false;
+        }
+
+        var cleanTitle = title?.Trim();
+        if (string.IsNullOrEmpty(cleanTitle) || cleanTitle.Length > MaxTitle)
+        {
+            throw new ArgumentException($"The task needs words, at most {MaxTitle} characters.", nameof(title));
+        }
+
+        var quantity = changeQuantity ? Clean(quantityText, MaxQuantityText, "quantity words") : QuantityText;
+        Title = cleanTitle;
+        QuantityText = quantity;
+        if (AssigneeUserId is not null)
+        {
+            SeenAtUtc = null;
+            AcceptedAtUtc = null;
+            Status = PlannedWorkStatus.Assigned;
+        }
+
+        Touch(nowUtc);
+        return true;
+    }
+
     /// <summary>True when <paramref name="dailyLogId"/> is linked to this task or to one of its plot rows.</summary>
     public bool Links(Guid dailyLogId) =>
         LinkedDailyLogIds.Contains(dailyLogId) || plots.Any(p => p.LinkedDailyLogIds.Contains(dailyLogId));
