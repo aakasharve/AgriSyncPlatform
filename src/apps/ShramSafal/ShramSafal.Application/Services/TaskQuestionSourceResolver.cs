@@ -2,7 +2,6 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Planning;
-using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Services;
 
@@ -15,7 +14,7 @@ namespace ShramSafal.Application.Services;
 /// content is loaded, slice 14). Read only: it writes nothing and refuses nothing but the one question.
 /// </summary>
 public sealed class TaskQuestionSourceResolver(
-    IShramSafalRepository repository, ScheduleRequirement requirement, IOwnScheduleStore ownStore) : ITaskQuestionSources
+    IShramSafalRepository repository, IPlotSeasonReader plotSeasons, IOwnScheduleStore ownStore) : ITaskQuestionSources
 {
     public async Task<TaskQuestionResolution> ResolveAsync(Guid farmId, Guid? plotId, IReadOnlyList<string> lineIds, CancellationToken ct = default)
     {
@@ -31,20 +30,18 @@ public sealed class TaskQuestionSourceResolver(
             return lines.Any(TaskQuestionLines.IsTaskLine) ? Refused : NotTaskFormat;
         }
 
-        var gathered = await requirement.FactsForPlotAsync(farmId, plot, farm.OwnerUserId.Value, ct);
-        if (!gathered.IsSuccess || gathered.Value.Season is not { } season)
+        // The plot's season and its main schedule come from the ONE reader the stage line and the day count use (PlotSeasonReader): never a second pick.
+        var season = await plotSeasons.ReadAsync(farmId, plot, farm.OwnerUserId.Value, ct);
+        if (season.CropCycleId is not { } cycleId)
         {
             return lines.Any(TaskQuestionLines.IsTaskLine) ? Refused : NotTaskFormat;
         }
 
-        var facts = gathered.Value;
-        var own = (await ownStore.GetSeasonAsync(plot, season.CycleId, ct))
+        var own = (await ownStore.GetSeasonAsync(plot, cycleId, ct))
             .Where(i => i.State == OwnScheduleItemState.Active)
             .ToDictionary(i => i.TaskKey, StringComparer.Ordinal);
 
-        var followed = ScheduleRequirement.FollowedNow(facts, season);
-        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing), facts.PlotFarmOwnerUserId);
-        var reference = main is null ? null : await repository.GetScheduleTemplateWithTasksByIdAsync(main.ScheduleTemplateId.Value, ct);
+        var reference = season.TemplateId is { } mainId ? await repository.GetScheduleTemplateWithTasksByIdAsync(mainId, ct) : null;
         var referenceTasks = reference is { Tasks.Count: > 0 }
             ? reference.Tasks.GroupBy(t => t.TaskKey, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Content, StringComparer.Ordinal)
             : new Dictionary<string, ScheduleTaskContent>(StringComparer.Ordinal);

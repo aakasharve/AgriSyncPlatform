@@ -7,7 +7,10 @@ namespace ShramSafal.Application.Services;
 /// A plot's crop, its day zero and its stages, as the server's own schedule engine holds them. <see cref="DayZero"/> is null when the
 /// plot has no main schedule (P4: no schedule, no day); <see cref="StageOn"/> answers null for a day no stage holds.
 /// </summary>
-public sealed record PlotSeason(string? Crop, DateOnly? DayZero, string? DayZeroSource, Guid? TemplateId, Func<DateOnly, string?>? StageFor)
+public sealed record PlotSeason(
+    string? Crop, DateOnly? DayZero, string? DayZeroSource, Guid? TemplateId, Func<DateOnly, string?>? StageFor,
+    // spec: plr-d10 schedule slice 12 - the plot's CURRENT crop season (the one the schedule page shows), when it has one, whether or not it follows a schedule.
+    Guid? CropCycleId = null)
 {
     public static PlotSeason None { get; } = new(null, null, null, null, null);
 
@@ -45,7 +48,7 @@ public sealed class PlotSeasonReader(ScheduleRequirement requirement) : IPlotSea
         if (main is null)
         {
             // No main schedule: the crop is known, a day is not (P4).
-            return PlotSeason.None with { Crop = season.CropName };
+            return PlotSeason.None with { Crop = season.CropName, CropCycleId = season.CycleId };
         }
 
         var byId = facts.Listing.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
@@ -53,6 +56,7 @@ public sealed class PlotSeasonReader(ScheduleRequirement requirement) : IPlotSea
         var definition = byId.TryGetValue(main.ScheduleTemplateId.Value, out var template) ? ScheduleDefinitionMapper.From(template) : null;
         return new PlotSeason(
             season.CropName, dayZero, main.ReferenceDate is null ? "crop-cycle-start" : "schedule", main.ScheduleTemplateId.Value,
-            definition is null ? null : day => ScheduleDefinitionMapper.StageHolding(definition, dayZero, day)?.Stage.Name);
+            definition is null ? null : day => ScheduleDefinitionMapper.StageHolding(definition, dayZero, day)?.Stage.Name,
+            season.CycleId);
     }
 }
