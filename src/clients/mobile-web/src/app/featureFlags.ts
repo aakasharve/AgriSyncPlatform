@@ -153,4 +153,10 @@ export const FEATURE_FLAGS = {
      * server or database change. Default OFF (env VITE_VOICE_FLOW_V2 absent -> false): ON in the fieldtest build only.
      */
     voiceFlowV2: isEnabled('VITE_VOICE_FLOW_V2'),
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 12) - TEST SEAM ONLY, default OFF, never set in a release or fieldtest build. The wording of the
+     * stage question (`stage.look`) stays HIDDEN until the founder approves it (marathiApproved false). A stack that drives the screen to check the schedule-sourced
+     * question sets VITE_DFES_STAGE_LOOK_TEST_APPROVED=1 to read that one entry as approved; nothing else changes and nothing in the bank is edited.
+     */
+    dfesStageLookTestApproved: isEnabled('VITE_DFES_STAGE_LOOK_TEST_APPROVED'),
 } as const;

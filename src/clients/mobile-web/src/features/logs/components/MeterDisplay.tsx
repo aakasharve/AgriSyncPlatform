@@ -157,6 +157,7 @@ export function MeterDisplay({
                     onAnswer={option => onAnswer?.(option)}
                     onLater={() => onDismiss?.()}
                     onSpeak={() => onAnswerBySpeaking?.()}
+                    sourceLabel={combinedQuestion.taskLine?.sourceLabelMr}
                 />
             </div>
         );
@@ -191,6 +192,11 @@ export function MeterDisplay({
                     >
                         {combinedQuestion.resolvedPromptMr}
                     </p>
+                    {combinedQuestion.taskLine ? (
+                        <p data-testid="shramsathi-question-source" className="mt-1 text-[11px] text-stone-600" style={{ fontFamily: SANS }}>
+                            {combinedQuestion.taskLine.sourceLabelMr}
+                        </p>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-2">
                         {combinedQuestion.answerOptions.map((option) => (
                             <button

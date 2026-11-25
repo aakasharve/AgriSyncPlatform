@@ -20,6 +20,8 @@ import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStag
 import type { ScheduleGapContext } from './dfesScheduleWindow';
 import type { MissedCard } from './dfesWhyNot';
 import type { StageQuestionContext } from './dfesStageQuestion';
+import type { TaskStageLine } from './taskStageLines';
+import { scheduleFeedWords } from '../../plannedWork/scheduleFeedWords';
 import type { WeatherReconcileContext } from './dfesWeatherReconcile';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
@@ -186,7 +188,19 @@ export interface SelectedQuestion {
     scheduleCardRef?: string | null;
     /** Lane DFES-Q - the task a why-not question is about: the answer card shows the reasons and opens that day. */
     missedCard?: MissedCard;
+    /**
+     * Slice 12 - the task a stage question was read from (the schedule the plot follows or owns): its source line is shown beside the question, and the answer
+     * (seen / not yet / unsure) is written as a `schedule.task_event` when the task is an own work that waits for a sign. Absent for every other question.
+     */
+    taskLine?: TaskStageLine;
+    /** Slice 12 - the crop season that task event is written against. */
+    taskCropCycleId?: string | null;
 }
+
+/** Slice 12 - the three answers to a question read from a task (the words of slice 5's sign question, PROPOSED Marathi). */
+export const TASK_ANSWER_OPTIONS: readonly DfesAnswerOption[] = (['seen', 'not_yet', 'unsure'] as const).map(value => ({
+    value, labelMr: scheduleFeedWords('mr').answer[value],
+}));
 
 /**
  * Hard gate: unapproved questions are never selectable, even if present.
@@ -455,11 +469,16 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     // P3 Stage - lane DFES-Q (task 6): a cited look line for this day of his season. The line travels with the event; the server
     // resolves its sources from the same schedule and refuses the event otherwise.
     const stage = inputs.stageQuestion;
-    if (stage?.kind === 'stage_look' && stage.line && stage.askMr) {
+    if (stage?.kind === 'stage_look' && (stage.line || stage.task) && stage.askMr) {
         const q = findQuestion('stage.look');
-        const lines = [stage.line.id];
-        if (eligible(q, recent, sourceLogId, lines)) {
-            return { ...pack(q, inputs, `stage look: day ${stage.scheduleDay} ${stage.line.id}`), lookLineIds: lines };
+        const lineId = stage.task ? stage.lineId : stage.line?.id;
+        const lines = lineId ? [lineId] : [];
+        if (lineId && eligible(q, recent, sourceLogId, lines)) {
+            const picked = { ...pack(q, inputs, `stage look: day ${stage.scheduleDay} ${lineId}`), lookLineIds: lines };
+            // Slice 12 - a question read from a task is answered with the three words of the sign question, and its source is shown beside it.
+            return stage.task
+                ? { ...picked, answerOptions: [...TASK_ANSWER_OPTIONS], taskLine: stage.task, taskCropCycleId: stage.cropCycleId ?? null }
+                : picked;
         }
     }
 

@@ -15,12 +15,14 @@
  *
  * spec: dfes-companion-2026-07-11
  */
-import React from 'react';
+import React, { useRef } from 'react';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { MeterDisplay } from './MeterDisplay';
 import { useDfesQuestion } from '../hooks/useDfesQuestion';
 import { notifyDfesAnswered } from '../services/dfesAnswerSignal';
-import type { DailyQuestionInputs } from '../services/dfesQuestionEngine';
+import type { DailyQuestionInputs, SelectedQuestion } from '../services/dfesQuestionEngine';
+import { ScheduleFeedCommands } from '../../../application/usecases/sync/ScheduleFeedCommands';
+import type { ScheduleSignAnswerName } from '../../../infrastructure/storage/plannedWorkRow';
 import type { PendingQuestionAnswer } from '../services/pendingQuestionAnswer';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import { WHY_NOT_REASONS, type WhyNotReason } from '../services/dfesWhyNot';
@@ -84,7 +86,30 @@ export function MeterQuestionHost({
     // row is NULL and wave-3.2's per-log dedupe had nothing to key on. All three outcome
     // paths carry it, not just the answered one: a SKIP is still "this log was asked".
     const sourceLogId = questionInputs.sourceLogId ?? null;
+    // Slice 12 - one `schedule.task_event` per shown question, whatever the number of taps or retries of the question's own write.
+    const taskEventFor = useRef<SelectedQuestion | null>(null);
+    const answerTaskQuestion = async (option: DfesAnswerOption) => {
+        const line = selected?.taskLine;
+        const cropCycleId = selected?.taskCropCycleId;
+        const answer = option.value as ScheduleSignAnswerName;
+        // The answer is QUEUED on the phone first (P10: it works with no internet and is replayed once, by its own request id), and only for an own work that waits for a
+        // sign - the one kind of task the server takes an answer about. "Unsure" is kept as its own event and writes NOTHING else: no log, no plan, no date.
+        if (selected && line?.takesSignEvent && cropCycleId && farmId && plotId && taskEventFor.current !== selected) {
+            taskEventFor.current = selected;
+            try {
+                await ScheduleFeedCommands.answerSign({ farmId, plotId, cropCycleId }, line.taskKey, answer, questionInputs.askedOnLocalDate);
+            } catch {
+                taskEventFor.current = null; // not queued: a second tap may try again
+            }
+        }
+        // The question's own record. It names no log (the question is about the plot's stage, not about a day's record), and an "unsure" carries no words at all.
+        void recordOutcome({ skipped: false, response: answer === 'unsure' ? null : option.labelMr, dailyLogId: null });
+    };
     const handleAnswer = (option: DfesAnswerOption) => {
+        if (selected?.taskLine) {
+            void answerTaskQuestion(option);
+            return;
+        }
         void recordOutcome({
             skipped: false, response: option.value,
             stageConfirmed: option.stageConfirmedValue ?? null, dailyLogId: sourceLogId,

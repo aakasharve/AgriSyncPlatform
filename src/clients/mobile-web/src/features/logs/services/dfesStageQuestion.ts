@@ -13,6 +13,8 @@
  * Counted against the real India today, never a saved log's own day. PURE.
  */
 import type { CropProfile } from '../../../types';
+import type { TaskStageLine } from './taskStageLines';
+import type { TaskStageState } from './taskStageSource';
 import { calculateDayNumber, scheduleTemplateForPlot } from '../../scheduler/planning/ClientPlanEngine';
 import {
     GRAPES_OCT_FRUIT_PRUNING, askableLinesForDay, sampleVinesFor, type DfesLookLine, type DfesSchedule,
@@ -25,6 +27,15 @@ export interface StageQuestionContext {
     line: DfesLookLine | null;
     /** The line's question, ready to show ("{N}" filled); null for stage_open. */
     askMr: string | null;
+    /**
+     * Slice 12 - the id the phone sends for the line: `task:{key}:look|ask` for a question read from a task of the schedule the plot follows or owns, else the
+     * embedded line's own id. Null for stage_open.
+     */
+    lineId?: string | null;
+    /** Slice 12 - the task line a question was read from (its source, and whether answering it writes a `schedule.task_event`); absent for the embedded json. */
+    task?: TaskStageLine;
+    /** Slice 12 - the crop season a task event is written against. */
+    cropCycleId?: string | null;
 }
 
 /** Fruit pruning months for the October schedule: September, October, November (1-based). */
@@ -39,11 +50,24 @@ export function computeStageQuestion(input: {
     /** In English mode a line with no English twin is not asked (the look lines are Marathi only for now). */
     language?: string;
     schedule?: DfesSchedule;
+    /**
+     * Slice 12 - what the plot's tasks say for today (`loadTaskStageState`). When the plot follows a task-format schedule or owns a work (`hasTaskFormat`), the
+     * question is read from THE TASK and the embedded json is never used (the server refuses it). Absent / no task format = the embedded json, as before.
+     */
+    taskStage?: TaskStageState | null;
 }): StageQuestionContext | null {
     if (!input.plotId) return null;
     const match = input.crops.flatMap(crop => crop.plots.map(plot => ({ crop, plot }))).find(item => item.plot.id === input.plotId);
     if (!match) return null;
     const open: StageQuestionContext = { kind: 'stage_open', scheduleDay: null, line: null, askMr: null };
+
+    if (input.taskStage?.source.hasTaskFormat) {
+        const { shownDay, source, cropCycleId } = input.taskStage;
+        // The task lines are Marathi words of the schedule: in English mode no line is asked (the look lines are Marathi only for now).
+        if (input.language === 'en' || source.lines.length === 0) return { ...open, scheduleDay: shownDay };
+        const chosen = source.lines[((shownDay % source.lines.length) + source.lines.length) % source.lines.length];
+        return { kind: 'stage_look', scheduleDay: shownDay, line: null, lineId: chosen.lineId, askMr: chosen.askMr, task: chosen, cropCycleId };
+    }
 
     const { crop, plot } = match;
     const template = plot.schedule ? scheduleTemplateForPlot(crop, plot) : undefined;
@@ -61,5 +85,5 @@ export function computeStageQuestion(input: {
 
     // One line a day, turning through the day's lines so a long daily window does not ask the same thing every time.
     const chosen = lines[((scheduleDay % lines.length) + lines.length) % lines.length];
-    return { kind: 'stage_look', scheduleDay, line: chosen.line, askMr: chosen.askMr };
+    return { kind: 'stage_look', scheduleDay, line: chosen.line, lineId: chosen.line.id, askMr: chosen.askMr };
 }

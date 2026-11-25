@@ -60,7 +60,7 @@
  * localStorage flag (unlockSpeechStore), not a ref — a ref would reset on
  * every remount and re-speak on every subsequent save.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { DailyLog } from '../../../domain/types/log.types';
 import type { CropProfile } from '../../../types';
 import type { DetailedWeather } from '../../../domain/types/weather.types';
@@ -70,6 +70,7 @@ import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { findMissedCards } from '../services/dfesWhyNot';
 import { computeStageQuestion } from '../services/dfesStageQuestion';
+import { loadTaskStageState, type TaskStageState } from '../services/taskStageSource';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import { computePreviousLog } from '../services/dfesPreviousLog';
@@ -188,8 +189,23 @@ export function LedgerRecognitionPanel({
     // Lane DFES-Q (task 6): SAME gate - the plot's stage question for the real India today (a log told for a past day must not ask
     // about that old day's stage). In English mode no look line is asked (no English twin yet).
     const language = useOptionalLanguage()?.language;
+    // Slice 12 - the stage question is read from the TASK the plot follows or owns (the phone's copy of the schedule and of its own works, so it works with no
+    // internet). The question card waits for that one read; a plot with no task format (or no plot) waits for nothing and uses the embedded schedule as before.
+    const wantsTaskStage = questionsEnabled && !!plotId;
+    const [taskStage, setTaskStage] = useState<TaskStageState | null | 'loading'>(wantsTaskStage ? 'loading' : null);
+    useEffect(() => {
+        if (!wantsTaskStage || !plotId) { setTaskStage(null); return; }
+        let cancelled = false;
+        const plotStart = crops.flatMap(c => c.plots).find(p => p.id === plotId)?.startDate ?? null;
+        void loadTaskStageState({ plotId, plotStartDate: plotStart, todayKey: getDateKey(), language })
+            .then(state => { if (!cancelled) setTaskStage(state); })
+            .catch(() => { if (!cancelled) setTaskStage(null); });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wantsTaskStage, plotId, language, savedLog?.id]);
     const stageQuestion = questionsEnabled
-        ? computeStageQuestion({ crops, plotId, todayLocalDate: getDateKey(), language }) ?? undefined
+        // While the phone reads the plot's tasks no stage question is offered at all (never the embedded json for a plot that may use the task format).
+        ? taskStage === 'loading' ? undefined : computeStageQuestion({ crops, plotId, todayLocalDate: getDateKey(), language, taskStage }) ?? undefined
         : undefined;
     // Task 4A: SAME gate — a flag-OFF (or farm-less) render builds no weather
     // context either, zero extra work.
@@ -260,6 +276,7 @@ export function LedgerRecognitionPanel({
     // is gated on the same flag — otherwise an empty coloured box would render.
     const question = (
         <MeterQuestionHost
+            key={taskStage === 'loading' ? 'stage-reading' : 'stage-read'}
             farmId={farmId}
             plotId={plotId}
             score={savedLog?.understanding}

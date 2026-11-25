@@ -36,15 +36,18 @@ export interface SathiQuestionCardProps {
     onLater: () => void;
     /** Opens the microphone with the question pinned (open questions). */
     onSpeak: () => void;
+    /** Slice 12 - "स्रोत: ..." of the task the question was read from, shown under the question; absent = none. */
+    sourceLabel?: string;
 }
 
-export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak }) => {
+export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak, sourceLabel }) => {
     const copy = resultCopy(useOptionalLanguage()?.language);
     const choices = options ?? [];
     return (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5" style={{ fontFamily: SANS }} data-testid="vr-question" data-kind={choices.length > 0 ? 'choice' : 'speak'}>
             <p className="m-0 mb-1.5 text-[14px] font-extrabold leading-snug text-amber-900" data-testid="vr-ask-heading">{copy.askHeading}</p>
             <h4 className="mb-3 text-[17px] font-extrabold leading-snug text-amber-950" data-testid="vr-question-prompt">{prompt}</h4>
+            {sourceLabel ? <p className="m-0 mb-3 text-[13px] font-bold leading-snug text-amber-900" data-testid="vr-question-source">{sourceLabel}</p> : null}
             {choices.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                     {choices.map(o => <Chip key={o.value} testId="vr-answer-option" label={o.labelMr} onClick={() => onAnswer(o)} />)}

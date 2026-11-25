@@ -22,6 +22,7 @@
  *
  * spec: dfes-companion-2026-07-11
  */
+import { FEATURE_FLAGS } from '../../../app/featureFlags';
 
 export const BANK_VERSION = 'dfes-bank-1' as const;
 export const QUESTION_ENGINE_VERSION = 'dfes-qengine-1' as const;
@@ -366,5 +367,7 @@ export function findGapQuestion(dimension: string): DfesQuestion | undefined {
 }
 
 export function findQuestion(questionKey: string): DfesQuestion | undefined {
-    return DFES_QUESTION_BANK.find(q => q.questionKey === questionKey);
+    const found = DFES_QUESTION_BANK.find(q => q.questionKey === questionKey);
+    // Slice 12 TEST SEAM (off unless a stack sets VITE_DFES_STAGE_LOOK_TEST_APPROVED): the one hidden entry read as approved so the screen can be driven. Never in a release.
+    return found && found.questionKey === 'stage.look' && FEATURE_FLAGS.dfesStageLookTestApproved ? { ...found, marathiApproved: true } : found;
 }
