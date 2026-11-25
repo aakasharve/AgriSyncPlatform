@@ -485,6 +485,27 @@ public sealed class SeasonCarryRealPostgresTests(ITestOutputHelper output) : Sch
     // ---- row security, both directions, as the real application role -----------------------------------------------------------
 
     [Fact]
+    public async Task Down_Refuses_WithItsOwnWords_WhileAnAnswerExists_AndRunsCleanWithNone()
+    {
+        // The refusal must PARSE: a syntax error would also "throw", so the test reads the refusal's own words, and with no row the same text must run clean.
+        await using var raw = new NpgsqlConnection(SuperuserConn);
+        await raw.OpenAsync();
+        await using (var empty = raw.CreateCommand())
+        {
+            empty.CommandText = ShramSafal.Infrastructure.Persistence.Migrations.AddOwnScheduleSeasonCarries.DownRefusalSql;
+            await empty.ExecuteNonQueryAsync();
+        }
+
+        var (plot, old, next, _, _, _) = await SeasonEndedAsync(record: false);
+        await OkAsync(CarryAsync(Owner, plot, old, next));
+        await using var down = raw.CreateCommand();
+        down.CommandText = ShramSafal.Infrastructure.Persistence.Migrations.AddOwnScheduleSeasonCarries.DownRefusalSql;
+        var refused = async () => await down.ExecuteNonQueryAsync();
+        (await refused.Should().ThrowAsync<PostgresException>()).Which.MessageText.Should().Contain("Down refused");
+        (await CountAsync("SELECT count(*) FROM ssf.own_schedule_season_carries")).Should().Be(3, "nothing changed");
+    }
+
+    [Fact]
     public async Task Rls_BothDirections_AsTheAppRole()
     {
         await AssertAppRoleIsNotVacuousAsync();

@@ -122,7 +122,7 @@ BEGIN
     SET LOCAL row_security = off;
     SELECT count(*) INTO v_carries FROM ssf.own_schedule_season_carries;
     IF v_carries > 0 THEN
-        RAISE EXCEPTION 'Down refused: % own schedule season carry row(s) exist, and rolling back would destroy the farmer's season-end answers and the link of each copy to its previous work. Remove them deliberately (a founder decision) before rolling this migration back. Nothing changed.', v_carries;
+        RAISE EXCEPTION 'Down refused: % own schedule season carry row(s) exist, and rolling back would destroy the season-end answers of the farmer and the link of each copy to its previous work. Remove them deliberately (a founder decision) before rolling this migration back. Nothing changed.', v_carries;
     END IF;
 END $$;
 ";
