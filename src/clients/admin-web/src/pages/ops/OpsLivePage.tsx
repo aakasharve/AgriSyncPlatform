@@ -195,6 +195,9 @@ const EVENT_MEANING: Record<string, string> = {
 
 const NOT_NAMED = 'Not named in the request';
 
+/** The most farms the server sends for repeated problems (AdminOpsRepository.GetRepeatedProblemFarmsAsync, maxFarms: 10). Keep the two in step. */
+const REPEATED_PROBLEMS_SERVER_CAP = 10;
+
 function buildEventColumns(contacts: Map<string, FarmContact>): DataListColumn<OpsErrorEvent>[] {
   return [
   {
@@ -930,6 +933,14 @@ export default function OpsLivePage() {
               <p role="status" className="text-body text-text-2">Checking now.</p>
             ) : (
               <NotMeasured why="The server did not send this list, so nothing can be said about repeated problems." />
+            )}
+            {/* Gate 1 R9 (founder 2026-11-25, "the numbers should not lie"): the server sends at most this many farms
+                (AdminOpsRepository.GetRepeatedProblemFarmsAsync, maxFarms: 10), so a full list's count is not the total. */}
+            {!analyticsSentence && sufferingFarms && sufferingFarms.length >= REPEATED_PROBLEMS_SERVER_CAP && (
+              <p data-testid="repeated-capped" className="text-caption text-text-2">
+                The server lists at most {REPEATED_PROBLEMS_SERVER_CAP} farms, the ones with the most problems first, so
+                there may be more farms with repeated problems than shown here.
+              </p>
             )}
           </section>
 

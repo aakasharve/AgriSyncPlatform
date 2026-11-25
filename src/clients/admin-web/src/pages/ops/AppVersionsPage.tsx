@@ -258,7 +258,14 @@ function Loaded({ data, days }: { data: AppVersionsAnswer; days: AppVersionsDays
           <KpiCard label="Phones signed in" value={null} state="unmeasured" caption={NOT_SENT} note={deviceNote} />
         )}
         {measured && olderCount !== null ? (
-          <KpiCard label="People on an older version" value={fmt.num(olderCount)} />
+          /* Gate 1 R6 (founder 2026-11-25, "the numbers should not lie"): a real count, but a partial one. An app
+             that does not report its version, or a phone not seen since counting began, is not in it, so a 0 must
+             not read as "everyone is up to date". */
+          <KpiCard
+            label="People on an older version"
+            value={fmt.num(olderCount)}
+            note={`At least this many. Only apps that report their version are counted, and only since ${readableDay(measuredSince(data)!)}.`}
+          />
         ) : (
           <KpiCard
             label="People on an older version"

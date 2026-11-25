@@ -229,6 +229,14 @@ export function FarmerTimeline({ timeline, analyticsNotMeasured = null }: Farmer
         Started and a dark cell in Submitted are not the same number. The figure is in the cell.
       </p>
       <MetricLines metric="fh-timeline" className="mb-3" />
+      {/* Gate 1 R7 (founder 2026-11-25, "the numbers should not lie"): these four rows are what the phones sent, so a
+          zero means none arrived, not none happened. */}
+      {!analyticsNotMeasured && (
+        <p data-testid="app-reported-rows" className="mb-3 text-caption text-text-3">
+          Started, Submitted, Proof and Summary are reported by the app on this farm&rsquo;s phones. A phone that was
+          offline, or an older app that does not report them, adds nothing here until it does.
+        </p>
+      )}
       {analyticsNotMeasured && (
         <p data-testid="analytics-not-measured" className="mb-3 text-body text-text-1">
           Started, Submitted, Proof, Summary and Errors are not shown: {analyticsNotMeasured}

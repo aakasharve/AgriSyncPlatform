@@ -705,7 +705,7 @@
     "key": "farms-last-log",
     "label": "Last Log",
     "status": "real",
-    "what": "When each farm's latest entry reached the server.",
+    "what": "When each farm's newest entry reached the server, from anyone, test accounts included; Silent Churn leaves them out.",
     "why": "Shows which farms have gone quiet, so someone can call them.",
     "buildId": "F3"
   },

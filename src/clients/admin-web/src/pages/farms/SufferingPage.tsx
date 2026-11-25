@@ -170,6 +170,17 @@ export default function SufferingPage() {
         skeleton={{ rows: 6, cells: 7 }}
       />
       )}
+      {/* Gate 1 R9 (founder 2026-11-25, "the numbers should not lie"): the server sends at most this many farms
+          (AdminMisRepository GetSufferingAsync, maxFarms: 50), so a full list's count is not the total. */}
+      {!analyticsFlag && items.length >= SUFFERING_SERVER_CAP && (
+        <p data-testid="list-capped" className="text-caption text-text-2">
+          The server lists at most {SUFFERING_SERVER_CAP} farms, the ones with the most problems first, so there may
+          be more farms with repeated problems than shown here.
+        </p>
+      )}
     </div>
   );
 }
+
+/** The most farms the server sends (AdminMisRepository.GetSufferingAsync, maxFarms: 50). Keep the two in step. */
+const SUFFERING_SERVER_CAP = 50;
