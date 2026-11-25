@@ -92,6 +92,8 @@ export async function fetchOwnerClips(db: AgriLogDatabase, farmId: string, clipI
     for (const id of new Set(clipIds)) {
         const meta = view.clips.get(id);
         if (!meta || view.keptClips.has(id)) { out.skipped.push(id); continue; }
+        // CTO gate: read again right before fetching - another run (a pull's prefetch, an open screen) may have kept it after this run read the view: never fetch it twice.
+        if (await db.referenceData.get(bytesKey(id, meta.contentHash) as never)) { out.skipped.push(id); continue; }
         const flightKey = `${farmId}:${id}:${meta.contentHash}`;
         let p = inFlight.get(flightKey);
         if (!p) {

@@ -19,6 +19,14 @@ export const OwnerVoiceHostProvider: React.FC<{ host: OwnerVoiceHost | null | un
 
 export const useOwnerVoiceHost = (): OwnerVoiceHost | null => useContext(HostContext);
 
+/**
+ * CTO gate (design: "Tap Schedule, then Listen on the orange line. The clip plays on its own card") - the message whose clip starts by itself because the farmer tapped
+ * "ऐका" for it. Set only around the viewer that Listen opened; everywhere else nothing starts without its own play tap.
+ */
+const AutoPlayContext = createContext<string | null>(null);
+export const OwnerAutoPlayProvider = AutoPlayContext.Provider;
+export const useOwnerAutoPlayId = (): string | null => useContext(AutoPlayContext);
+
 /** Live: what this phone holds of the owner's voice. Empty until the first read, and always empty on a phone the server sent nothing to. */
 export function useOwnerVoiceView(enabled = true): OwnerVoiceView {
     const [view, setView] = useState<OwnerVoiceView>(EMPTY_OWNER_VIEW);

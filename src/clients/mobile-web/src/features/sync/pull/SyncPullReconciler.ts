@@ -192,8 +192,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     // fetched only when their sha changed, after the pull has landed and outside its transaction. Fire and forget: the step never throws, a
     // refusal or an offline phone just leaves the letter or leaf badge, and nothing it does can fail or delay this pull.
     void Promise.resolve().then(() => syncSchedulePictures(db, (payload as { scheduleTemplates?: unknown }).scheduleTemplates)).catch(() => undefined);
-    // spec: plr-d10 schedule slice 12b (CTO gate; P10) - the schedule owner's clips (and the checked new version a change names), fetched right after the pull lands and outside
-    // its transaction, so they play in the field with no signal even when no schedule screen was opened online. Fire and forget: never throws, never delays this pull.
+    // spec: plr-d10 schedule slices 8 and 12b (CTO gate; P10) - the schedule owner's clips and the day cards of every followed schedule (and of the versions the owner's
+    // messages name), kept right after the pull lands and outside its transaction, so they open and play in the field with no signal even when no schedule screen was
+    // opened online. Only what the phone does not hold yet is fetched. Fire and forget: never throws, never delays this pull.
     void Promise.resolve().then(() => prefetchOwnerVoiceAfterPull(db)).catch(() => undefined);
     if (withdrawnMoney > 0 && typeof window !== 'undefined') {
         // The money cache merges pulls; a withdrawn money record must leave it too (re-read from the phone's store).

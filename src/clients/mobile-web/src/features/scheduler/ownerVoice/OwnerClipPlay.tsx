@@ -18,12 +18,15 @@ export const OwnerClipPlay: React.FC<{
     notFetchedTestId: string;
     /** Called once each time the clip plays to its end. */
     onFullPlay?: () => void;
-}> = ({ clipId, kept, words, label, testId, notFetchedTestId, onFullPlay }) => {
+    /** Start by itself once, as soon as the clip is on the phone (the farmer tapped "ऐका", or just answered a look). A phone that blocks it keeps the play button, no error words. */
+    autoStart?: boolean;
+}> = ({ clipId, kept, words, label, testId, notFetchedTestId, onFullPlay, autoStart = false }) => {
     const [phase, setPhase] = useState<Phase>('idle');
     const audio = useRef<HTMLAudioElement | null>(null);
     const url = useRef<string | null>(null);
     const full = useRef(onFullPlay);
     full.current = onFullPlay;
+    const autoStarted = useRef(false);
 
     const release = () => {
         audio.current = null;
@@ -31,11 +34,7 @@ export const OwnerClipPlay: React.FC<{
     };
     useEffect(() => () => { try { audio.current?.pause(); } catch { /* already stopped */ } release(); }, []);
 
-    if (!kept) {
-        return <p className="m-0 rounded-2xl bg-amber-50 px-3 py-2 text-[14px] font-bold leading-snug text-amber-900" data-testid={notFetchedTestId}>{words.notFetched}</p>;
-    }
-
-    const toggle = async () => {
+    const toggle = async (auto = false) => {
         if (phase === 'playing') {
             try { audio.current?.pause(); } catch { /* already stopped */ }
             release();
@@ -53,11 +52,22 @@ export const OwnerClipPlay: React.FC<{
             el.addEventListener('error', () => { release(); setPhase('error'); });
             setPhase('playing');
             await el.play();
-        } catch {
+        } catch (error) {
             release();
-            setPhase('error');
+            // A start by itself that the phone blocks (no tap of its own) is not an error: the play button stays.
+            setPhase(auto && (error as { name?: unknown } | null)?.name === 'NotAllowedError' ? 'idle' : 'error');
         }
     };
+
+    useEffect(() => {
+        if (!autoStart || !kept || autoStarted.current) return;
+        autoStarted.current = true;
+        void toggle(true);
+    }, [autoStart, kept]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (!kept) {
+        return <p className="m-0 rounded-2xl bg-amber-50 px-3 py-2 text-[14px] font-bold leading-snug text-amber-900" data-testid={notFetchedTestId}>{words.notFetched}</p>;
+    }
 
     return (
         <div className="space-y-1">

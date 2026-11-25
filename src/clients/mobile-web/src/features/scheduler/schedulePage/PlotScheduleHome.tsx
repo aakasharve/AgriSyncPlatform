@@ -35,7 +35,7 @@ import type { TakeHost } from '../ownSchedule/TakeIntoMyScheduleButton';
 import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 import { OwnerVoiceLine, useUnheardCounts } from '../ownerVoice/OwnerVoiceLine';
-import { OwnerVoiceHostProvider } from '../ownerVoice/useOwnerVoice';
+import { OwnerAutoPlayProvider, OwnerVoiceHostProvider } from '../ownerVoice/useOwnerVoice';
 import type { OwnerMessage, OwnerVoiceHost } from '../ownerVoice/ownerVoiceTypes';
 import { DayCardsViewer } from '../dayCards/DayCardsViewer';
 import { ScheduleProfileCard } from './ScheduleProfileCard';
@@ -136,7 +136,12 @@ const PlotScheduleHomeBody: React.FC<{
                 ? <ScheduleTabHead crop={crop} plot={plot} model={model} isGrape={/grape/i.test(template.cropCode)} onChangePlot={onChangePlot} />
                 : <h2 className="m-0 px-1 text-[20px] font-black text-stone-900" data-testid="plot-head-name">{plotName}</h2>}
             <OwnerVoiceLine versionIds={followedVersionIds} fromNameOf={makerOfVersion} onListen={setListening} />
-            {listening && <DayCardsViewer source={{ templateId: listening.scheduleVersionId }} target={{ taskKey: listening.taskKey }} onClose={() => setListening(null)} take={take} />}
+            {/* "ऐका" opens the message's own card AND starts its clip (design: "Listen on the orange line. The clip plays on its own card"). */}
+            {listening && (
+                <OwnerAutoPlayProvider value={listening.id}>
+                    <DayCardsViewer source={{ templateId: listening.scheduleVersionId }} target={{ taskKey: listening.taskKey }} onClose={() => setListening(null)} take={take} />
+                </OwnerAutoPlayProvider>
+            )}
             {followed && (
                 <ScheduleTiles followed={followed} selectedTemplateId={profileId} onSelect={setPicked} onAdd={onAddSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} unheard={unheardByVersion} />
             )}

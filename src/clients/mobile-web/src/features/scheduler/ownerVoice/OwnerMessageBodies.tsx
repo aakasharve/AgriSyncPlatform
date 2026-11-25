@@ -15,17 +15,25 @@ import { OwnerVoiceCommands } from './ownerVoiceCommands';
 import { answerOf, isHeard, standingOf, tipsOfTask } from './ownerVoiceModel';
 import type { OwnerDecision, OwnerMessage, OwnerVoiceHost, OwnerVoiceView } from './ownerVoiceTypes';
 import { ownerVoiceWords, type OwnerVoiceWords } from './ownerVoiceWords';
+import { useOwnerAutoPlayId } from './useOwnerVoice';
 
 export interface OwnerVoiceProps { host: OwnerVoiceHost; view: OwnerVoiceView }
 
 const useWords = (): OwnerVoiceWords => ownerVoiceWords(useOptionalLanguage()?.language === 'en' ? 'en' : 'mr');
 const nudge = () => { backgroundSyncWorker.triggerNow().catch(() => undefined); };
 
-/** The play button of a message's own clip: the first full play queues "heard" (once; an already heard message queues nothing). */
-const MessagePlay: React.FC<{ message: OwnerMessage; voice: OwnerVoiceProps; words: OwnerVoiceWords; testId: string; notFetchedTestId: string }> = ({ message, voice, words, testId, notFetchedTestId }) => (
-    <OwnerClipPlay clipId={message.clipId} kept={voice.view.keptClips.has(message.clipId)} words={words} testId={testId} notFetchedTestId={notFetchedTestId}
-        onFullPlay={() => { if (!isHeard(voice.view, voice.host.plotId, message.id)) void OwnerVoiceCommands.heard(voice.host, message.id).then(nudge, () => undefined); }} />
-);
+/**
+ * The play button of a message's own clip: the first full play queues "heard" (once; an already heard message queues nothing). The message the farmer tapped "ऐका" for
+ * starts by itself (design: "Listen on the orange line. The clip plays on its own card").
+ */
+const MessagePlay: React.FC<{ message: OwnerMessage; voice: OwnerVoiceProps; words: OwnerVoiceWords; testId: string; notFetchedTestId: string }> = ({ message, voice, words, testId, notFetchedTestId }) => {
+    const autoPlayId = useOwnerAutoPlayId();
+    return (
+        <OwnerClipPlay clipId={message.clipId} kept={voice.view.keptClips.has(message.clipId)} words={words} testId={testId} notFetchedTestId={notFetchedTestId}
+            autoStart={autoPlayId === message.id}
+            onFullPlay={() => { if (!isHeard(voice.view, voice.host.plotId, message.id)) void OwnerVoiceCommands.heard(voice.host, message.id).then(nudge, () => undefined); }} />
+    );
+};
 
 /** A tip: a play button on the card of the work it is about. */
 export const TipPlays: React.FC<{ detail: DayCardsDetail; taskKey: string; voice: OwnerVoiceProps }> = ({ detail, taskKey, voice }) => {
@@ -148,6 +156,8 @@ export const OwnerLookBody: React.FC<{ message: OwnerMessage; task: DayCardTask;
     const words = useWords();
     const { host, view } = voice;
     const [busy, setBusy] = useState(false);
+    // Design: "the owner's follow-up plays after the answer" - it starts by itself right after THIS answer (not when the card is opened again later).
+    const [justAnswered, setJustAnswered] = useState(false);
     const answered = answerOf(view, host.plotId, message.id);
     const decider = host.mayDecide && host.cropCycleId !== null;
     const answerWords = { first: message.answerFirst ?? '', second: message.answerSecond ?? '' };
@@ -155,7 +165,11 @@ export const OwnerLookBody: React.FC<{ message: OwnerMessage; task: DayCardTask;
     const send = async (a: 'first' | 'second') => {
         if (busy || !host.cropCycleId) return;
         setBusy(true);
-        try { await OwnerVoiceCommands.answer({ farmId: host.farmId, plotId: host.plotId, cropCycleId: host.cropCycleId }, message.id, a); nudge(); } finally { setBusy(false); }
+        try {
+            await OwnerVoiceCommands.answer({ farmId: host.farmId, plotId: host.plotId, cropCycleId: host.cropCycleId }, message.id, a);
+            setJustAnswered(true);
+            nudge();
+        } finally { setBusy(false); }
     };
     return (
         <div className="flex flex-1 flex-col gap-3" data-testid={`look-card-${message.id}`}>
@@ -181,7 +195,8 @@ export const OwnerLookBody: React.FC<{ message: OwnerMessage; task: DayCardTask;
                     {followId && (
                         <div className="space-y-1" data-testid={`look-followup-${answered.answer}`}>
                             <p className="m-0 text-[13px] font-extrabold text-orange-900">{words.followUp}</p>
-                            <OwnerClipPlay clipId={followId} kept={view.keptClips.has(followId)} words={words} testId={`look-followup-play-${answered.answer}`} notFetchedTestId={`look-followup-not-fetched-${answered.answer}`} />
+                            <OwnerClipPlay clipId={followId} kept={view.keptClips.has(followId)} words={words} autoStart={justAnswered}
+                                testId={`look-followup-play-${answered.answer}`} notFetchedTestId={`look-followup-not-fetched-${answered.answer}`} />
                         </div>
                     )}
                 </div>
