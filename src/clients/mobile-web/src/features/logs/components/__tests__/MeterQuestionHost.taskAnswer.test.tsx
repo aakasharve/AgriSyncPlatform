@@ -108,6 +108,29 @@ describe('an answer queues one task event for that task', () => {
     });
 });
 
+describe('with no internet, a question whose answer could not be kept is not asked', () => {
+    const setOnline = (value: boolean) => {
+        Object.defineProperty(window.navigator, 'onLine', { value, configurable: true });
+        window.dispatchEvent(new Event(value ? 'online' : 'offline'));
+    };
+    afterEach(() => setOnline(true));
+
+    it('a reference task (no own work, no queued event) is NOT shown offline, and comes back when the internet does', async () => {
+        setOnline(false);
+        const view = await mount(line({ takesSignEvent: false, kind: 'reference' }));
+        expect(view.queryAllByTestId('shramsathi-answer-option')).toHaveLength(0);
+        setOnline(true);
+        await waitFor(() => expect(view.getAllByTestId('shramsathi-answer-option')).toHaveLength(3));
+    });
+
+    it('an own work that waits for a sign IS shown offline, and its answer is queued', async () => {
+        setOnline(false);
+        const view = await mount(line());
+        fireEvent.click(view.getAllByTestId('shramsathi-answer-option')[0]);
+        await waitFor(async () => expect((await events()).map(e => e.answer)).toEqual(['seen']));
+    });
+});
+
 describe('unsureChangesNothing', () => {
     it('"खात्री नाही" queues its event and nothing else: no log, no plan, no own work, no schedule choice', async () => {
         const db = getDatabase();

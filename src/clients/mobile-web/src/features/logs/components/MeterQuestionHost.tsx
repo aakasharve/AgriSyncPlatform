@@ -28,6 +28,7 @@ import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import { WHY_NOT_REASONS, type WhyNotReason } from '../services/dfesWhyNot';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
+import { useOnline } from '../../compare/useOnline';
 
 export interface MeterQuestionHostProps {
     farmId: string | null;
@@ -86,6 +87,11 @@ export function MeterQuestionHost({
     // row is NULL and wave-3.2's per-log dedupe had nothing to key on. All three outcome
     // paths carry it, not just the answered one: a SKIP is still "this log was asked".
     const sourceLogId = questionInputs.sourceLogId ?? null;
+    // Slice 12 (CTO gate) - a task question whose answer has no queued home (a reference task the plot follows, or an own work that does not wait for a sign) is kept ONLY
+    // by the question's own record, which needs the internet. With no internet it is not asked: a farmer never answers into nothing (P10). A work that waits for a sign
+    // is still asked offline, because its answer is queued on the phone first.
+    const online = useOnline();
+    const askable = !selected?.taskLine || selected.taskLine.takesSignEvent || online;
     // Slice 12 - one `schedule.task_event` per shown question, whatever the number of taps or retries of the question's own write.
     const taskEventFor = useRef<SelectedQuestion | null>(null);
     const answerTaskQuestion = async (option: DfesAnswerOption) => {
@@ -150,7 +156,7 @@ export function MeterQuestionHost({
             score={score}
             allLogs={allLogs}
             engagement={engagement}
-            dfesQuestion={selected}
+            dfesQuestion={askable ? selected : null}
             // No-options ack path — UNCHANGED from pre-Task-2A behaviour ({skipped:false}).
             // Still the fallback whenever no respeak route is wired.
             onQuestionInteract={() => { void recordOutcome({ skipped: false, dailyLogId: sourceLogId }); }}
