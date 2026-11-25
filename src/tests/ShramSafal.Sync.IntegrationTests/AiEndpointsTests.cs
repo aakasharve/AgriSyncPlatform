@@ -69,6 +69,53 @@ public sealed class AiEndpointsTests
         Assert.Equal(JsonValueKind.Object, statusDoc.RootElement.GetProperty("result").ValueKind);
     }
 
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 16) - the timer he SAID rides inside the one planned work, never at the top
+    // level (the 1.0.17 phone: AgriLogResponseSchema top level .strict(), PlannedTaskDraftSchema .passthrough()). No AI is called: the provider is a double.
+    [Theory]
+    [InlineData("पेस्टनंतर आठ दिवसांनी, फूट दिसली की", """[{"title":"पेस्ट फवारणी","dueHint":null}]""", "after")]
+    [InlineData("दहाव्या दिवशी", """[{"title":"छाटणी","dueHint":null}]""", "day")]
+    [InlineData("फूट दिसली की", """[{"title":"खत","dueHint":null}]""", "sign")]
+    [InlineData("दोन तीन दिवसांनी", """[{"title":"पेस्ट","dueHint":null}]""", null)]
+    [InlineData("पेस्टनंतर आठ दिवसांनी, फूट दिसली की", """[{"title":"पेस्ट"},{"title":"खत"}]""", null)]
+    [InlineData("पेस्टनंतर आठ दिवसांनी", "[]", null)]
+    public async Task VoiceParse_puts_the_spoken_timer_inside_the_one_planned_work_only(string said, string planned, string? kind)
+    {
+        await using var harness = await TestHarness.CreateAsync(FakeAiProviderMode.Success);
+        foreach (var provider in harness.Providers.Values)
+        {
+            provider.Script = (said, planned);
+        }
+
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-timer", "req-farm-ai-timer", farmId, "AI Timer Farm");
+
+        var response = await harness.Client.PostAsJsonAsync("/shramsafal/ai/voice-parse", new
+        {
+            farmId,
+            textTranscript = said,
+            idempotencyKey = "voice-parse-timer-" + Guid.NewGuid().ToString("N")
+        });
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+
+        using var doc = JsonDocument.Parse(body);
+        var parsedLog = doc.RootElement.GetProperty("parsedLog");
+        Assert.False(parsedLog.TryGetProperty("spokenTimer", out _), "nothing at the top level of the parsed log");
+        Assert.False(doc.RootElement.TryGetProperty("spokenTimer", out _), "nothing at the top level of the response");
+
+        var items = parsedLog.GetProperty("plannedTasks").EnumerateArray().ToList();
+        if (kind is null)
+        {
+            Assert.All(items, item => Assert.False(item.TryGetProperty("spokenTimer", out _)));
+            return;
+        }
+
+        var timer = Assert.Single(items).GetProperty("spokenTimer");
+        Assert.Equal(kind, timer.GetProperty("kind").GetString());
+        Assert.Equal("spoken", timer.GetProperty("provenance").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(timer.GetProperty("heardWords").GetString()));
+    }
+
     // DATA_PRINCIPLE_SPINE sub-phase 01.5: voice-parse response must surface a
     // provenance envelope so downstream consumers (analytics, replay tooling)
     // can correlate the response back to (a) the originating AI job, (b) the
@@ -999,6 +1046,10 @@ public sealed class AiEndpointsTests
         private int _pattiCallCount;
 
         public AiProviderType ProviderType { get; } = providerType;
+
+        /// <summary>Slice 16: what the scripted "speech" says and the planned works the scripted model returned (null = the default answer).</summary>
+        public (string Transcript, string PlannedTasksJson)? Script { get; set; }
+
         public int VoiceParseCallCount => _voiceParseCallCount;
         public int ReceiptCallCount => _receiptCallCount;
         public int PattiCallCount => _pattiCallCount;
@@ -1038,11 +1089,13 @@ public sealed class AiEndpointsTests
                 });
             }
 
+            var spoken = Script?.Transcript ?? "आज पाणी दिलं.";
+            var plannedJson = Script?.PlannedTasksJson ?? "[]";
             return Task.FromResult(new VoiceParseCanonicalResult
             {
                 Success = true,
                 OverallConfidence = 0.92m,
-                RawTranscript = "आज पाणी दिलं.",
+                RawTranscript = spoken,
                 NormalizedJson = """
                                  {
                                    "summary":"काम नोंदवले गेले.",
@@ -1054,7 +1107,7 @@ public sealed class AiEndpointsTests
                                    "machinery":[],
                                    "activityExpenses":[],
                                    "observations":[],
-                                   "plannedTasks":[],
+                                   "plannedTasks":__PLANNED__,
                                    "disturbance":null,
                                    "missingSegments":[],
                                    "unclearSegments":[],
@@ -1063,7 +1116,7 @@ public sealed class AiEndpointsTests
                                    "confidence":0.92,
                                    "fullTranscript":"आज पाणी दिलं."
                                  }
-                                 """
+                                 """.Replace("__PLANNED__", plannedJson)
             });
         }
 

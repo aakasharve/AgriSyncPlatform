@@ -277,10 +277,12 @@ public sealed class ParseVoiceInputHandler(
                 _domainKnowledgePipeline);
             // PLR lane AI-2 fix pass — a "बदला" parse (the phone sent the entry it changes) keeps what he did not
             // change, makes no note of the negated half, and turns a product swap into the swapped row.
-            using var document = JsonDocument.Parse(
-                promptContext.CorrectionOf is { ValueKind: JsonValueKind.Object } correctedEntry
-                    ? CorrectionGuard.Apply(integrityChecked, correctedEntry, heardWords)
-                    : integrityChecked);
+            var corrected = promptContext.CorrectionOf is { ValueKind: JsonValueKind.Object } correctedEntry
+                ? CorrectionGuard.Apply(integrityChecked, correctedEntry, heardWords)
+                : integrityChecked;
+            // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 16) - the timer he SAID, read from his own words by a
+            // deterministic reader (no model), inside the one planned-work item only; a log with no planned work gets nothing.
+            using var document = JsonDocument.Parse(SpokenTimerAttachment.Attach(corrected, heardWords));
             var parsedLog = document.RootElement.Clone();
             var fieldConfidences = ExtractFieldConfidences(parsedLog);
             var overallConfidence = canonicalResult.OverallConfidence > 0
