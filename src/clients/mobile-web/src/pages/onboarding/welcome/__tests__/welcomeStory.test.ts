@@ -9,6 +9,8 @@
  * itself at the right moment.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
     CHAPTER_STARTS, INTRO_MAX_MS, INTRO_MIN_MS, STORY_CHAPTERS, STORY_DURATION, STORY_LINES,
@@ -123,5 +125,16 @@ describe('picture track', () => {
                 expect(at).toBeLessThanOrEqual(to);
             }
         });
+    });
+});
+
+describe('tappable pictures', () => {
+    // Full-size overlay layers sit on top of tappable art; each must let taps
+    // through, or the picture under it silently stops responding (found on the
+    // season wheel in the test-app check, 2026-11-26).
+    const css = readFileSync(fileURLToPath(new URL('../welcomeStory.css', import.meta.url)), 'utf8');
+    it.each(['.ws-wheel-core', '.ws-ripples', '.ws-target', '.ws-fog', '.ws-cross', '.ws-confetti', '.ws-leaves', '.ws-sparkle'])('%s does not swallow taps', (sel) => {
+        const rule = css.match(new RegExp(sel.replace('.', '\\.') + '\\s*\\{[^}]*\\}'))?.[0] ?? '';
+        expect(rule, `${sel} rule`).toContain('pointer-events: none');
     });
 });

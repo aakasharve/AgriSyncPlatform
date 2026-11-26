@@ -124,7 +124,8 @@
 .ws-disc-in { display: flex; flex-direction: column; align-items: center; gap: 2px; animation: ws-spin 26s linear infinite reverse; }
 .ws-disc svg { width: 66px; height: 66px; filter: drop-shadow(0 8px 12px rgba(6, 60, 40, 0.25)); }
 .ws-disc b { font-size: 14px; font-weight: 900; background: rgba(255, 255, 255, 0.9); padding: 0 7px; border-radius: 7px; }
-.ws-wheel-core { position: absolute; inset: 0; display: grid; place-items: center; }
+/* lets taps through to the season discs underneath (it covers the whole wheel) */
+.ws-wheel-core { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .ws-ripples { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .ws-ripples i { grid-area: 1 / 1; width: 110px; height: 110px; border-radius: 50%; border: 3px solid rgba(16, 185, 129, 0.5); opacity: 0; }
 .ws-ripples.on i { animation: ws-ripple 2.2s ease-out infinite; }
