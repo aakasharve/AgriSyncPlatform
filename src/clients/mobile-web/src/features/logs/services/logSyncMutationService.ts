@@ -7,7 +7,7 @@ import { startSyncAfterEnqueue } from './startSyncAfterEnqueue';
 import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
-import { buildTaskPayloads, ensureUuid, isWireUuid, normalizeName } from './logTaskPayloads';
+import { buildTaskPayloads, engagedThroughForWire, ensureUuid, normalizeName } from './logTaskPayloads';
 import { logContentFor } from './logContentPayload';
 import { buildWeatherStampPayload } from './weatherStampPayload';
 import {
@@ -238,11 +238,6 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
         // Assumed. Zero and negatives are unstated too — not an error (P9).
         const durationHours = finiteOrOmitted(event.durationHours);
         const workerNames = workerNamesForWire(event.workerNames);
-        // Repair FIX-1 item 8 — "कोणामार्फत?": sent only when the farmer chose a person AND it is a GUID the contract's
-        // ZGuid accepts (anything else would throw at MutationQueue.enqueue and cost the whole day, P9). Never minted,
-        // never guessed: absent = nobody said.
-        const engagedThroughFieldOperatorId = isWireUuid(event.engagedThroughFieldOperatorId) ? event.engagedThroughFieldOperatorId : undefined;
-
         // Conditional spreads, so a value we cannot send is simply NOT SENT: the
         // key is absent rather than present-and-undefined. One uniform rule for
         // every optional number on this payload.
@@ -277,7 +272,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
             task: event.activity,
             notes: event.notes,
             ...(workerNames !== undefined && { workerNames }),
-            ...(engagedThroughFieldOperatorId !== undefined && { engagedThroughFieldOperatorId }),
+            ...engagedThroughForWire(event.engagedThroughFieldOperatorId), // FIX-1 item 8, "कोणामार्फत?" (see logTaskPayloads)
         };
     });
 }
