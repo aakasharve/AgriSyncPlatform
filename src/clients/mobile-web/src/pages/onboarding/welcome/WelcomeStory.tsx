@@ -88,9 +88,26 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
 
     /* ---- audio lifecycle ---- */
     useEffect(() => {
-        const audio = new Audio(welcomeNoteUrl);
+        const audio = new Audio();
         audio.preload = 'auto';
         audioRef.current = audio;
+        let objectUrl: string | null = null;
+        let cancelled = false;
+        // Whole file into memory once, never streamed from the app's own server: Capacitor 8.4.3's
+        // WebViewLocalServer answers "from byte N" with byte 0, which cut the note off on the phone.
+        fetch(welcomeNoteUrl)
+            .then((r) => { if (!r.ok) throw new Error(`welcome note ${r.status}`); return r.blob(); })
+            .then((blob) => {
+                if (cancelled) return;
+                objectUrl = URL.createObjectURL(blob);
+                audio.src = objectUrl;
+                audio.load();
+            })
+            .catch(() => {
+                if (cancelled) return;
+                audio.src = welcomeNoteUrl;
+                audio.load();
+            });
         const onPlay = () => setPlaying(true);
         const onPause = () => setPlaying(false);
         const onEnded = () => {
@@ -129,7 +146,6 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
         }
 
         ctxRef.current = ctx;
-        audio.load();
 
         const onHide = () => { if (document.hidden) audio.pause(); };
         document.addEventListener('visibilitychange', onHide);
@@ -139,8 +155,10 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             audio.removeEventListener('play', onPlay);
             audio.removeEventListener('pause', onPause);
             audio.removeEventListener('ended', onEnded);
+            cancelled = true;
             audio.pause();
             audio.removeAttribute('src');
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
             void ctx?.close().catch(() => undefined);
         };
     }, [onDone]);
