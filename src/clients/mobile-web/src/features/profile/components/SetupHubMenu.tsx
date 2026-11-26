@@ -26,6 +26,8 @@ import { AppVersionRow } from '../../appUpdate/AppVersionRow';
 import { MyResponsibilities } from '../../relationships/MyResponsibilities';
 import { ownsNoFarm, switcherRows } from '../../relationships/relationshipModel';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import type { InvitationLabel } from '../../invitations/personalInvitationClient';
+import { TeamFirstStepCard, TeamPendingChip, TEAM_FIRST_WORDS } from './TeamFirstStepCard';
 
 export interface SetupHelp {
     what: string;
@@ -45,6 +47,13 @@ export interface HubMenuItem {
     /** Not built yet: shows "लवकरच" instead of "बाकी" and is not counted as a setup step. */
     soon?: boolean;
     help?: SetupHelp;
+    /**
+     * Repair FIX-1 item 10 — a step that MUST be done (the माझी टीम step for the primary owner): its "बाकी" is red. Absent: a
+     * step not counted for this person (the row as before, no status).
+     */
+    mustDo?: boolean;
+    /** Repair FIX-1 item 10 — the team step is drawn as the first-setup question card (owner alone, nothing sent). */
+    firstCard?: boolean;
 }
 
 export interface SetupProgressData {
@@ -94,6 +103,10 @@ interface SetupHubMenuProps {
     teamViewOnly?: boolean;
     /** People waiting for the owner's answer (from the owner-only roster); 0 = none. */
     teamRequestCount?: number;
+    /** Repair FIX-1 item 10 — a choice on the first team card: open the invite sheet with this label chosen. */
+    onInviteLabel?: (label: InvitationLabel) => void;
+    /** Repair FIX-1 item 10 — "सध्या मी एकटाच शेती पाहतो" on the first team card. */
+    onTeamSolo?: () => void;
     settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }[];
     onSelectExtra?: (id: string) => void;
     logout: () => void;
@@ -161,7 +174,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
     farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm,
     currentFarmId, onSwitchFarm, onCreateFarm, onJoinViaQr,
     language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour,
-    farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, settingsItems, onSelectExtra, logout,
+    farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, onInviteLabel, onTeamSolo, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
     // spec: plr-d10 lane MU-1 - the same relationship read model (/me/context) feeds this sheet's rows as the header's.
@@ -210,17 +223,25 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
 
                 <div className="space-y-2" data-testid="hub-farm">
                     <SectionHead title="माझं शेत" />
-                    {items.map(it => (it.id === 'team'
-                        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the
-                        // farm QR + code, and the people waiting for the owner's answer. In the sequence since FIX-1 item 3.
-                        ? onOpenTeam && (
+                    {items.map(it => {
+                        if (it.id !== 'team') return <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.tab)} />;
+                        // Repair FIX-1 item 10 — the owner alone, nothing sent: the first-setup question card stands in for the row.
+                        if (it.firstCard && onInviteLabel && onTeamSolo) {
+                            return <TeamFirstStepCard key={it.id} language={language} isNext={setupProgress?.nextId === it.id} onPick={onInviteLabel} onSolo={onTeamSolo} />;
+                        }
+                        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the farm QR + code,
+                        // and the people waiting for the owner's answer. In the sequence since FIX-1 item 3; its पूर्ण / red बाकी
+                        // only where it is a counted step (FIX-1 item 10).
+                        const status = it.done === true ? <Chip tone="green">पूर्ण</Chip>
+                            : it.mustDo ? <TeamPendingChip label={TEAM_FIRST_WORDS[language === 'en' ? 'en' : 'mr'].pending} /> : null;
+                        const requests = teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : null;
+                        return onOpenTeam && (
                             <RowLink key={it.id} testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={TEAM_COPY.pageTitle}
                                 line={teamViewOnly ? TEAM_COPY.crewLine : teamRequestCount > 0 ? TEAM_COPY.requestsTitle(teamRequestCount) : TEAM_COPY.hubLine}
-                                badge={teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : undefined}
+                                badge={requests || status ? <span className="flex shrink-0 items-center gap-1">{requests}{status}</span> : undefined}
                                 onClick={onOpenTeam} />
-                        )
-                        : <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.tab)} />
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {onOpenFinance && (

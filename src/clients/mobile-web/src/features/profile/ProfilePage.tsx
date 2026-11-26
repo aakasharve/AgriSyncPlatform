@@ -46,7 +46,12 @@ import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
-import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, type HubStepId } from './hubSteps';
+import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
+import { useSentInvitations } from './components/TeamFirstStepCard';
+import { useFarmPlots } from './team/useFarmPlots';
+import { InviteBuilderSheet } from '../invitations/InviteBuilderSheet';
+import type { InvitationLabel } from '../invitations/personalInvitationClient';
+import { useUiPref } from '../../shared/hooks/useUiPref';
 import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
 import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
@@ -262,6 +267,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const canEditFarmSetup = setupFarm
         ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
         : callerIsPrimary;
+    // Repair FIX-1 item 10 (R2-B 15, founder 27 Nov) — the माझी टीम step: a MUST for the primary owner (red बाकी, counted by
+    // "पुढचं", never a block), done once someone else is on the list, an invitation stands, or he says he runs this farm alone
+    // for now — that mark is kept on this phone per farm (`teamSoloKey`; phone-only until the farm setup moves to the server).
+    const [inviteKey, setInviteKey] = useState(0);
+    const sentInvitations = useSentInvitations(callerIsPrimary ? teamFarmId : null, inviteKey);
+    const [teamSolo, setTeamSolo, teamSoloLoaded] = useUiPref<boolean>(teamSoloKey(teamFarmId ?? '__no_farm__'), false);
+    const teamStep = teamStepOf({
+        isPrimaryOwner: callerIsPrimary && !!teamFarmId,
+        callerUserId: authSession?.userId,
+        rows: teamRoster.loadFailed ? null : teamRoster.rows,
+        invitations: sentInvitations,
+        solo: teamSoloLoaded ? teamSolo : null,
+    });
+    // The first team card's choice: the EXISTING invite sheet, that label chosen.
+    const [inviteLabel, setInviteLabel] = useState<InvitationLabel | null>(null);
+    const invitePlots = useFarmPlots(inviteLabel ? teamFarmId : null);
     // Founder D-22 (26 Oct): only the PRIMARY owner answers a request, so only his hub counts them.
     const teamRequestCount = farmAdmin.myFarm?.role === 'PrimaryOwner'
         ? splitRoster(teamRoster.rows).requests.length
@@ -282,6 +303,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     farmId={farmAdmin.myFarm.farmId}
                     farmName={farmAdmin.myFarm.name}
                 />
+            )}
+            {/* Repair FIX-1 item 10 — the first team card's choice opens the EXISTING invite sheet with that label chosen. */}
+            {inviteLabel && teamFarmId && (
+                <InviteBuilderSheet farmId={teamFarmId} farmName={farmAdmin.myFarm?.name ?? ''} farmPlots={invitePlots} initialLabel={inviteLabel}
+                    onMade={() => setInviteKey(k => k + 1)}
+                    onClose={() => { setInviteLabel(null); setInviteKey(k => k + 1); }} />
             )}
             {farmAdmin.farmLookupError && farmAdmin.showInviteQr === false && (
                 // lane FX-1 (FOOT-1) — above the bar's whole room (bottom-24 sat under its raised centre button).
@@ -422,16 +449,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 };
                 // Repair FIX-1 item 3: the founder's order (hubSteps.ts). माझी टीम sits in it for whoever has the team door.
                 const steps = HUB_STEP_ORDER.filter(id => id !== 'team' || openTeam);
+                // FIX-1 item 10: the team step is a counted step only for the primary owner, once its facts are known.
+                const isDone = (id: HubStepId): boolean => (id === 'team' ? teamStep.counted && teamStep.done : doneIds.has(id));
                 const menuItems: HubMenuItem[] = steps.map(id => ({
                     id, tab: HUB_STEP_TAB[id], label: STEP_LABEL[id], icon: STEP_ICON[id], subtitle: subtitleFor(id),
-                    done: doneIds.has(id), soon: id === 'health', help: SETUP_HELP[id],
+                    done: id === 'team' && !teamStep.counted ? undefined : isDone(id), soon: id === 'health', help: SETUP_HELP[id],
+                    ...(id === 'team' && teamStep.counted && { mustDo: true, firstCard: teamStep.firstCard }),
                 }));
 
                 // Farm-setup progress — one honest count over the setup steps that CAN be done
-                // ('health' cannot: report upload is not built). The team row is not counted here.
-                const setupOrder = steps.filter(id => id !== 'health' && id !== 'team');
-                const doneCount = setupOrder.filter(id => doneIds.has(id)).length;
-                const nextId = setupOrder.find(id => !doneIds.has(id));
+                // ('health' cannot: report upload is not built; the team step only where it is counted).
+                const setupOrder = steps.filter(id => id !== 'health' && (id !== 'team' || teamStep.counted));
+                const doneCount = setupOrder.filter(isDone).length;
+                const nextId = setupOrder.find(id => !isDone(id));
                 const setupProgress = {
                     done: doneCount,
                     total: setupOrder.length,
@@ -568,6 +598,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onOpenTeam={openTeam}
                             teamViewOnly={!callerIsPrimary}
                             teamRequestCount={teamRequestCount}
+                            onInviteLabel={callerIsPrimary && teamFarmId ? setInviteLabel : undefined}
+                            onTeamSolo={() => setTeamSolo(true)}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}
                             logout={logout}

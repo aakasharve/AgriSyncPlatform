@@ -38,6 +38,7 @@ import {
 import {
     createInvitation,
     invitationRefusal,
+    type InvitationLabel,
     type InvitationRefusal,
     type PersonalInvitationView,
 } from './personalInvitationClient';
@@ -53,14 +54,16 @@ export interface InviteBuilderSheetProps {
     onMade?: (invitation: PersonalInvitationView) => void;
     /** An invitation already made, to show its delivery again. */
     showing?: PersonalInvitationView | null;
+    /** Repair FIX-1 item 10 — the label already chosen when it opens (the Setup Hub's first team step). Default: कामगार. */
+    initialLabel?: InvitationLabel;
 }
 
 export const InviteBuilderSheet: React.FC<InviteBuilderSheetProps> = ({
-    farmId, farmName, farmPlots, workers = [], onClose, onMade, showing = null,
+    farmId, farmName, farmPlots, workers = [], onClose, onMade, showing = null, initialLabel = 'Worker',
 }) => {
     const language = useOptionalLanguage()?.language;
     const copy = invitationCopy(language);
-    const [grant, setGrant] = useState<InviteGrant>(() => presetGrant('Worker'));
+    const [grant, setGrant] = useState<InviteGrant>(() => presetGrant(initialLabel));
     const [eachOpen, setEachOpen] = useState(false);
     const [name, setName] = useState('');
     const [mobile, setMobile] = useState('');
