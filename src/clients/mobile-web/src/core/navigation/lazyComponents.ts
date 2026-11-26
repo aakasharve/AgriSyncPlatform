@@ -30,6 +30,8 @@ export const QuickLogSheet = React.lazy(() => import('../../features/logs/compon
 export const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
 // The welcome written for the role — the LAST first-run step, after the permissions (plr-d10 I16).
 export const WelcomeScreen = React.lazy(() => import('../../pages/WelcomeScreen'));
+// The founder's welcome voice note — first-run step between the permissions and the role welcome.
+export const WelcomeStory = React.lazy(() => import('../../pages/onboarding/welcome/WelcomeStory'));
 export const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 export const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 export const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));

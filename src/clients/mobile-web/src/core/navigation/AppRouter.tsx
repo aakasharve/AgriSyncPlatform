@@ -11,7 +11,8 @@ import {
     useAppWeatherState,
 } from '../../app/context/AppFeatureContexts';
 
-import { OnboardingPermissionsPage, WelcomeScreen, RouteLoader } from './lazyComponents';
+import { OnboardingPermissionsPage, WelcomeScreen, WelcomeStory, RouteLoader } from './lazyComponents';
+import { toWelcomeRole } from '../../features/onboarding/firstRun/roleWelcome';
 import { AppRouterContext } from './routeContext';
 import { SimpleRoutes } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
@@ -91,6 +92,14 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // The welcome written for the role — the LAST first-run step (it was the first, right after login).
     const [welcomeSeen, setWelcomeSeen, welcomeLoaded] = useUiPref<boolean>(
         'shramsafal_welcome_seen',
+        typeof window === 'undefined',
+    );
+    // The founder's welcome voice note, between the permissions and the role welcome. Founder decision
+    // 2026-11-26: compulsory for EACH user, the gentle skip kept — so it has its own once-only key, and an
+    // installed user who passed both steps above long ago hears it once (the one deliberate exception to
+    // "sees neither again", P11; it adds a screen, it changes nothing he already has).
+    const [voiceSeen, setVoiceSeen, voiceLoaded] = useUiPref<boolean>(
+        'shramsafal_welcome_voice_v1_seen',
         typeof window === 'undefined',
     );
     // FR-8: back from the role welcome re-opens the permissions step for this visit.
@@ -264,9 +273,9 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // installed user must not see a flash of a step he passed long ago. The farm list's wait is
     // bounded by `useFarmContextState` (FARM_LIST_WAIT_MS): a list that has not answered by then
     // reads as "not known to have a farm", and a late answer still lands.
-    const firstRunPending = !permissionsGranted || !welcomeSeen || permissionsAgain;
+    const firstRunPending = !permissionsGranted || !welcomeSeen || !voiceSeen || permissionsAgain;
     if (firstRunPending) {
-        if (permissionsLoaded === false || welcomeLoaded === false || (!firstRunFarm && !farmsKnown)) {
+        if (permissionsLoaded === false || welcomeLoaded === false || voiceLoaded === false || (!firstRunFarm && !farmsKnown)) {
             // Round-2 review WAIT-1: a spinner and "उघडत आहे…" after a beat, not an empty area.
             return <FirstRunWait />;
         }
@@ -284,16 +293,28 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                     </React.Suspense>
                 );
             }
-            return (
-                <React.Suspense fallback={<RouteLoader />}>
-                    <WelcomeScreen
-                        onContinue={() => setWelcomeSeen(true)}
-                        onBack={() => setPermissionsAgain(true)}
-                        farmRole={firstRunFarm.role}
-                        farmName={firstRunFarm.name}
-                    />
-                </React.Suspense>
-            );
+            if (!voiceSeen) {
+                // Plays by itself after a short live intro; skip asks once, then moves on. The owner's
+                // line under "अभिनंदन!" is only for an owner or co-owner (D10).
+                const ownerSeat = ['owner', 'coOwner'].includes(toWelcomeRole(firstRunFarm.role));
+                return (
+                    <React.Suspense fallback={<RouteLoader />}>
+                        <WelcomeStory onDone={() => setVoiceSeen(true)} showOwnerLine={ownerSeat} />
+                    </React.Suspense>
+                );
+            }
+            if (!welcomeSeen) {
+                return (
+                    <React.Suspense fallback={<RouteLoader />}>
+                        <WelcomeScreen
+                            onContinue={() => setWelcomeSeen(true)}
+                            onBack={() => setPermissionsAgain(true)}
+                            farmRole={firstRunFarm.role}
+                            farmName={firstRunFarm.name}
+                        />
+                    </React.Suspense>
+                );
+            }
         }
     }
 

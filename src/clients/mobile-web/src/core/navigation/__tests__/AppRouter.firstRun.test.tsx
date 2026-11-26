@@ -6,6 +6,10 @@
  * with no farm the 0-farm doors (drawn by AppContent) are the screen. Back from the welcome returns to
  * the permissions. Someone who passed both long ago sees neither (P11).
  *
+ * Between the permissions and the role welcome sits the founder's welcome voice note (founder decision
+ * 2026-11-26: compulsory for EACH user, gentle skip kept). It has its own once-only key, so someone who
+ * passed both steps long ago hears it once and then goes straight in — the one deliberate exception.
+ *
  * Harness as AppRouter.reviewInboxRequest.test.tsx: AppRouter's context hooks and render modules are
  * stubbed; the two first-run pages are stubbed to their props (their own suites test their content).
  */
@@ -32,6 +36,11 @@ vi.mock('../lazyComponents', () => ({
     OnboardingPermissionsPage: (props: { onComplete: () => void; onBack?: () => void }) => (
         <div data-testid="stub-permissions" data-has-back={typeof props.onBack === 'function' ? 'yes' : 'no'}>
             <button type="button" onClick={props.onComplete}>perm-continue</button>
+        </div>
+    ),
+    WelcomeStory: ({ onDone, showOwnerLine }: { onDone: (listened: boolean) => void; showOwnerLine: boolean }) => (
+        <div data-testid="stub-voice-note" data-owner-line={showOwnerLine ? 'yes' : 'no'}>
+            <button type="button" onClick={() => onDone(true)}>voice-done</button>
         </div>
     ),
     WelcomeScreen: ({ onContinue, onBack, farmRole, farmName }: { onContinue: () => void; onBack: () => void; farmRole: string; farmName: string }) => (
@@ -115,23 +124,40 @@ const mount = async (props: React.ComponentProps<typeof AppRouter>) => {
 };
 
 describe('AppRouter — the first run after the farm', () => {
-    it('order: permissions FIRST, then the welcome for the REAL role, then the app', async () => {
+    it('order: permissions FIRST, then the voice note, then the welcome for the REAL role, then the app', async () => {
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         expect(screen.getByTestId('stub-permissions')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-voice-note')).toBeNull();
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
 
         fireEvent.click(screen.getByText('perm-continue'));
+        expect(screen.getByTestId('stub-voice-note')).toHaveAttribute('data-owner-line', 'yes');
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
+
+        fireEvent.click(screen.getByText('voice-done'));
         const hello = screen.getByTestId('stub-role-welcome');
         expect(hello).toHaveAttribute('data-role', 'PrimaryOwner');
         expect(hello).toHaveAttribute('data-farm', 'आर्वे शेती');
 
         fireEvent.click(screen.getByText('welcome-continue'));
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
-        expect(h.prefs).toEqual({ shramsafal_permissions_granted: true, shramsafal_welcome_seen: true });
+        expect(h.prefs).toEqual({ shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true, shramsafal_welcome_seen: true });
+    });
+
+    it('a worker and a mukadam hear the voice note too, without the owner line (D10)', async () => {
+        for (const role of ['Worker', 'Mukadam']) {
+            h.prefs = { shramsafal_permissions_granted: true };
+            await mount({ firstRunFarm: { name: 'पवार मळा', role }, farmsKnown: true });
+            expect(screen.getByTestId('stub-voice-note')).toHaveAttribute('data-owner-line', 'no');
+            cleanup();
+        }
+        h.prefs = { shramsafal_permissions_granted: true };
+        await mount({ firstRunFarm: { name: 'पवार मळा', role: 'SecondaryOwner' }, farmsKnown: true });
+        expect(screen.getByTestId('stub-voice-note')).toHaveAttribute('data-owner-line', 'yes');
     });
 
     it('back from the role welcome returns to the permissions, then forward again', async () => {
-        h.prefs = { shramsafal_permissions_granted: true };
+        h.prefs = { shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true };
         await mount({ firstRunFarm: { name: 'पवार मळा', role: 'Worker' }, farmsKnown: true });
         expect(screen.getByTestId('stub-role-welcome')).toHaveAttribute('data-role', 'Worker');
         fireEvent.click(screen.getByText('welcome-back'));
@@ -145,6 +171,7 @@ describe('AppRouter — the first run after the farm', () => {
         expect(screen.getByTestId('stub-permissions')).toHaveAttribute('data-has-back', 'no');
         // Reached again from the role welcome's back: still none — the welcome's back is the way here.
         fireEvent.click(screen.getByText('perm-continue'));
+        fireEvent.click(screen.getByText('voice-done'));
         fireEvent.click(screen.getByText('welcome-back'));
         expect(screen.getByTestId('stub-permissions')).toHaveAttribute('data-has-back', 'no');
     });
@@ -152,6 +179,7 @@ describe('AppRouter — the first run after the farm', () => {
     it('no farm yet (0 farms, or only a request still waiting): no first-run step here — the doors are the screen', async () => {
         await mount({ firstRunFarm: null, farmsKnown: true });
         expect(screen.queryByTestId('stub-permissions')).toBeNull();
+        expect(screen.queryByTestId('stub-voice-note')).toBeNull();
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
         expect(h.prefs).toEqual({});
     });
@@ -188,16 +216,28 @@ describe('AppRouter — the first run after the farm', () => {
         }
     });
 
-    it('an installed user who passed both before goes straight to the app (P11)', async () => {
+    it('an installed user who passed both before hears the voice note ONCE, then goes straight in', async () => {
         h.prefs = { shramsafal_permissions_granted: true, shramsafal_welcome_seen: true };
+        await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
+        expect(screen.getByTestId('stub-voice-note')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-permissions')).toBeNull();
+        fireEvent.click(screen.getByText('voice-done'));
+        expect(screen.getByTestId('app-body')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
+        expect(h.prefs.shramsafal_welcome_voice_v1_seen).toBe(true);
+    });
+
+    it('an installed user who passed all three goes straight to the app (P11)', async () => {
+        h.prefs = { shramsafal_permissions_granted: true, shramsafal_welcome_seen: true, shramsafal_welcome_voice_v1_seen: true };
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
         expect(screen.queryByTestId('stub-permissions')).toBeNull();
+        expect(screen.queryByTestId('stub-voice-note')).toBeNull();
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
     });
 
     it('an installed user who saw the OLD welcome but not the permissions gets only the permissions', async () => {
-        h.prefs = { shramsafal_welcome_seen: true };
+        h.prefs = { shramsafal_welcome_seen: true, shramsafal_welcome_voice_v1_seen: true };
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         fireEvent.click(screen.getByText('perm-continue'));
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();

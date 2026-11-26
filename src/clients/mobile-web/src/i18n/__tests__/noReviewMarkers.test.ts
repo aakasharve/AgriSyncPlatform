@@ -198,6 +198,7 @@ describe('statements that were measured against the code and found untrue stay o
             'features/voiceDiary/components/ClipPlayerCard.tsx': 'GATED: playbackAllowed / usePlaybackSwitch(); OFF blocks and shows the founder words',
             'features/logs/components/originalVoice/OriginalVoiceButton.tsx': 'SERVER-GATED: the audio comes from GetLogOriginalVoice, which refuses while OFF',
             'features/consent/ConsentScreen.tsx': 'NOT A RECORDING: the narration element of the consent screen',
+            'pages/onboarding/welcome/WelcomeStory.tsx': 'NOT A RECORDING: the founder\'s welcome voice note bundled in the app (welcome/assets/welcome-note.mp3), never a farmer\'s clip',
             'features/labour/identity/CardScanner.tsx': 'NOT A RECORDING: camera video preview',
             'features/logs/components/shramsathi/understandingRing/cinematicEngine.ts': 'NOT A RECORDING: animation timing',
             'features/logs/components/shramsathi/understandingRing/understandingEngine.ts': 'NOT A RECORDING: animation timing',

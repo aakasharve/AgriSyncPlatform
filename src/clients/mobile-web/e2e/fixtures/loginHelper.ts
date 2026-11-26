@@ -139,11 +139,17 @@ export async function loginViaPassword(
     await tickConsentIfPresent(page, submitButton);
     await submitButton.click();
 
-    // spec: plr-d10 I16 — after sign-in, a first-run phone shows फोनच्या परवानग्या and then the welcome
-    // written for the role (in that order). Click through whichever is on screen until home.
-    for (let step = 0; step < 3; step += 1) {
+    // spec: plr-d10 I16 — after sign-in, a first-run phone shows फोनच्या परवानग्या, then the founder's
+    // welcome voice note (it plays by itself; specs skip it through its "please listen" sheet), then the
+    // welcome written for the role (in that order). Click through whichever is on screen until home.
+    for (let step = 0; step < 4; step += 1) {
         const landing = await waitForLoginLanding(page);
         if (landing === 'home') break;
+        if (landing === 'voice') {
+            await page.getByTestId('welcome-story-skip').click();
+            await page.getByTestId('welcome-skip-confirm').click();
+            continue;
+        }
         await page.getByTestId(landing === 'welcome' ? 'welcome-continue' : 'permissions-continue').click();
     }
 
@@ -152,11 +158,12 @@ export async function loginViaPassword(
     await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 }
 
-async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'welcome'> {
+async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'voice' | 'welcome'> {
     const deadline = Date.now() + 30_000;
     const homeGreeting = page.getByTestId(HOME_READY_TESTID);
     const welcomeContinue = page.getByTestId('welcome-continue');
     const skipBtn = page.getByTestId('permissions-continue');
+    const voiceSkip = page.getByTestId('welcome-story-skip');
     const alert = page.getByRole('alert').first();
 
     while (Date.now() < deadline) {
@@ -170,6 +177,10 @@ async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' |
 
         if (await skipBtn.isVisible().catch(() => false)) {
             return 'permissions';
+        }
+
+        if (await voiceSkip.isVisible().catch(() => false)) {
+            return 'voice';
         }
 
         if (await alert.isVisible().catch(() => false)) {
