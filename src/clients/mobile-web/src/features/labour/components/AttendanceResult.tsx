@@ -16,19 +16,21 @@
  * Money never appears here (state A "must not": no ₹, no rate, no wage).
  */
 import React from 'react';
-import { Check, Mic, Pencil } from 'lucide-react';
+import { Check, Mic, Pencil, Plus } from 'lucide-react';
 import type { AgriLogResponse } from '../../../types';
 import type { LabourAnchor } from '../labourAnchor';
-import { ATTENDANCE_COPY as COPY } from '../attendanceCopy';
+import { ATTENDANCE_COPY as COPY, NAME_STATE_COPY } from '../attendanceCopy';
 import { selectLadderRung } from '../attendanceLadder';
 import { findDayContradictions, type DayContradiction, type DayShift } from '../attendanceContradiction';
 import { selectConfirmSurface } from '../attendanceDisagreement';
 import { resolveLabourHeadcount } from '../../../domain/logs/labourHeadcount';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
-import { fetchFieldOperators, type FieldOperator } from '../data/fieldOperatorClient';
+import { createFieldOperator, fetchFieldOperators, type FieldOperator } from '../data/fieldOperatorClient';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { buildPickerRows } from './FieldOperatorPicker';
+import { NameOnlyBadge } from './LabourUiKit';
 
 export interface AttendanceResultProps {
     /** Attendance-only draft (labour.length > 0) — toAttendanceOnlyDraft output. */
@@ -56,12 +58,24 @@ const TAP_WORDS = {
     en: { Full: 'Present', Half: 'Half', Absent: 'Absent', hint: 'Tap a name: Present → Half → Absent', speak: 'Change by speaking', none: 'These names do not match the attendance list right now — say it again.', offline: 'The list of names could not load without internet — say it again, or change it when online.' },
 } as const;
 
+/** Repair FIX-1 item 6 — where a spoken name stands: 'unknown' while the farm's list is not here (no state is claimed). */
+type NameState = 'unknown' | 'onList' | 'notOnList' | 'shared';
+
 const AttendanceResult: React.FC<AttendanceResultProps> = ({
     draft, anchor, farmId, workDate, onConfirm, onSpeakMore,
 }) => {
     const language = useOptionalLanguage()?.language;
     const tapWords = language === 'en' ? TAP_WORDS.en : TAP_WORDS.mr;
+    const nameWords = language === 'en' ? NAME_STATE_COPY.en : NAME_STATE_COPY.mr;
     const [editing, setEditing] = React.useState(false);
+    // Repair FIX-1 item 6 — a spoken name the farmer resolved himself (spoken name → field operator id): picked from the
+    // list ("यादीतून निवडा", "सारखं नाव — कोण?") or just added ("नवीन नाव जोडा"). Never set by the app.
+    const [picked, setPicked] = React.useState<Record<string, string>>({});
+    const [choosing, setChoosing] = React.useState<{ name: string; mode: 'list' | 'shared' | 'add' } | null>(null);
+    const [newName, setNewName] = React.useState('');
+    const [newFullName, setNewFullName] = React.useState('');
+    const [adding, setAdding] = React.useState(false);
+    const [addFailed, setAddFailed] = React.useState(false);
     // Lane OF — each person's day as he tapped it (absent = as said: an unqualified "आले" is हजर).
     const [tapMarks, setTapMarks] = React.useState<Record<string, TapMark>>({});
     // Task 3.5c — the farm's FieldOperator roster, fetched for name→identity
@@ -125,13 +139,61 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const contradictions: DayContradiction[] = findDayContradictions(draft.labour)
         .filter((c) => rulings[c.name] == null);
 
-    // The one farm person each said name resolves to (rule 10: exactly one match, else nobody — never merged).
+    // The farm people who carry this exact name (rule 10: exact match only, never fuzzy).
+    const sameNamed = (name: string): FieldOperator[] => (roster ?? []).filter((o) => o.isActive && o.displayName.trim() === name);
+    // The one farm person each said name resolves to: the one HE picked for it (FIX-1 item 6), else exactly one match, else
+    // nobody — never merged (rule 10).
     const personOf = (name: string): FieldOperator | undefined => {
         if (!roster) return undefined;
-        const matches = roster.filter((o) => o.isActive && o.displayName.trim() === name);
+        const chosen = picked[name];
+        if (chosen) return roster.find((o) => o.id === chosen && o.isActive);
+        const matches = sameNamed(name);
         return matches.length === 1 ? matches[0] : undefined;
     };
+    const stateOf = (name: string): NameState => {
+        if (!roster) return 'unknown';
+        if (personOf(name)) return 'onList';
+        return sameNamed(name).length >= 2 ? 'shared' : 'notOnList';
+    };
     const tappable = displayNames.filter((n) => personOf(n) !== undefined);
+    // Nothing silent (FIX-1 item 6): how many said names "बरोबर" will write NO mark for. With no list (offline, no farm) that is
+    // every name; while the list is still coming, nothing is claimed yet.
+    const unmarkedCount = roster
+        ? displayNames.filter((n) => personOf(n) === undefined).length
+        : (rosterFailed || !farmId) ? displayNames.length : 0;
+
+    const openChooser = (name: string, mode: 'list' | 'shared' | 'add') => {
+        setAddFailed(false);
+        if (mode === 'add') { setNewName(name); setNewFullName(''); }
+        setChoosing({ name, mode });
+    };
+    const pickFor = (name: string, operatorId: string) => {
+        setPicked((p) => ({ ...p, [name]: operatorId }));
+        setChoosing(null);
+    };
+    // The existing add (createFieldOperator, as AttendanceRoster's "नाव जोडा"): makes the person, and the spoken name is his.
+    const addFor = async (name: string) => {
+        const displayName = newName.trim();
+        if (!farmId || !roster || !displayName || adding) return;
+        setAdding(true);
+        setAddFailed(false);
+        try {
+            const created = await createFieldOperator(farmId, displayName, newFullName.trim() || undefined);
+            setRoster((r) => [...(r ?? []), created]);
+            pickFor(name, created.id);
+        } catch {
+            setAddFailed(true);
+        } finally {
+            setAdding(false);
+        }
+    };
+    // The people "यादीतून निवडा" offers: the farm's list, without anyone already on this card (never one person twice);
+    // "सारखं नाव — कोण?" offers only the people who carry that name, told apart (buildPickerRows, B2).
+    const chooserRows = (name: string, mode: 'list' | 'shared') => {
+        const taken = new Set(displayNames.filter((n) => n !== name).map((n) => personOf(n)?.id).filter((id): id is string => !!id));
+        const pool = (roster ?? []).filter((o) => o.isActive && (mode === 'shared' ? o.displayName.trim() === name : !taken.has(o.id)));
+        return buildPickerRows(pool);
+    };
 
     const question = rung === 2 && knownCount != null ? COPY.rungWho(knownCount)
         : rung === 3 ? COPY.rungRemainder
@@ -175,18 +237,83 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                     <div className="mt-2 flex flex-wrap gap-1.5" data-testid="attendance-names">
                         {displayNames.map((name) => {
                             const mark = tapMarks[name] ?? 'Full';
-                            return editing && personOf(name) ? (
-                                <button key={name} type="button" data-testid={`attendance-tap-${name}`} data-mark={mark}
-                                    onClick={() => setTapMarks((m) => ({ ...m, [name]: NEXT_MARK[m[name] ?? 'Full'] }))}
-                                    className={`min-h-[44px] rounded-lg border-2 px-2.5 py-1 text-[14px] font-extrabold ${mark === 'Full' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : mark === 'Half' ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-500 line-through'}`}>
-                                    {name} · {tapWords[mark]}
-                                </button>
-                            ) : (
-                                <span key={name} className="rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] font-bold text-slate-800">{name}{tapMarks[name] ? ` · ${tapWords[tapMarks[name]]}` : ''}</span>
+                            const state = stateOf(name);
+                            const tapSuffix = tapMarks[name] ? ` · ${tapWords[tapMarks[name]]}` : '';
+                            if (editing && personOf(name)) {
+                                return (
+                                    <button key={name} type="button" data-testid={`attendance-tap-${name}`} data-mark={mark}
+                                        onClick={() => setTapMarks((m) => ({ ...m, [name]: NEXT_MARK[m[name] ?? 'Full'] }))}
+                                        className={`min-h-[44px] rounded-lg border-2 px-2.5 py-1 text-[14px] font-extrabold ${mark === 'Full' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : mark === 'Half' ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-500 line-through'}`}>
+                                        {name} · {tapWords[mark]}
+                                    </button>
+                                );
+                            }
+                            // FIX-1 item 6 — each name's state, before बरोबर. No list (offline): the plain chip, no claim.
+                            if (state === 'unknown') {
+                                return <span key={name} data-testid={`attendance-name-${name}`} className="rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] font-bold text-slate-800">{name}{tapSuffix}</span>;
+                            }
+                            if (state === 'onList') {
+                                return (
+                                    <span key={name} data-testid={`attendance-name-${name}`} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[13px] font-bold text-emerald-800">
+                                        <Check size={13} strokeWidth={3} aria-hidden="true" />{name} · {nameWords.onList}{tapSuffix}
+                                    </span>
+                                );
+                            }
+                            return (
+                                <div key={name} data-testid={`attendance-name-${name}`} className="flex basis-full flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[13px] font-bold text-amber-900">
+                                    <span className="min-w-0 flex-1">{name}{state === 'notOnList' ? ` · ${nameWords.notOnList}` : ''}</span>
+                                    {state === 'shared' ? (
+                                        <button type="button" onClick={() => openChooser(name, 'shared')}
+                                            className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.sharedWho}</button>
+                                    ) : (
+                                        <>
+                                            <button type="button" onClick={() => openChooser(name, 'list')}
+                                                className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.pickFromList}</button>
+                                            <button type="button" onClick={() => openChooser(name, 'add')}
+                                                className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.addNew}</button>
+                                        </>
+                                    )}
+                                </div>
                             );
                         })}
                     </div>
                 )}
+                {choosing && roster && (choosing.mode === 'add' ? (
+                    <div className="mt-2 flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2.5" data-testid="attendance-add-form">
+                        <input type="text" value={newName} maxLength={200} onChange={(e) => setNewName(e.target.value)} disabled={adding}
+                            aria-label={nameWords.namePlaceholder} placeholder={nameWords.namePlaceholder} data-testid="attendance-add-name"
+                            className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 text-[16px] font-bold text-slate-800 focus:border-emerald-500 focus:outline-none" />
+                        <input type="text" value={newFullName} maxLength={200} onChange={(e) => setNewFullName(e.target.value)} disabled={adding}
+                            aria-label={nameWords.fullNamePlaceholder} placeholder={nameWords.fullNamePlaceholder} data-testid="attendance-add-full-name"
+                            className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 text-[15px] font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none" />
+                        {addFailed && <p className="m-0 text-[13px] font-bold text-rose-700" data-testid="attendance-add-failed">{nameWords.addFailed}</p>}
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setChoosing(null)}
+                                className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-600">{nameWords.close}</button>
+                            <button type="button" data-testid="attendance-add-submit" disabled={!newName.trim() || adding} onClick={() => void addFor(choosing.name)}
+                                className="flex min-h-[44px] flex-[2] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-[15px] font-extrabold text-white disabled:opacity-50">
+                                <Plus size={16} strokeWidth={2.6} aria-hidden="true" />{nameWords.add}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mt-2 flex flex-col gap-1.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5" data-testid="attendance-pick-list">
+                        {chooserRows(choosing.name, choosing.mode).map((row) => (
+                            <button key={row.operator.id} type="button" data-testid={`attendance-pick-${row.operator.id}`} onClick={() => pickFor(choosing.name, row.operator.id)}
+                                className="flex min-h-[48px] w-full flex-col items-start justify-center rounded-xl border border-slate-100 bg-white px-3 py-1.5 text-left">
+                                <span className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-slate-800">
+                                    {row.operator.displayName}
+                                    {row.tag && <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[13px] font-bold text-slate-500">#{row.tag}</span>}
+                                    {row.ambiguous && !row.fullName && <NameOnlyBadge />}
+                                </span>
+                                {row.fullName && <span className="block text-[13px] text-slate-500">{row.fullName}</span>}
+                                {row.ambiguous && <span className="block text-[13px] text-slate-500">{nameWords.sameNameNote}</span>}
+                            </button>
+                        ))}
+                        <button type="button" onClick={() => setChoosing(null)}
+                            className="min-h-[44px] rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-600">{nameWords.close}</button>
+                    </div>
+                ))}
                 {editing && (
                     <div className="mt-2.5 space-y-2 border-t border-slate-100 pt-2.5" data-testid="attendance-edit">
                         <button type="button" onClick={onSpeakMore} data-testid="attendance-edit-speak"
@@ -255,26 +382,25 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                 </div>
             )}
 
+            {/* FIX-1 item 6 — nothing silent: the names बरोबर will write no mark for, counted, right above it. It never blocks (P9). */}
+            {unmarkedCount > 0 && (
+                <p className="px-1 text-[13.5px] font-extrabold text-amber-800" data-testid="attendance-unmarked-line">{nameWords.unmarkedLine(unmarkedCount)}</p>
+            )}
             {/* Pre-save honesty + the ONLY save. Disabled while a contradiction is unanswered. */}
             <p className="px-1 text-[12.5px] font-bold text-slate-500">{COPY.preSaveHonesty}</p>
             <div className="flex gap-2">
                 <button type="button" disabled={contradictions.length > 0}
                     onClick={() => {
                         // Marks for uniquely-resolved names only (rule 10: duplicates resolve to
-                        // NOBODY — never auto-merged). Offline/unfetchable roster ⇒ no marks; the
-                        // statement save below still records every spoken name on the engagement.
+                        // NOBODY — never auto-merged), and for a name HE resolved on this card
+                        // (FIX-1 item 6: picked from the list, or just added). Offline/unfetchable
+                        // roster ⇒ no marks; the statement save below still records every spoken
+                        // name on the engagement. `personOf` trims (B002) exactly as before.
                         if (farmId && roster) {
                             const markDate = workDate ?? getDateKey();
-                            const byName = new Map<string, FieldOperator[]>();
-                            for (const op of roster.filter((o) => o.isActive)) {
-                                // B002: server names are trimmed at the write boundary; trim here
-                                // too so a stale untrimmed row cannot dodge its own name.
-                                const key = op.displayName.trim();
-                                byName.set(key, [...(byName.get(key) ?? []), op]);
-                            }
                             void Promise.all(workerNames.flatMap((name) => {
-                                const matches = byName.get(name) ?? [];
-                                if (matches.length !== 1) return [];
+                                const person = personOf(name);
+                                if (!person) return [];
                                 const ruling = rulings[name];
                                 const tapped = tapMarks[name];
                                 // An unqualified "आले" writes dayMark:'Full' — the register's own
@@ -284,7 +410,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                                 // is what he stated, and wins.
                                 return [MarkAttendanceCommand.enqueue({
                                     attendanceMarkId: crypto.randomUUID(),
-                                    farmId, fieldOperatorId: matches[0].id, workDate: markDate,
+                                    farmId, fieldOperatorId: person.id, workDate: markDate,
                                     ...(tapped ? { dayMark: tapped }
                                         : ruling === 'half' ? { dayMark: 'Half' as const }
                                         : ruling === 'night' ? { nightMark: 'Worked' as const }

@@ -6,6 +6,8 @@
  * on these surfaces; a missing string is a founder question, never a guess.
  * Numerals follow his convention: Latin digits (DM Sans) for quantities.
  */
+import { digitsFor } from '../../shared/utils/marathiDigits';
+
 export const ATTENDANCE_COPY = {
     /** State B — the reason under the inactive hero. Not a permission word anywhere. */
     noAnchorReason: 'आजच्या कामात किती जण होते ते अजून समजलं नाही. आधी आजचं काम सांगा.',
@@ -66,4 +68,40 @@ export const ATTENDANCE_COPY = {
     staleAgeDays: (n: number) => `${n} दिवसांपूर्वी मिळाली`,
     /** Approved mark vocabulary — the only words the contradiction slots may hold. */
     markWord: { full: 'आला', half: 'अर्धा', night: 'रात्र' } as const,
+} as const;
+
+/**
+ * Repair FIX-1 item 6 (R2-B 19-B, founder 27 Nov) — where each spoken name stands on the confirm card, said BEFORE "बरोबर".
+ * The six Marathi state words are the founder's own; the add form's words are the existing add's (AttendanceRoster /
+ * FieldOperatorPicker). English twins follow `TAP_WORDS` in AttendanceResult. The count is in Marathi digits in Marathi mode.
+ */
+export const NAME_STATE_COPY = {
+    mr: {
+        onList: 'यादीत आहे',
+        notOnList: 'यादीत नाही',
+        pickFromList: 'यादीतून निवडा',
+        addNew: 'नवीन नाव जोडा',
+        sharedWho: 'सारखं नाव — कोण?',
+        unmarkedLine: (n: number) => `${digitsFor(n, 'mr')} नावांची हजेरी लागली नाही`,
+        sameNameNote: 'सारखं नाव — माणूस वेगळा',
+        namePlaceholder: 'नाव',
+        fullNamePlaceholder: 'पूर्ण नाव किंवा ओळख — हवं तर',
+        add: 'जोडा',
+        addFailed: 'नाव जोडता आलं नाही — पुन्हा प्रयत्न करा',
+        close: 'बंद करा',
+    },
+    en: {
+        onList: 'On the list',
+        notOnList: 'Not on the list',
+        pickFromList: 'Choose from the list',
+        addNew: 'Add a new name',
+        sharedWho: 'Same name — who?',
+        unmarkedLine: (n: number) => `Attendance not marked for ${n} ${n === 1 ? 'name' : 'names'}`,
+        sameNameNote: 'Same name — a different person',
+        namePlaceholder: 'Name',
+        fullNamePlaceholder: 'Full name or identity — optional',
+        add: 'Add',
+        addFailed: 'Could not add the name — try again',
+        close: 'Close',
+    },
 } as const;
