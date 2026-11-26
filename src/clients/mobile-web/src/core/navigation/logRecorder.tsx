@@ -18,12 +18,19 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+import { VoiceJourney } from '../../features/logs/components/voiceFlowV2/VoiceJourney';
+import { daysRecordedThisMonth } from '../../features/logs/components/voiceFlowV2/V2Shell';
 import { ShramSathiUnderstanding as ShramSathiUnderstandingLine } from './mainViewComponents';
 import type { AppRouterContext } from './routeContext';
+import type { RecorderFlowV2 } from '../../features/voice/components/recorder/flowV2Types';
+import { placeLabelOf } from './placeLabel';
+import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
 
 export interface LogRecorderHooks {
     /** The recorder says when it starts and stops listening. */
     onRecordingChange?: (recording: boolean) => void;
+    /** spec voice-flow-v2-2026-11-23 — bumps on each plot tap on this screen (the mic card's 7 s ring). Absent = no card. */
+    armSeq?: number;
 }
 
 /** The recorder's own "choose a plot first" nudge: scroll to (and briefly ring) the crop/plot choice. */
@@ -36,9 +43,27 @@ const focusRecorder = () => {
     }
 };
 
+/** spec voice-flow-v2-2026-11-23 — the v2 full-screen frame's words: the place chip, the field card's plot, the days count. */
+const v2Frame = (ctx: AppRouterContext) => {
+    const placeLabel = (language: string | undefined) => placeLabelOf(ctx.logScope, ctx.crops, language, resultStr(language).wholeFarm) ?? '';
+    const plotLabel = (language: string | undefined) => {
+        const crop = ctx.crops.find(c => ctx.logScope.selectedCropIds.includes(c.id));
+        const plots = (crop?.plots ?? []).filter(p => ctx.logScope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
+        return plots.length === 1 ? plots[0] : placeLabel(language);
+    };
+    return { placeLabel, plotLabel, days: daysRecordedThisMonth(ctx.history ?? []) };
+};
+
 /** THE log recorder (and its live caption), bound to the app's one voice pipeline. */
-export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange }: LogRecorderHooks = {}): React.ReactNode => {
+export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, armSeq }: LogRecorderHooks = {}): React.ReactNode => {
     const { handleAudioReady, handleTextReady, setStatus, isContextReady, error, errorTranscript, liveCaption, voiceStreamingPhase } = ctx;
+    // spec voice-flow-v2-2026-11-23 — OFF: undefined, today's recorder byte for byte.
+    const frame = FEATURE_FLAGS.voiceFlowV2 ? v2Frame(ctx) : undefined;
+    const flowV2: RecorderFlowV2 | undefined = frame ? {
+        silenceHelp: true,
+        card: armSeq !== undefined ? { armSeq, placeLabel: frame.placeLabel } : undefined,
+        ...frame,
+    } : undefined;
     return (
         <>
             {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
@@ -52,6 +77,7 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange }: 
                     suggestInteraction={isContextReady}
                     onRequestContextSelection={focusRecorder}
                     onRecordingChange={onRecordingChange}
+                    flowV2={flowV2}
                 />
             ) : (
                 <AudioRecorder
@@ -63,6 +89,7 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange }: 
                     suggestInteraction={isContextReady}
                     onRequestContextSelection={focusRecorder}
                     onRecordingChange={onRecordingChange}
+                    flowV2={flowV2}
                 />
             )}
             {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
@@ -80,6 +107,8 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange }: 
 
 /** THE waiting screen after he speaks (founder-approved; its component is not touched here). */
 export const renderProcessingScreen = (ctx: AppRouterContext): React.ReactNode => {
+    // spec voice-flow-v2-2026-11-23 (Task 6) — the calm step list, each tick a real event. OFF: today's screen below.
+    if (FEATURE_FLAGS.voiceFlowV2) return <VoiceJourney crops={ctx.crops} farmerProfile={ctx.farmerProfile} logScope={ctx.logScope} {...v2Frame(ctx)} />;
     const { liveCaption, voiceStreamingPhase } = ctx;
     return FEATURE_FLAGS.dailyLoop ? (
         /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —

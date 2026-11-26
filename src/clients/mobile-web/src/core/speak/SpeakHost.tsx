@@ -19,11 +19,10 @@ import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow'
 import { abandonPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { readRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
 import { readMoneyNotFollowed } from '../../features/finance/editMoney';
-import { placeWords } from '../../shared/names/placeWords';
 import { renderLogRecorder, renderProcessingScreen } from '../navigation/logRecorder';
 import type { AppRouterContext } from '../navigation/routeContext';
 import { useBackDismiss } from '../navigation/useBackDismiss';
-import { FARM_GLOBAL, afterLanding, landingAfter, scopeForRequest, startDecision } from './speakFlow';
+import { afterLanding, landingAfter, scopeForRequest, startDecision } from './speakFlow';
 import { landSpeak, useSpeakState, type SpeakLanding, type SpeakRequest } from './speakStore';
 import { SpeakBandView, SpeakScreen } from './SpeakScreen';
 import { speakWords } from './speakWords';
@@ -43,15 +42,9 @@ function warmRecorder(): void {
     }
 }
 
-/** "द्राक्ष · G1" for the recorder's plots (crop names strictly in his language), the whole farm by its own name. */
-export function placeLabelOf(scope: LogScope, crops: AppRouterContext['crops'], language: string | null | undefined, wholeFarm: string): string | undefined {
-    if (scope.selectedCropIds.includes(FARM_GLOBAL)) return wholeFarm;
-    const crop = crops.find(c => scope.selectedCropIds.includes(c.id));
-    if (!crop) return undefined;
-    const plots = (crop.plots ?? []).filter(p => scope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
-    // lane OF fix 1 (10): never "द्राक्ष · द्राक्ष G1"; founder 2026-11-21: from 4 plots a count ("द्राक्ष · सर्व १५ प्लॉट"), never fifteen names cut off
-    return placeWords(crop.name, plots, language, (crop.plots ?? []).length) || undefined;
-}
+// spec voice-flow-v2-2026-11-23: moved to core/navigation/placeLabel.ts (no circular import); re-exported so callers are unchanged.
+export { placeLabelOf } from '../navigation/placeLabel';
+import { placeLabelOf } from '../navigation/placeLabel';
 
 interface Session { id: string; prevScope: LogScope | null; spoke: boolean; savedAtStart: string | undefined; statusAtStart: AppStatus; typedSent?: boolean }
 

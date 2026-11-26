@@ -12,8 +12,22 @@
  * "पक्कं नाही" until the owner, or someone the owner trusts, confirms it in review. A role not yet known never sees
  * the button. A log whose create is not KNOWN to be in the sync queue is not offered either: its verify would be
  * refused as "not found".
+ *
+ * spec: voice-flow-v2-2026-11-23 (Task 12; amendments H2, H3, M5) — behind `FEATURE_FLAGS.voiceFlowV2` (off = this screen exactly as
+ * before) the SAVED screen comes first (`voiceFlowV2/SavedScreen`, the same pieces), today's result screen stays one tap away as the
+ * detail page (unchanged; the owner's "पक्कं आहे" lives there), and the saved screen closes itself after 30 s untouched — never
+ * while a log is not known to be on its way to the server, the sync needs a hand, or a refused / money banner is shown.
+ *
+ * Founder 2026-11-26 ("exact replication of what we built"): with the flag on, both pages are full screen in the design's frame
+ * (`V2Shell`: the place, "या महिन्यात N दिवस" counted from the history). The detail page is now the design's आढावा
+ * (`voiceFlowV2/DetailPage`) — the owner's "पक्कं आहे" moved there with the SAME rules (canConfirm, basis heard / read, the same
+ * confirm call); the old result screen stays exactly as it was for the flag off. The banners and the day sheet are drawn inside
+ * the frame so nothing that opens over it is ever under it.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FEATURE_FLAGS } from '../../../../app/featureFlags';
+import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
+import { logger } from '../../../../infrastructure/observability/Logger';
 import type { CropProfile, DailyLog, FarmerProfile } from '../../../../types';
 import { useDataSource } from '../../../../app/providers/DataSourceProvider';
 import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
@@ -44,6 +58,10 @@ import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/mone
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { AudienceRow } from '../../../recordAudience/AudienceRow';
+import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
+import DetailPage from '../voiceFlowV2/DetailPage';
+import { daysRecordedThisMonth } from '../voiceFlowV2/V2Shell';
+import { holdDetailBack } from '../voiceFlowV2/detailBack';
 
 /** The holder's own name from the session profile; the app's placeholder for "no name yet" is not a name. */
 const ownNameOf = (name: string | undefined): string | undefined => {
@@ -80,13 +98,22 @@ export interface VoiceResultContainerProps {
     onMoveDay?: (logs: readonly DailyLog[], dateKey: string) => Promise<void>;
     /** Lane IT4 - the mixing rules the combination boxes use. Default: the shippable list (no red rule is reviewed yet, D-96). Test seam. */
     mixRules?: readonly MixRule[];
+    /** spec voice-flow-v2-2026-11-23 — where the saved screen goes when it closes itself (the work home). Absent = `onBack`. */
+    onAutoClose?: () => void;
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, crops, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules, onAutoClose,
 }) => {
     const [pickingDay, setPickingDay] = useState(false);
+    // spec voice-flow-v2 (M5): the recording whose detail page is open (null = the saved screen). Keyed by the recording, so a new
+    // one starts on the saved screen. Above the `return null` below: the hooks run in the same order on every render.
+    const [detailOf, setDetailOf] = useState<string | null>(null);
+    const detail = FEATURE_FLAGS.voiceFlowV2 === true && detailOf === result.key;
+    const closeDetail = useCallback(() => setDetailOf(null), []);
+    useBackDismiss(detail, closeDetail);
+    useEffect(() => (detail ? holdDetailBack(closeDetail) : undefined), [detail, closeDetail]);
     const sessionUserId = getSessionUserId();
     const RS = useResultStr();
     const language = useOptionalLanguage()?.language;
@@ -175,12 +202,14 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     // D-44: "whether they listened to the original voice or reviewed the text" — his clip played on this screen, or not.
     const basis: 'heard' | 'read' = playback.heard.has(primary.id) ? 'heard' : 'read';
     const leave = (then: () => void) => () => { playback.stop(); then(); };
+    const canConfirm = mayConfirmOwn && !!verifierUserId && confirmable.length > 0;
+    const onConfirm = () => { void (async () => { for (const l of confirmable) await trust.confirm(l.id, basis, l.contentVersion); })(); };
 
     // A हजेरी-door record is changed in the हजेरी वही, never moved from here (none reaches this screen today: its save
     // goes to the saved card — this keeps it so).
     const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
-    return (
+    const banners = (
         <>
         {refused && (
             <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
@@ -202,6 +231,109 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                 {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
             </div>
         )}
+        </>
+    );
+    const daySheet = moveDay && pickingDay && (
+        <DayPickSheet
+            value={primary.date}
+            onPick={key => {
+                setPickingDay(false);
+                if (key === primary.date) return;
+                void moveDay(current, key).catch((error: unknown) => {
+                    // Never silent: he is told the day did not change (pressing again is safe — the same move is
+                    // queued once, `MoveDailyLogCommand`), and what failed is kept in the log.
+                    console.error('VoiceResultContainer: the day could not be changed', error);
+                    window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: RS.dayNotMoved, type: 'error' } }));
+                });
+            }}
+            onClose={() => setPickingDay(false)}
+        />
+    );
+    const onEditOne = (id: string) => leave(() => onEdit(current.find(l => l.id === id) ?? primary))();
+    const onTellPart = (part: PartKey) => leave(() => (onTellMore ? onTellMore(part) : onAddAnother()))();
+
+    if (FEATURE_FLAGS.voiceFlowV2 && detail) {
+        return (
+            <DetailPage
+                day={day}
+                placeLabel={placeLabel}
+                farmId={farmId}
+                farmRole={farmRole}
+                days={daysRecordedThisMonth(history)}
+                unclear={result.unclear}
+                clips={clips}
+                playingId={playback.playingId}
+                lengthOf={id => clipSeconds(id, clips.get(id), playback.lengths)}
+                onTogglePlay={id => { const clip = clips.get(id); if (clip) void playback.toggle(id, clip); }}
+                sync={sync}
+                syncQueuedOf={id => syncQueuedById.get(id)}
+                confirm={{ canConfirm, confirmed, confirmFailed: !!trust.failed, heard: basis === 'heard', onConfirm }}
+                onEdit={onEditOne}
+                onTellMore={onTellPart}
+                onChangeDay={moveDay ? () => setPickingDay(true) : undefined}
+                questionPanel={questionPanel}
+                extras={extras}
+                answerKit={answerKit}
+                mixRules={mixRules}
+                onBack={leave(closeDetail)}
+                onAddAnother={leave(onAddAnother)}
+                top={banners}
+                sheet={daySheet}
+            />
+        );
+    }
+
+    if (FEATURE_FLAGS.voiceFlowV2) {
+        // H2 / P10: it closes itself only when nothing on it still needs him or says something is wrong.
+        const autoCloseOff = current.some(l => syncQueuedById.get(l.id) !== true) ? 'not_queued'
+            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed' : null;
+        return (
+            <SavedScreen
+                day={day}
+                recordingKey={result.key}
+                placeLabel={placeLabel}
+                farmId={farmId}
+                nodes={nodes}
+                unclear={result.unclear}
+                clips={clips}
+                playingId={playback.playingId}
+                progress={playback.progress}
+                lengthOf={id => clipSeconds(id, clips.get(id), playback.lengths)}
+                onTogglePlay={id => { const clip = clips.get(id); if (clip) void playback.toggle(id, clip); }}
+                sync={sync}
+                syncQueuedOf={id => syncQueuedById.get(id)}
+                confirmed={confirmed}
+                onEdit={onEditOne}
+                onAddAnother={leave(onAddAnother)}
+                onTellMore={onTellPart}
+                onChangeDay={moveDay ? () => setPickingDay(true) : undefined}
+                pickingDay={pickingDay}
+                questionPanel={questionPanel}
+                extras={extras}
+                answerKit={answerKit}
+                mixRules={mixRules}
+                autoCloseOff={autoCloseOff}
+                onOpenDetail={() => {
+                    logger.info('voice_v2.saved.detail_opened', { component: 'SavedScreen', action: 'detail_opened', logCount: current.length });
+                    setDetailOf(result.key);
+                }}
+                onAutoClose={leave(() => {
+                    logger.info('voice_v2.saved.auto_close', { component: 'SavedScreen', action: 'auto_close', sync, logCount: current.length });
+                    // The app's own toast event (`app/compositionRoot.ts`), with the same honest claim as the title.
+                    window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: closedToastOf(sync, language), type: 'success' } }));
+                    (onAutoClose ?? onBack)();
+                })}
+                days={daysRecordedThisMonth(history)}
+                onBack={leave(onBack)}
+                top={banners}
+                sheet={daySheet}
+            />
+        );
+    }
+
+    return (
+        <>
+        {banners}
         <VoiceResultScreen
             day={day}
             recordingKey={result.key}
@@ -218,36 +350,21 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             onTogglePlay={id => { const clip = clips.get(id); if (clip) void playback.toggle(id, clip); }}
             sync={sync}
             syncQueuedOf={id => syncQueuedById.get(id)}
-            canConfirm={mayConfirmOwn && !!verifierUserId && confirmable.length > 0}
+            canConfirm={canConfirm}
             confirmed={confirmed}
             confirmFailed={!!trust.failed}
-            onConfirm={() => { void (async () => { for (const l of confirmable) await trust.confirm(l.id, basis, l.contentVersion); })(); }}
-            onEdit={id => leave(() => onEdit(current.find(l => l.id === id) ?? primary))()}
-            onBack={leave(onBack)}
+            onConfirm={onConfirm}
+            onEdit={onEditOne}
+            onBack={leave(detail ? closeDetail : onBack)}
             onAddAnother={leave(onAddAnother)}
-            onTellMore={(part: PartKey) => leave(() => (onTellMore ? onTellMore(part) : onAddAnother()))()}
+            onTellMore={onTellPart}
             questionPanel={questionPanel}
             extras={extras}
             onChangeDay={moveDay ? () => setPickingDay(true) : undefined}
             answerKit={answerKit}
             mixRules={mixRules}
         />
-        {moveDay && pickingDay && (
-            <DayPickSheet
-                value={primary.date}
-                onPick={key => {
-                    setPickingDay(false);
-                    if (key === primary.date) return;
-                    void moveDay(current, key).catch((error: unknown) => {
-                        // Never silent: he is told the day did not change (pressing again is safe — the same move is
-                        // queued once, `MoveDailyLogCommand`), and what failed is kept in the log.
-                        console.error('VoiceResultContainer: the day could not be changed', error);
-                        window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: RS.dayNotMoved, type: 'error' } }));
-                    });
-                }}
-                onClose={() => setPickingDay(false)}
-            />
-        )}
+        {daySheet}
         </>
     );
 };

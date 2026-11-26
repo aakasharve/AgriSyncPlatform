@@ -47,9 +47,20 @@
  * (manual submit / note edit / verify — each calls `notify()` instead of
  * touching Dexie or a backend, so the farmer-facing message is "not
  * available here", never a fake success toast).
+ *
+ * spec: voice-flow-v2-2026-11-23 (Task 13b) — WITH `VITE_VOICE_FLOW_V2=1` the
+ * voice stub instead walks `preview/previewVoiceJourney.ts`: the real step
+ * list ticks on the events the real save path emits, the fixture parse is
+ * built into logs by the save's own factory and added to the in-memory
+ * history (never Dexie), and the real result screen opens on them. Without
+ * the flag the stub is exactly the notice above.
  */
 import { useCallback, useState } from 'react';
 import { openCorrection } from '../../../core/speak/speakStore';
+import { FEATURE_FLAGS } from '../../../app/featureFlags';
+import type { VoiceResultState } from '../../../app/hooks/useVoiceAutoSave';
+import type { LastSavedLogSummaryItem } from '../../../app/uiRuntimeTypes';
+import { recordingMs, runPreviewVoiceJourney } from './previewVoiceJourney';
 
 import { useLogContext } from '../../../app/context/LogContext';
 import type { ManualSubmitOutcome } from '../../../app/hooks/useLogCommands.types';
@@ -62,6 +73,7 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 import type {
     AgriLogResponse,
     AppStatus,
+    AudioData,
     CropProfile,
     DailyLog,
     DetailedWeather,
@@ -80,6 +92,8 @@ export interface PreviewDataState {
     farmerProfile: FarmerProfile;
     setFarmerProfile: React.Dispatch<React.SetStateAction<FarmerProfile>>;
     history: DailyLog[];
+    /** spec voice-flow-v2-2026-11-23 — the flag-on voice harness adds the logs it "saved" here (in memory only). */
+    setHistory?: React.Dispatch<React.SetStateAction<DailyLog[]>>;
     plannedTasks: PlannedTask[];
     setPlannedTasks: React.Dispatch<React.SetStateAction<PlannedTask[]>>;
     ledgerDefaults: LedgerDefaults;
@@ -110,12 +124,37 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const [draftLog, setDraftLog] = useState<AgriLogResponse | null>(null);
     const [error] = useState<string | null>(null);
 
-    const handleAudioReady = useCallback(async () => {
+    // spec voice-flow-v2-2026-11-23 (Task 13b) — the result screen's inputs (the real app's useVoiceAutoSave / runtime).
+    const [voiceResult, setVoiceResult] = useState<VoiceResultState | null>(null);
+    const [lastSavedLogIds, setLastSavedLogIds] = useState<string[]>([]);
+    const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
+    const { setHistory, crops, farmerProfile } = data;
+    const logScope = context.logScope;
+    const runJourney = useCallback(async (input: 'audio' | 'text', durationMs?: number) => {
+        if (!setHistory) return;
+        await runPreviewVoiceJourney({
+            input, durationMs, scope: logScope, crops, profile: farmerProfile,
+            setStatus, setHistory, setVoiceResult,
+            setLastSaved: (ids, summary) => { setLastSavedLogIds(ids); setLastSavedLogSummary(summary); },
+            // `&queued=1`: behave as a phone whose save queued the record, so the 30 s self-close can be seen (dev only).
+            simulateQueued: typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('queued') === '1',
+        });
+    }, [setHistory, logScope, crops, farmerProfile]);
+
+    const handleAudioReady = useCallback(async (audio?: AudioData) => {
+        if (FEATURE_FLAGS.voiceFlowV2 && setHistory) {
+            await runJourney('audio', await recordingMs(audio));
+            return;
+        }
         notify('Voice capture needs the AI backend — not available in this preview.');
-    }, [notify]);
+    }, [notify, runJourney, setHistory]);
     const handleTextReady = useCallback(async () => {
+        if (FEATURE_FLAGS.voiceFlowV2 && setHistory) {
+            await runJourney('text');
+            return;
+        }
         notify('Voice capture needs the AI backend — not available in this preview.');
-    }, [notify]);
+    }, [notify, runJourney, setHistory]);
 
     // ── Weather — honest "no location behind this seed" state. The REAL
     // WeatherWidget (mounted by the REAL CompactWeatherChip on tap) owns
@@ -148,6 +187,7 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         setMode('voice');
         setDraftLog(null);
         setRecordingSegment(null);
+        setVoiceResult(null);
     }, []);
 
     // ── Local-only sheet state (unused by the log/reflect/compare views
@@ -268,6 +308,10 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         // for a session with no farm and no pending capture.
         continuityLevel: null,
         savedPendingCaptureId: null,
+        // spec voice-flow-v2-2026-11-23 — set only by the flag-on harness; no farm role (no "पक्कं आहे"), no day move.
+        voiceResult,
+        farmRole: undefined,
+        moveSavedDay: undefined,
         activeFarmId: null,
         showNoWorkReason: false,
         setShowNoWorkReason: () => {},
@@ -280,8 +324,8 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         handleManualSubmit, handleUpdateNote,
 
         handleReset,
-        lastSavedLogSummary: [],
-        lastSavedLogIds: [],
+        lastSavedLogSummary,
+        lastSavedLogIds,
 
         getTodayCounts,
         getContextColorIndicator,

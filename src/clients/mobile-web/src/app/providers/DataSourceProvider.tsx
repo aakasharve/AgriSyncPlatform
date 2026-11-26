@@ -30,7 +30,7 @@ import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/Voi
 
 // --- CONTEXT ---
 
-interface DataSourceContextValue {
+export interface DataSourceContextValue {
     dataSource: AppDataSource;
     auditPort: AuditPort;
     isDemoMode: boolean;
@@ -39,6 +39,15 @@ interface DataSourceContextValue {
 }
 
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
+
+/**
+ * spec: voice-flow-v2-2026-11-23 (Task 13b) — hands a GIVEN value to `useDataSource()`, with none of the provider's
+ * start-up work (no Dexie init, no sync workers). For the dev-only preview, whose screens read `useDataSource()` but
+ * must never save; the app's own tree keeps `DataSourceProvider` above.
+ */
+export const DataSourceValueProvider: React.FC<{ value: DataSourceContextValue; children: React.ReactNode }> = ({ value, children }) => (
+    <DataSourceContext.Provider value={value}>{children}</DataSourceContext.Provider>
+);
 
 // --- PROVIDER ---
 

@@ -29,7 +29,8 @@ import { formatFarmerLogTime } from '../../../../core/navigation/helpers';
 import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
 // The ring's pure parts by file, not its barrel: this model is read by the activity feed on every app load, and the
 // barrel also evaluates the canvas engines (only the result screen, loaded on demand, needs those).
-import { buildNodes, type CategoryId, type RingNodeData } from '../shramsathi/understandingRing/categories';
+import { buildNodes, CATEGORY_META, type CategoryId, type RingNodeData } from '../shramsathi/understandingRing/categories';
+import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understandingRing/dayCategoryCoverage';
 import type { IconName } from '../shramsathi/understandingRing/icons';
 import { productBoxesOf, withoutTaskPrefix, type ProductBox } from './productModel';
@@ -737,8 +738,30 @@ export function phrasesByPart(runs: readonly WordRun[]): Array<{ part: PartKey; 
  * ring stays grey — a part that was not told shows as the red X (an invitation, never a 0).
  */
 export function ringNodesForDay(logs: readonly DailyLog[], date: string | undefined): RingNodeData[] {
+    if (FEATURE_FLAGS.voiceFlowV2) return ringNodesV2(dayCategoryStates(logs, date, COVERAGE));
     return buildNodes(dayCategoryStates(logs, date, COVERAGE)).map(n => (n.state === 'neutral' ? { ...n, state: 'missed' as const } : n));
 }
+
+/**
+ * spec voice-flow-v2-2026-11-23 — founder 2026-11-23: "there is no field called पीक and it would always remain blank, so remove
+ * that, and instead add Disturbance - अडथळा". With the v2 flag: no "पीक निरीक्षण / विशेष बाब" orb (what he says about the crop is
+ * still read into "निरीक्षण आणि टीप"); "अडथळा" is always on the ring — lit when he told one, and when he did not it stays
+ * grey, never the red X: a day without a disturbance is a normal day, and a red invitation would ask him to invent one.
+ */
+export function ringNodesV2(states: Partial<Record<CategoryId, RingNodeData['state']>>): RingNodeData[] {
+    return RING_V2_ORDER.filter(id => id === 'blockers' || states[id] !== undefined).map(id => {
+        if (id === 'blockers') {
+            return { ...CATEGORY_META.blockers, label: RING_V2_BLOCKER_LABEL, state: states.blockers === 'told' ? 'told' as const : 'neutral' as const };
+        }
+        const state = states[id] === 'neutral' ? 'missed' as const : states[id] as RingNodeData['state'];
+        return { ...CATEGORY_META[id], state };
+    });
+}
+
+/** The v2 ring, clockwise from the top: the old order without 'cropNote'; 'blockers' always present. */
+const RING_V2_ORDER: readonly CategoryId[] = ['work', 'labour', 'inputs', 'water', 'machinery', 'blockers', 'expenses', 'observations', 'reminders'];
+/** The founder's word for the orb (2026-11-23). PROPOSED (Marathi) until his string review. */
+const RING_V2_BLOCKER_LABEL = 'अडथळा';
 
 /** Which part a ring orb belongs to, so tapping a red orb opens the mic to tell it. */
 export const PART_OF_NODE: Partial<Record<CategoryId, PartKey>> = {

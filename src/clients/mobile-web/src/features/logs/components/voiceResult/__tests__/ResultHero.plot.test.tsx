@@ -124,7 +124,13 @@ describe('the day-score meter is drawn in exactly the places listed here (Result
         const readers = sourceFiles(SRC)
             .filter(f => readFileSync(f, 'utf8').includes('usePlotDayUnderstanding') && !/usePlotDayUnderstanding\.ts$/.test(f))
             .map(f => relative(SRC, f).split(sep).join('/'));
-        expect(readers).toEqual(['features/logs/components/voiceResult/ResultHero.tsx']);
+        // spec voice-flow-v2-2026-11-23 (F3): the v2 saved card (the result screen's first view behind `voiceFlowV2`) drew this same
+        // meter through ResultHero; it now draws it as the approved design's dial, reading the same hook the same way. Still one
+        // score, in one place: the result screen.
+        expect(readers.sort()).toEqual([
+            'features/logs/components/voiceFlowV2/SavedMeterGauge.tsx',
+            'features/logs/components/voiceResult/ResultHero.tsx',
+        ]);
     });
 
     it('the reflect (आढावा) sources carry no "/१०" meter text and no daily points list', () => {
