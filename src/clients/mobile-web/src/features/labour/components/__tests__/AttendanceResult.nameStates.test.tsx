@@ -71,7 +71,7 @@ describe('हजेरी confirm card — every spoken name says where it stand
         expect(within(screen.getByTestId('attendance-name-बाळू')).getByRole('button', { name: 'सारखं नाव — कोण?' })).toBeInTheDocument();
 
         // Marathi digits, the founder's words exactly
-        expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('२ नावांची हजेरी लागली नाही');
+        expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('2 नावांची हजेरी लागली नाही');
 
         // बरोबर still writes exactly today's marks: गणेश only; the count he said is untouched
         confirm();
@@ -90,7 +90,7 @@ describe('हजेरी confirm card — every spoken name says where it stand
         fireEvent.click(within(list).getByTestId('attendance-pick-op-balu-2'));
         expect(screen.queryByTestId('attendance-pick-list')).toBeNull();
         expect(screen.getByTestId('attendance-name-बाळू')).toHaveTextContent('यादीत आहे');
-        expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('१ नावांची हजेरी लागली नाही');
+        expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('1 नावाची हजेरी लागली नाही');
         confirm();
         expect(markedIds().sort()).toEqual(['op-balu-2', 'op-ganesh']);
     });
@@ -131,7 +131,7 @@ describe('हजेरी confirm card — every spoken name says where it stand
 
         h.fetchOperators.mockRejectedValueOnce(new Error('Network Error'));
         render(<AttendanceResult draft={{ ...base, labour }} anchor={anchor} farmId={FARM} onConfirm={vi.fn()} onSpeakMore={vi.fn()} />);
-        await waitFor(() => expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('३ नावांची हजेरी लागली नाही'));
+        await waitFor(() => expect(screen.getByTestId('attendance-unmarked-line')).toHaveTextContent('3 नावांची हजेरी लागली नाही'));
         expect(screen.getByTestId('attendance-names')).not.toHaveTextContent('यादीत');
     });
 

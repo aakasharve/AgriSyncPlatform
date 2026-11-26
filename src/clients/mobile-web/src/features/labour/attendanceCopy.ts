@@ -6,8 +6,6 @@
  * on these surfaces; a missing string is a founder question, never a guess.
  * Numerals follow his convention: Latin digits (DM Sans) for quantities.
  */
-import { digitsFor } from '../../shared/utils/marathiDigits';
-
 export const ATTENDANCE_COPY = {
     /** State B — the reason under the inactive hero. Not a permission word anywhere. */
     noAnchorReason: 'आजच्या कामात किती जण होते ते अजून समजलं नाही. आधी आजचं काम सांगा.',
@@ -73,7 +71,7 @@ export const ATTENDANCE_COPY = {
 /**
  * Repair FIX-1 item 6 (R2-B 19-B, founder 27 Nov) — where each spoken name stands on the confirm card, said BEFORE "बरोबर".
  * The six Marathi state words are the founder's own; the add form's words are the existing add's (AttendanceRoster /
- * FieldOperatorPicker). English twins follow `TAP_WORDS` in AttendanceResult. The count is in Marathi digits in Marathi mode.
+ * FieldOperatorPicker). English twins follow `TAP_WORDS` in AttendanceResult. The count uses Latin digits like the card's head count; one name is singular.
  */
 export const NAME_STATE_COPY = {
     mr: {
@@ -82,7 +80,8 @@ export const NAME_STATE_COPY = {
         pickFromList: 'यादीतून निवडा',
         addNew: 'नवीन नाव जोडा',
         sharedWho: 'सारखं नाव — कोण?',
-        unmarkedLine: (n: number) => `${digitsFor(n, 'mr')} नावांची हजेरी लागली नाही`,
+        // Latin digits, like the head count on the same card (this file's rule above); one name is singular ("नावाची").
+        unmarkedLine: (n: number) => `${n} ${n === 1 ? 'नावाची' : 'नावांची'} हजेरी लागली नाही`,
         sameNameNote: 'सारखं नाव — माणूस वेगळा',
         namePlaceholder: 'नाव',
         fullNamePlaceholder: 'पूर्ण नाव किंवा ओळख — हवं तर',
