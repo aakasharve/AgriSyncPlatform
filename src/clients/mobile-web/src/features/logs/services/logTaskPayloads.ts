@@ -42,6 +42,11 @@ export function ensureUuid(localId: string | undefined): string {
     return idGenerator.generate();
 }
 
+/** True when `value` is a GUID the contract's `ZGuid` accepts (the same regex). Never mints one. */
+export function isWireUuid(value: unknown): value is string {
+    return typeof value === 'string' && UUID_REGEX.test(value);
+}
+
 
 export function normalizeName(value?: string): string {
     return (value || '').trim().toLowerCase();

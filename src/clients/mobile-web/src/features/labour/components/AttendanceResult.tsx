@@ -19,7 +19,7 @@ import React from 'react';
 import { Check, Mic, Pencil, Plus } from 'lucide-react';
 import type { AgriLogResponse } from '../../../types';
 import type { LabourAnchor } from '../labourAnchor';
-import { ATTENDANCE_COPY as COPY, NAME_STATE_COPY } from '../attendanceCopy';
+import { ATTENDANCE_COPY as COPY, NAME_STATE_COPY, THROUGH_COPY } from '../attendanceCopy';
 import { selectLadderRung } from '../attendanceLadder';
 import { findDayContradictions, type DayContradiction, type DayShift } from '../attendanceContradiction';
 import { selectConfirmSurface } from '../attendanceDisagreement';
@@ -61,6 +61,10 @@ const TAP_WORDS = {
 /** Repair FIX-1 item 6 — where a spoken name stands: 'unknown' while the farm's list is not here (no state is claimed). */
 type NameState = 'unknown' | 'onList' | 'notOnList' | 'shared';
 
+/** Repair FIX-1 item 8 — the two "कोणामार्फत?" answers that are not a person (shown, never sent). */
+const NOBODY = '__nobody__';
+const NOT_KNOWN = '__not_known__';
+
 const AttendanceResult: React.FC<AttendanceResultProps> = ({
     draft, anchor, farmId, workDate, onConfirm, onSpeakMore,
 }) => {
@@ -76,6 +80,13 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const [newFullName, setNewFullName] = React.useState('');
     const [adding, setAdding] = React.useState(false);
     const [addFailed, setAddFailed] = React.useState(false);
+    // Repair FIX-1 item 8 — "कोणामार्फत?" per labour line (by the line's id): a field operator id, or his answer that
+    // nobody / he does not know. Only a person ever reaches the record; nothing chosen = nothing sent.
+    const throughWords = language === 'en' ? THROUGH_COPY.en : THROUGH_COPY.mr;
+    const [through, setThrough] = React.useState<Record<string, string>>({});
+    const [throughOpen, setThroughOpen] = React.useState<string | null>(null);
+    // A record already saved (an edit) cannot carry it yet: the server has no door for a saved entry.
+    const asksThrough = !draft.originalLogId;
     // Lane OF — each person's day as he tapped it (absent = as said: an unqualified "आले" is हजर).
     const [tapMarks, setTapMarks] = React.useState<Record<string, TapMark>>({});
     // Task 3.5c — the farm's FieldOperator roster, fetched for name→identity
@@ -187,6 +198,28 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
             setAdding(false);
         }
     };
+    const throughLabel = (lineId: string): string | null => {
+        const answer = through[lineId];
+        if (!answer) return null;
+        if (answer === NOBODY) return throughWords.nobody;
+        if (answer === NOT_KNOWN) return throughWords.notKnown;
+        return roster?.find((o) => o.id === answer)?.displayName ?? null;
+    };
+    const chooseThrough = (lineId: string, answer: string) => {
+        setThrough((t) => ({ ...t, [lineId]: answer }));
+        setThroughOpen(null);
+    };
+    /** The draft "बरोबर" saves: unchanged unless he chose a person for a line, which then rides that line only. */
+    const withThrough = (d: AgriLogResponse): AgriLogResponse => {
+        const people = Object.entries(through).filter(([, answer]) => answer !== NOBODY && answer !== NOT_KNOWN);
+        if (!asksThrough || people.length === 0) return d;
+        const byLine = new Map(people);
+        return {
+            ...d,
+            labour: d.labour.map((e) => (byLine.has(e.id) ? { ...e, engagedThroughFieldOperatorId: byLine.get(e.id) } : e)),
+        };
+    };
+
     // The people "यादीतून निवडा" offers: the farm's list, without anyone already on this card (never one person twice);
     // "सारखं नाव — कोण?" offers only the people who carry that name, told apart (buildPickerRows, B2).
     const chooserRows = (name: string, mode: 'list' | 'shared') => {
@@ -323,6 +356,48 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                         <p className="m-0 text-[13px] font-bold text-slate-600" data-testid="attendance-edit-hint">{tappable.length > 0 ? tapWords.hint : (rosterFailed || !farmId) ? tapWords.offline : tapWords.none}</p>
                     </div>
                 )}
+                {/* Repair FIX-1 item 8 — "कोणामार्फत?" on each labour line of this NEW entry: the farm's people, or "कोणी नाही" /
+                    "माहीत नाही". Optional, never blocks बरोबर (P9); never a count (P7). */}
+                {asksThrough && draft.labour.length > 0 && (
+                    <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" data-testid="attendance-through">
+                        {draft.labour.map((e) => {
+                            const chosen = throughLabel(e.id);
+                            const count = resolveLabourHeadcount(e);
+                            const prefix = draft.labour.length > 1 && count != null ? `${throughWords.crew(count)} · ` : '';
+                            const open = throughOpen === e.id;
+                            return (
+                                <div key={e.id}>
+                                    <button type="button" data-testid={`attendance-through-${e.id}`} aria-expanded={open}
+                                        onClick={() => setThroughOpen(open ? null : e.id)}
+                                        className={`flex min-h-[44px] w-full items-center rounded-xl border px-3 text-left text-[14px] font-extrabold ${chosen ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-700'}`}>
+                                        {prefix}{chosen ? throughWords.chosen(chosen) : throughWords.ask}
+                                    </button>
+                                    {open && (
+                                        <div className="mt-1.5 flex flex-col gap-1.5 rounded-xl border border-slate-100 bg-slate-50 p-2" data-testid={`attendance-through-list-${e.id}`}>
+                                            {buildPickerRows((roster ?? []).filter((o) => o.isActive)).map((row) => (
+                                                <button key={row.operator.id} type="button" data-testid={`attendance-through-pick-${row.operator.id}`}
+                                                    onClick={() => chooseThrough(e.id, row.operator.id)}
+                                                    className="flex min-h-[44px] w-full flex-col items-start justify-center rounded-xl border border-slate-100 bg-white px-3 py-1 text-left">
+                                                    <span className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-slate-800">
+                                                        {row.operator.displayName}
+                                                        {row.tag && <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[13px] font-bold text-slate-500">#{row.tag}</span>}
+                                                    </span>
+                                                    {row.fullName && <span className="block text-[13px] text-slate-500">{row.fullName}</span>}
+                                                </button>
+                                            ))}
+                                            <div className="flex gap-1.5">
+                                                <button type="button" onClick={() => chooseThrough(e.id, NOBODY)}
+                                                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-700">{throughWords.nobody}</button>
+                                                <button type="button" onClick={() => chooseThrough(e.id, NOT_KNOWN)}
+                                                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-700">{throughWords.notKnown}</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
                 {/* D9.5 — sourceText first, then the reading taken. Settled by
                     बरोबर / बदल करा below; NEVER raised as a separate question.
                     "Shankarसोबत 8" stays ONE fact under Shankar's own line —
@@ -428,7 +503,8 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                                 }));
                             });
                         }
-                        onConfirm(draft);
+                        // FIX-1 item 8: the draft as it was, plus the person he chose under "कोणामार्फत?" (nothing else changes).
+                        onConfirm(withThrough(draft));
                     }}
                     className={`flex flex-[2] items-center justify-center gap-2 rounded-[14px] py-3.5 text-[16px] font-extrabold text-white transition-transform active:scale-[0.98] ${contradictions.length > 0 ? 'bg-slate-300' : 'bg-emerald-600'}`}>
                     <Check size={18} /> {COPY.confirmButton}

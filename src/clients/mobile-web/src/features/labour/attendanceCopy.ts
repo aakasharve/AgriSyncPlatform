@@ -105,3 +105,24 @@ export const NAME_STATE_COPY = {
         close: 'Close',
     },
 } as const;
+
+/**
+ * Repair FIX-1 item 8 (R2-B 19-E step 1, founder 27 Nov) — "कोणामार्फत?" on a new entry's labour line. The three Marathi
+ * answers are the founder's words; "कोणामार्फत: ‹नाव›" (the answer shown back) and the count prefix are new (PROPOSED).
+ */
+export const THROUGH_COPY = {
+    mr: {
+        ask: 'कोणामार्फत?',
+        nobody: 'कोणी नाही',
+        notKnown: 'माहीत नाही',
+        chosen: (answer: string) => `कोणामार्फत: ${answer}`,
+        crew: (n: number) => `${n} जण`,
+    },
+    en: {
+        ask: 'Through whom?',
+        nobody: 'Nobody',
+        notKnown: 'Not known',
+        chosen: (answer: string) => `Through: ${answer}`,
+        crew: (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`,
+    },
+} as const;

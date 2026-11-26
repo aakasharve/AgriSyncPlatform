@@ -134,6 +134,15 @@ export interface LabourEvent {
      */
     attributedOperators?: AttributedOperator[];
 
+    /**
+     * Repair FIX-1 item 8 (R2-B 19-E step 1, founder 27 Nov) — "कोणामार्फत?": THROUGH WHOM this crew came (a field
+     * operator id of THIS farm), chosen by the farmer on a NEW entry before it is saved. Sent as the contract's
+     * `labour[].engagedThroughFieldOperatorId` on create_daily_log. Absent = nobody said ("कोणी नाही" / "माहीत नाही"
+     * included) — never guessed from the role or from who typed it. Engagement-scoped, never a count (P7). Not read
+     * back by the pull yet, and not changeable on a saved entry yet (the server has no door for that).
+     */
+    engagedThroughFieldOperatorId?: string;
+
     // Labour V1 Task 7 — client-minted, stable engagement id (A9). Minted once at
     // the single shared write boundary (`ensureLabourAssignmentIds`, called from
     // `LogCommandServiceImpl.confirmAndSave`) so the same engagement keeps one
