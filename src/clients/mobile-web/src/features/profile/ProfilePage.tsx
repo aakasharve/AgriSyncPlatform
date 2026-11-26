@@ -47,6 +47,10 @@ import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
 import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, type HubStepId } from './hubSteps';
+import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
+import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
+import { digitsFor } from '../../shared/utils/marathiDigits';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -235,6 +239,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+    // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
+    const scheduleChoices = usePlotScheduleChoices();
+    const todayKey = getDateKey();
+    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey).length, [crops, scheduleChoices, todayKey]);
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner-only team roster, read ONCE here:
     // the hub's "माझी टीम" row shows how many people wait for an answer, the team page lists them.
@@ -390,7 +398,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'water') return waterCount > 0 ? `${waterCount} स्रोत` : 'विहीर, बोअर, कालवा, शेततळं';
                     if (id === 'motor') return motorCount > 0 ? `${motorCount} मोटर` : 'स्रोतावरची मोटर';
                     if (id === 'power') return doneIds.has('power') ? 'विजेच्या वेळा जतन झाल्या' : 'सिंगल फेज आणि थ्री फेज';
-                    if (id === 'structure') return crops.length > 0 ? `${crops.length} पिकं · ${plotCount} प्लॉट` : 'पिकं आणि प्लॉट जोडा';
+                    if (id === 'structure') {
+                        if (crops.length === 0) return 'पिकं आणि प्लॉट जोडा';
+                        // Marathi digits, like every other "पिकं · प्लॉट" line in the app; the pending count (FIX-1 item 5) only when there is one.
+                        const line = `${digitsFor(crops.length, 'mr')} पिकं · ${digitsFor(plotCount, 'mr')} प्लॉट`;
+                        return pendingPlotCount > 0 ? `${line} · ${PLOT_PENDING_WORDS.mr.hubCount(pendingPlotCount)}` : line;
+                    }
                     if (id === 'machines') return machineCount > 0 ? `${machineCount} यंत्रं` : 'ट्रॅक्टर, फवारणी यंत्र';
                     if (id === 'health') return 'अहवाल जोडण्याची सोय अजून नाही';
                     return '';
