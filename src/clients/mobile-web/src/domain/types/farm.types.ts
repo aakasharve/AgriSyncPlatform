@@ -228,6 +228,11 @@ export interface ElectricityTimingConfiguration {
     singlePhase: ElectricityPhaseSchedule;
     threePhase: ElectricityPhaseSchedule;
     updatedAt?: string;
+    /**
+     * Set only when the farmer presses जतन करा on the power page. The app's own starting timetable
+     * never carries it, so the Setup Hub can tell "saved by him" from "the default" (repair FIX-1 item 3).
+     */
+    savedByFarmerAt?: string;
 }
 
 export interface FarmMotor {

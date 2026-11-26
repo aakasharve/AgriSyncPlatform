@@ -83,7 +83,8 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(screen.getByTestId('page-title')).toHaveTextContent('सेट-अप केंद्र');
         expect(screen.queryByText(/Profile/)).toBeNull();
         const farm = screen.getByTestId('hub-farm');
-        for (const title of ['माझी ओळख', 'पिकं आणि प्लॉट', 'पाणी आणि वीज', 'यंत्रं', 'माती व पाणी अहवाल']) {
+        // repair FIX-1 item 3: water, motor and power are three steps of the one पाणी आणि वीज page
+        for (const title of ['माझी ओळख', 'पाण्याचे स्रोत', 'मोटर', 'वीज आणि वेळापत्रक', 'पिकं आणि प्लॉट', 'यंत्रं', 'माती व पाणी अहवाल']) {
             expect(within(farm).getByText(title)).toBeInTheDocument();
         }
         expect(screen.getByTestId('hub-row-health')).toHaveTextContent('लवकरच');
@@ -100,12 +101,14 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(screen.getByTestId('hub-verified')).toHaveTextContent('ओळख पडताळलेली');
     });
 
-    it('counts only the steps that can be done (4) and "पुढचं" opens the next one; back returns to the hub', () => {
+    it('counts only the steps that can be done (6) and "पुढचं" opens the next one; back returns to the hub', () => {
         mount();
-        expect(screen.getByTestId('hub-progress')).toHaveTextContent('4 पैकी 1 पूर्ण');
+        expect(screen.getByTestId('hub-progress')).toHaveTextContent('6 पैकी 1 पूर्ण');
+        // repair FIX-1 item 3: infrastructure before crop and plot — the next step is the water source
+        expect(screen.getByTestId('hub-next')).toHaveTextContent('पुढचं: पाण्याचे स्रोत');
         fireEvent.click(screen.getByTestId('hub-next'));
-        expect(screen.getByTestId('page-title')).toHaveTextContent('पिकं आणि प्लॉट');
-        expect(screen.getByTestId('hub-page-structure')).toBeInTheDocument();
+        expect(screen.getByTestId('page-title')).toHaveTextContent('पाणी आणि वीज');
+        expect(screen.getByTestId('hub-page-utils')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('page-back'));
         expect(screen.getByTestId('page-title')).toHaveTextContent('सेट-अप केंद्र');
     });
@@ -202,8 +205,8 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
 
     it('the "?" on a row opens its plain guide', () => {
         mount();
-        fireEvent.click(screen.getByTestId('hub-help-utils'));
-        expect(screen.getByTestId('hub-row-utils')).toHaveTextContent('काय करायचं');
+        fireEvent.click(screen.getByTestId('hub-help-water'));
+        expect(screen.getByTestId('hub-row-water')).toHaveTextContent('काय करायचं');
     });
 
     it('the language page sets the language', () => {
@@ -216,7 +219,7 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
 
     it('पाणी आणि वीज saves a new source through onUpdateProfile and says it is on this phone only', () => {
         const hs = mount();
-        fireEvent.click(screen.getByTestId('hub-open-utils'));
+        fireEvent.click(screen.getByTestId('hub-open-water'));
         expect(screen.getByTestId('page-title')).toHaveTextContent('पाणी आणि वीज');
         expect(screen.getByTestId('setup-this-phone-only')).toBeInTheDocument();
         expect(screen.getByTestId('phase-threePhase')).toBeInTheDocument();

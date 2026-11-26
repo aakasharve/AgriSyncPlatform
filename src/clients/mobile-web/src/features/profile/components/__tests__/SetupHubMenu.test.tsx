@@ -72,10 +72,12 @@ describe('SetupHubMenu - the setup progress count reads the right way round', ()
     });
 });
 
-// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माणसं → माझी टीम" is its own row,
+// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम" is its own row,
 // the farm's permanent code sits on the top card, and a waiting request is counted on the row.
+// Repair FIX-1 item 3: the row sits where the `team` step is in the setup sequence.
 describe('SetupHubMenu — माझी टीम and the farm code (PLR-D7 M1 step 2)', () => {
     afterEach(() => cleanup());
+    const teamStep = [{ id: 'team' as const, tab: 'team' as const, label: 'माझी टीम', icon: null }];
 
     it('shows the farm code on the top card only when the server sent one', () => {
         const { rerender } = render(<SetupHubMenu {...baseProps()} farmCode="K7M2QP" />);
@@ -87,25 +89,25 @@ describe('SetupHubMenu — माझी टीम and the farm code (PLR-D7 M1 s
 
     it('the माझी टीम row opens the team page, and says how many people wait for an answer', () => {
         const onOpenTeam = vi.fn();
-        const { rerender } = render(<SetupHubMenu {...baseProps()} onOpenTeam={onOpenTeam} />);
+        const { rerender } = render(<SetupHubMenu {...baseProps()} items={teamStep} onOpenTeam={onOpenTeam} />);
         const row = screen.getByTestId('hub-team');
         expect(row).toHaveTextContent('माझी टीम');
         expect(row).toHaveTextContent('कोण, कोणती भूमिका · नवीन व्यक्ती जोडा');
         row.click();
         expect(onOpenTeam).toHaveBeenCalledTimes(1);
 
-        rerender(<SetupHubMenu {...baseProps()} onOpenTeam={onOpenTeam} teamRequestCount={2} />);
+        rerender(<SetupHubMenu {...baseProps()} items={teamStep} onOpenTeam={onOpenTeam} teamRequestCount={2} />);
         expect(screen.getByTestId('hub-team')).toHaveTextContent('2 जण आत येऊ इच्छितात');
     });
 
     it('a मुकादम\'s row says he looks at his crew (no request count, no add line)', () => {
-        render(<SetupHubMenu {...baseProps()} onOpenTeam={vi.fn()} teamViewOnly teamRequestCount={3} />);
+        render(<SetupHubMenu {...baseProps()} items={teamStep} onOpenTeam={vi.fn()} teamViewOnly teamRequestCount={3} />);
         expect(screen.getByTestId('hub-team')).toHaveTextContent('माझ्या टोळीतले लोक');
         expect(screen.getByTestId('hub-team')).not.toHaveTextContent('आत येऊ');
     });
 
     it('no माझी टीम row without an owner-tier door (a worker\'s hub has none)', () => {
-        render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
+        render(<SetupHubMenu {...baseProps()} items={teamStep} onOpenLabour={vi.fn()} />);
         expect(screen.queryByTestId('hub-team')).toBeNull();
     });
 });

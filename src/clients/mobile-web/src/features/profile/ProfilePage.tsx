@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, CreditCard, Mic, BookOpen, Check } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, CreditCard, Mic, BookOpen, Check, Droplets, Settings2, Users } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
@@ -46,6 +46,7 @@ import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
+import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, type HubStepId } from './hubSteps';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -60,6 +61,28 @@ const HUB_TITLE: Record<'identity' | 'structure' | 'utils' | 'machines' | 'healt
     utils: 'पाणी आणि वीज',
     machines: 'यंत्रं',
     health: 'माती व पाणी अहवाल',
+};
+
+/** Repair FIX-1 item 3 — each hub STEP's title (water, motor and power are three steps of the one पाणी आणि वीज page). */
+const STEP_LABEL: Record<HubStepId, string> = {
+    identity: HUB_TITLE.identity,
+    water: 'पाण्याचे स्रोत',
+    motor: 'मोटर',
+    power: 'वीज आणि वेळापत्रक',
+    structure: HUB_TITLE.structure,
+    team: TEAM_COPY.pageTitle,
+    machines: HUB_TITLE.machines,
+    health: HUB_TITLE.health,
+};
+const STEP_ICON: Record<HubStepId, React.ReactNode> = {
+    identity: <User size={20} />,
+    water: <Droplets size={20} />,
+    motor: <Settings2 size={20} />,
+    power: <Zap size={20} />,
+    structure: <Sprout size={20} />,
+    team: <Users size={20} />,
+    machines: <Tractor size={20} />,
+    health: <FlaskConical size={20} />,
 };
 
 /**
@@ -195,19 +218,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // is read from the farm context, so it follows this switch by itself.
     const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => { switchFarm(farmId); }, [switchFarm]);
 
-    // Guided-setup progress: a section counts as "done" once its core data
-    // exists. Identity = name + village; Crops = at least one crop. The rest
-    // are refined as their completion signals are wired.
+    // Guided-setup progress: a step counts as "done" once its core data is really saved.
+    // Identity = name + village; water / motor / power = a source / a motor / power times the farmer
+    // saved (repair FIX-1 item 3: three steps, one page); Crops = at least one crop.
     const doneIds = React.useMemo(() => {
-        const s = new Set<ProfileTab>();
+        const s = new Set<HubStepId>();
         if (profile.name && profile.village) s.add('identity');
+        if ((profile.waterResources?.length ?? 0) > 0) s.add('water');
+        if ((profile.motors?.length ?? 0) > 0) s.add('motor');
+        if (powerTimesSaved(profile.electricityTiming)) s.add('power');
         if (crops.length > 0) s.add('structure');
-        if ((profile.waterResources?.length ?? 0) > 0) s.add('utils');
         if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
         // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
         // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
-    }, [profile.name, profile.village, profile.waterResources, profile.machineries, crops.length]);
+    }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
 
@@ -360,30 +385,38 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const waterCount = profile.waterResources?.length ?? 0;
                 const motorCount = profile.motors?.length ?? 0;
                 const machineCount = profile.machineries?.length ?? 0;
-                const subtitleFor = (id: ProfileTab): string => {
+                const subtitleFor = (id: HubStepId): string => {
                     if (id === 'identity') return doneIds.has('identity') ? 'नाव आणि गाव भरलं' : 'नाव आणि गाव भरा';
+                    if (id === 'water') return waterCount > 0 ? `${waterCount} स्रोत` : 'विहीर, बोअर, कालवा, शेततळं';
+                    if (id === 'motor') return motorCount > 0 ? `${motorCount} मोटर` : 'स्रोतावरची मोटर';
+                    if (id === 'power') return doneIds.has('power') ? 'विजेच्या वेळा जतन झाल्या' : 'सिंगल फेज आणि थ्री फेज';
                     if (id === 'structure') return crops.length > 0 ? `${crops.length} पिकं · ${plotCount} प्लॉट` : 'पिकं आणि प्लॉट जोडा';
-                    if (id === 'utils') return waterCount > 0 ? `${waterCount} स्रोत · ${motorCount} मोटर · विजेच्या वेळा` : 'विहीर, मोटर, विजेच्या वेळा';
                     if (id === 'machines') return machineCount > 0 ? `${machineCount} यंत्रं` : 'ट्रॅक्टर, फवारणी यंत्र';
                     if (id === 'health') return 'अहवाल जोडण्याची सोय अजून नाही';
                     return '';
                 };
-                const SETUP_HELP: Partial<Record<ProfileTab, { what: string; do: string; why: string }>> = {
+                // The three water / motor / power steps open one page, so they share its one guide.
+                const UTILS_HELP = { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' };
+                const SETUP_HELP: Partial<Record<HubStepId, { what: string; do: string; why: string }>> = {
                     identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
+                    water: UTILS_HELP,
+                    motor: UTILS_HELP,
+                    power: UTILS_HELP,
                     structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
-                    utils: { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' },
                     machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
                     // P5: no promise of an upload that does not exist.
                     health: { what: 'तुमच्या मातीची आणि पाण्याची तपासणी.', do: 'अहवाल जोडण्याची सोय अजून तयार नाही — लवकरच.', why: 'तयार झाल्यावर तुमच्या मातीप्रमाणे खताचा विचार करता येईल.' },
                 };
-                const menuItems: HubMenuItem[] = sections.map(s => ({
-                    id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id),
-                    done: doneIds.has(s.id), soon: s.id === 'health', help: SETUP_HELP[s.id],
+                // Repair FIX-1 item 3: the founder's order (hubSteps.ts). माझी टीम sits in it for whoever has the team door.
+                const steps = HUB_STEP_ORDER.filter(id => id !== 'team' || openTeam);
+                const menuItems: HubMenuItem[] = steps.map(id => ({
+                    id, tab: HUB_STEP_TAB[id], label: STEP_LABEL[id], icon: STEP_ICON[id], subtitle: subtitleFor(id),
+                    done: doneIds.has(id), soon: id === 'health', help: SETUP_HELP[id],
                 }));
 
-                // Farm-setup progress — one honest count over the setup sections that CAN be done
-                // ('health' cannot: report upload is not built).
-                const setupOrder = sections.map(s => s.id).filter(id => id !== 'health');
+                // Farm-setup progress — one honest count over the setup steps that CAN be done
+                // ('health' cannot: report upload is not built). The team row is not counted here.
+                const setupOrder = steps.filter(id => id !== 'health' && id !== 'team');
                 const doneCount = setupOrder.filter(id => doneIds.has(id)).length;
                 const nextId = setupOrder.find(id => !doneIds.has(id));
                 const setupProgress = {
@@ -391,7 +424,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     total: setupOrder.length,
                     percent: Math.round((doneCount / setupOrder.length) * 100),
                     nextId,
-                    nextLabel: nextId ? sections.find(s => s.id === nextId)?.label : undefined,
+                    nextLabel: nextId ? STEP_LABEL[nextId] : undefined,
                 };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';

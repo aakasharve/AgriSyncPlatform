@@ -163,7 +163,9 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
             setMessage('वेळ दुरुस्त करा, मग जतन करा.');
             return;
         }
-        onUpdate({ ...profile, electricityTiming: { ...draft, updatedAt: systemClock.nowISO() } });
+        const now = systemClock.nowISO();
+        // savedByFarmerAt: the hub's वीज step reads पूर्ण only from a real save (repair FIX-1 item 3).
+        onUpdate({ ...profile, electricityTiming: { ...draft, updatedAt: now, savedByFarmerAt: now } });
         setDirty(false);
         setMessage('वीज वेळ जतन झाली ✓');
     };

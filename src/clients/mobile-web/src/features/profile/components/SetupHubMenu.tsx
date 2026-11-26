@@ -16,6 +16,7 @@
 import React, { useState } from 'react';
 import { BarChart3, CheckCircle2, LogOut, MapPin, ShieldCheck, Sprout, UserPlus, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
+import type { HubStepId } from '../hubSteps';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
@@ -33,7 +34,10 @@ export interface SetupHelp {
 }
 
 export interface HubMenuItem {
-    id: ProfileTab;
+    /** The step (row testids `hub-row-<id>` / `hub-open-<id>` / `hub-help-<id>`). */
+    id: HubStepId;
+    /** The page the row opens (water, motor and power share the one पाणी आणि वीज page). */
+    tab: ProfileTab;
     label: string;
     icon: React.ReactNode;
     subtitle?: string;
@@ -47,7 +51,7 @@ export interface SetupProgressData {
     done: number;
     total: number;
     percent: number;
-    nextId?: ProfileTab;
+    nextId?: HubStepId;
     nextLabel?: string;
 }
 
@@ -81,7 +85,10 @@ interface SetupHubMenuProps {
      * is shown rather than an invented one.
      */
     farmCode?: string | null;
-    /** Opens "माझी टीम": owner tier (to manage) and a मुकादम (to look at his crew); never a worker. */
+    /**
+     * Opens "माझी टीम": owner tier (to manage) and a मुकादम (to look at his crew); never a worker.
+     * The row is drawn where the `team` step sits in `items` (repair FIX-1 item 3: inside the sequence).
+     */
     onOpenTeam?: () => void;
     /** A मुकादम only looks at the team: the row says "माझ्या टोळीतले लोक". */
     teamViewOnly?: boolean;
@@ -187,7 +194,10 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     </div>
                 </GlassCard>
 
-                {setupProgress && <ProgressCard p={setupProgress} onNext={() => setupProgress.nextId && onSelect(setupProgress.nextId)} />}
+                {setupProgress && <ProgressCard p={setupProgress} onNext={() => {
+                    const next = items.find(it => it.id === setupProgress.nextId);
+                    if (next) onSelect(next.tab);
+                }} />}
 
                 {/* spec: plr-d10 lane MU-1 - "माझी शेती व जबाबदाऱ्या": one card per relationship, from the one read model only. Not drawn for a
                     single-farm primary owner with nothing waiting (Scenario A). */}
@@ -200,8 +210,16 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
 
                 <div className="space-y-2" data-testid="hub-farm">
                     <SectionHead title="माझं शेत" />
-                    {items.map(it => (
-                        <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.id)} />
+                    {items.map(it => (it.id === 'team'
+                        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the
+                        // farm QR + code, and the people waiting for the owner's answer. In the sequence since FIX-1 item 3.
+                        ? onOpenTeam && (
+                            <RowLink key={it.id} testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={TEAM_COPY.pageTitle}
+                                line={teamViewOnly ? TEAM_COPY.crewLine : teamRequestCount > 0 ? TEAM_COPY.requestsTitle(teamRequestCount) : TEAM_COPY.hubLine}
+                                badge={teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : undefined}
+                                onClick={onOpenTeam} />
+                        )
+                        : <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.tab)} />
                     ))}
                 </div>
 
@@ -212,17 +230,9 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     </div>
                 )}
 
-                {(onOpenTeam || onOpenLabour || farmSwitcherReady) && (
+                {(onOpenLabour || farmSwitcherReady) && (
                     <div className="space-y-2" data-testid="hub-people">
                         <SectionHead title="माणसं आणि शेती" />
-                        {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the
-                            farm QR + code, and the people waiting for the owner's answer. */}
-                        {onOpenTeam && (
-                            <RowLink testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={TEAM_COPY.pageTitle}
-                                line={teamViewOnly ? TEAM_COPY.crewLine : teamRequestCount > 0 ? TEAM_COPY.requestsTitle(teamRequestCount) : TEAM_COPY.hubLine}
-                                badge={teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : undefined}
-                                onClick={onOpenTeam} />
-                        )}
                         {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree).
                             The subtitle stays `मजुरी` — Task 7 / 7b honesty deletions stand. */}
                         {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title="कामगार व हजेरी" line="मजुरी" onClick={onOpenLabour} />}
