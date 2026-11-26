@@ -57,7 +57,7 @@ export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel
     const language = useOptionalLanguage()?.language;
     const frame = (
         <div className="fixed inset-0 z-[51] flex flex-col bg-[#FBFBF7] text-[#1C1917]" data-testid={testId} style={{ fontFamily: SANS }}>
-            <div className="flex items-center gap-2 px-4 pb-2 pt-[max(8px,env(safe-area-inset-top))]" data-testid="v2-appbar">
+            <div className="flex items-center gap-2 px-4 pb-2 pt-[max(8px,var(--safe-area-inset-top,env(safe-area-inset-top)))]" data-testid="v2-appbar">
                 {onBack && (
                     <button type="button" onClick={onBack} aria-label={backLabel ?? 'मागे'} data-testid="v2-back"
                         className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#DDE3DA] bg-white text-[18px] font-bold">←</button>
@@ -71,7 +71,7 @@ export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3" data-testid="v2-body">{children}</div>
             {footer && (
-                <div className={`shrink-0 pb-[env(safe-area-inset-bottom)] ${plainFooter ? 'bg-[#FBFBF7]' : 'border-t border-[#DDE3DA] bg-white'}`} data-testid="v2-footer">{footer}</div>
+                <div className={`shrink-0 pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom))] ${plainFooter ? 'bg-[#FBFBF7]' : 'border-t border-[#DDE3DA] bg-white'}`} data-testid="v2-footer">{footer}</div>
             )}
         </div>
     );
