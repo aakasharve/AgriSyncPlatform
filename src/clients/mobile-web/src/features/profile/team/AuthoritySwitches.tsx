@@ -15,11 +15,10 @@
 import React, { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { SWITCHABLE_AUTHORITIES } from '../../../core/session/farmAuthorities';
 import type { AuthorityGrant } from '../data/labourPermissionsClient';
 import { expiryUtcForChip } from '../components/responsibilityDuration';
 import { authorityCopy, authorityLabel } from './authorityCopy';
-import { endOf, holds, throughDay, withAuthority, withoutAuthority } from './authoritySwitchModel';
+import { endOf, groupedSwitches, holds, throughDay, withAuthority, withoutAuthority } from './authoritySwitchModel';
 
 export interface AuthorityAccessView {
     /** The server's list for this person (held now, each with its end). */
@@ -50,73 +49,84 @@ export const AuthoritySwitches: React.FC<{ memberId: string; access: AuthorityAc
         setPickedDate('');
     };
 
+    /** One responsibility's row: a still row when it does nothing on this seat, else its switch (unchanged). */
+    const renderSwitch = (name: string) => {
+        if (access.notInForce?.includes(name)) {
+            return (
+                <li key={name} className="list-none rounded-xl border border-slate-200 bg-slate-50 p-2.5"
+                    data-testid={`authority-${name}-${memberId}`} data-on="not-in-force">
+                    <span className="block text-[13.5px] font-bold text-slate-700">{authorityLabel(copy, name)}</span>
+                    <span className="block text-[12px] font-extrabold text-slate-600">{copy.notInForce}</span>
+                    <span className="block text-[11.5px] leading-snug text-slate-500" data-testid={`authority-${name}-rule-${memberId}`}>
+                        {copy.notInForceWhy[name] ?? ''}
+                    </span>
+                </li>
+            );
+        }
+        const on = holds(access.authorities, name);
+        const end = throughDay(endOf(access.authorities, name), language);
+        const note = copy.note[name];
+        return (
+            <li key={name} className="list-none">
+                <button type="button" data-testid={`authority-${name}-${memberId}`} data-on={on ? 'yes' : 'no'}
+                    aria-pressed={on} aria-busy={access.saving} disabled={access.saving}
+                    onClick={() => (on ? access.onChange(withoutAuthority(access.authorities, name)) : setChoosing(choosing === name ? null : name))}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all active:scale-[0.98] disabled:opacity-60 ${on ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-200 bg-white'}`}>
+                    <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        <ShieldCheck size={16} aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                        <span className="block text-[13.5px] font-bold text-slate-800">{authorityLabel(copy, name)}</span>
+                        {on && <span className="block text-[11.5px] font-semibold text-slate-600" data-testid={`authority-${name}-end-${memberId}`}>{end ? copy.until(end) : copy.permanent}</span>}
+                        {note && <span className="block text-[11.5px] leading-snug text-slate-500">{note}</span>}
+                    </span>
+                    <span className="flex-shrink-0 text-[12px] font-extrabold text-slate-600">{on ? copy.on : copy.off}</span>
+                </button>
+                {choosing === name && !on && (
+                    <div className="mt-1.5 space-y-2 rounded-xl border border-emerald-200 bg-white p-2.5" data-testid={`authority-${name}-choose-${memberId}`}>
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" disabled={access.saving} onClick={() => give(name, null)}
+                                data-testid={`authority-${name}-permanent-${memberId}`}
+                                className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[13px] font-bold text-emerald-800 disabled:opacity-60">
+                                {copy.permanent}
+                            </button>
+                            <button type="button" onClick={() => setChoosing(null)}
+                                className="rounded-full px-3 py-1.5 text-[13px] font-bold text-stone-600 ring-1 ring-stone-300">
+                                {copy.cancel}
+                            </button>
+                        </div>
+                        <label className="block text-[12.5px] font-bold text-slate-700">
+                            {copy.untilDate} · {copy.pickDate}
+                            <input type="date" value={pickedDate} disabled={access.saving}
+                                data-testid={`authority-${name}-date-${memberId}`}
+                                onChange={(e) => {
+                                    const iso = e.target.value;
+                                    setPickedDate(iso);
+                                    if (iso) give(name, expiryUtcForChip('date', new Date(), iso));
+                                }}
+                                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm" />
+                        </label>
+                    </div>
+                )}
+            </li>
+        );
+    };
+
     return (
         <section className="space-y-1.5" data-testid={`authority-switches-${memberId}`} aria-label={copy.title}>
             <p className="m-0 text-[13.5px] font-extrabold text-stone-700">{copy.title}</p>
             <p className="m-0 text-[12px] font-semibold leading-snug text-stone-600">{copy.hint}</p>
-            <ul className="m-0 space-y-1.5 p-0">
-                {SWITCHABLE_AUTHORITIES.map(name => {
-                    if (access.notInForce?.includes(name)) {
-                        return (
-                            <li key={name} className="list-none rounded-xl border border-slate-200 bg-slate-50 p-2.5"
-                                data-testid={`authority-${name}-${memberId}`} data-on="not-in-force">
-                                <span className="block text-[13.5px] font-bold text-slate-700">{authorityLabel(copy, name)}</span>
-                                <span className="block text-[12px] font-extrabold text-slate-600">{copy.notInForce}</span>
-                                <span className="block text-[11.5px] leading-snug text-slate-500" data-testid={`authority-${name}-rule-${memberId}`}>
-                                    {copy.notInForceWhy[name] ?? ''}
-                                </span>
-                            </li>
-                        );
-                    }
-                    const on = holds(access.authorities, name);
-                    const end = throughDay(endOf(access.authorities, name), language);
-                    const note = copy.note[name];
-                    return (
-                        <li key={name} className="list-none">
-                            <button type="button" data-testid={`authority-${name}-${memberId}`} data-on={on ? 'yes' : 'no'}
-                                aria-pressed={on} aria-busy={access.saving} disabled={access.saving}
-                                onClick={() => (on ? access.onChange(withoutAuthority(access.authorities, name)) : setChoosing(choosing === name ? null : name))}
-                                className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all active:scale-[0.98] disabled:opacity-60 ${on ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-200 bg-white'}`}>
-                                <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                    <ShieldCheck size={16} aria-hidden="true" />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                    <span className="block text-[13.5px] font-bold text-slate-800">{authorityLabel(copy, name)}</span>
-                                    {on && <span className="block text-[11.5px] font-semibold text-slate-600" data-testid={`authority-${name}-end-${memberId}`}>{end ? copy.until(end) : copy.permanent}</span>}
-                                    {note && <span className="block text-[11.5px] leading-snug text-slate-500">{note}</span>}
-                                </span>
-                                <span className="flex-shrink-0 text-[12px] font-extrabold text-slate-600">{on ? copy.on : copy.off}</span>
-                            </button>
-                            {choosing === name && !on && (
-                                <div className="mt-1.5 space-y-2 rounded-xl border border-emerald-200 bg-white p-2.5" data-testid={`authority-${name}-choose-${memberId}`}>
-                                    <div className="flex flex-wrap gap-2">
-                                        <button type="button" disabled={access.saving} onClick={() => give(name, null)}
-                                            data-testid={`authority-${name}-permanent-${memberId}`}
-                                            className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[13px] font-bold text-emerald-800 disabled:opacity-60">
-                                            {copy.permanent}
-                                        </button>
-                                        <button type="button" onClick={() => setChoosing(null)}
-                                            className="rounded-full px-3 py-1.5 text-[13px] font-bold text-stone-600 ring-1 ring-stone-300">
-                                            {copy.cancel}
-                                        </button>
-                                    </div>
-                                    <label className="block text-[12.5px] font-bold text-slate-700">
-                                        {copy.untilDate} · {copy.pickDate}
-                                        <input type="date" value={pickedDate} disabled={access.saving}
-                                            data-testid={`authority-${name}-date-${memberId}`}
-                                            onChange={(e) => {
-                                                const iso = e.target.value;
-                                                setPickedDate(iso);
-                                                if (iso) give(name, expiryUtcForChip('date', new Date(), iso));
-                                            }}
-                                            className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm" />
-                                    </label>
-                                </div>
-                            )}
-                        </li>
-                    );
-                })}
-            </ul>
+            {/* Repair FIX-1 item 9 (R2-B 16 Step A): the same switches, under four headings, each exactly once. */}
+            {groupedSwitches().map(group => (
+                <div key={group.key ?? 'other'} className="space-y-1.5 pt-1" data-testid={`authority-group-${group.key ?? 'other'}-${memberId}`}>
+                    {group.key && (
+                        <p className="m-0 text-[13px] font-extrabold text-stone-800" data-part="heading" data-testid={`authority-group-${group.key}-title-${memberId}`}>
+                            {copy.group[group.key]}
+                        </p>
+                    )}
+                    <ul className="m-0 space-y-1.5 p-0">{group.names.map(renderSwitch)}</ul>
+                </div>
+            ))}
             {/* lane MU-1: checking money entries without seeing wages cannot settle a payout - said once, on the switches. */}
             {holds(access.authorities, 'ReviewMoney') && !holds(access.authorities, 'SeeWages') && !access.notInForce?.includes('ReviewMoney') && (
                 <p className="m-0 text-[12px] font-bold leading-snug text-amber-800" data-testid={`authority-payout-note-${memberId}`}>
