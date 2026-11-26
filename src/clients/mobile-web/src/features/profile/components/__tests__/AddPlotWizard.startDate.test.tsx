@@ -89,11 +89,28 @@ describe('add-plot wizard, step 3 - the one date question (F2)', () => {
         expect(screen.queryByTestId('plot-start-day')).toBeNull();
     });
 
-    it('the old schedule list and its "Required" pill are gone; the machinery part stays', () => {
+    it('the old schedule list and its "Required" pill are gone', () => {
         openStep3();
         expect(screen.queryByText(/Choose Schedule/)).toBeNull();
         expect(screen.queryByText('Required')).toBeNull();
-        expect(screen.getByText('profile.selectTools')).toBeInTheDocument();
+    });
+
+    // Repair FIX-1 item 4 (R2-A 14, founder 27 Nov): machines belong to the whole farm, not to a plot —
+    // the "या प्लॉटवर वापरलेली साधने निवडा" question leaves the plot form. The plot still saves as before.
+    it('no machines question on the plot form, even when the farm has machines; the plot still saves', () => {
+        const withMachines = { ...profile, machineries: [{ id: 'k1', name: 'ट्रॅक्टर', type: 'Tractor', ownership: 'Owned' }] } as unknown as FarmerProfile;
+        const onSave = vi.fn();
+        render(<AddPlotWizard crop={crop} profile={withMachines} onSave={onSave} onCancel={vi.fn()} />);
+        fillStep(); next();
+        fillStep(); next();
+        expect(screen.queryByText('profile.selectTools')).toBeNull();
+        expect(screen.queryByText('profile.noMachinery')).toBeNull();
+        expect(screen.queryByText('ट्रॅक्टर')).toBeNull();
+        fireEvent.click(byId('plot-start-today'));
+        fireEvent.click(finish());
+        expect(onSave).toHaveBeenCalledTimes(1);
+        const [plot] = onSave.mock.calls[0] as [Plot];
+        expect(plot.infrastructure).toEqual({ irrigationMethod: 'None', linkedMachineryIds: [] });
     });
 
     it('cannot finish until a date choice is made', () => {

@@ -65,16 +65,16 @@ describe('labels: 16 px in #44403c (stone-700), not 12 px light grey', () => {
         }
     });
 
-    it('step 3 is not touched: its own label keeps its old look', () => {
+    // Repair FIX-1 item 4: step 3 no longer carries the machines question (its small grey label went with it).
+    it('step 3 asks the date only: no machines label', () => {
         renderWizard();
         toStepTwo();
         fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'महाबीज' } });
         fireEvent.change(document.querySelector('input[type="number"]') as HTMLInputElement, { target: { value: '3' } });
         next();
         expect(screen.getByTestId('plot-start-today')).toBeInTheDocument();
-        const tools = labels().find(l => l.textContent?.includes('साधने'));
-        expect(tools?.className).toContain('text-xs');
-        expect(tools?.className).toContain('text-slate-400');
+        expect(labels().find(l => l.textContent?.includes('साधने'))).toBeUndefined();
+        expect(screen.queryByText('या प्लॉटवर वापरलेली साधने निवडा')).toBeNull();
     });
 });
 

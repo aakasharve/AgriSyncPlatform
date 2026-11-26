@@ -7,10 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-    X, ArrowRight, Save,
-    CheckCircle2, Wrench, AlertTriangle, Tractor
-} from 'lucide-react';
+import { X, ArrowRight, Save, AlertTriangle } from 'lucide-react';
 import {
     FarmerProfile, CropProfile, Plot, LandUnit,
     PlotInfrastructure, PlantingMaterial
@@ -33,6 +30,7 @@ import {
 
 interface PlotWizardProps {
     crop: CropProfile;
+    /** The farm setup on this phone. Not read since the machines question left (FIX-1 item 4); the plot's water question will read it (D-9). */
     profile: FarmerProfile;
     /** The new plot, and (spec: plr-d10 lane WIZARD-F2) the day it counts from and the checked schedule that follows by itself. */
     onSave: (plot: Plot, start: NewPlotStart) => void;
@@ -45,7 +43,7 @@ interface PlotWizardProps {
  */
 const LABEL = 'block text-[16px] font-bold text-stone-700 mb-1';
 
-const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel }) => {
+const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) => {
     const { t, language } = useLanguage();
     // The words of steps 1 and 2 that were English on a Marathi screen (placeholders, errors, hint, units); English mode keeps its English.
     const w = plotWizardWords(language);
@@ -65,10 +63,6 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
     const [seedUnit, setSeedUnit] = useState('kg');
     const [nurseryName, setNurseryName] = useState('');
     const [plantAge, setPlantAge] = useState<number | ''>('');
-
-
-
-    const [selectedMachineIds, setSelectedMachineIds] = useState<string[]>([]);
 
     // spec: plr-d10 lane WIZARD-F2 (founder pick F2, 2026-11-19) - step 3 asks ONE required question, when the crop was planted / pruned /
     // sown. NOTHING is pre-selected (a date is never guessed for him); the finish button stays off until one of the two choices is made.
@@ -142,9 +136,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
             plantAgeDays: Number(plantAge)
         };
 
+        // Saved exactly as before (no machine was ever required): machines are the farm's, not the plot's (FIX-1 item 4).
         const infrastructure: PlotInfrastructure = {
             irrigationMethod: 'None',
-            linkedMachineryIds: selectedMachineIds
+            linkedMachineryIds: []
         };
 
         // spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3). A bare GUID, the id the
@@ -393,7 +388,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                         </div>
                     )}
 
-                    {/* STEP 3: SCHEDULE & MACHINERY */}
+                    {/* STEP 3: THE START DATE */}
                     {step === 3 && (
                         <div className="space-y-4 animate-in slide-in-from-right-4">
                             {/* spec: plr-d10 lane WIZARD-F2 (founder pick F2) - ONE required question replaces the schedule list. */}
@@ -410,41 +405,8 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                 dayCount={chosenKey ? dayCountOn(chosenKey, todayKey) : null}
                                 checked={checkedSchedule}
                             />
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{t('profile.selectTools')}</label>
-                                <div className="space-y-2">
-                                    {(profile.machineries || []).map(m => {
-                                        const isSelected = selectedMachineIds.includes(m.id);
-                                        return (
-                                            <button
-                                                key={m.id}
-                                                onClick={() => {
-                                                    if (isSelected) setSelectedMachineIds(selectedMachineIds.filter(id => id !== m.id));
-                                                    else setSelectedMachineIds([...selectedMachineIds, m.id]);
-                                                }}
-                                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${isSelected ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-slate-100'}`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`p-2 rounded-lg ${isSelected ? 'bg-white text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                        {m.type === 'Tractor' ? <Tractor size={18} /> : <Wrench size={18} />}
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <p className={`text-sm font-bold ${isSelected ? 'text-emerald-900' : 'text-slate-700'}`}>{m.name}</p>
-                                                        <p className="text-xs text-slate-400">{m.type} • {m.capacity ? `${m.capacity}L` : m.ownership}</p>
-                                                    </div>
-                                                </div>
-                                                {isSelected && <CheckCircle2 size={20} className="text-emerald-500" />}
-                                            </button>
-                                        )
-                                    })}
-                                    {(!profile.machineries || profile.machineries.length === 0) && (
-                                        <div className="p-4 text-center border-2 border-dashed border-slate-100 rounded-xl">
-                                            <p className="text-slate-400 text-sm">{t('profile.noMachinery')}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            {/* Repair FIX-1 item 4 (R2-A 14): no machines question here. Machines belong to the whole farm,
+                                not to one plot. The plot's water question comes with the per-farm setup on the server (D-9). */}
                         </div>
                     )}
 
