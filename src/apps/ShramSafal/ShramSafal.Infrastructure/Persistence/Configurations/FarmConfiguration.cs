@@ -91,6 +91,13 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasDefaultValue(false)
             .IsRequired();
 
+        // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch: may a person who checks money approve a bill he made
+        // himself. false for every farm, old and new, unless its primary owner turned it on. Migration AddFarmOwnBillApprovalSwitch.
+        builder.Property(x => x.ReviewerMayApproveOwnBill)
+            .HasColumnName("reviewer_may_approve_own_bill")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasIndex(x => x.ModifiedAtUtc);
         builder.HasIndex(x => x.OwnerAccountId)
             .HasDatabaseName("ix_farms_owner_account_id");

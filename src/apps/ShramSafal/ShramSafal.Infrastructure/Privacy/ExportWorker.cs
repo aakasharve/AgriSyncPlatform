@@ -282,6 +282,11 @@ public sealed class ExportWorker(
             await WritePicturesAsync(zip, admin, sp.GetService<ShramSafal.Application.Ports.External.IAttachmentStorageService>(), userId, ct)
                 .ConfigureAwait(false);
 
+            // farm_setup (repair D-9): the setup of the farms HE OWNS - water sources with their motors, the power timetable, machines and each plot's
+            // water arrangement. The rows describe the farm, so they are exported for the farm's owner; a seat-holder who typed a change owns no farm
+            // and receives none of it. Admin context, so row security does not hide the farm rows; the filter is the farm's owner.
+            await WriteFarmSetupAsync(zip, admin, userId, ct).ConfigureAwait(false);
+
             // cross_border_transfers — Phase 08 has no direct subject-user
             // pointer on the row (the table is keyed on AI job, not
             // user). For the export bundle we emit the full set scoped
@@ -479,6 +484,89 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
     }
 
     /// <summary>
+    /// spec: plr-d10 repair D-9 (farm setup on the server; DPDP export). Writes <c>farm_setup.json</c>: for every farm this person OWNS
+    /// (<c>ssf.farms.owner_user_id</c>), its water sources with their motors, its power timetable, its machines and each plot's water arrangement, removed
+    /// rows too (each says its state). A person who owns no farm gets an empty list: the setup is the farm's, not a seat-holder's.
+    /// </summary>
+    internal static async Task WriteFarmSetupAsync(ZipArchive zip, ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        var owner = new AgriSync.SharedKernel.Contracts.Ids.UserId(userId);
+        var farmIds = (await db.Farms.AsNoTracking().Where(f => f.OwnerUserId == owner).OrderBy(f => f.CreatedAtUtc).Select(f => f.Id).ToListAsync(ct).ConfigureAwait(false))
+            .Select(id => id.Value)
+            .ToList();
+        var rows = await new ShramSafal.Infrastructure.Persistence.Repositories.FarmSetupStore(db).GetOfFarmsAsync(farmIds, ct).ConfigureAwait(false);
+
+        static string StateOf(ShramSafal.Domain.Farms.FarmSetupState state) => state == ShramSafal.Domain.Farms.FarmSetupState.Active ? "active" : "removed";
+
+        await WriteJsonEntryAsync(zip, "farm_setup.json",
+            new
+            {
+                farms = farmIds.Select(farmId => new
+                {
+                    farmId,
+                    waterSources = rows.WaterSources.Where(s => s.FarmId.Value == farmId).Select(s => new
+                    {
+                        id = s.Id,
+                        name = s.Name,
+                        sourceType = s.SourceType,
+                        isAvailable = s.IsAvailable,
+                        notes = s.Notes,
+                        state = StateOf(s.State),
+                        revision = s.Revision,
+                        createdAtUtc = s.CreatedAtUtc,
+                        updatedAtUtc = s.UpdatedAtUtc,
+                        motors = s.Motors.Select(m => new
+                        {
+                            id = m.Id,
+                            name = m.Name,
+                            hp = m.Hp,
+                            phase = m.Phase,
+                            powerSource = m.PowerSource,
+                            powerSourceName = m.PowerSourceName,
+                            hasDrip = m.HasDrip,
+                            dripPipeSize = m.DripPipeSize,
+                            dripHasFilter = m.DripHasFilter,
+                            dripFlowLitresPerHour = m.DripFlowLph,
+                            state = StateOf(m.State),
+                        }),
+                    }),
+                    powerTimes = rows.PowerTimes.Where(p => p.Id == farmId).Select(p => new
+                    {
+                        revision = p.Revision,
+                        updatedAtUtc = p.UpdatedAtUtc,
+                        timetable = JsonSerializer.Deserialize<JsonElement>(p.Content),
+                    }).FirstOrDefault(),
+                    machines = rows.Machines.Where(m => m.FarmId.Value == farmId).Select(m => new
+                    {
+                        id = m.Id,
+                        name = m.Name,
+                        machineType = m.MachineType,
+                        ownership = m.Ownership,
+                        company = m.Company,
+                        model = m.Model,
+                        hp = m.Hp,
+                        nozzleCount = m.NozzleCount,
+                        tankLitres = m.TankLitres,
+                        detailLine = m.DetailLine,
+                        state = StateOf(m.State),
+                        revision = m.Revision,
+                        createdAtUtc = m.CreatedAtUtc,
+                        updatedAtUtc = m.UpdatedAtUtc,
+                    }),
+                    plotWater = rows.PlotWater.Where(p => p.FarmId.Value == farmId).Select(p => new
+                    {
+                        plotId = p.Id,
+                        method = p.Method,
+                        revision = p.Revision,
+                        updatedAtUtc = p.UpdatedAtUtc,
+                        links = p.Links.Select(l => new { waterSourceId = l.WaterSourceId, motorId = l.MotorId, state = StateOf(l.State) }),
+                    }),
+                }),
+            },
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane SCH-ID-S (founder D-146; DPDP export). Writes <c>pictures/metadata.json</c> (one line per picture he owns: kind, date, size,
     /// type, hash, and whether the file was found) and each file under <c>pictures/</c>. Only his: kind PERSON with his id as subject, and kind
     /// SCHEDULE rows he set. A file the storage cannot return is listed in the metadata with <c>fileIncluded: false</c>, never skipped silently.
@@ -584,6 +672,7 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         - `/pictures/` — the picture you set for yourself and any picture you chose for one of your schedules, with a metadata file
         - `/own_schedule_items.json` — the works of your own schedule (and any you wrote on another farm), each with every change made to it
         - `/schedule_task_events.json` — every answer you gave about a sign in a schedule (seen, not yet, not sure) and the day you looked
+        - `/farm_setup.json` — the setup of the farms you own: water sources and their motors, power times, machines, and how each plot gets its water
         - `/transcripts/` — speech-to-text outputs (Phase 08 placeholder)
         - `/parsed/` — structured parses derived from your voice (Phase 08 placeholder)
         - `/voice/` — raw voice clips (deferred until Phase 07)

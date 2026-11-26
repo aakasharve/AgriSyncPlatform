@@ -35,7 +35,10 @@ public sealed class PullSyncChangesHandler(
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 3) - the works of each plot-season's own schedule still being built.
     IOwnScheduleStore ownScheduleStore,
     // spec: plr-d10 schedule slice 12b - the owner's voice (messages, clips' metadata, the farms' own state of each).
-    IOwnerVoiceStore ownerVoiceStore)
+    IOwnerVoiceStore ownerVoiceStore,
+    // spec: plr-d10 repair D-9 - each farm's setup (water sources, motors, power times, machines, plot water), for a phone that asks; and (repair D-177)
+    // which farms have the owner's own-bill switch on.
+    IFarmSetupStore farmSetupStore)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
     // DegradedComponent.ComponentName. Frontend keys on these.
@@ -882,6 +885,21 @@ public sealed class PullSyncChangesHandler(
                 .ToList();
         }
 
+        // spec: plr-d10 repair D-9 (farm setup on the server, per farm) - ONLY for a phone that asks (farmSetup=1): a phone that does not ask gets no key and
+        // no read is made for it. FULL on every pull, one entry per farm he reads (an empty farm too, so "empty" is told apart from "not sent"), active rows
+        // only. Every Active member reads the sources, motors, power times and machines; a plot's water only where his seat covers the plot (the rule the
+        // plots themselves follow, above). Read under his user scope. Phase-1 style, NOT degrade-and-continue: a failed read fails the pull and the phone
+        // retries, because an empty answer would tell it the farm has no setup. D-9 is for every farm: the schedule switch is not asked.
+        IReadOnlyList<FarmSetupDto>? farmSetup = null;
+        if (query.FarmSetupFormat is >= 1)
+        {
+            var rows = await farmSetupStore.GetOfFarmsAsync(window.FarmIds, ct);
+            farmSetup = window.FarmIds.Select(farmId => PullFarmSetup.Of(farmId, rows, window.Scopes[farmId])).ToList();
+        }
+
+        // spec: plr-d10 repair D-177 - the farms of this pull whose owner turned the own-bill switch on (FULL every pull: a flip moves no cursor he reads).
+        var ownBillApprovalFarms = await farmSetupStore.GetFarmsAllowingOwnBillApprovalAsync(window.FarmIds, ct);
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -944,6 +962,8 @@ public sealed class PullSyncChangesHandler(
                 {
                     // lane PRV — the days whose totals leave a record out for him (W4); absent when none.
                     WithheldRecordDays = audience.WithheldDays(window.Scopes[id]) is { Count: > 0 } days ? days : null,
+                    // repair D-177 — the farm's own-bill switch, written only when its owner turned it on (off is no key at all).
+                    ReviewerMayApproveOwnBill = ownBillApprovalFarms.Contains(id) ? true : null,
                 })
                 .Concat(notReadable)
                 .ToList(),
@@ -981,7 +1001,9 @@ public sealed class PullSyncChangesHandler(
             OwnScheduleCarries: ownScheduleCarries,
             OwnerMessages: ownerMessages,
             OwnerClips: ownerClips,
-            OwnerMessageStates: ownerMessageStates);
+            OwnerMessageStates: ownerMessageStates,
+            // repair D-9 - each farm's setup, only for a phone that asked (farmSetup=1); never a key otherwise.
+            FarmSetup: farmSetup);
 
         return Result.Success(response);
     }

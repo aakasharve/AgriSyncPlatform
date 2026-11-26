@@ -662,6 +662,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // p_totals_owner_select (FOR SELECT, TO the function's owner role only, never PUBLIC or the app role) on seven schedule tables, ssf.farms and the list. It alters no existing policy (none is a p_user_select_* policy, so the narrowed/open
         // counts are unchanged), no farm_memberships or farm_join_requests object, no seat. Down() refuses while the list has any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125120000_AddScheduleTotals",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9) - Up() and Down() read in full: Up() creates six new tables (ssf.farm_water_sources, farm_motors, farm_power_times, farm_machines, plot_water_setups,
+        // plot_water_links), each FORCE RLS with a farm-member read policy written ALREADY narrowed (m.status = 3) from birth (listed below). It alters no existing policy, no farm_memberships or farm_join_requests object,
+        // no seat. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261127020000_AddFarmSetup",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms. It creates and
+        // alters no policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
+        "20261127021000_AddFarmOwnBillApprovalSwitch",
     ];
 
     /// <summary>
@@ -713,6 +720,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_own_schedule_season_carries",
         // slice 12b: 20261125030530_AddScheduleOwnerVoice creates ssf.schedule_owner_message_states with this policy ALREADY narrowed (m.status = 3). Down() drops the table with it.
         "p_user_select_schedule_owner_message_states",
+        // repair D-9: 20261127020000_AddFarmSetup creates six tables, each with this policy ALREADY narrowed (m.status = 3). Down() drops the tables with them.
+        "p_user_select_farm_water_sources",
+        "p_user_select_farm_motors",
+        "p_user_select_farm_power_times",
+        "p_user_select_farm_machines",
+        "p_user_select_plot_water_setups",
+        "p_user_select_plot_water_links",
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 5) - 20261123071136_AddScheduleFeed creates ssf.schedule_task_events with a p_user_select_* policy
         // written ALREADY narrowed (m.status = 3). Down() drops the table with its policy.
         "p_user_select_schedule_task_events",

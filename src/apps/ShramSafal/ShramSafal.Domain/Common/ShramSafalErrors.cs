@@ -314,6 +314,23 @@ public static class ShramSafalErrors
     public static Error OwnScheduleInvalid(string rule, string words) =>
         Error.Validation("ShramSafal.OwnScheduleInvalid", $"{rule}: {words} Nothing was saved.");
 
+    /// <summary>
+    /// spec: plr-d10 repair D-9 (farm setup on the server) - no silent overwrite. A farm-setup change whose base revision is not the stored one (and whose
+    /// content is not already there), a change that lost the race to another save in the same instant, or one that names a source, motor or machine that is
+    /// no longer part of this farm's setup. Nothing is written. THREE SEGMENTS, tail CONFLICT: every shipped phone parks such a row for the person to see
+    /// and never re-sends it (the reasoning of <see cref="ScheduleCopyExists"/>, P10 / P11).
+    /// </summary>
+    public static readonly Error FarmSetupChangedElsewhere = Error.Conflict(
+        "ShramSafal.FarmSetup.Conflict",
+        "This was changed from another phone first. Nothing was saved.");
+
+    /// <summary>
+    /// spec: plr-d10 repair D-9 - a farm-setup change whose content does not hold together (an unknown type, an empty name, a time that is not HH:mm, a plot
+    /// with "no water" and a source ticked). Permanent: the same bytes are refused again. The words name the rule; nothing was saved.
+    /// </summary>
+    public static Error FarmSetupInvalid(string rule, string words) =>
+        Error.Validation("ShramSafal.FarmSetupInvalid", $"{rule}: {words} Nothing was saved.");
+
     // PLR-D10 I23 / N6 (founder D-16, 2026-10-26): "Future attendance must not be recorded as
     // completed work. Future work belongs in planning." An attendance mark dated after the farm's
     // India date is refused. THREE SEGMENTS for the same reason as LabourAssignmentConflict below:

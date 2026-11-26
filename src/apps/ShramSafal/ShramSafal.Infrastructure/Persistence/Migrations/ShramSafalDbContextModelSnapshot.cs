@@ -2237,6 +2237,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(6)")
                         .HasColumnName("pin_code");
 
+                    b.Property<bool>("ReviewerMayApproveOwnBill")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("reviewer_may_approve_own_bill");
+
                     b.Property<decimal?>("TotalGovtAreaAcres")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -2422,6 +2428,109 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("farm_join_tokens", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmMachine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Company")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("company");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("DetailLine")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("detail_line");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<decimal?>("Hp")
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("hp");
+
+                    b.Property<string>("MachineType")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("machine_type");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<short?>("NozzleCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("nozzle_count");
+
+                    b.Property<string>("Ownership")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("ownership");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<decimal?>("TankLitres")
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("tank_litres");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_farm_machines_farm");
+
+                    b.ToTable("farm_machines", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_machines_hp", "hp > 0");
+
+                            t.HasCheckConstraint("ck_farm_machines_nozzles", "nozzle_count > 0");
+
+                            t.HasCheckConstraint("ck_farm_machines_ownership", "ownership IN ('owned', 'rented')");
+
+                            t.HasCheckConstraint("ck_farm_machines_revision", "revision >= 1");
+
+                            t.HasCheckConstraint("ck_farm_machines_state", "state IN (0, 1)");
+
+                            t.HasCheckConstraint("ck_farm_machines_tank", "tank_litres > 0");
+
+                            t.HasCheckConstraint("ck_farm_machines_type", "machine_type IN ('tractor', 'blower', 'sprayer', 'rotavator', 'harvester', 'other')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Farms.FarmMembership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2568,6 +2677,105 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmMotor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<decimal?>("DripFlowLph")
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("drip_flow_lph");
+
+                    b.Property<bool?>("DripHasFilter")
+                        .HasColumnType("boolean")
+                        .HasColumnName("drip_has_filter");
+
+                    b.Property<string>("DripPipeSize")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("drip_pipe_size");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<bool>("HasDrip")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_drip");
+
+                    b.Property<decimal>("Hp")
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("hp");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<short>("Phase")
+                        .HasColumnType("smallint")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("PowerSource")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("power_source");
+
+                    b.Property<string>("PowerSourceName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("power_source_name");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.Property<Guid>("WaterSourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("water_source_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_farm_motors_farm");
+
+                    b.HasIndex("WaterSourceId")
+                        .HasDatabaseName("ix_farm_motors_source");
+
+                    b.ToTable("farm_motors", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_motors_drip_flow", "drip_flow_lph > 0");
+
+                            t.HasCheckConstraint("ck_farm_motors_hp", "hp > 0 AND hp <= 500");
+
+                            t.HasCheckConstraint("ck_farm_motors_phase", "phase IN (1, 3)");
+
+                            t.HasCheckConstraint("ck_farm_motors_power_source", "power_source IN ('mseb', 'solar', 'generator')");
+
+                            t.HasCheckConstraint("ck_farm_motors_state", "state IN (0, 1)");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Farms.FarmOperation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2645,6 +2853,118 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasFilter("is_current_version");
 
                     b.ToTable("farm_operations", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmPowerTimes", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("farm_power_times", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_power_times_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_farm_power_times_revision", "revision >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmWaterSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_available");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("source_type");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_farm_water_sources_farm");
+
+                    b.ToTable("farm_water_sources", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_water_sources_revision", "revision >= 1");
+
+                            t.HasCheckConstraint("ck_farm_water_sources_state", "state IN (0, 1)");
+
+                            t.HasCheckConstraint("ck_farm_water_sources_type", "source_type IN ('well', 'borewell', 'canal', 'farm_pond', 'tanker')");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.IrrigationEntry", b =>
@@ -3201,6 +3521,107 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("FarmId", "Name");
 
                     b.ToTable("plots", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.PlotWaterLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid?>("MotorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("motor_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<short>("State")
+                        .HasColumnType("smallint")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.Property<Guid>("WaterSourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("water_source_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_plot_water_links_farm");
+
+                    b.HasIndex("MotorId")
+                        .HasDatabaseName("ix_plot_water_links_motor");
+
+                    b.HasIndex("PlotId")
+                        .HasDatabaseName("ix_plot_water_links_plot");
+
+                    b.ToTable("plot_water_links", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_plot_water_links_state", "state IN (0, 1)");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.PlotWaterSetup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("irrigation_method");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_plot_water_setups_farm");
+
+                    b.ToTable("plot_water_setups", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_plot_water_setups_method", "irrigation_method IN ('drip', 'flood', 'sprinkler', 'none')");
+
+                            t.HasCheckConstraint("ck_plot_water_setups_revision", "revision >= 1");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.RoutinePattern", b =>

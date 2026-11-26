@@ -90,10 +90,12 @@ public sealed class EveryBillIsCheckedTests
     [Fact]
     public void ReviewerOwnBill_rule_nobody_approves_his_own_bill_the_owner_may()
     {
-        BillApprovalRules.ReviewerMayApproveOwnBill.Should().BeFalse("founder C3 = C: for now it works like A");
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true).Should().BeFalse("a reviewer's own bill needs someone else");
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true).Should().BeTrue("the owner may approve his own bill");
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false).Should().BeTrue("a reviewer approves someone else's bill");
+        // Repair D-177 (founder 27 Nov, B1.4): the constant is gone; the FARM's switch (off unless its owner turned it on) decides for a reviewer's own bill.
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true, farmAllows: false).Should().BeFalse("a reviewer's own bill needs someone else while the farm's switch is off");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true, farmAllows: true).Should().BeTrue("the owner turned the farm's switch on");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true, farmAllows: false).Should().BeTrue("the owner may approve his own bill either way");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false, farmAllows: false).Should().BeTrue("a reviewer approves someone else's bill");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: false, farmAllows: true).Should().BeTrue();
     }
 
     // ---- helpers ----

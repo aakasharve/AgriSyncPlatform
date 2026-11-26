@@ -90,6 +90,7 @@ public static class SyncEndpoints
             string? since,
             string? farms,
             string? scheduleFormat,
+            string? farmSetup,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
             PullSyncChangesHandler handler,
@@ -134,8 +135,13 @@ public static class SyncEndpoints
 
             // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 1) - `scheduleFormat=2`: the schedule format the phone can read. A QUERY
             // parameter (no new header, so CORS is untouched), read leniently like `farms`: an unreadable value says nothing and never refuses the pull.
+            // spec: plr-d10 repair D-9 - `farmSetup=1`: the phone asks for the farm's setup (water sources, motors, power times, machines, plot water).
+            // A QUERY parameter for the same reason (CORS untouched) and read as leniently; a phone that does not ask is never sent the key.
             var result = await handler.HandleAsync(
-                new PullSyncChangesQuery(cursor, actorUserId, heldFarmIds, PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat)), ct);
+                new PullSyncChangesQuery(
+                    cursor, actorUserId, heldFarmIds, PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat),
+                    PullSyncChangesQuery.ParseScheduleFormat(farmSetup)),
+                ct);
             if (!result.IsSuccess)
             {
                 return ToErrorResult(result.Error);

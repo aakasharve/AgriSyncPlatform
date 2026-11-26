@@ -247,7 +247,9 @@ internal static class DtoMappingExtensions
             attributions
                 .OrderBy(r => r.CreatedAtUtc)
                 .Select(ToDto)
-                .ToList());
+                .ToList(),
+            // repair D-9 paper, part 8b (a): through whom the crew came, read back as stored (written on the wire only when set).
+            EngagedThroughFieldOperatorId: assignment.EngagedThroughFieldOperatorId);
 
     public static AttributedOperatorDto ToDto(this FieldOperatorWorkRow row) =>
         new(row.FieldOperatorId, row.DisplayNameAtAttach);

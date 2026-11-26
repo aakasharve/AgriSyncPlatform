@@ -208,7 +208,16 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 12b) - the schedule owner's voice: heard, the farmer's decision on a change, the answer to a look message.
     ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageHeardHandler ownerMessageHeardHandler,
     ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageDecideHandler ownerMessageDecideHandler,
-    ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerHandler ownerMessageAnswerHandler)
+    ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerHandler ownerMessageAnswerHandler,
+    // spec: plr-d10 repair D-9 (founder 27 Nov) - a farm's setup on the server, per farm: water sources with their motors, power times, machines, plot water (farmsetup.*).
+    ShramSafal.Application.UseCases.Farms.FarmSetup.SaveWaterSourceHandler saveWaterSourceHandler,
+    ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveWaterSourceHandler removeWaterSourceHandler,
+    ShramSafal.Application.UseCases.Farms.FarmSetup.SetPowerTimesHandler setPowerTimesHandler,
+    ShramSafal.Application.UseCases.Farms.FarmSetup.SaveMachineHandler saveMachineHandler,
+    ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveMachineHandler removeMachineHandler,
+    ShramSafal.Application.UseCases.Farms.FarmSetup.SetPlotWaterHandler setPlotWaterHandler,
+    // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch, the primary owner's alone (farm.own_bill_approval.set).
+    ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalHandler setOwnBillApprovalHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1297,6 +1306,22 @@ public sealed class PushSyncBatchHandler(
                 return await HandleOwnerMessageDecideAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "schedule.owner_message.answer":
                 return await HandleOwnerMessageAnswerAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 repair D-9 (founder 27 Nov) - a farm's setup on the server, per farm. NEW names for EVERY farm: not reserved by the schedule switch.
+            case "farmsetup.water_source.save":
+                return await HandleFarmSetupWaterSourceSaveAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            case "farmsetup.water_source.remove":
+                return await HandleFarmSetupWaterSourceRemoveAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            case "farmsetup.power_times.set":
+                return await HandleFarmSetupPowerTimesSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            case "farmsetup.machine.save":
+                return await HandleFarmSetupMachineSaveAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            case "farmsetup.machine.remove":
+                return await HandleFarmSetupMachineRemoveAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            case "farmsetup.plot_water.set":
+                return await HandleFarmSetupPlotWaterSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch.
+            case "farm.own_bill_approval.set":
+                return await HandleFarmOwnBillApprovalSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3636,6 +3661,295 @@ public sealed class PushSyncBatchHandler(
         "skip" => nameof(Domain.Planning.ScheduleCarryChoice.Skip),
         _ => "not-a-choice",
     };
+
+    // ── spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9; founder 27 Nov: "send it to server; the phone is only a door") ───────────────
+    // A farm's setup on the server, per farm: six NEW names (strict push rule: no key is added to a payload a released phone sends). Each payload names
+    // the farm, so its scope is opened from it (a farm the sender is no Active member of is refused with no farm GUC ever set). Who may (the existing
+    // "edit farm setup" authority, from THIS farm's seat), the conflict rule (a stale base revision is refused, never overwritten) and the content rules
+    // are the handlers'. The sender is the authenticated person. Every refusal parks visibly on the phone (P10). The allow-lists are one line each:
+    // allowlist-parity.test.ts parses them. Nested entries (a motor, its drip, a link) are strict too: a key the contract does not name is refused.
+
+    private static ShramSafal.Application.UseCases.Farms.FarmSetup.FarmSetupCaller FarmSetupCallerOf(
+        string deviceId, string clientRequestId, Guid actorUserId, string? appVersion) =>
+        new(actorUserId, clientRequestId, string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion, deviceId);
+
+    /// <summary>True when every one of the REQUIRED keys is there with a value (a missing required key is never read as a default).</summary>
+    private static bool PayloadHasAll(JsonElement element, params string[] requiredProperties) =>
+        element.ValueKind == JsonValueKind.Object
+        && requiredProperties.All(required => element.EnumerateObject().Any(p =>
+            p.Name.Equals(required, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)));
+
+    /// <summary>The value of a top-level key read without regard to case (as the deserializer reads it), or null.</summary>
+    private static JsonElement? PayloadValue(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Every motor of a water source carries only the keys the contract names, and so does its drip part.</summary>
+    private static bool FarmSetupMotorsHaveOnlyKnownKeys(JsonElement payload)
+    {
+        if (PayloadValue(payload, "motors") is not { ValueKind: JsonValueKind.Array } motors)
+        {
+            return false;
+        }
+
+        foreach (var motor in motors.EnumerateArray())
+        {
+            if (!PayloadHasOnly(motor, "motorId", "name", "hp", "phase", "powerSource", "powerSourceName", "drip")
+                || !PayloadHasAll(motor, "motorId", "name", "hp", "phase", "powerSource"))
+            {
+                return false;
+            }
+
+            if (PayloadValue(motor, "drip") is { ValueKind: not JsonValueKind.Null } drip
+                && (!PayloadHasOnly(drip, "pipeSize", "hasFilter", "flowLitresPerHour") || !PayloadHasAll(drip, "hasFilter")))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Every link of a plot's water arrangement carries only the keys the contract names.</summary>
+    private static bool FarmSetupLinksHaveOnlyKnownKeys(JsonElement payload)
+    {
+        if (PayloadValue(payload, "links") is not { ValueKind: JsonValueKind.Array } links)
+        {
+            return false;
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (!PayloadHasOnly(link, "waterSourceId", "motorId") || !PayloadHasAll(link, "waterSourceId"))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupWaterSourceSaveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "waterSourceId", "baseRevision", "name", "sourceType", "isAvailable", "notes", "motors"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.water_source.save payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "waterSourceId", "baseRevision", "name", "sourceType", "isAvailable", "motors")
+            || !FarmSetupMotorsHaveOnlyKnownKeys(payload)
+            || !TryDeserializeSchedulePayload<FarmsetupWaterSourceSavePayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.Motors is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.water_source.save.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var spec = new Domain.Farms.FarmWaterSourceSpec(
+            request.Name,
+            request.SourceType,
+            request.IsAvailable,
+            request.Notes,
+            request.Motors
+                .Select(m => new Domain.Farms.FarmMotorSpec(
+                    m.MotorId, m.Name, m.Hp, m.Phase, m.PowerSource, m.PowerSourceName,
+                    m.Drip is null ? null : new Domain.Farms.FarmMotorDripSpec(m.Drip.PipeSize, m.Drip.HasFilter, m.Drip.FlowLitresPerHour)))
+                .ToList());
+        var result = await saveWaterSourceHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.SaveWaterSourceCommand(
+                request.FarmId, request.WaterSourceId, request.BaseRevision, spec, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupWaterSourceRemoveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "waterSourceId", "baseRevision"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.water_source.remove payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "waterSourceId", "baseRevision")
+            || !TryDeserializeSchedulePayload<FarmsetupWaterSourceRemovePayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.water_source.remove.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await removeWaterSourceHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveWaterSourceCommand(
+                request.FarmId, request.WaterSourceId, request.BaseRevision, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupPowerTimesSetAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "baseRevision", "timetable"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.power_times.set payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "baseRevision", "timetable")
+            || !TryDeserializeSchedulePayload<FarmsetupPowerTimesSetPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.Timetable.ValueKind != JsonValueKind.Object)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.power_times.set.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        // The timetable travels as it was sent: the domain reads it strictly (PowerTimetable) and refuses a key the format does not know.
+        var result = await setPowerTimesHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.SetPowerTimesCommand(
+                request.FarmId, request.BaseRevision, request.Timetable.GetRawText(), FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupMachineSaveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "machineId", "baseRevision", "name", "machineType", "ownership", "company", "model", "hp", "nozzleCount", "tankLitres", "detailLine"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.machine.save payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "machineId", "baseRevision", "name", "machineType", "ownership")
+            || !TryDeserializeSchedulePayload<FarmsetupMachineSavePayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.machine.save.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var spec = new Domain.Farms.FarmMachineSpec(
+            request.Name, request.MachineType, request.Ownership, request.Company, request.Model, request.Hp, request.NozzleCount, request.TankLitres, request.DetailLine);
+        var result = await saveMachineHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.SaveMachineCommand(
+                request.FarmId, request.MachineId, request.BaseRevision, spec, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupMachineRemoveAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "machineId", "baseRevision"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.machine.remove payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "machineId", "baseRevision")
+            || !TryDeserializeSchedulePayload<FarmsetupMachineRemovePayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.machine.remove.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await removeMachineHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveMachineCommand(
+                request.FarmId, request.MachineId, request.BaseRevision, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleFarmSetupPlotWaterSetAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "baseRevision", "method", "links"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farmsetup.plot_water.set payload contains unsupported fields.");
+        }
+
+        if (!PayloadHasAll(payload, "farmId", "plotId", "baseRevision", "method", "links")
+            || !FarmSetupLinksHaveOnlyKnownKeys(payload)
+            || !TryDeserializeSchedulePayload<FarmsetupPlotWaterSetPayload>(payload, out var request) || request is null
+            || request.FarmId == Guid.Empty || request.Links is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farmsetup.plot_water.set.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var spec = new Domain.Farms.PlotWaterSpec(
+            request.Method, request.Links.Select(l => new Domain.Farms.PlotWaterLinkSpec(l.WaterSourceId, l.MotorId)).ToList());
+        var result = await setPlotWaterHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.FarmSetup.SetPlotWaterCommand(
+                request.FarmId, request.PlotId, request.BaseRevision, spec, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    // ── spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) — the farm's own-bill switch. A NEW name. Only the farm's primary account holder may turn it
+    // (the handler's rule); a farm the sender is no Active member of is refused here with no farm GUC ever set. One line: allowlist-parity.test.ts parses it.
+    private async Task<MutationExecutionOutcome> HandleFarmOwnBillApprovalSetAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "allowed"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farm.own_bill_approval.set payload contains unsupported fields.");
+        }
+
+        // `allowed` must be a real true or false: a missing or null value is never read as "off".
+        if (!PayloadHasAll(payload, "farmId", "allowed")
+            || PayloadValue(payload, "allowed") is not { ValueKind: JsonValueKind.True or JsonValueKind.False }
+            || !TryDeserializeSchedulePayload<FarmOwnBillApprovalSetPayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farm.own_bill_approval.set.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await setOwnBillApprovalHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalCommand(
+                request.FarmId, request.Allowed, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
 
     /// <summary>The stage line is strict too (F5): an entry with a key the contract does not name is refused, never silently dropped.</summary>
     private static bool OwnScheduleStageLineHasOnlyKnownKeys(JsonElement payload)

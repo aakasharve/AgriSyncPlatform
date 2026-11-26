@@ -327,6 +327,15 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageHeardHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageDecideHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.OwnerVoice.OwnerMessageAnswerHandler>();
+        // spec: plr-d10 repair D-9 (founder 27 Nov) - a farm's setup on the server, per farm: the six farmsetup.* doors.
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.SaveWaterSourceHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveWaterSourceHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.SetPowerTimesHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.SaveMachineHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveMachineHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.SetPlotWaterHandler>();
+        // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch (farm.own_bill_approval.set).
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

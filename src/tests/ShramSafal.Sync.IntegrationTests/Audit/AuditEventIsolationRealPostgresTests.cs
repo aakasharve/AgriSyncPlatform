@@ -1472,6 +1472,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // ssf.schedule_chain_totals and one owner-only SELECT policy (p_totals_owner_select) on seven schedule tables, farms and the list. It never touches ssf.audit_events, its policies or its grants. Down() refuses while the list has
         // any row (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
         "20261125120000_AddScheduleTotals",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9) - Up() and Down() read in full: Up() creates six new tables only (ssf.farm_water_sources, farm_motors, farm_power_times, farm_machines,
+        // plot_water_setups, plot_water_links; FORCE RLS on each one's own farm_id, one place trigger function, SELECT + INSERT + UPDATE for the app role, DELETE and TRUNCATE revoked). It never touches
+        // ssf.audit_events, its policies or its grants. Down() refuses while any row exists (none does in this proof) and otherwise drops exactly what Up() added. Safe mid-proof.
+        "20261127020000_AddFarmSetup",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms and nothing
+        // else. It never touches ssf.audit_events, its policies or its grants. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
+        "20261127021000_AddFarmOwnBillApprovalSwitch",
     ];
 
     /// <summary>

@@ -139,7 +139,16 @@ public sealed record LabourEngagementDto(
     /// lane MU-3 fix 1 (F10) — <c>true</c> when a crew total WAS stated and is withheld from this reader (he does
     /// not see the farm's money): <see cref="TotalCost"/> is then null by rule, never "not stated". Additive.
     /// </summary>
-    bool? TotalCostWithheld = null);
+    bool? TotalCostWithheld = null,
+
+    /// <summary>
+    /// spec: plr-d10 repair D-9 paper, part 8b (a) ("कोणामार्फत?") — the मुकादम (a field operator of THIS farm, checked when the log was made) this crew
+    /// was engaged THROUGH, exactly as stored; <c>null</c> = none was named. It was written and never read back, so a second phone or a reinstall could
+    /// not show whom he picked. WRITTEN ONLY WHEN SET: a line that has none carries no such key, so its bytes are what they were (P11). Additive and
+    /// last. It never changes <see cref="WorkerCount"/> or any other reported quantity (P7): it says through whom, not how many.
+    /// </summary>
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    Guid? EngagedThroughFieldOperatorId = null);
 
 /// <summary>
 /// One live attribution row (<c>FieldOperatorWorkRow</c>) as a device reads it.

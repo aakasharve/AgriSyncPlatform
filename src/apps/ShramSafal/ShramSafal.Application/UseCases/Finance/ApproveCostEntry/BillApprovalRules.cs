@@ -4,18 +4,20 @@ namespace ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 /// spec: plr-d10-redesign-real-integration-2026-10-25 — lane BILL-1 fix round 1 (review M3; founder question D-105 (a)).
 /// May a reviewer (review money) approve a bill he entered himself? Answered 2026-11-23 (spec: plr-d10-founder-answers-2026-11-23,
 /// C3 = C): "Owner decides for each farm, later. For now it works like A: nobody approves his own bill, the owner may. A switch
-/// per farm comes after 3 December." So <see cref="ReviewerMayApproveOwnBill"/> is <c>false</c>: a reviewer's own bills need
-/// someone else. The primary account holder's own bills are always his to approve. The per-farm switch is NOT built: when it
-/// comes it replaces this ONE named check, nothing else.
+/// per farm comes after 3 December." A reviewer's own bills need someone else; the primary account holder's own bills are always
+/// his to approve.
+/// <para>Repair D-177 (founder 27 Nov 2026, B1.4): the per-farm switch is built. The constant that stood here is gone; the FARM's
+/// value (<c>Farm.ReviewerMayApproveOwnBill</c>, off for every farm unless its primary owner turned it on) takes its place in this
+/// ONE named check, and nothing else changed: the correction rules below are as they were.</para>
 /// </summary>
 public static class BillApprovalRules
 {
-    /// <summary>D-105 (a), founder C3 = C (2026-11-23): nobody approves his own bill; the owner may.</summary>
-    public static readonly bool ReviewerMayApproveOwnBill = false;
-
-    /// <summary>May this approver stamp this bill, as its maker or not?</summary>
-    public static bool MayApproveOwnBill(bool isPrimaryAccountHolder, bool isMaker) =>
-        !isMaker || isPrimaryAccountHolder || ReviewerMayApproveOwnBill;
+    /// <summary>
+    /// May this approver stamp this bill, as its maker or not? <paramref name="farmAllows"/> is the farm's own-bill switch as it
+    /// stands when the approval arrives at the server.
+    /// </summary>
+    public static bool MayApproveOwnBill(bool isPrimaryAccountHolder, bool isMaker, bool farmAllows) =>
+        !isMaker || isPrimaryAccountHolder || farmAllows;
 
     /// <summary>
     /// spec: plr-d10 lane BILL-1b — founder D-105 (b), answered 2026-11-08: "Only you, the main owner, can change an approved
