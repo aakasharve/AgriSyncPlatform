@@ -121,9 +121,10 @@ describe('सेट-अप केंद्र — the farm open in the app', () 
         const row = await screen.findByTestId('hub-team');
         expect(row).toHaveTextContent('माझ्या टोळीतले लोक');
         expect(h.fetchLabourPermissions).not.toHaveBeenCalled();
-        // no "add plot" door on this farm
+        // no "add plot" door on this farm — and no "add crop" door either (round 1, Bug 3)
         fireEvent.click(screen.getByTestId('hub-open-structure'));
         expect(screen.queryByTestId('plot-add-c1')).toBeNull();
+        expect(screen.queryByText('नवीन पीक जोडा')).toBeNull();
     });
 
     it('the owned farm, open in the app, keeps its owner doors', async () => {
@@ -134,5 +135,6 @@ describe('सेट-अप केंद्र — the farm open in the app', () 
         expect(h.fetchLabourPermissions).toHaveBeenCalledWith('farm-1');
         fireEvent.click(screen.getByTestId('hub-open-structure'));
         expect(screen.getByTestId('plot-add-c1')).toBeInTheDocument();
+        expect(screen.getByText('नवीन पीक जोडा')).toBeInTheDocument();
     });
 });

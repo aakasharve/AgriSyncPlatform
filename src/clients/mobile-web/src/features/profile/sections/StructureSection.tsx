@@ -65,7 +65,8 @@ interface StructureSectionProps {
     setWizardCropId: (id: string | null) => void;
     /**
      * lane 2b (D-15 via D-26) — the server lets this person add a plot ("edit farm setup"). False:
-     * no add-plot door, since the server would refuse the plot (P5). Absent = true.
+     * no add-plot door, since the server would refuse the plot (P5) — and no add-crop door either (FIX-1
+     * round 1, Bug 3: a crop is part of the farm's structure too). Absent = true.
      */
     canAddPlot?: boolean;
     onOpenScheduleLibrary?: (cropId?: string) => void;
@@ -246,7 +247,9 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                         </div>
                     </div>
                 </GlassCard>
-            ) : (
+            ) : canAddPlot && (
+                // Repair FIX-1 round 1 (Bug 3): a crop is part of the farm's structure, like a plot — the same
+                // "edit farm setup" rule draws both doors (a seat without it never sees a door the server would refuse).
                 <BigButton onClick={() => setIsAddingCrop(true)} tone="white" testId="crop-add"><Plus size={20} aria-hidden="true" />नवीन पीक जोडा</BigButton>
             )}
 

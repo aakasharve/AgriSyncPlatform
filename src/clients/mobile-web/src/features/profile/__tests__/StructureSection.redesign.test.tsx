@@ -125,6 +125,18 @@ describe('StructureSection (redesigned)', () => {
         expect(p.setWizardCropId).toHaveBeenCalledWith('c1');
     });
 
+    // Repair FIX-1 round 1, Bug 3: adding a crop is part of the farm's structure, exactly like adding a plot — the
+    // same "edit farm setup" rule (`canAddPlot`) decides both doors.
+    it('a seat without farm-setup authority sees neither "नवीन पीक जोडा" nor "या पिकात प्लॉट जोडा"; with it, both', () => {
+        const { rerender } = render(<StructureSection {...props({ canAddPlot: false })} />);
+        expect(screen.queryByText('नवीन पीक जोडा')).toBeNull();
+        expect(screen.queryByTestId('crop-add')).toBeNull();
+        expect(screen.queryByText('या पिकात प्लॉट जोडा')).toBeNull();
+        rerender(<StructureSection {...props({ canAddPlot: true })} />);
+        expect(screen.getByTestId('crop-add')).toHaveTextContent('नवीन पीक जोडा');
+        expect(screen.getByTestId('plot-add-c1')).toHaveTextContent('या पिकात प्लॉट जोडा');
+    });
+
     it('with no crops it says so plainly', () => {
         render(<StructureSection {...props({ crops: [] })} />);
         expect(screen.getByTestId('crops-empty')).toHaveTextContent('अजून पीक जोडलेलं नाही');
