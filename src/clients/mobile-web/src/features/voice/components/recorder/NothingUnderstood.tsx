@@ -16,6 +16,7 @@ import { CategoryIcon } from '../../../logs/components/shramsathi/understandingR
 import type { IconName } from '../../../logs/components/shramsathi/understandingRing/icons';
 import { latestUnlinkedClipSince, readClipAudio } from '../../../../infrastructure/voice/clipLogLink';
 import { SavedClip } from '../../../logs/components/voiceFlowV2/SavedClip';
+import { PlaybackUnavailableNote, usePlaybackSwitch } from '../../../logs/components/voiceResult/playbackSwitch';
 import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
 import { useNoWorkQuestion } from '../../noWorkAnswer';
 
@@ -26,11 +27,19 @@ const ICONS: readonly IconName[] = ['work', 'labour', 'inputs'];
 /** How far back the answer's own clip can have been recorded (it was recorded seconds ago; this only bounds the scan). */
 const CLIP_WINDOW_MS = 10 * 60 * 1000;
 
-/** His clip of this answer, kept on the phone (a no-work answer saves no log, but the clip row is written before the parse). */
+/**
+ * His clip of this answer, kept on the phone (a no-work answer saves no log, but the clip row is written before the parse). It is HIS
+ * recording, so it obeys the shared playback switch like every other player of his voice: while the switch is OFF nothing plays and the
+ * founder's D-31 words stand where the player would be (the consent screen promises his recordings "can no longer be played back").
+ */
 const OwnClip: React.FC = () => {
     const [clip, setClip] = useState<{ id: string; seconds: number | null; blob: Blob } | null>(null);
     const [playing, setPlaying] = useState(false);
     const audio = useRef<HTMLAudioElement | null>(null);
+    const switchOff = usePlaybackSwitch() === false;
+    useEffect(() => {
+        if (switchOff) { audio.current?.pause(); setPlaying(false); }
+    }, [switchOff]);
     useEffect(() => {
         let alive = true;
         void (async () => {
@@ -43,7 +52,9 @@ const OwnClip: React.FC = () => {
         return () => { alive = false; audio.current?.pause(); };
     }, []);
     if (!clip) return null;
+    if (switchOff) return <PlaybackUnavailableNote testId="nu-play-off" />;
     const toggle = () => {
+        if (switchOff) return;
         if (!audio.current) {
             const a = new Audio(URL.createObjectURL(clip.blob));
             a.onended = () => setPlaying(false);

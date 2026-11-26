@@ -199,6 +199,8 @@ describe('statements that were measured against the code and found untrue stay o
             'features/logs/components/originalVoice/OriginalVoiceButton.tsx': 'SERVER-GATED: the audio comes from GetLogOriginalVoice, which refuses while OFF',
             'features/consent/ConsentScreen.tsx': 'NOT A RECORDING: the narration element of the consent screen',
             'pages/onboarding/welcome/WelcomeStory.tsx': 'NOT A RECORDING: the founder\'s welcome voice note bundled in the app (welcome/assets/welcome-note.mp3), never a farmer\'s clip',
+            'features/voice/components/recorder/NothingUnderstood.tsx': 'GATED: its SavedClip reads usePlaybackSwitch() (OFF = no play button, the D-31 words); the screen also stops a clip that is playing when the switch turns OFF',
+            'features/scheduler/ownerVoice/OwnerClipPlay.tsx': 'NOT HIS RECORDING: the schedule owner\'s message (its own clip store, slice 12b), never a farmer\'s clip; the switch is about his own recordings',
             'features/labour/identity/CardScanner.tsx': 'NOT A RECORDING: camera video preview',
             'features/logs/components/shramsathi/understandingRing/cinematicEngine.ts': 'NOT A RECORDING: animation timing',
             'features/logs/components/shramsathi/understandingRing/understandingEngine.ts': 'NOT A RECORDING: animation timing',
