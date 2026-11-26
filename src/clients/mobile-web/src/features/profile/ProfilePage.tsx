@@ -135,7 +135,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const { notes: waitingVoice } = useWaitingVoiceNotes();
 
     const cropPlot = useCropPlotState({ crops, onUpdateCrops });
-    const farmAdmin = useFarmAdminState();
+    // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
+    // Mukadam on any farm.
+    const { currentFarmId: profileFarmId, currentFarm: appFarm, switchFarm, farms: meFarms, meContext } = useFarmContext();
+    // Repair FIX-1 item 2 (R2-A 03 + 20): the hub follows the farm OPEN in the app — the one the header
+    // and the switcher show — never "the first farm I own".
+    const farmAdmin = useFarmAdminState(appFarm?.farmId ?? profileFarmId ?? null);
 
     // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
     // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
@@ -158,9 +163,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         }
     }, [adminMyFarm, adminSetShowFarmBoundary]);
 
-    // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
-    // Mukadam on any farm.
-    const { currentFarmId: profileFarmId, switchFarm, farms: meFarms, meContext } = useFarmContext();
     // lane HONESTY-2 (H4) — the number this account signed in with, as the server holds it, for the one "सत्यापित" tick.
     const signedInPhone = meContext?.me
         ? { masked: meContext.me.phoneMasked, verified: meContext.me.phoneVerifiedAtUtc != null }
@@ -178,31 +180,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         return ids;
     }, [farmAdmin.myMemberships]);
 
-    // Open a specific farm: switch app-wide farm context to it, sync the
-    // local farm-admin snapshot, and drill into its own page (Identity).
+    // Open a specific farm: switch app-wide farm context to it (the hub's farm follows it) and drill
+    // into its own page (Identity).
     const handleOpenFarm = React.useCallback((farmId: string) => {
         switchFarm(farmId);
-        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
-        if (picked) {
-            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
-        }
         setActiveTab('identity');
-    }, [switchFarm, farmAdmin]);
+    }, [switchFarm]);
 
     // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
     // row's own switch handler: switches farm context only, same as
     // AppHeader's own farm-switcher trigger (no drill-into-Identity, unlike
     // `handleOpenFarm` above, which is a DIFFERENT affordance — "open this
-    // farm's page" — that already exists in `FarmsSection`). Mirrors
-    // `handleOpenFarm`'s own `farmAdmin.setMyFarm` sync so the profile
-    // summary's farm name stays correct after switching from this row too.
-    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => {
-        switchFarm(farmId);
-        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
-        if (picked) {
-            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
-        }
-    }, [switchFarm, farmAdmin]);
+    // farm's page" — that already exists in `FarmsSection`). The hub's farm
+    // is read from the farm context, so it follows this switch by itself.
+    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => { switchFarm(farmId); }, [switchFarm]);
 
     // Guided-setup progress: a section counts as "done" once its core data
     // exists. Identity = name + village; Crops = at least one crop. The rest
