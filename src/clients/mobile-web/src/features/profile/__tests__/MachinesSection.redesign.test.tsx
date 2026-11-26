@@ -43,9 +43,12 @@ describe('MachinesSection (redesigned)', () => {
         expect(m![0].id).toMatch(/^mach_/);
     });
 
-    it('has no tank field for a rotavator', () => {
+    // Repair FIX-1 item 7: the tank is a blower's / sprayer's detail; the tractor's details are कंपनी, मॉडेल, HP.
+    it('has no tank field for a rotavator or a tractor; a sprayer has one', () => {
         render(<MachinesSection profile={profileWith()} onUpdate={vi.fn()} />);
         fireEvent.click(screen.getByTestId('machine-add'));
+        expect(screen.queryByTestId('machine-tank')).toBeNull();
+        fireEvent.click(screen.getByTestId('machine-type-Sprayer'));
         expect(screen.getByTestId('machine-tank')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('machine-type-Rotavator'));
         expect(screen.queryByTestId('machine-tank')).toBeNull();
