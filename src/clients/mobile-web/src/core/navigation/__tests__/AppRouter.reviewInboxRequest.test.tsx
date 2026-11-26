@@ -29,7 +29,7 @@ import { requestOpenReviewInbox } from '../../../features/oversight/oversightNav
 
 vi.mock('../../../shared/hooks/useUiPref', () => ({
     // Past the welcome + permissions gates, straight to the router body.
-    useUiPref: () => [true, vi.fn()] as const,
+    useUiPref: () => [true, vi.fn(), true] as const,
 }));
 
 vi.mock('../../../app/context/AppFeatureContexts', () => ({

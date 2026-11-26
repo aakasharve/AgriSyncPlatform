@@ -9,30 +9,73 @@
  * owner. It is shown unless the farm role says this person is NOT the owner:
  * a Worker or Mukadam. No role known yet (a brand-new account about to make
  * their first farm) keeps the greeting.
+ *
+ * Every new user now gets the founder's welcome voice note, which starts by
+ * itself after a short intro (founder decision 2026-11-23: compulsory for each
+ * user, gentle skip kept). The owner line under "अभिनंदन!" is the only part
+ * that still depends on role.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
-
-vi.mock('../onboarding/DawnScene', () => ({ default: () => null }));
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
 import WelcomeScreen from '../WelcomeScreen';
 
 const OWNER_LINE = 'सुव्यवस्थित शेतीचा मालक होण्याच्या वाटेवर!';
 
+beforeEach(() => {
+    // jsdom has no media playback: give the audio element a quiet stand-in.
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+});
+
 describe('WelcomeScreen - the owner greeting is for owners', () => {
-    afterEach(() => cleanup());
+    afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
     it.each(['Worker', 'Mukadam', 'worker'])('hidden for a %s; the rest of the welcome stays', (role) => {
         render(<WelcomeScreen onContinue={vi.fn()} farmRole={role} />);
         expect(screen.queryByText(OWNER_LINE)).toBeNull();
         expect(screen.getByText('अभिनंदन!')).toBeInTheDocument();
-        expect(screen.getByText('आज काय केलं')).toBeInTheDocument();
+        expect(screen.getByTestId('welcome-intro')).toBeInTheDocument();
     });
 
     it.each([undefined, 'Owner', 'PrimaryOwner', 'SecondaryOwner'])('kept for %s', (role) => {
         render(<WelcomeScreen onContinue={vi.fn()} farmRole={role} />);
         expect(screen.getByText(OWNER_LINE)).toBeInTheDocument();
+    });
+});
+
+describe('WelcomeScreen - the owner voice note', () => {
+    afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+
+    it.each(['Owner', 'Worker', 'Mukadam', undefined])('every user (%s) gets the intro, then the voice starts with no tap', (role) => {
+        vi.useFakeTimers();
+        const play = vi.mocked(HTMLMediaElement.prototype.play);
+        render(<WelcomeScreen onContinue={vi.fn()} farmRole={role} />);
+        expect(screen.getByTestId('welcome-intro')).toBeInTheDocument();
+        expect(play).not.toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(9500); });
+        expect(play).toHaveBeenCalled();
+    });
+
+    it.each(['Owner', 'Worker'])('skipping asks once, honestly, then continues (%s)', (role) => {
+        const onContinue = vi.fn();
+        render(<WelcomeScreen onContinue={onContinue} farmRole={role} />);
+        fireEvent.click(screen.getByTestId('welcome-story-skip'));
+        expect(screen.getByText('एक छोटी विनंती')).toBeInTheDocument();
+        expect(screen.getByText('फक्त 2 मिनिटं लागतील')).toBeInTheDocument();
+        expect(screen.queryByText(/नंतर ऐक/)).toBeNull(); // no promise of a "listen later" place that does not exist
+        fireEvent.click(screen.getByTestId('welcome-skip-confirm'));
+        expect(onContinue).toHaveBeenCalledTimes(1);
+    });
+
+    it('choosing to listen from the sheet starts the voice', () => {
+        const play = vi.mocked(HTMLMediaElement.prototype.play);
+        render(<WelcomeScreen onContinue={vi.fn()} farmRole="Owner" />);
+        fireEvent.click(screen.getByTestId('welcome-story-skip'));
+        fireEvent.click(screen.getByTestId('welcome-skip-stay'));
+        expect(play).toHaveBeenCalled();
     });
 });

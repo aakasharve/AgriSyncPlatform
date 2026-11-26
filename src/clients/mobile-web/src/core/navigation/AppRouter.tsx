@@ -56,9 +56,12 @@ const AppRouter: React.FC = () => {
         'shramsafal_permissions_granted',
         typeof window === 'undefined',
     );
-    // First-run welcome, shown once after login and before the consent screen.
-    const [welcomeSeen, setWelcomeSeen] = useUiPref<boolean>(
-        'shramsafal_welcome_seen',
+    // First-run welcome, shown once per user after login and before the consent
+    // screen. It is the founder's welcome voice note, compulsory for each user
+    // (founder decision 2026-11-23), so it has its own "seen" key: everyone,
+    // including people who saw the earlier static welcome, hears it once.
+    const [welcomeSeen, setWelcomeSeen, welcomeSeenLoaded] = useUiPref<boolean>(
+        'shramsafal_welcome_voice_v1_seen',
         typeof window === 'undefined',
     );
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
@@ -196,6 +199,11 @@ const AppRouter: React.FC = () => {
     // (trust rule 5; useVoiceRecorder.ts's "never skip to auto-save" holds
     // on this door again). The 2026-08-31 ruling it implemented is
     // superseded by the founder's 2026-09-01 final direction §7 / D1–D3.
+
+    // Wait for the stored answer before deciding. Until it is read the value is
+    // its "not seen" fallback, and the welcome would flash its intro (and start
+    // loading the voice note) for a returning user on every app open.
+    if (!welcomeSeenLoaded) return <RouteLoader />;
 
     if (!welcomeSeen) {
         return (
