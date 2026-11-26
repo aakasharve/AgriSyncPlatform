@@ -40,9 +40,11 @@ export interface SavedEarlierProps {
     playingId: string | null;
     lengthOf: (logId: string) => number | null;
     onTogglePlay: (logId: string) => void;
+    /** Open from the start (the detail page: the design's `<details class="early" open>`); default folded (the saved screen). */
+    open?: boolean;
 }
 
-export const SavedEarlier: React.FC<SavedEarlierProps> = ({ earlier, onDay, clips, playingId, lengthOf, onTogglePlay }) => {
+export const SavedEarlier: React.FC<SavedEarlierProps> = ({ earlier, onDay, clips, playingId, lengthOf, onTogglePlay, open = false }) => {
     const RS = useResultStr();
     const language = useOptionalLanguage()?.language;
     const SW = savedWords(language);
@@ -50,7 +52,7 @@ export const SavedEarlier: React.FC<SavedEarlierProps> = ({ earlier, onDay, clip
     if (earlier.length === 0) return null;
     const title = onDay ? resultDayStr(language).earlier : SW.earlierToday;
     return (
-        <details className="rounded-2xl border border-[#DDE3DA] bg-white px-3 [&_summary::-webkit-details-marker]:hidden" data-testid="vr2-earlier" style={{ fontFamily: SANS }}>
+        <details open={open} className="rounded-2xl border border-[#DDE3DA] bg-white px-3 [&_summary::-webkit-details-marker]:hidden" data-testid="vr2-earlier" style={{ fontFamily: SANS }}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-3">
                 <b className="text-[14.5px] font-bold text-[#1C1917]" data-testid="vr2-earlier-title">{title} ({digitsFor(earlier.length, language)})</b>
                 <small className="text-[12px] font-bold text-[#2D7FF9]">{SW.tapToListen}</small>

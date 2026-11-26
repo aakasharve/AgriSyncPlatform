@@ -84,6 +84,7 @@ import { LogProvider } from '../../app/context/LogContext';
 import AppShell from '../../app/components/AppShell';
 import { AppErrorBoundary } from '../../app/components/common/AppErrorBoundary';
 import ActionToast from '../../shared/components/ui/ActionToast';
+import { AboveV2Shell } from '../logs/components/voiceFlowV2/V2Shell';
 import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
@@ -335,10 +336,10 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
             />
 
             {notice && (
-                <ActionToast message={notice} type="partial" onDismiss={dismissNotice} />
+                <AboveV2Shell><ActionToast message={notice} type="partial" onDismiss={dismissNotice} /></AboveV2Shell>
             )}
             {!notice && globalToast && (
-                <ActionToast key={globalToast.message} message={globalToast.message} type={globalToast.type} onDismiss={dismissGlobalToast} />
+                <AboveV2Shell key={globalToast.message}><ActionToast message={globalToast.message} type={globalToast.type} onDismiss={dismissGlobalToast} /></AboveV2Shell>
             )}
         </div>
     );

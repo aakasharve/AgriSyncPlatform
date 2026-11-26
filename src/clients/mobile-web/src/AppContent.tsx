@@ -15,6 +15,7 @@ import AccessStatusNotice from './features/context/components/AccessStatusNotice
 import HeldWorkNotice from './features/context/components/HeldWorkNotice';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
+import { AboveV2Shell } from './features/logs/components/voiceFlowV2/V2Shell';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
 import MinimalOnboarding from './features/onboarding/components/MinimalOnboarding';
@@ -338,11 +339,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             />
 
             {toast && (
-                <ActionToast
-                    message={toast.message}
-                    type={toast.type}
-                    onDismiss={() => setToast(null)}
-                />
+                <AboveV2Shell>
+                    <ActionToast
+                        message={toast.message}
+                        type={toast.type}
+                        onDismiss={() => setToast(null)}
+                    />
+                </AboveV2Shell>
             )}
         </div>
     );

@@ -4,12 +4,17 @@
  *
  * spec: voice-flow-v2-2026-11-23 — founder 2026-11-26: "exact replication" of the approved design. The design shows the voice flow
  * full screen with ONE slim bar (the place chip on the left, "या महिन्यात N दिवस" on the right), not the app's big header, tabs
- * and bottom bar. V2Shell is that frame: a fixed full-screen layer (above the app's bottom bar, below sheets and toasts), the
- * design's background (#FBFBF7), the slim bar, a scrolling body and an optional footer. Rendered into `document.body` so no
- * transformed ancestor can trap it.
+ * and bottom bar. V2Shell is that frame: a fixed full-screen layer, the design's background (#FBFBF7), the slim bar, a scrolling
+ * body and an optional footer. Rendered through a portal so no transformed ancestor can trap it: into the app's root frame
+ * (`AppShell`, marked `data-app-shell`) when there is one, so it takes its place in the app's OWN layer order — above the app's
+ * header (z-50) and bottom bar (z-40), below the one approval sheet (z-60) and the app's toast (lifted by `AboveV2Shell`). Seen on
+ * localhost 2026-11-26: portalled into `document.body` the frame covered the toast and the approval sheet, because `AppShell` is
+ * `position: fixed` and so is a layer of its own. Anything portalled into `document.body` (the record-audience sheet) is above it.
+ * No app frame (a test, a lone preview) = `document.body`.
  */
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import type { DailyLog } from '../../../../types';
@@ -24,6 +29,13 @@ export function daysRecordedThisMonth(logs: readonly Pick<DailyLog, 'date'>[], t
 
 export const daysLabel = (n: number, language: string | null | undefined): string =>
     language === 'en' ? `${n} days this month` : `या महिन्यात ${digitsFor(n, 'mr')} दिवस`; // PROPOSED (Marathi) — the approved design's words
+
+/**
+ * The app's toast sits at the header's own layer (z-50) in the app frame; with the flag on it is lifted one step above the v2 frame
+ * (a stacking layer of its own; a `fixed` toast inside still places itself on the screen). Flag off: the child alone, as before.
+ */
+export const AboveV2Shell: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+    (FEATURE_FLAGS.voiceFlowV2 ? <div className="relative z-[52]" data-testid="above-v2-shell">{children}</div> : <>{children}</>);
 
 export interface V2ShellProps {
     /** "द्राक्ष · Grapes A" — the place chip. */
@@ -42,7 +54,7 @@ export interface V2ShellProps {
 export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel, footer, testId = 'v2-shell', children }) => {
     const language = useOptionalLanguage()?.language;
     const frame = (
-        <div className="fixed inset-0 z-[45] flex flex-col bg-[#FBFBF7] text-[#1C1917]" data-testid={testId} style={{ fontFamily: SANS }}>
+        <div className="fixed inset-0 z-[51] flex flex-col bg-[#FBFBF7] text-[#1C1917]" data-testid={testId} style={{ fontFamily: SANS }}>
             <div className="flex items-center gap-2 px-4 pb-2 pt-[max(8px,env(safe-area-inset-top))]" data-testid="v2-appbar">
                 {onBack && (
                     <button type="button" onClick={onBack} aria-label={backLabel ?? 'मागे'} data-testid="v2-back"
@@ -59,7 +71,8 @@ export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel
             {footer && <div className="shrink-0 border-t border-[#DDE3DA] bg-white pb-[env(safe-area-inset-bottom)]" data-testid="v2-footer">{footer}</div>}
         </div>
     );
-    return typeof document === 'undefined' ? frame : createPortal(frame, document.body);
+    if (typeof document === 'undefined') return frame;
+    return createPortal(frame, document.querySelector<HTMLElement>('[data-app-shell]') ?? document.body);
 };
 
 export default V2Shell;

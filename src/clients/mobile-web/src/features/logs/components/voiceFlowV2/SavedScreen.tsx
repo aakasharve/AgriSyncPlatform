@@ -17,6 +17,11 @@
  *   5. the bottom bar: the big mic and the 30-second self-close (`IdleCloseBar`), held while a clip plays, the product card or
  *      the day sheet or any overlay is open, and off when the container says so.
  * No "पक्कं आहे" here (it stays on the detail page), no projected number, no save call.
+ *
+ * Founder 2026-11-26 ("exact replication of what we built"): the whole screen sits in the design's full-screen frame (`V2Shell`):
+ * the slim bar (← the screen's own back, the recording's place, "या महिन्यात N दिवस"), the body scrolling under it, and the
+ * bottom bar (5.) as the frame's footer — no longer sticky, so no end-room. The container's banners (`top`) open the body and its
+ * day sheet (`sheet`) is drawn inside the frame, so every sheet stays above it.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
@@ -26,7 +31,6 @@ import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewCom
 import { SHIPPABLE_RULES, type MixRule } from '../../../../domain/inputs/mixVerdict';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
-import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { dayRel, dayShort } from '../dayPick/dayWords';
@@ -50,9 +54,8 @@ import SavedMeterGauge from './SavedMeterGauge';
 import SavedPartsGrid from './SavedPartsGrid';
 import SavedProductCard from './SavedProductCard';
 import SavedScreenLower from './SavedScreenLower';
-
-/** The design's `.hstrip .chip`. */
-const CHIP = 'inline-block whitespace-nowrap rounded-full border border-[#DDE3DA] bg-white px-[11px] py-1 text-[13px] font-extrabold text-[#1C1917]';
+import SavedSpeakers, { HEAD_CHIP as CHIP } from './SavedSpeakers';
+import V2Shell from './V2Shell';
 
 export interface SavedScreenProps {
     day: DayView;
@@ -84,6 +87,14 @@ export interface SavedScreenProps {
     autoCloseOff: string | null;
     onOpenDetail: () => void;
     onAutoClose: () => void;
+    /** Days recorded this month (the frame's "या महिन्यात N दिवस"); null = not shown. */
+    days: number | null;
+    /** The frame's back arrow: leaves the saved screen (the container's existing back). */
+    onBack: () => void;
+    /** The container's banners (a refused change, who may see it, money not followed), at the top of the body. */
+    top?: React.ReactNode;
+    /** The container's day sheet, drawn inside the frame so it is never under it. */
+    sheet?: React.ReactNode;
 }
 
 /** The title's claim: only what the sync state says (P10). */
@@ -147,12 +158,17 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const severalNote = severalPlots ? null : <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />;
     const addedEntries = day.current.flatMap(r => r.entries);
     const speakerDone = !!kit && !kit.canCheck && addedEntries.some(e => e.products?.items.some(i => !!i.ref));
+    const place = typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel;
 
     return (
+        <V2Shell place={place} days={p.days} onBack={p.onBack} backLabel={RS.back} testId="vr2-shell"
+            footer={<IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
+                onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />}>
         <div ref={root} className="space-y-3 pt-1" style={{ fontFamily: SANS }} data-testid="vr2-saved">
+            {p.top && <div className="-mx-3 -mt-2 empty:hidden" data-testid="vr2-top">{p.top}</div>}
             <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
             <div className="flex flex-wrap items-center gap-1.5" data-testid="vr2-head">
-                <span className={CHIP} data-testid="vr2-place"><span aria-hidden="true">📍 </span>{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
+                <span className={CHIP} data-testid="vr2-place"><span aria-hidden="true">📍 </span>{place}</span>
                 {p.onChangeDay ? (
                     <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className={`${CHIP} border-[#94A3B8]`}><span aria-hidden="true">📅 </span>{dayText} ▾</button>
                 ) : (
@@ -160,15 +176,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 )}
                 <span className="text-[12px] font-bold text-[#5F6B63]" data-testid="vr2-count">{onDay ? (count > 1 ? nd(DS.count(count, onDay)) : DS.first(onDay)) : count > 1 ? nd(RS.todayCount(count)) : RS.firstToday}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-[5px] rounded-[14px] border border-[#DDE3DA] bg-white px-2.5 py-1.5" data-testid="vr2-speakers">
-                <span className="text-[12px] font-extrabold text-[#5F6B63]">{onDay ? DS.who(onDay) : RS.todayWho}:</span>
-                {day.speakers.map(s => (
-                    <span key={`${s.you}-${s.name}`} data-you={s.you ? 'yes' : 'no'}
-                        className={`rounded-full border px-[9px] py-px text-[12px] font-extrabold ${s.you ? 'border-[#86EFAC] bg-[#F0FDF4] text-[#14532D]' : 'border-[#93C5FD] bg-[#EFF6FF] text-[#1E3A8A]'}`}>
-                        {s.name} · {nd(RS.times(s.times))}
-                    </span>
-                ))}
-            </div>
+            <SavedSpeakers day={day} onDay={onDay} testId="vr2-speakers" />
 
             <section className="flex flex-col items-center gap-2 rounded-[22px] border-[1.5px] border-[#F0DFA6] p-3" data-testid="vr2-saved-card"
                 style={{ background: 'linear-gradient(180deg,#FFFBEA,#FFF6D8)' }}>
@@ -215,13 +223,10 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}
                 questionPanel={p.questionPanel} extras={p.extras} onOpenDetail={p.onOpenDetail} />
 
-            <IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
-                onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />
-            {/* Room under the sticky bar: at the very end of the page the bar rests here, so "आजचा आढावा बघा" and the last
-                rows scroll fully above it and above the app's bottom bar (seen on localhost: they sat under both). */}
-            <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: BOTTOM_BAR_CLEARANCE }} />
             {card && kit && <SavedProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
+            {p.sheet}
         </div>
+        </V2Shell>
     );
 };
 

@@ -130,6 +130,22 @@ describe('voice flow v2 — around the saved screen', { timeout: 60_000 }, () =>
         expect(c.handleReset).toHaveBeenCalledTimes(1);
     });
 
+    it('the full-screen frame\'s ← (which covers the sticky bar) leaves like the bar: the reset, then the bar\'s history entry is reclaimed', async () => {
+        const { renderLogView } = await load(true);
+        const c = ctx();
+        render(<>{renderLogView(c)}</>);
+        await screen.findByTestId('voice-result-stub');
+        expect((window.history.state as Record<string, unknown> | null)?.agrisyncSavedBackTrap).toBe(true);
+        const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+        try {
+            (seen.props?.onBack as () => void)();
+            expect(c.handleReset).toHaveBeenCalledTimes(1);
+            expect(back).toHaveBeenCalledTimes(1);
+        } finally {
+            back.mockRestore();
+        }
+    });
+
     it('flag OFF: no close is handed to the screen, and the sticky back is the reset as before', async () => {
         const { renderLogView, back } = await load(false);
         back.resetDetailBackForTests();

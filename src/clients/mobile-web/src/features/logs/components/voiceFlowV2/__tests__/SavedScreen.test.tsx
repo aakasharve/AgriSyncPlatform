@@ -90,7 +90,7 @@ const props = (over: Partial<SavedScreenProps> = {}): SavedScreenProps => ({
     onEdit: vi.fn(), onAddAnother: vi.fn(), onTellMore: vi.fn(),
     questionPanel: <div data-testid="question-panel" />, extras: <div data-testid="extras-slot" />,
     answerKit: kitOf([NOW, EARLIER], false),
-    autoCloseOff: null, onOpenDetail: vi.fn(), onAutoClose: vi.fn(),
+    autoCloseOff: null, onOpenDetail: vi.fn(), onAutoClose: vi.fn(), days: 3, onBack: vi.fn(),
     ...over,
 });
 
@@ -119,7 +119,9 @@ describe('SavedScreen — what he sees first', () => {
 
     it('on the phone only: the title is "लक्षात ठेवलं ✓" and no server claim anywhere', () => {
         // (said once: the title; no repeated "लक्षात ठेवलं" badge)
-        const { container } = render(<SavedScreen {...props()} />);
+        render(<SavedScreen {...props()} />);
+        // The screen is drawn in the full-screen frame (a portal into the page's body): read the whole page.
+        const container = document.body;
         expect(screen.getByTestId('vr2-saved-title').textContent).toBe('लक्षात ठेवलं ✓');
         expect(screen.queryByTestId('vr2-on-server')).toBeNull();
         expect(container.textContent).not.toContain('श्रम सफलमध्ये');
@@ -219,9 +221,10 @@ describe('SavedScreen — what he sees first', () => {
     });
 
     it('no "पक्कं आहे" here, and no projected number (P4)', () => {
-        const { container } = render(<SavedScreen {...props({ answerKit: kitOf([NOW, EARLIER], true) })} />);
+        render(<SavedScreen {...props({ answerKit: kitOf([NOW, EARLIER], true) })} />);
         expect(screen.queryByTestId('vr-confirm')).toBeNull();
-        const text = container.textContent ?? '';
+        expect(screen.queryByTestId('vr2d-confirm')).toBeNull();
+        const text = document.body.textContent ?? '';
         expect(text).not.toMatch(/→\s*[0-9०-९]/);
         expect(text).not.toMatch(/\/१०|\/10/);
     });
@@ -243,6 +246,41 @@ describe('SavedScreen — what he sees first', () => {
         expect(p.onEdit).toHaveBeenCalledWith('L-B');
         expect(screen.getByTestId('vr2-edit-L-A')).toBeTruthy();
         expect(screen.queryByTestId('vr2-edit')).toBeNull();
+    });
+});
+
+describe('SavedScreen — full screen in the design\'s frame (founder 2026-11-26)', () => {
+    it('the frame\'s bar: ← (the screen\'s own back), the recording\'s place, "या महिन्यात N दिवस"', () => {
+        const p = props();
+        render(<SavedScreen {...p} />);
+        const shell = within(screen.getByTestId('vr2-shell'));
+        expect(shell.getByTestId('v2-place').textContent).toBe('द्राक्ष · प्लॉट १');
+        expect(shell.getByTestId('v2-days').textContent).toBe('या महिन्यात ३ दिवस');
+        fireEvent.click(shell.getByTestId('v2-back'));
+        expect(p.onBack).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('vr2-saved').closest('[data-testid="vr2-shell"]')).toBeTruthy();
+    });
+
+    it('no days recorded this month: no count pill (never a "०")', () => {
+        render(<SavedScreen {...props({ days: 0 })} />);
+        expect(screen.queryByTestId('v2-days')).toBeNull();
+    });
+
+    it('the mic and the 30 s bar are the frame\'s footer, not sticky; no end-room spacer', () => {
+        render(<SavedScreen {...props()} />);
+        const bar = screen.getByTestId('vr2-idle-bar');
+        expect(bar.closest('[data-testid="v2-footer"]')).toBeTruthy();
+        expect(bar.className).not.toContain('sticky');
+        expect(screen.queryByTestId('vr2-end-room')).toBeNull();
+        expect(within(screen.getByTestId('v2-footer')).getByTestId('vr2-add-another')).toBeTruthy();
+    });
+
+    it('the product card, the day sheet and the banners are drawn inside the frame (so above it)', () => {
+        render(<SavedScreen {...props({ sheet: <div data-testid="day-sheet" />, top: <div data-testid="banner" /> })} />);
+        expect(screen.getByTestId('day-sheet').closest('[data-testid="vr2-shell"]')).toBeTruthy();
+        expect(before('banner', 'vr2-head')).toBe(true);
+        fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
+        expect(screen.getByTestId('vr-product-card').closest('[data-testid="vr2-shell"]')).toBeTruthy();
     });
 });
 

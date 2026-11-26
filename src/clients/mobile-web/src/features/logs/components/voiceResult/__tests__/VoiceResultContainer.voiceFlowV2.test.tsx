@@ -5,8 +5,9 @@
  *
  * spec: voice-flow-v2-2026-11-23 (Task 12; amendments H2, H3, M5) — the REAL container over a real Dexie (fake-indexeddb), with
  * the voice flow v2 flag ON:
- *   - the saved screen comes first; today's result screen (unchanged) is one tap away, its "मागे", the phone's back and the
- *     sticky back all return to the saved screen;
+ *   - the saved screen comes first, full screen in the design's frame (the place, the month's days, ← its own back); the design's
+ *     detail page (शेतीचा आढावा, founder 2026-11-26) is one tap away, with the owner's "पक्कं आहे" for the owner only and the
+ *     approval list's "मंजुरीसाठी N"; its "मागे", the phone's back and the sticky back all return to the saved screen;
  *   - after 30 s untouched the screen closes itself once, with ONE toast whose claim follows the sync truth (P10);
  *   - it never closes itself while a log is not known to be on its way to the server, or while the sync needs a hand;
  *   - with the flag OFF the container renders exactly today's screen (the existing suites pin the rest).
@@ -16,7 +17,9 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const { flags } = vi.hoisted(() => ({ flags: { voiceFlowV2: true as boolean | undefined } }));
+const { flags, queue } = vi.hoisted(() => ({ flags: { voiceFlowV2: true as boolean | undefined }, queue: { count: null as number | null, opened: 0 } }));
+vi.mock('../../../../approval/useApprovalQueue', () => ({ useApprovalQueue: () => ({ count: queue.count, mayConfirm: queue.count !== null }) }));
+vi.mock('../../../../approval/openApprovalReview', () => ({ openApprovalReview: () => { queue.opened += 1; } }));
 vi.mock('../../../../../app/featureFlags', async (orig) => {
     const real = await orig<typeof import('../../../../../app/featureFlags')>();
     return { ...real, FEATURE_FLAGS: new Proxy(real.FEATURE_FLAGS, { get: (t, k) => (k in flags ? flags[k as keyof typeof flags] : t[k as keyof typeof t]) }) };
@@ -95,6 +98,8 @@ const onToast = (e: Event) => { toasts.push((e as CustomEvent<{ message: string;
 
 beforeEach(async () => {
     flags.voiceFlowV2 = true;
+    queue.count = null;
+    queue.opened = 0;
     toasts.length = 0;
     window.addEventListener('agrisync:toast', onToast);
     __resetBackStackForTests();
@@ -121,15 +126,60 @@ describe('voice flow v2 — the saved screen first', () => {
         expect(screen.getByTestId('vr2-saved-title').textContent).toBe('लक्षात ठेवलं ✓');
     });
 
-    it('the blue button opens today\'s result screen unchanged, with the owner\'s "पक्कं आहे"; its मागे returns', () => {
+    it('the saved screen is full screen in the frame: the recording\'s place, ← is the screen\'s own back', () => {
+        const p = props();
+        mount(p);
+        expect(screen.getByTestId('vr2-saved').closest('[data-testid="vr2-shell"]')).toBeTruthy();
+        expect(screen.getByTestId('v2-place').textContent).toBe('द्राक्ष · प्लॉट १');
+        fireEvent.click(screen.getByTestId('v2-back'));
+        expect(p.onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('the frame counts the days recorded this month from the history (a count, never a streak)', () => {
+        const now = new Date();
+        const key = (d: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const extra = [1, 2].map(d => ({ ...HISTORY[0], id: `old-${d}`, date: key(d), fullTranscript: undefined } as DailyLog));
+        mount(props({ history: [...HISTORY, ...extra] }));
+        expect(screen.getByTestId('v2-days').textContent).toBe('या महिन्यात २ दिवस');
+    });
+
+    it('the blue button opens the design\'s detail page, with the owner\'s "पक्कं आहे"; its मागे returns', () => {
         mount(props());
         fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        expect(screen.getByTestId('voice-result')).toBeTruthy();
-        expect(screen.getByTestId('vr-confirm')).toBeTruthy();
-        expect(screen.queryByTestId('vr2-saved-card')).toBeNull();
-        fireEvent.click(screen.getByTestId('vr-back'));
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.getByTestId('vr2-detail')).toBeTruthy();
+        expect(screen.getByTestId('vr2d-shell').textContent).toContain('शेतीचा आढावा');
+        expect(screen.getByTestId('vr2d-confirm')).toBeTruthy();
+        expect(screen.getByTestId('vr2d-confirm-basis').textContent).toBe('वाचा आणि पक्कं करा');
         expect(screen.queryByTestId('voice-result')).toBeNull();
+        expect(screen.queryByTestId('vr2-saved-card')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr2d-back'));
+        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.queryByTestId('vr2-detail')).toBeNull();
+        expect(openOverlayCount()).toBe(0);
+    });
+
+    it('the detail page never asks someone who is not the primary owner to confirm', () => {
+        mount(props({ farmRole: 'Mukadam' }));
+        fireEvent.click(screen.getByTestId('vr2-open-detail'));
+        expect(screen.getByTestId('vr2-detail')).toBeTruthy();
+        expect(screen.queryByTestId('vr2d-confirm')).toBeNull();
+    });
+
+    it('a log not known to be on its way to the server is not offered to confirm (its verify would be refused)', () => {
+        mount(props({ syncQueuedById: new Map([[NOW, null]]) }));
+        fireEvent.click(screen.getByTestId('vr2-open-detail'));
+        expect(screen.queryByTestId('vr2d-confirm')).toBeNull();
+    });
+
+    it('"मंजुरीसाठी N" only when the one approval list gives a number; the tap opens the one review sheet', () => {
+        const view = mount(props());
+        fireEvent.click(screen.getByTestId('vr2-open-detail'));
+        expect(screen.queryByTestId('vr2d-approvals')).toBeNull();
+        queue.count = 2;
+        view.rerender(<VoiceResultContainer {...props()} />);
+        expect(screen.getByTestId('vr2d-approvals-count').textContent).toBe('मंजुरीसाठी २');
+        fireEvent.click(screen.getByTestId('vr2d-approvals'));
+        expect(queue.opened).toBe(1);
     });
 
     it('the phone\'s back (the back stack) and the sticky back return from the detail page to the saved screen', () => {
@@ -216,7 +266,7 @@ describe('voice flow v2 — the saved screen first', () => {
         const p = props();
         const view = mount(p);
         fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        expect(screen.getByTestId('voice-result')).toBeTruthy();
+        expect(screen.getByTestId('vr2-detail')).toBeTruthy();
         view.rerender(<VoiceResultContainer {...p} result={{ ...p.result, key: 'clip-next|T' }} />);
         expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
     });

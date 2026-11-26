@@ -66,6 +66,18 @@ function hasBackTrap(): boolean {
     return Boolean(state && state[BACK_TRAP]);
 }
 
+/**
+ * spec: voice-flow-v2-2026-11-23 (founder 2026-11-26) — leave the post-save surface from a control OTHER than this bar (the v2
+ * full-screen frame's ← covers the bar): the same two steps as the bar's own tap — leave first, then reclaim this bar's history
+ * entry, so the phone's next back is not a dead press.
+ */
+export function leaveSavedSurface(onBack: () => void): void {
+    onBack();
+    if (typeof window !== 'undefined' && hasBackTrap()) {
+        window.history.back();
+    }
+}
+
 export function SavedScreenBack({ onBack, onStepBack }: SavedScreenBackProps): React.ReactElement {
     const { t } = useLanguage();
 

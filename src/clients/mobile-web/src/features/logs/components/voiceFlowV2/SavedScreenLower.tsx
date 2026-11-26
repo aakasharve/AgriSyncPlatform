@@ -34,6 +34,39 @@ const plotsOf = (r: RecordingView, RS: ResultStr): string => {
 /** The design's `.editb`. */
 const EDITB = 'min-h-[48px] w-full rounded-[14px] border-[1.5px] border-[#DDE3DA] bg-white px-3.5 text-[15px] font-extrabold text-[#1C1917]';
 
+/**
+ * "✎ बदला" — or one per plot, each with its own not-queued badge, when he named several. Shared by the saved screen and the
+ * detail page (the same buttons, the same edit form). `prefix` keeps each page's test ids its own.
+ */
+export const SavedEditButtons: React.FC<{
+    day: DayView; primary: RecordingView; syncQueuedOf: (logId: string) => boolean | null | undefined; onEdit: (logId: string) => void; prefix?: string;
+}> = ({ day, primary, syncQueuedOf, onEdit, prefix = 'vr2' }) => {
+    const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
+    const SW = savedWords(language);
+    if (day.current.length <= 1) {
+        return (
+            <button type="button" onClick={() => onEdit(primary.id)} data-testid={`${prefix}-edit`} className={`${EDITB} text-center`} style={{ fontFamily: SANS }}>
+                ✎ {RS.edit}
+            </button>
+        );
+    }
+    // He named several plots: one log each. Each can be fixed, and each says if it will not reach the server.
+    return (
+        <div className="flex flex-col gap-1.5" data-testid={`${prefix}-plots`} style={{ fontFamily: SANS }}>
+            <div className="text-[13px] font-extrabold text-[#5F6B63]">{SW.plotsEach(digitsFor(day.current.length, language))}</div>
+            {day.current.map(r => (
+                <div key={r.id} data-testid={`${prefix}-plot-${r.id}`}>
+                    <button type="button" onClick={() => onEdit(r.id)} data-testid={`${prefix}-edit-${r.id}`} className={`${EDITB} text-left`}>
+                        <span className="block truncate">✎ {RS.edit} · {plotsOf(r, RS)}</span>
+                    </button>
+                    <NotQueuedForServerBadge syncQueued={syncQueuedOf(r.id)} />
+                </div>
+            ))}
+        </div>
+    );
+};
+
 export interface SavedScreenLowerProps {
     day: DayView;
     primary: RecordingView;
@@ -53,34 +86,13 @@ export interface SavedScreenLowerProps {
 
 export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
     const { day, primary } = p;
-    const RS = useResultStr();
-    const language = useOptionalLanguage()?.language;
-    const W = voiceFlowWords(language);
-    const SW = savedWords(language);
-    const severalPlots = day.current.length > 1;
+    const W = voiceFlowWords(useOptionalLanguage()?.language);
     return (
         <>
             {p.questionPanel && <div data-testid="vr2-question">{p.questionPanel}</div>}
             {p.extras}
 
-            {severalPlots ? (
-                // He named several plots: one log each. Each can be fixed, and each says if it will not reach the server.
-                <div className="flex flex-col gap-1.5" data-testid="vr2-plots" style={{ fontFamily: SANS }}>
-                    <div className="text-[13px] font-extrabold text-[#5F6B63]">{SW.plotsEach(digitsFor(day.current.length, language))}</div>
-                    {day.current.map(r => (
-                        <div key={r.id} data-testid={`vr2-plot-${r.id}`}>
-                            <button type="button" onClick={() => p.onEdit(r.id)} data-testid={`vr2-edit-${r.id}`} className={`${EDITB} text-left`}>
-                                <span className="block truncate">✎ {RS.edit} · {plotsOf(r, RS)}</span>
-                            </button>
-                            <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(r.id)} />
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <button type="button" onClick={() => p.onEdit(primary.id)} data-testid="vr2-edit" className={`${EDITB} text-center`} style={{ fontFamily: SANS }}>
-                    ✎ {RS.edit}
-                </button>
-            )}
+            <SavedEditButtons day={day} primary={primary} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit} />
 
             <SavedEarlier earlier={day.earlier} onDay={p.onDay} clips={p.clips} playingId={p.playingId} lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} />
 
