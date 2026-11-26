@@ -24,16 +24,18 @@ export interface SavedGivenProps {
     kit?: ProductAnswerKit;
     verdicts: readonly TankVerdict[];
     onOpen: (item: ProductItem, logId: string) => void;
+    /** The section's title; default "तुम्ही काय दिलं" (the detail page says the design's "औषध / खत"). */
+    title?: string;
 }
 
-export const SavedGiven: React.FC<SavedGivenProps> = ({ day, kit, verdicts, onOpen }) => {
+export const SavedGiven: React.FC<SavedGivenProps> = ({ day, kit, verdicts, onOpen, title }) => {
     const language = useOptionalLanguage()?.language;
     const W = voiceFlowWords(language);
     const nowLines = dayLinesOf(day, language, 'now');
     const tanks = nowLines.filter(l => l.box && l.boxEntry);
     if (tanks.length === 0) return null;
     return (
-        <RbSec testId="vr2-given" title={W.givenTitle} hint={kit ? W.givenHint : undefined}>
+        <RbSec testId="vr2-given" title={title ?? W.givenTitle} hint={kit ? W.givenHint : undefined}>
             {tanks.map(line => {
                 const box = line.box;
                 const entry = line.boxEntry;

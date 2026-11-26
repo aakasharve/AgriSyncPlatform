@@ -28,7 +28,7 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 import type { VoiceResultState } from '../../app/hooks/useVoiceAutoSave';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
-import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
+import SavedScreenBack, { leaveSavedSurface } from '../../features/logs/components/shramsathi/SavedScreenBack';
 // The model's own rule for "the log that carries his words" (useVoiceAutoSave keeps the same one-liner): it keeps the
 // auto-save hook and its clip store out of the log tab's first load.
 import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
@@ -149,7 +149,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
                     onEdit={ctx.handleEditLog}
                     onMoveDay={ctx.moveSavedDay}
-                    onBack={ctx.handleReset}
+                    // v2 (founder 2026-11-26): the full-screen frame covers the sticky bar, so its ← leaves the way the bar does.
+                    onBack={FEATURE_FLAGS.voiceFlowV2 ? () => leaveSavedSurface(ctx.handleReset) : ctx.handleReset}
                     onAutoClose={FEATURE_FLAGS.voiceFlowV2 ? () => { ctx.handleReset(); ctx.setLogScope(WORK_HOME_SCOPE); } : undefined}
                     onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
                     onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}

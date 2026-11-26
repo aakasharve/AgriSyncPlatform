@@ -117,17 +117,21 @@ export interface SavedWordsProps {
     unclear: readonly string[];
     /** His recording's player (or the typed note), at the top of his words (founder 2026-11-23: meter, then his text). */
     player?: React.ReactNode;
+    /**
+     * false = no white section of its own: the player, then the small "तुमचं बोलणं" heading and his words, inside the caller's card
+     * (the detail page's record card, the design's `.adrec`). Default true (the saved screen's own section).
+     */
+    framed?: boolean;
 }
 
-export const SavedWords: React.FC<SavedWordsProps> = ({ transcript, wordsWithheld, entries, unclear, player }) => {
+export const SavedWords: React.FC<SavedWordsProps> = ({ transcript, wordsWithheld, entries, unclear, player, framed = true }) => {
     const RS = useResultStr();
     const copy = resultCopy(useOptionalLanguage()?.language);
     const [focus, setFocus] = useState<PartKey | null>(null);
     const runs = markTranscript(transcript, entries);
     if (!wordsWithheld && runs.length === 0 && unclear.length === 0 && !player) return null;
-    return (
-        <RbSec testId="vr2-words" title={copy.yourWords}>
-            {player && <div className="mb-2">{player}</div>}
+    const body = (
+        <>
             {wordsWithheld ? <MoneyWordsWithheldCard testId="vr-words-withheld" /> : runs.length > 0 && <TintedWords runs={runs} focus={focus} />}
             <WhyTiles runs={runs} entries={entries} focus={focus} onFocus={setFocus} />
             {unclear.length > 0 && (
@@ -136,6 +140,21 @@ export const SavedWords: React.FC<SavedWordsProps> = ({ transcript, wordsWithhel
                     {unclear.map((u, i) => <div key={i}>“{u}”</div>)}
                 </div>
             )}
+        </>
+    );
+    if (!framed) {
+        return (
+            <div data-testid="vr2-words">
+                {player}
+                <h4 className="m-0 mb-1 mt-2 text-[13px] font-extrabold text-[#5F6B63]" data-testid="vr2d-words-heading">{copy.yourWords}</h4>
+                {body}
+            </div>
+        );
+    }
+    return (
+        <RbSec testId="vr2-words" title={copy.yourWords}>
+            {player && <div className="mb-2">{player}</div>}
+            {body}
         </RbSec>
     );
 };

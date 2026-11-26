@@ -19,6 +19,14 @@ export interface SavedWords {
     selfTold: string;
     otherTold: (name: string) => string;
     plotsEach: (n: string) => string;
+    /** The detail page's name in the slim bar (the design's `setPlace('शेतीचा आढावा')`). */
+    aadhava: string;
+    /** "१ नोंद" / "३ नोंदी" — the day's recordings, counted from the screen's own rows. */
+    records: (n: number, digits: string) => string;
+    productsTitle: string;
+    approvalSub: string;
+    /** The role word after the holder's own name ("रमेश (मालक)"): only his own role, as the server told this phone. */
+    role: Readonly<Record<string, string>>;
 }
 
 export const SAVED_MR: SavedWords = {
@@ -40,6 +48,11 @@ export const SAVED_MR: SavedWords = {
     selfTold: 'तुम्ही स्वतः सांगितलं', // PROPOSED (Marathi)
     otherTold: (name: string) => `${name} यांनी सांगितलं`, // PROPOSED (Marathi)
     plotsEach: (n: string) => `${n} प्लॉट — प्रत्येक प्लॉटची वेगळी नोंद झाली`, // PROPOSED (Marathi)
+    aadhava: 'शेतीचा आढावा', // PROPOSED (Marathi) — the design's own name for the detail page (founder 2026-11-26)
+    records: (n: number, digits: string) => (n === 1 ? `${digits} नोंद` : `${digits} नोंदी`), // PROPOSED (Marathi) — the design's chip
+    productsTitle: 'औषध / खत', // PROPOSED (Marathi) — the design's section title
+    approvalSub: 'मुकादम आणि कामगारांच्या नोंदी', // PROPOSED (Marathi) — the design's line under "मंजुरीसाठी N"
+    role: { PrimaryOwner: 'मालक', SecondaryOwner: 'सहमालक', Mukadam: 'मुकादम', Worker: 'कामगार' }, // EXISTING words (team page)
 };
 
 export const SAVED_EN: SavedWords = {
@@ -61,6 +74,11 @@ export const SAVED_EN: SavedWords = {
     selfTold: 'You told it yourself', // PROPOSED (English)
     otherTold: (name: string) => `Told by ${name}`, // PROPOSED (English)
     plotsEach: (n: string) => `${n} plots — each plot got its own record`, // PROPOSED (English)
+    aadhava: 'Farm review', // PROPOSED (English)
+    records: (n: number, digits: string) => (n === 1 ? `${digits} record` : `${digits} records`), // PROPOSED (English)
+    productsTitle: 'Sprays / fertiliser', // PROPOSED (English)
+    approvalSub: 'Records by the mukadam and workers', // PROPOSED (English)
+    role: { PrimaryOwner: 'Owner', SecondaryOwner: 'Co-owner', Mukadam: 'Mukadam', Worker: 'Worker' }, // PROPOSED (English)
 };
 
 /** The words in the screen's language (Marathi unless English is chosen). */
