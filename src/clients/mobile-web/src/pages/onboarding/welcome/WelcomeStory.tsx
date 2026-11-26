@@ -89,11 +89,23 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
     const readyRef = useRef(false);
     const ctxRef = useRef<AudioContext | null>(null);
     const begunRef = useRef(false);
+    // The latest "finished" callback, held apart from the player. The router used to hand a new one on
+    // every redraw (background sync redraws every 15 s); the player set-up re-ran on it, and its
+    // clean-up paused the voice: the note stopped between 0 and 15 s on every phone (R1 04-A).
+    const onDoneRef = useRef(onDone);
+    useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+    // What the play button shows, kept equal to the real audio state: set from the player's own events
+    // AND checked every frame, so a stop without a "pause" event can never leave a wrong button.
+    const playingRef = useRef(false);
+    const syncPlaying = useCallback((audio: HTMLAudioElement) => {
+        const now = !audio.paused;
+        if (now !== playingRef.current) { playingRef.current = now; setPlaying(now); }
+    }, []);
 
     const sceneIdx = sceneIndexForLine(Math.max(0, lineIdx));
     const line = lineIdx >= 0 ? STORY_LINES[lineIdx] : null;
 
-    /* ---- audio lifecycle ---- */
+    /* ---- audio lifecycle: ONE player for the life of this screen ---- */
     useEffect(() => {
         const audio = new Audio();
         audio.preload = 'auto';
@@ -115,12 +127,13 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
                 audio.src = welcomeNoteUrl;
                 audio.load();
             });
-        const onPlay = () => setPlaying(true);
-        const onPause = () => setPlaying(false);
+        const onPlay = () => syncPlaying(audio);
+        const onPause = () => syncPlaying(audio);
         const onEnded = () => {
+            syncPlaying(audio);
             if (doneRef.current) return;
             doneRef.current = true;
-            window.setTimeout(() => onDone(true), 900);
+            window.setTimeout(() => onDoneRef.current(true), 900);
         };
         const onReady = () => { readyRef.current = true; };
         audio.addEventListener('canplaythrough', onReady);
@@ -168,7 +181,8 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             if (objectUrl) URL.revokeObjectURL(objectUrl);
             void ctx?.close().catch(() => undefined);
         };
-    }, [onDone]);
+        // Runs once (syncPlaying never changes): nothing the parent hands down may tear the player down mid-note.
+    }, [syncPlaying]);
 
     /* ---- per-frame sync (class toggles only) ---- */
     useEffect(() => {
@@ -202,10 +216,11 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             if (skyRef.current && Math.abs(p - lastSky) > 0.004) { lastSky = p; skyRef.current.style.background = skyGradient(p); }
             const level = audio.paused ? 0 : levelRef.current();
             rootRef.current?.style.setProperty('--lvl', level.toFixed(3));
+            syncPlaying(audio);
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
-    }, []);
+    }, [syncPlaying]);
 
     /* ---- after a scene mounts: collect its cue nodes ---- */
     useLayoutEffect(() => {
@@ -405,7 +420,7 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
                 remainingSec={sheet?.remaining ?? STORY_DURATION}
                 started={begunRef.current}
                 onStay={() => { setSheet(null); if (begunRef.current) play(); else begin(); }}
-                onLeave={() => { setSheet(null); doneRef.current = true; onDone(false); }}
+                onLeave={() => { setSheet(null); doneRef.current = true; onDoneRef.current(false); }}
             />
         </div>
     );

@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, screen, act, fireEvent, cleanup } from '@testing-library/react';
 
-const h = vi.hoisted(() => ({ prefs: {} as Record<string, unknown>, loaded: true }));
+const h = vi.hoisted(() => ({ prefs: {} as Record<string, unknown>, loaded: true, voiceDoneSeen: [] as unknown[] }));
 
 vi.mock('../../../shared/hooks/useUiPref', async () => {
     const R = await import('react');
@@ -38,11 +38,14 @@ vi.mock('../lazyComponents', () => ({
             <button type="button" onClick={props.onComplete}>perm-continue</button>
         </div>
     ),
-    WelcomeStory: ({ onDone, showOwnerLine }: { onDone: (listened: boolean) => void; showOwnerLine: boolean }) => (
-        <div data-testid="stub-voice-note" data-owner-line={showOwnerLine ? 'yes' : 'no'}>
-            <button type="button" onClick={() => onDone(true)}>voice-done</button>
-        </div>
-    ),
+    WelcomeStory: ({ onDone, showOwnerLine }: { onDone: (listened: boolean) => void; showOwnerLine: boolean }) => {
+        h.voiceDoneSeen.push(onDone);
+        return (
+            <div data-testid="stub-voice-note" data-owner-line={showOwnerLine ? 'yes' : 'no'}>
+                <button type="button" onClick={() => onDone(true)}>voice-done</button>
+            </div>
+        );
+    },
     WelcomeScreen: ({ onContinue, onBack, farmRole, farmName }: { onContinue: () => void; onBack: () => void; farmRole: string; farmName: string }) => (
         <div data-testid="stub-role-welcome" data-role={farmRole} data-farm={farmName}>
             <button type="button" onClick={onContinue}>welcome-continue</button>
@@ -116,6 +119,7 @@ const OWNER_FARM = { name: 'आर्वे शेती', role: 'PrimaryOwner' 
 beforeEach(() => {
     h.prefs = {};
     h.loaded = true;
+    h.voiceDoneSeen = [];
 });
 afterEach(cleanup);
 
@@ -224,6 +228,20 @@ describe('AppRouter — the first run after the farm', () => {
         fireEvent.click(screen.getByText('voice-done'));
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
+        expect(h.prefs.shramsafal_welcome_voice_v1_seen).toBe(true);
+    });
+
+    // R1 04-A: the background sync redraws the router every 15 s; a new "finished" callback on each
+    // redraw used to restart the voice note's player. The router hands the SAME callback every time.
+    it('a redraw hands the voice note the SAME finished callback', async () => {
+        h.prefs = { shramsafal_permissions_granted: true };
+        let rerender: ReturnType<typeof render>['rerender'] = () => undefined;
+        await act(async () => { ({ rerender } = render(<AppRouter firstRunFarm={OWNER_FARM} farmsKnown />)); });
+        await act(async () => { rerender(<AppRouter firstRunFarm={{ ...OWNER_FARM }} farmsKnown />); });
+        await act(async () => { rerender(<AppRouter firstRunFarm={{ ...OWNER_FARM }} farmsKnown />); });
+        expect(h.voiceDoneSeen.length).toBeGreaterThanOrEqual(3);
+        expect(new Set(h.voiceDoneSeen).size).toBe(1);
+        fireEvent.click(screen.getByText('voice-done'));
         expect(h.prefs.shramsafal_welcome_voice_v1_seen).toBe(true);
     });
 

@@ -102,6 +102,12 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         'shramsafal_welcome_voice_v1_seen',
         typeof window === 'undefined',
     );
+    // ONE "finished" callback for the voice note's whole life (R1 04-A): the background sync redraws
+    // this router every 15 s, and a new callback on each redraw used to restart the note's player.
+    // Above every early return (rules of hooks).
+    const setVoiceSeenRef = React.useRef(setVoiceSeen);
+    React.useEffect(() => { setVoiceSeenRef.current = setVoiceSeen; });
+    const onWelcomeVoiceDone = React.useCallback(() => setVoiceSeenRef.current(true), []);
     // FR-8: back from the role welcome re-opens the permissions step for this visit.
     const [permissionsAgain, setPermissionsAgain] = React.useState(false);
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
@@ -299,7 +305,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                 const ownerSeat = ['owner', 'coOwner'].includes(toWelcomeRole(firstRunFarm.role));
                 return (
                     <React.Suspense fallback={<RouteLoader />}>
-                        <WelcomeStory onDone={() => setVoiceSeen(true)} showOwnerLine={ownerSeat} />
+                        <WelcomeStory onDone={onWelcomeVoiceDone} showOwnerLine={ownerSeat} />
                     </React.Suspense>
                 );
             }
