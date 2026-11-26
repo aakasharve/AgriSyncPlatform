@@ -22,6 +22,19 @@ export interface VoiceFlowWords {
     holdLink: string;
     held: string;
     sathiListening: string;
+    // recording stage (the design's full screen: Sathi's ring, his field, the red stop)
+    /** Sathi's first words when he pressed the mic himself. */
+    sathiHello: string;
+    /** Under "आता बोला — मी ऐकतोय" after an auto-start. */
+    listeningSub: string;
+    /** The honest status line: only seconds the phone holds (P10: never "सर्व्हरवर" here). */
+    recSafe: (seconds: number) => string;
+    /** Beside the red stop. */
+    stopSide: string;
+    /** The field card's caption: "तुमचं शेत · प्लॉट २". */
+    fieldTitle: (plot: string) => string;
+    /** How many things from his words are drawn in the field (after the parse only). */
+    fieldCount: (n: number) => string;
     // silence help
     coachOne: string;
     coachTitle: string;
@@ -71,6 +84,12 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     holdLink: 'थांबा, अजून प्लॉट निवडायचे आहेत', // PROPOSED (Marathi)
     held: 'माइक दाबल्यावरच ऐकेल', // PROPOSED (Marathi)
     sathiListening: 'आता बोला — मी ऐकतोय', // PROPOSED (Marathi)
+    sathiHello: 'सांगा, मी ऐकतोय…', // PROPOSED (Marathi)
+    listeningSub: 'आज शेतात काय काम झालं ते सांगा', // PROPOSED (Marathi)
+    recSafe: (n: number) => `${digitsFor(String(n), 'mr')} सेकंद आवाज फोनवर सुरक्षित`, // PROPOSED (Marathi)
+    stopSide: 'झालं की थांबवा', // PROPOSED (Marathi)
+    fieldTitle: (plot: string) => (plot ? `तुमचं शेत · ${plot}` : 'तुमचं शेत'), // PROPOSED (Marathi)
+    fieldCount: (n: number) => `शेतात भरलं: ${digitsFor(String(n), 'mr')}`, // PROPOSED (Marathi)
     coachOne: 'बोला… मी ऐकतोय. उदा. “आज छाटणी केली”', // PROPOSED (Marathi)
     coachTitle: 'काय सांगायचं? यापैकी काहीही', // PROPOSED (Marathi)
     prompts: [
@@ -121,6 +140,12 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     holdLink: 'Wait, I want to choose more plots', // PROPOSED (English)
     held: 'Listens only when you press the mic', // PROPOSED (English)
     sathiListening: 'Speak now — I am listening', // PROPOSED (English)
+    sathiHello: 'Go on, I am listening…', // PROPOSED (English)
+    listeningSub: 'Say what work was done on the farm today', // PROPOSED (English)
+    recSafe: (n: number) => `${n} seconds of voice safe on the phone`, // PROPOSED (English)
+    stopSide: 'Stop when done', // PROPOSED (English)
+    fieldTitle: (plot: string) => (plot ? `Your field · ${plot}` : 'Your field'), // PROPOSED (English)
+    fieldCount: (n: number) => `In the field: ${n}`, // PROPOSED (English)
     coachOne: 'Speak… I am listening. E.g. "Did pruning today"', // PROPOSED (English)
     coachTitle: 'What to say? Any of these', // PROPOSED (English)
     prompts: [

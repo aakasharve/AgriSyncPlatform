@@ -19,6 +19,7 @@ import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 import { VoiceJourney } from '../../features/logs/components/voiceFlowV2/VoiceJourney';
+import { daysRecordedThisMonth } from '../../features/logs/components/voiceFlowV2/V2Shell';
 import { ShramSathiUnderstanding as ShramSathiUnderstandingLine } from './mainViewComponents';
 import type { AppRouterContext } from './routeContext';
 import type { RecorderFlowV2 } from '../../features/voice/components/recorder/flowV2Types';
@@ -42,15 +43,26 @@ const focusRecorder = () => {
     }
 };
 
+/** spec voice-flow-v2-2026-11-23 — the v2 full-screen frame's words: the place chip, the field card's plot, the days count. */
+const v2Frame = (ctx: AppRouterContext) => {
+    const placeLabel = (language: string | undefined) => placeLabelOf(ctx.logScope, ctx.crops, language, resultStr(language).wholeFarm) ?? '';
+    const plotLabel = (language: string | undefined) => {
+        const crop = ctx.crops.find(c => ctx.logScope.selectedCropIds.includes(c.id));
+        const plots = (crop?.plots ?? []).filter(p => ctx.logScope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
+        return plots.length === 1 ? plots[0] : placeLabel(language);
+    };
+    return { placeLabel, plotLabel, days: daysRecordedThisMonth(ctx.history ?? []) };
+};
+
 /** THE log recorder (and its live caption), bound to the app's one voice pipeline. */
 export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, armSeq }: LogRecorderHooks = {}): React.ReactNode => {
     const { handleAudioReady, handleTextReady, setStatus, isContextReady, error, errorTranscript, liveCaption, voiceStreamingPhase } = ctx;
     // spec voice-flow-v2-2026-11-23 — OFF: undefined, today's recorder byte for byte.
-    const flowV2: RecorderFlowV2 | undefined = FEATURE_FLAGS.voiceFlowV2 ? {
+    const frame = FEATURE_FLAGS.voiceFlowV2 ? v2Frame(ctx) : undefined;
+    const flowV2: RecorderFlowV2 | undefined = frame ? {
         silenceHelp: true,
-        card: armSeq !== undefined
-            ? { armSeq, placeLabel: (language: string | undefined) => placeLabelOf(ctx.logScope, ctx.crops, language, resultStr(language).wholeFarm) ?? '' }
-            : undefined,
+        card: armSeq !== undefined ? { armSeq, placeLabel: frame.placeLabel } : undefined,
+        ...frame,
     } : undefined;
     return (
         <>
@@ -96,7 +108,7 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, ar
 /** THE waiting screen after he speaks (founder-approved; its component is not touched here). */
 export const renderProcessingScreen = (ctx: AppRouterContext): React.ReactNode => {
     // spec voice-flow-v2-2026-11-23 (Task 6) — the calm step list, each tick a real event. OFF: today's screen below.
-    if (FEATURE_FLAGS.voiceFlowV2) return <VoiceJourney crops={ctx.crops} farmerProfile={ctx.farmerProfile} logScope={ctx.logScope} />;
+    if (FEATURE_FLAGS.voiceFlowV2) return <VoiceJourney crops={ctx.crops} farmerProfile={ctx.farmerProfile} logScope={ctx.logScope} {...v2Frame(ctx)} />;
     const { liveCaption, voiceStreamingPhase } = ctx;
     return FEATURE_FLAGS.dailyLoop ? (
         /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —

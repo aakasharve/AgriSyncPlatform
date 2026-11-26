@@ -118,6 +118,32 @@ describe('VoiceJourney — the heading says it is saved', () => {
     });
 });
 
+describe('VoiceJourney — full screen, Sathi\'s mood and his field', () => {
+    it('in the v2 frame; Sathi ponders while it works and is happy once saved', () => {
+        render(<VoiceJourney crops={crops} farmerProfile={profile} logScope={scope} placeLabel={() => 'द्राक्ष · सोनाका'} days={4} />);
+        expect(screen.getByTestId('vj-shell')).toBeInTheDocument();
+        expect(screen.getByTestId('v2-place')).toHaveTextContent('द्राक्ष · सोनाका');
+        expect(screen.getByTestId('vj-waiting')).toBeInTheDocument();
+        expect(screen.getByTestId('vj-sathi')).toHaveAttribute('data-mood', 'ponder');
+        finish();
+        expect(screen.getByTestId('vj-sathi')).toHaveAttribute('data-mood', 'happy');
+    });
+
+    it('the field card shows only after the real "understood", filled from the parse alone (P4)', () => {
+        render(<VoiceJourney crops={crops} farmerProfile={profile} logScope={scope} plotLabel={() => 'सोनाका'} />);
+        act(() => noteVoiceJourney({ kind: 'kept', input: 'audio', durationMs: 12_000 }));
+        expect(screen.queryByTestId('field-card')).toBeNull();
+        act(() => noteVoiceJourney({ kind: 'understood', draft: DRAFT }));
+        expect(screen.getByTestId('field-card')).toHaveAttribute('data-filled', 'yes');
+        expect(screen.getByTestId('field-title')).toHaveTextContent('तुमचं शेत · सोनाका');
+        expect(screen.getAllByTestId('field-worker')).toHaveLength(10); // the ten he named
+        expect(screen.getByTestId('field-sprayer')).toBeInTheDocument();
+        expect(screen.getByTestId('field-spray')).toBeInTheDocument();
+        expect(screen.queryByTestId('field-tractor')).toBeNull();
+        expect(screen.queryByTestId('field-drip')).toBeNull();
+    });
+});
+
 describe('VoiceJourney — the finished list is held for 1.2 s', () => {
     it('saved, then the result screen replaces it: a still copy stays 1.2 s with every tick and chip, then goes', () => {
         const { unmount } = view();

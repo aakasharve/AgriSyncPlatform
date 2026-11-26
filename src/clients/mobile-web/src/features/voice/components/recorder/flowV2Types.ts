@@ -18,4 +18,10 @@ export interface RecorderFlowV2 {
     silenceHelp: boolean;
     /** The mic card instead of the plain idle mic. */
     card?: MicCardSpec;
+    /** The full-screen recording stage's place chip ("द्राक्ष · प्लॉट २"); absent = an empty chip. */
+    placeLabel?: (language: string | undefined) => string;
+    /** The plot on the stage's field card ("तुमचं शेत · प्लॉट २"); absent = "तुमचं शेत" alone. */
+    plotLabel?: (language: string | undefined) => string;
+    /** Days recorded this month (a count, never a streak) for "या महिन्यात N दिवस"; absent / 0 = not shown. */
+    days?: number | null;
 }

@@ -22,9 +22,10 @@ let holding: HTMLElement | null = null;
 
 /**
  * Shows a still copy of `node` where it was, for `ms`. Returns false (and does nothing) when another hold is showing,
- * when `ms` is not positive, or when the page cannot be drawn on. Never throws.
+ * when `ms` is not positive, or when the page cannot be drawn on. Never throws. `z`: the layer's z-index (a full-screen
+ * v2 frame is held over the v2 frames, z 45, so the screen that replaces it does not hide it).
  */
-export function holdOnScreen(node: HTMLElement, ms: number): boolean {
+export function holdOnScreen(node: HTMLElement, ms: number, z: string = HOLD_Z): boolean {
     if (holding || !(ms > 0)) return false;
     try {
         const doc = node.ownerDocument;
@@ -34,7 +35,7 @@ export function holdOnScreen(node: HTMLElement, ms: number): boolean {
         layer.setAttribute('aria-hidden', 'true');
         Object.assign(layer.style, {
             position: 'fixed', left: '0', right: '0', bottom: '0', top: `${Math.max(0, rect.top)}px`,
-            zIndex: HOLD_Z, background: PAGE_BG, overflow: 'hidden',
+            zIndex: z, background: PAGE_BG, overflow: 'hidden',
         });
         const copy = node.cloneNode(true) as HTMLElement;
         copy.setAttribute('data-testid', 'voice-journey-held');

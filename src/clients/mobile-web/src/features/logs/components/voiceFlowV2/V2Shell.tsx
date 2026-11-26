@@ -35,11 +35,13 @@ export interface V2ShellProps {
     backLabel?: string;
     /** Sticky footer (e.g. the saved screen's mic + 30 s bar, or the red stop). */
     footer?: React.ReactNode;
+    /** The footer on the screen's own background with no line above it (the design's recording `.micbar`). */
+    plainFooter?: boolean;
     testId?: string;
     children: React.ReactNode;
 }
 
-export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel, footer, testId = 'v2-shell', children }) => {
+export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel, footer, plainFooter = false, testId = 'v2-shell', children }) => {
     const language = useOptionalLanguage()?.language;
     const frame = (
         <div className="fixed inset-0 z-[45] flex flex-col bg-[#FBFBF7] text-[#1C1917]" data-testid={testId} style={{ fontFamily: SANS }}>
@@ -56,7 +58,9 @@ export const V2Shell: React.FC<V2ShellProps> = ({ place, days, onBack, backLabel
                 )}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3" data-testid="v2-body">{children}</div>
-            {footer && <div className="shrink-0 border-t border-[#DDE3DA] bg-white pb-[env(safe-area-inset-bottom)]" data-testid="v2-footer">{footer}</div>}
+            {footer && (
+                <div className={`shrink-0 pb-[env(safe-area-inset-bottom)] ${plainFooter ? 'bg-[#FBFBF7]' : 'border-t border-[#DDE3DA] bg-white'}`} data-testid="v2-footer">{footer}</div>
+            )}
         </div>
     );
     return typeof document === 'undefined' ? frame : createPortal(frame, document.body);
