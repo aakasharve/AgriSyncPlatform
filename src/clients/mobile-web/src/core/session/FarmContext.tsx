@@ -170,10 +170,14 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
     }, [isAuthenticated, hasRealToken, refresh]);
 
+    // Repair FIX-1 round 1 (Bug 1): THE one switch of the open farm (the header's switcher goes through it too). Kept for
+    // the SIGNED-IN farmer, as `refresh` keeps it: the ambient key (`setCurrentFarmId`) is the handset's active farmer,
+    // who is switched a tick after the session, so a switch in that tick landed in the previous farmer's pointer.
     const switchFarm = useCallback((farmId: string) => {
         setCurrentFarmId(farmId);
-        SessionStore.setCurrentFarmId(farmId);
-    }, []);
+        if (userId) SessionStore.setCurrentFarmIdForUser(userId, farmId);
+        else SessionStore.setCurrentFarmId(farmId);
+    }, [userId]);
 
     // Active seats only (see `refresh`): a pending request is not a farm to list or switch to.
     const farms = useMemo(() => (meContext?.farms ?? []).filter(isActiveSeat), [meContext]);
