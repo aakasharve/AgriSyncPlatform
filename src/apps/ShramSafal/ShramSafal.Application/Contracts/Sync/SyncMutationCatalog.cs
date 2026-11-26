@@ -74,6 +74,13 @@ public static class SyncMutationCatalog
     public const string ScheduleOwnerMessageHeard = "schedule.owner_message.heard";
     public const string ScheduleOwnerMessageDecide = "schedule.owner_message.decide";
     public const string ScheduleOwnerMessageAnswer = "schedule.owner_message.answer";
+    public const string FarmsetupWaterSourceSave = "farmsetup.water_source.save";
+    public const string FarmsetupWaterSourceRemove = "farmsetup.water_source.remove";
+    public const string FarmsetupPowerTimesSet = "farmsetup.power_times.set";
+    public const string FarmsetupMachineSave = "farmsetup.machine.save";
+    public const string FarmsetupMachineRemove = "farmsetup.machine.remove";
+    public const string FarmsetupPlotWaterSet = "farmsetup.plot_water.set";
+    public const string FarmOwnBillApprovalSet = "farm.own_bill_approval.set";
 
     public static readonly ImmutableArray<SyncMutationDescriptor> All = ImmutableArray.Create(
         new SyncMutationDescriptor(Name: "create_farm", OwnerAggregate: "Farm", SinceVersion: "0.1.0", PayloadSchema: "CreateFarm"),
@@ -134,7 +141,14 @@ public static class SyncMutationCatalog
         new SyncMutationDescriptor(Name: "ownschedule.carry_forward", OwnerAggregate: "OwnScheduleItem", SinceVersion: "1.0.18", PayloadSchema: "OwnScheduleCarryForward"),
         new SyncMutationDescriptor(Name: "schedule.owner_message.heard", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageHeard"),
         new SyncMutationDescriptor(Name: "schedule.owner_message.decide", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageDecide"),
-        new SyncMutationDescriptor(Name: "schedule.owner_message.answer", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageAnswer")
+        new SyncMutationDescriptor(Name: "schedule.owner_message.answer", OwnerAggregate: "ScheduleOwnerMessage", SinceVersion: "1.0.18", PayloadSchema: "ScheduleOwnerMessageAnswer"),
+        new SyncMutationDescriptor(Name: "farmsetup.water_source.save", OwnerAggregate: "FarmWaterSource", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupWaterSourceSave"),
+        new SyncMutationDescriptor(Name: "farmsetup.water_source.remove", OwnerAggregate: "FarmWaterSource", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupWaterSourceRemove"),
+        new SyncMutationDescriptor(Name: "farmsetup.power_times.set", OwnerAggregate: "FarmPowerTimes", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupPowerTimesSet"),
+        new SyncMutationDescriptor(Name: "farmsetup.machine.save", OwnerAggregate: "FarmMachine", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupMachineSave"),
+        new SyncMutationDescriptor(Name: "farmsetup.machine.remove", OwnerAggregate: "FarmMachine", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupMachineRemove"),
+        new SyncMutationDescriptor(Name: "farmsetup.plot_water.set", OwnerAggregate: "PlotWaterSetup", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupPlotWaterSet"),
+        new SyncMutationDescriptor(Name: "farm.own_bill_approval.set", OwnerAggregate: "Farm", SinceVersion: "1.0.18", PayloadSchema: "FarmOwnBillApprovalSet")
     );
 
     public static readonly ImmutableHashSet<string> Names =

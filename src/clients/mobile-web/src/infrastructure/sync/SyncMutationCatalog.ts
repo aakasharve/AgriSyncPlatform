@@ -64,6 +64,13 @@ export const SYNC_MUTATION_TYPES = [
   "schedule.owner_message.heard",
   "schedule.owner_message.decide",
   "schedule.owner_message.answer",
+  "farmsetup.water_source.save",
+  "farmsetup.water_source.remove",
+  "farmsetup.power_times.set",
+  "farmsetup.machine.save",
+  "farmsetup.machine.remove",
+  "farmsetup.plot_water.set",
+  "farm.own_bill_approval.set",
 ] as const;
 
 export type SyncMutationType = typeof SYNC_MUTATION_TYPES[number];
@@ -138,6 +145,13 @@ export const SYNC_MUTATION_CATALOG: Readonly<Record<SyncMutationType, SyncMutati
   "schedule.owner_message.heard": { name: "schedule.owner_message.heard", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageHeard" },
   "schedule.owner_message.decide": { name: "schedule.owner_message.decide", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageDecide" },
   "schedule.owner_message.answer": { name: "schedule.owner_message.answer", ownerAggregate: "ScheduleOwnerMessage", sinceVersion: "1.0.18", payloadSchema: "ScheduleOwnerMessageAnswer" },
+  "farmsetup.water_source.save": { name: "farmsetup.water_source.save", ownerAggregate: "FarmWaterSource", sinceVersion: "1.0.18", payloadSchema: "FarmsetupWaterSourceSave" },
+  "farmsetup.water_source.remove": { name: "farmsetup.water_source.remove", ownerAggregate: "FarmWaterSource", sinceVersion: "1.0.18", payloadSchema: "FarmsetupWaterSourceRemove" },
+  "farmsetup.power_times.set": { name: "farmsetup.power_times.set", ownerAggregate: "FarmPowerTimes", sinceVersion: "1.0.18", payloadSchema: "FarmsetupPowerTimesSet" },
+  "farmsetup.machine.save": { name: "farmsetup.machine.save", ownerAggregate: "FarmMachine", sinceVersion: "1.0.18", payloadSchema: "FarmsetupMachineSave" },
+  "farmsetup.machine.remove": { name: "farmsetup.machine.remove", ownerAggregate: "FarmMachine", sinceVersion: "1.0.18", payloadSchema: "FarmsetupMachineRemove" },
+  "farmsetup.plot_water.set": { name: "farmsetup.plot_water.set", ownerAggregate: "PlotWaterSetup", sinceVersion: "1.0.18", payloadSchema: "FarmsetupPlotWaterSet" },
+  "farm.own_bill_approval.set": { name: "farm.own_bill_approval.set", ownerAggregate: "Farm", sinceVersion: "1.0.18", payloadSchema: "FarmOwnBillApprovalSet" },
 });
 
 export function isSyncMutationType(value: string): value is SyncMutationType {
@@ -212,4 +226,11 @@ export const SyncMutationName = {
   ScheduleOwnerMessageHeard: "schedule.owner_message.heard",
   ScheduleOwnerMessageDecide: "schedule.owner_message.decide",
   ScheduleOwnerMessageAnswer: "schedule.owner_message.answer",
+  FarmsetupWaterSourceSave: "farmsetup.water_source.save",
+  FarmsetupWaterSourceRemove: "farmsetup.water_source.remove",
+  FarmsetupPowerTimesSet: "farmsetup.power_times.set",
+  FarmsetupMachineSave: "farmsetup.machine.save",
+  FarmsetupMachineRemove: "farmsetup.machine.remove",
+  FarmsetupPlotWaterSet: "farmsetup.plot_water.set",
+  FarmOwnBillApprovalSet: "farm.own_bill_approval.set",
 } as const satisfies Record<string, SyncMutationType>;

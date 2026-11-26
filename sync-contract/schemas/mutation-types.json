@@ -61,6 +61,13 @@
     { "name": "ownschedule.carry_forward", "ownerAggregate": "OwnScheduleItem",  "sinceVersion": "1.0.18", "payloadSchema": "OwnScheduleCarryForward" },
     { "name": "schedule.owner_message.heard",  "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageHeard" },
     { "name": "schedule.owner_message.decide", "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageDecide" },
-    { "name": "schedule.owner_message.answer", "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageAnswer" }
+    { "name": "schedule.owner_message.answer", "ownerAggregate": "ScheduleOwnerMessage", "sinceVersion": "1.0.18", "payloadSchema": "ScheduleOwnerMessageAnswer" },
+    { "name": "farmsetup.water_source.save",   "ownerAggregate": "FarmWaterSource", "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupWaterSourceSave" },
+    { "name": "farmsetup.water_source.remove", "ownerAggregate": "FarmWaterSource", "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupWaterSourceRemove" },
+    { "name": "farmsetup.power_times.set",     "ownerAggregate": "FarmPowerTimes",  "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupPowerTimesSet" },
+    { "name": "farmsetup.machine.save",        "ownerAggregate": "FarmMachine",     "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupMachineSave" },
+    { "name": "farmsetup.machine.remove",      "ownerAggregate": "FarmMachine",     "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupMachineRemove" },
+    { "name": "farmsetup.plot_water.set",      "ownerAggregate": "PlotWaterSetup",  "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupPlotWaterSet" },
+    { "name": "farm.own_bill_approval.set",    "ownerAggregate": "Farm",            "sinceVersion": "1.0.18", "payloadSchema": "FarmOwnBillApprovalSet" }
   ]
 }
