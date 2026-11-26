@@ -135,6 +135,25 @@ describe('हजेरी confirm card — every spoken name says where it stand
         expect(screen.getByTestId('attendance-names')).not.toHaveTextContent('यादीत');
     });
 
+    // Repair FIX-1 round 1, Bug 4: at 320 px "शिवा · यादीत नाही" was squeezed to one word per line beside the two taps.
+    // The name and its state keep their own full-width line; the taps sit in their own block below and may wrap.
+    it('the name and its state keep their own full-width line; the taps sit in a separate block below that may wrap', async () => {
+        await draw();
+        for (const [name, words] of [['राजू', ['यादीतून निवडा', 'नवीन नाव जोडा']], ['बाळू', ['सारखं नाव — कोण?']]] as const) {
+            const chip = screen.getByTestId(`attendance-name-${name}`);
+            const label = within(chip).getByTestId(`attendance-name-label-${name}`);
+            const actions = within(chip).getByTestId(`attendance-name-actions-${name}`);
+            expect(label.className).toContain('w-full');
+            expect(within(label).queryAllByRole('button')).toHaveLength(0);
+            expect(within(actions).getAllByRole('button').map(b => b.textContent)).toEqual(words);
+            expect(actions.className).toContain('flex-wrap');
+            // the label comes first, the taps after it
+            expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(chip.firstElementChild).toBe(label);
+        }
+        expect(screen.getByTestId('attendance-name-label-राजू')).toHaveTextContent('राजू · यादीत नाही');
+    });
+
     it('English mode: the English twins', async () => {
         h.language = 'en';
         h.fetchOperators.mockResolvedValueOnce(ROSTER);

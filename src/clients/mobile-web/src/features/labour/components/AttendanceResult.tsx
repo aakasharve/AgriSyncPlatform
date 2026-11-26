@@ -292,20 +292,24 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                                     </span>
                                 );
                             }
+                            // FIX-1 round 1 (Bug 4): the name and its state keep their own full-width line; the taps sit in
+                            // their own block below and wrap when they do not fit (at 320 px the name was squeezed beside them).
                             return (
-                                <div key={name} data-testid={`attendance-name-${name}`} className="flex basis-full flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[13px] font-bold text-amber-900">
-                                    <span className="min-w-0 flex-1">{name}{state === 'notOnList' ? ` · ${nameWords.notOnList}` : ''}</span>
-                                    {state === 'shared' ? (
-                                        <button type="button" onClick={() => openChooser(name, 'shared')}
-                                            className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.sharedWho}</button>
-                                    ) : (
-                                        <>
-                                            <button type="button" onClick={() => openChooser(name, 'list')}
-                                                className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.pickFromList}</button>
-                                            <button type="button" onClick={() => openChooser(name, 'add')}
-                                                className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.addNew}</button>
-                                        </>
-                                    )}
+                                <div key={name} data-testid={`attendance-name-${name}`} className="basis-full space-y-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[13px] font-bold text-amber-900">
+                                    <span className="block w-full [overflow-wrap:anywhere]" data-testid={`attendance-name-label-${name}`}>{name}{state === 'notOnList' ? ` · ${nameWords.notOnList}` : ''}</span>
+                                    <div className="flex flex-wrap gap-1.5" data-testid={`attendance-name-actions-${name}`}>
+                                        {state === 'shared' ? (
+                                            <button type="button" onClick={() => openChooser(name, 'shared')}
+                                                className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.sharedWho}</button>
+                                        ) : (
+                                            <>
+                                                <button type="button" onClick={() => openChooser(name, 'list')}
+                                                    className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.pickFromList}</button>
+                                                <button type="button" onClick={() => openChooser(name, 'add')}
+                                                    className="min-h-[44px] rounded-lg bg-white px-2.5 text-[13.5px] font-extrabold text-amber-900 ring-1 ring-amber-300">{nameWords.addNew}</button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
