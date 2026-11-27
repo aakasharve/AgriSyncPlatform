@@ -94,7 +94,7 @@ public class MainActivity extends BridgeActivity {
             int bottom = keyboardUp ? 0 : bars.bottom;
             legacySafeArea = Insets.of(bars.left, bars.top, bars.right, bottom);
             publishLegacySafeArea(webView);
-            // 28 Nov 2026: lift the page above the keyboard here, the way Capacitor's SystemBars does on
+            // 27 Nov 2026: lift the page above the keyboard here, the way Capacitor's SystemBars does on
             // Android 15+ (this listener replaces SystemBars' on the same view below 15). Insets arrive on
             // every keyboard open AND close, so the page always gets its full height back; the keyboard
             // plugin's resizeOnFullScreen (restored only by a close animation, which can be skipped) is off.

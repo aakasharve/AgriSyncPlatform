@@ -32,7 +32,7 @@ const config: CapacitorConfig & {
       style: 'DARK',
       hidden: false
     },
-    // resizeOnFullScreen is OFF (28 Nov 2026, founder's phone: the bottom half of every screen stayed white). That
+    // resizeOnFullScreen is OFF (27 Nov 2026, founder's phone: the bottom half of every screen stayed white). That
     // option shrinks the app's whole content area while the keyboard is open and grows it back only inside the
     // keyboard's close ANIMATION; when the close skips that animation (the password screen handing over to the app,
     // a password-manager sheet) the app stays shrunk on every screen until restarted. The app is lifted above the
