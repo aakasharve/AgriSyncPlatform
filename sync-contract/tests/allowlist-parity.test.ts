@@ -68,7 +68,8 @@ const HANDLER_PATH = resolve(
 // 42 -> 43 on 2026-11-25 (schedule mechanism slice 11): ownschedule.carry_forward, its own PayloadHasOnly.
 // 43 -> 46 on 2026-11-25 (schedule mechanism slice 12b): schedule.owner_message.heard / .decide / .answer, each its own PayloadHasOnly.
 // 46 -> 53 on 2026-11-27 (repair D-9 + D-177): six farmsetup.* names and farm.own_bill_approval.set, each its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 53;
+// 53 -> 54 on 2026-11-27 (pilot lane PERM): farm.money_private.set, its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 54;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -147,6 +148,8 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'farmsetup.machine.remove',
     'farmsetup.plot_water.set',
     'farm.own_bill_approval.set',
+    // pilot lane PERM - the farm's money-private switch, the registrant's alone.
+    'farm.money_private.set',
 ].sort();
 
 interface CatalogEntry {

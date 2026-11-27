@@ -81,6 +81,7 @@ public static class SyncMutationCatalog
     public const string FarmsetupMachineRemove = "farmsetup.machine.remove";
     public const string FarmsetupPlotWaterSet = "farmsetup.plot_water.set";
     public const string FarmOwnBillApprovalSet = "farm.own_bill_approval.set";
+    public const string FarmMoneyPrivateSet = "farm.money_private.set";
 
     public static readonly ImmutableArray<SyncMutationDescriptor> All = ImmutableArray.Create(
         new SyncMutationDescriptor(Name: "create_farm", OwnerAggregate: "Farm", SinceVersion: "0.1.0", PayloadSchema: "CreateFarm"),
@@ -148,7 +149,8 @@ public static class SyncMutationCatalog
         new SyncMutationDescriptor(Name: "farmsetup.machine.save", OwnerAggregate: "FarmMachine", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupMachineSave"),
         new SyncMutationDescriptor(Name: "farmsetup.machine.remove", OwnerAggregate: "FarmMachine", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupMachineRemove"),
         new SyncMutationDescriptor(Name: "farmsetup.plot_water.set", OwnerAggregate: "PlotWaterSetup", SinceVersion: "1.0.18", PayloadSchema: "FarmsetupPlotWaterSet"),
-        new SyncMutationDescriptor(Name: "farm.own_bill_approval.set", OwnerAggregate: "Farm", SinceVersion: "1.0.18", PayloadSchema: "FarmOwnBillApprovalSet")
+        new SyncMutationDescriptor(Name: "farm.own_bill_approval.set", OwnerAggregate: "Farm", SinceVersion: "1.0.18", PayloadSchema: "FarmOwnBillApprovalSet"),
+        new SyncMutationDescriptor(Name: "farm.money_private.set", OwnerAggregate: "Farm", SinceVersion: "1.0.18", PayloadSchema: "FarmMoneyPrivateSet")
     );
 
     public static readonly ImmutableHashSet<string> Names =

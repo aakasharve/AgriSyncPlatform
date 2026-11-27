@@ -49,14 +49,16 @@ describe('mutation-types.json', () => {
   // decision on a change, his answer to a look message); NEW names (sinceVersion 1.0.18).
   // 59 -> 66 on 2026-11-27 (repair D-9 + D-177): farmsetup.water_source.save / .remove, farmsetup.power_times.set, farmsetup.machine.save / .remove,
   // farmsetup.plot_water.set (the farm's setup on the server, per farm) and farm.own_bill_approval.set (the owner's own-bill switch); NEW names (1.0.18).
-  it('declares 66 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(66);
+  // 66 -> 67 on 2026-11-27 (pilot lane PERM): farm.money_private.set (the farm's "पैशांच्या नोंदी फक्त मला दिसू दे" switch, the registrant's alone);
+  // a NEW name (1.0.18).
+  it('declares 67 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(67);
   });
 
   it('is contract version 1.19.0 and names the own-schedule and feed mutations as new', () => {
     expect(json.version).toBe('1.19.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
-    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task', 'ownschedule.carry_forward', 'schedule.owner_message.heard', 'schedule.owner_message.decide', 'schedule.owner_message.answer', 'farmsetup.water_source.save', 'farmsetup.water_source.remove', 'farmsetup.power_times.set', 'farmsetup.machine.save', 'farmsetup.machine.remove', 'farmsetup.plot_water.set', 'farm.own_bill_approval.set']) {
+    for (const name of ['ownschedule.item.save', 'ownschedule.item.remove', 'ownschedule.make_main', 'ownschedule.item.plan', 'schedule.task_event', 'schedule.take_task', 'ownschedule.carry_forward', 'schedule.owner_message.heard', 'schedule.owner_message.decide', 'schedule.owner_message.answer', 'farmsetup.water_source.save', 'farmsetup.water_source.remove', 'farmsetup.power_times.set', 'farmsetup.machine.save', 'farmsetup.machine.remove', 'farmsetup.plot_water.set', 'farm.own_bill_approval.set', 'farm.money_private.set']) {
       const entry = json.mutationTypes.find((m) => m.name === name);
       expect(entry, name).toBeDefined();
       expect(entry!.sinceVersion).toBe('1.0.18');
