@@ -4093,6 +4093,52 @@ internal sealed class ShramSafalRepository(
         return on.Select(f => (Guid)f).ToHashSet();
     }
 
+    // spec: plr-d10 pilot lane PERM (S3) — see the port. Under the pull's user scope a member reads only his OWN seat
+    // (p_user_select_memberships), so the farm's other seats are read inside that farm's tenant scope, opened ONLY after the reader is
+    // proved its registrant or an Active seat under his own scope (RlsIdentityScope.RunAsFarmAsync, the one sanctioned mechanism). The caller
+    // asks it as the pull's LAST read: the farm scope it opens lives until the request's transaction ends, and the reader is a member there.
+    public async Task<IReadOnlyList<FarmMembership>> GetLiveSeatsOfFarmForMemberAsync(
+        Guid farmId, Guid readerUserId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || readerUserId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        var typedReader = new UserId(readerUserId);
+        var farm = await db.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == typedFarmId)
+            .Select(f => new { f.OwnerUserId, f.OwnerAccountId })
+            .FirstOrDefaultAsync(ct);
+        if (farm is null || farm.OwnerAccountId.Value == Guid.Empty)
+        {
+            return [];
+        }
+
+        var isMember = farm.OwnerUserId == typedReader
+            || await db.FarmMemberships
+                .AsNoTracking()
+                .AnyAsync(m => m.FarmId == typedFarmId && m.UserId == typedReader && m.Status == MembershipStatus.Active, ct);
+        if (!isMember)
+        {
+            return [];
+        }
+
+        return await RlsIdentityScope.RunAsFarmAsync<IReadOnlyList<FarmMembership>>(
+            db,
+            farmId,
+            farm.OwnerAccountId.Value,
+            readerUserId,
+            async token => await db.FarmMemberships
+                .AsNoTracking()
+                .Where(m => m.FarmId == typedFarmId && m.Status == MembershipStatus.Active)
+                .OrderBy(m => m.GrantedAtUtc)
+                .ToListAsync(token),
+            ct);
+    }
+
     // spec: plr-d10 pilot lane PERM (S1) — see the port: one bounded read of his live seat on this farm (ix_farm_memberships_farm_user_nonterminal).
     public async Task<bool> HasWorkKindLimitAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {

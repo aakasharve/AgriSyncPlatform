@@ -2244,6 +2244,16 @@ public interface IShramSafalRepository
         => Task.FromResult(false);
 
     /// <summary>
+    /// spec: plr-d10 pilot lane PERM (S3, the name-free "who sees this") — the Active seats of <paramref name="farmId"/>, for a reader who is its
+    /// registrant or holds an Active seat there (anyone else: none). Production reads them inside that farm's tenant scope, because under the pull's
+    /// user scope a member sees only his own seat. Default body (F7): the farm's memberships, Active only.
+    /// </summary>
+    async Task<IReadOnlyList<FarmMembership>> GetLiveSeatsOfFarmForMemberAsync(Guid farmId, Guid readerUserId, CancellationToken ct = default) =>
+        (await GetFarmMembershipsAsync(new AgriSync.SharedKernel.Contracts.Ids.FarmId(farmId), ct))
+            .Where(m => m.Status == MembershipStatus.Active)
+            .ToList();
+
+    /// <summary>
     /// lane MU-4 — the place of ONE work (<c>DailyLog</c>) or money (<c>CostEntry</c>) record, read without tracking; null
     /// when it is not found under the caller's scope. Default body: none (a test double narrows nothing by place).
     /// </summary>

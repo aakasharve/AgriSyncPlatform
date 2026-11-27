@@ -27,7 +27,10 @@ public sealed record PullSyncChangesQuery(
     Guid UserId,
     IReadOnlyList<Guid>? HeldFarmIds = null,
     int? ScheduleFormat = null,
-    int? FarmSetupFormat = null)
+    int? FarmSetupFormat = null,
+    // spec: plr-d10 pilot lane PERM (contract S3) - the phone ASKS for each farm's name-free "who sees this" (seenBy=1; a QUERY parameter, read
+    // leniently by the same reader). null = the phone did not ask (1.0.17, today's test build, an unreadable value): no seenBy anywhere (P11).
+    int? SeenByFormat = null)
 {
     /// <summary>
     /// Reads the <c>scheduleFormat</c> query value leniently (P11: an older or odd client is never refused for it): a positive whole number is

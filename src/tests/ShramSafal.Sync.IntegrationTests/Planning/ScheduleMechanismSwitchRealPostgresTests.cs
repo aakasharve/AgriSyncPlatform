@@ -281,5 +281,30 @@ public sealed class ScheduleMechanismSwitchRealPostgresTests(ITestOutputHelper o
         afterSetup.Select(p => p.Key).Should().BeEquivalentTo(after.Select(p => p.Key), "no key is added or lost");
         JsonNode.DeepEquals(Same(afterSetup), Same(before)).Should().BeTrue("the old phone's pull is what it was before any setup existed");
         (await Pull1017Async("&farmSetup=1"))["farmSetup"]![0]!["machines"]!.AsArray().Count.Should().Be(1);
+
+        // ── spec: plr-d10 pilot lane PERM (S1.8, S2.6, S3; P11) - on a farm that limits nobody and keeps its money open, an old phone's pull names none of
+        // the lane's keys. `seenBy` is NEVER present for a phone that does not ask (`seenBy=1`, read leniently like `farmSetup`); a phone that asks gets it
+        // INSIDE each accessScopes entry and nothing else moves (no new top-level key).
+        foreach (var key in new[] { "workKinds", "moneyPrivate", "moneyAudience", "seenBy" })
+        {
+            afterSetup.ToJsonString().Should().NotContain($"\"{key}\"", $"an old phone's pull never carries {key} on a farm that uses none of it");
+        }
+
+        foreach (var query in new[] { "&seenBy=", "&seenBy=abc", "&seenBy=0", "&seenBy=99999999999999" })
+        {
+            var notAsked = await Pull1017Async(query);
+            notAsked.ToJsonString().Should().NotContain("seenBy", $"'{query}' is unreadable: it says nothing and never refuses the pull");
+            JsonNode.DeepEquals(Same(notAsked), Same(afterSetup)).Should().BeTrue($"'{query}' changes nothing");
+        }
+
+        var askedSeenBy = await Pull1017Async("&seenBy=1");
+        askedSeenBy.Select(p => p.Key).Should().BeEquivalentTo(afterSetup.Select(p => p.Key), "seenBy adds no top-level key");
+        foreach (var scope in askedSeenBy["accessScopes"]!.AsArray())
+        {
+            scope!["seenBy"].Should().NotBeNull("an asking phone is told, on each farm it reads");
+            scope.AsObject().Remove("seenBy");
+        }
+
+        JsonNode.DeepEquals(Same(askedSeenBy), Same(afterSetup)).Should().BeTrue("asking for seenBy changes nothing else");
     }
 }
