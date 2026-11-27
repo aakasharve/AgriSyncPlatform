@@ -52,6 +52,10 @@ vi.mock('../lazyComponents', () => ({
             <button type="button" onClick={onBack}>welcome-back</button>
         </div>
     ),
+    // R1-g 1a — the first-record card after the welcome (an owner seat only); its own suite is AppRouter.firstRecordCard.test.tsx.
+    FirstRecordCard: ({ onLater }: { onLater: () => void }) => (
+        <div data-testid="stub-first-record-card"><button type="button" onClick={onLater}>first-record-later</button></div>
+    ),
 }));
 
 vi.mock('../../../app/context/AppFeatureContexts', () => ({
@@ -128,7 +132,9 @@ const mount = async (props: React.ComponentProps<typeof AppRouter>) => {
 };
 
 describe('AppRouter — the first run after the farm', () => {
-    it('order: permissions FIRST, then the voice note, then the welcome for the REAL role, then the app', async () => {
+    // R1-g 1a (founder Q5, 28 Nov): an OWNER's first run gained one step at its end — the first-record card after
+    // "चला, सुरुवात करूया". A worker's order is unchanged (next test, and AppRouter.firstRecordCard.test.tsx).
+    it('order: permissions FIRST, then the voice note, then the welcome for the REAL role, then (owner) the first-record card, then the app', async () => {
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         expect(screen.getByTestId('stub-permissions')).toBeInTheDocument();
         expect(screen.queryByTestId('stub-voice-note')).toBeNull();
@@ -144,6 +150,23 @@ describe('AppRouter — the first run after the farm', () => {
         expect(hello).toHaveAttribute('data-farm', 'आर्वे शेती');
 
         fireEvent.click(screen.getByText('welcome-continue'));
+        expect(screen.getByTestId('stub-first-record-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('app-body')).toBeNull();
+
+        fireEvent.click(screen.getByText('first-record-later'));
+        expect(screen.getByTestId('app-body')).toBeInTheDocument();
+        expect(h.prefs).toEqual({
+            shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true, shramsafal_welcome_seen: true,
+            shramsafal_first_record_card_v1_seen: true,
+        });
+    });
+
+    it('order for a worker: permissions, the voice note, the welcome, then the app (no first-record card)', async () => {
+        await mount({ firstRunFarm: { name: 'पवार मळा', role: 'Worker' }, farmsKnown: true });
+        fireEvent.click(screen.getByText('perm-continue'));
+        fireEvent.click(screen.getByText('voice-done'));
+        fireEvent.click(screen.getByText('welcome-continue'));
+        expect(screen.queryByTestId('stub-first-record-card')).toBeNull();
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
         expect(h.prefs).toEqual({ shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true, shramsafal_welcome_seen: true });
     });

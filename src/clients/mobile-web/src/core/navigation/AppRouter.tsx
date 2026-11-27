@@ -11,8 +11,10 @@ import {
     useAppWeatherState,
 } from '../../app/context/AppFeatureContexts';
 
-import { OnboardingPermissionsPage, WelcomeScreen, WelcomeStory, RouteLoader } from './lazyComponents';
+import { FirstRecordCard, OnboardingPermissionsPage, WelcomeScreen, WelcomeStory, RouteLoader } from './lazyComponents';
 import { toWelcomeRole } from '../../features/onboarding/firstRun/roleWelcome';
+import { FIRST_RECORD_CARD_FALLBACK, FIRST_RECORD_CARD_KEY, mayOfferFirstRecord } from '../../features/onboarding/firstRun/firstRecord';
+import { startFirstRecord } from './firstRecordStart';
 import { AppRouterContext } from './routeContext';
 import { SimpleRoutes } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
@@ -21,7 +23,7 @@ import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
-import { seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
+import { plotsOnlyOnFarm, seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
 import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../session/farmAuthorities';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
@@ -108,6 +110,13 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const setVoiceSeenRef = React.useRef(setVoiceSeen);
     React.useEffect(() => { setVoiceSeenRef.current = setVoiceSeen; });
     const onWelcomeVoiceDone = React.useCallback(() => setVoiceSeenRef.current(true), []);
+    // Repair R1-g 1a (founder Q5, 28 Nov; CTO ruling 1) — the first-record card after "चला, सुरुवात करूया": its OWN
+    // once-only key, written "due" (false) only when an owner seat leaves the role welcome. No row reads "seen", so an
+    // installed phone that passed the first run long ago never sees it (P11).
+    const [firstRecordCardSeen, setFirstRecordCardSeen, firstRecordCardLoaded] = useUiPref<boolean>(
+        FIRST_RECORD_CARD_KEY,
+        FIRST_RECORD_CARD_FALLBACK,
+    );
     // FR-8: back from the role welcome re-opens the permissions step for this visit.
     const [permissionsAgain, setPermissionsAgain] = React.useState(false);
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
@@ -279,9 +288,25 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // installed user must not see a flash of a step he passed long ago. The farm list's wait is
     // bounded by `useFarmContextState` (FARM_LIST_WAIT_MS): a list that has not answered by then
     // reads as "not known to have a farm", and a late answer still lands.
-    const firstRunPending = !permissionsGranted || !welcomeSeen || !voiceSeen || permissionsAgain;
+    const firstRunPending = !permissionsGranted || !welcomeSeen || !voiceSeen || permissionsAgain || !firstRecordCardSeen
+        || firstRecordCardLoaded === false;
+    // R1-g 1a — the card's two answers. "बोलायला सुरुवात करा": the farm's own voice entry (`firstRecordStart.ts`: on a farm
+    // with no crop, "संपूर्ण शेत" and the mic; with crops, the crop step). "नंतर सांगेन": Home. Either way it is answered for good.
+    const onFirstRecordStart = () => {
+        setFirstRecordCardSeen(true);
+        startFirstRecord(
+            { status, draftLog, handleReset, setLogScope, setMode, setMainView, setCompletingTask, currentRoute, setCurrentRoute },
+            { cropCount: crops.length, wholeFarmOffered: !plotsOnlyOnFarm(storedAccessScopes, currentFarmId, currentFarm) },
+        );
+    };
+    const onFirstRecordLater = () => {
+        setFirstRecordCardSeen(true);
+        if (currentRoute !== 'main') setCurrentRoute('main');
+        if (mainView !== 'log') setMainView('log');
+    };
     if (firstRunPending) {
-        if (permissionsLoaded === false || welcomeLoaded === false || voiceLoaded === false || (!firstRunFarm && !farmsKnown)) {
+        if (permissionsLoaded === false || welcomeLoaded === false || voiceLoaded === false || firstRecordCardLoaded === false
+            || (!firstRunFarm && !farmsKnown)) {
             // Round-2 review WAIT-1: a spinner and "उघडत आहे…" after a beat, not an empty area.
             return <FirstRunWait />;
         }
@@ -313,11 +338,23 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                 return (
                     <React.Suspense fallback={<RouteLoader />}>
                         <WelcomeScreen
-                            onContinue={() => setWelcomeSeen(true)}
+                            onContinue={() => {
+                                // R1-g 1a: an owner or co-owner seat gets the first-record card next; anyone else lands as today.
+                                if (mayOfferFirstRecord(firstRunFarm.role)) setFirstRecordCardSeen(false);
+                                setWelcomeSeen(true);
+                            }}
                             onBack={() => setPermissionsAgain(true)}
                             farmRole={firstRunFarm.role}
                             farmName={firstRunFarm.name}
                         />
+                    </React.Suspense>
+                );
+            }
+            if (!firstRecordCardSeen && mayOfferFirstRecord(firstRunFarm.role)) {
+                // Its "← मागे" re-opens the role welcome (whose own back goes on to the permissions).
+                return (
+                    <React.Suspense fallback={<RouteLoader />}>
+                        <FirstRecordCard onStart={onFirstRecordStart} onLater={onFirstRecordLater} onBack={() => setWelcomeSeen(false)} />
                     </React.Suspense>
                 );
             }
