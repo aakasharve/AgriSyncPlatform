@@ -290,7 +290,7 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate, 
             )}
 
             <SectionHead title={words.power} hint={words.powerHint} />
-            <ElectricityTimingConfigurator profile={profile} onUpdate={onUpdate} />
+            <ElectricityTimingConfigurator profile={profile} onUpdate={onUpdate} farmSetup={server} canEdit={mayEdit} />
         </div>
     );
 };
