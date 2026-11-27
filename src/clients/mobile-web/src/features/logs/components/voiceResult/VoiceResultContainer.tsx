@@ -51,7 +51,6 @@ import { readRefusedChange, refusalLines, useRefusedChangeOf } from '../correcti
 import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/moneyNotFollowed';
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
-import { AudienceRow } from '../../../recordAudience/AudienceRow';
 import { kindsNotSavedOf } from '../../../workKinds/closedKinds';
 import { KindsNotSavedNote } from '../../../workKinds/KindsNotSavedNote';
 import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
@@ -214,16 +213,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     // goes to the saved card — this keeps it so).
     const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
-    // lane PRV (D-26) — who may see this record: the farm's primary account holder only, once it is on its way to
-    // the server (the choice is queued after the record itself). Never asked at capture (P9).
-    const audienceRow = mayConfirmOwn && farmId && current.every(l => typeof l.contentVersion === 'number' || syncQueuedById.get(l.id) === true) ? (
-        <div className="mx-3 mt-2">
-            <AudienceRow kind="DailyLog" recordIds={current.map(l => l.id)} farmId={farmId} selfUserId={sessionUserId}
-                audience={primary.audience} chosen={primary.audienceUserIds} moneyFollows testId="vr-audience"
-                madeBySomeoneElse={!!primary.meta?.createdByOperatorId && primary.meta.createdByOperatorId !== 'owner'
-                    && primary.meta.createdByOperatorId !== sessionUserId} />
-        </div>
-    ) : null;
+    // lane PRV (D-26) AMENDED by pilot lane PERM (S5.2; founder 27 Nov "Every log should not be asked"): no record asks who may see it. The
+    // per-record row is gone; the setting lives in माझी टीम (the owner's "सेटिंग बदला" there).
     const refusedBanner = refused ? (
         <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
             {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
@@ -237,9 +228,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
         </div>
     ) : null;
-    // The old screen keeps its order (refusal, the audience row, money). The v2 saved screen draws the audience row where the
-    // approved design has it: under "बदला", above the earlier recordings (F6).
-    const banners = <>{refusedBanner}{kindsBanner}{audienceRow}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
+    // The old screen keeps its order (refusal, money). The v2 saved screen's audience slot (under "बदला", F6) is empty here.
+    const banners = <>{refusedBanner}{kindsBanner}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
     const bannersV2 = <>{refusedBanner}{kindsBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
@@ -270,7 +260,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             <>
             {bannersV2}
             <SavedScreen
-                audience={audienceRow}
+                audience={null}
                 day={day}
                 recordingKey={result.key}
                 placeLabel={placeLabel}
