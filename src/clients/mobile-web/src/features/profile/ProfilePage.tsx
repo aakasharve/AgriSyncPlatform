@@ -231,6 +231,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+    // repair D-9 - "आधी पाण्याचा स्रोत जोडा": the add-plot form closes (the plot is not saved half) and पाणी आणि वीज opens.
+    const openWaterPage = () => { cropPlot.setWizardCropId(null); setActiveTab('utils'); };
     const plotNames = React.useMemo(() => crops.flatMap(c => c.plots.map(p => ({ id: p.id, name: p.name }))), [crops]);
     // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
     const scheduleChoices = usePlotScheduleChoices();
@@ -312,6 +314,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     profile={profile}
                     onSave={cropPlot.handleAddPlot}
                     onCancel={() => cropPlot.setWizardCropId(null)}
+                    farmSetup={farmSetup}
+                    onOpenWaterPage={openWaterPage}
                 />
             )}
 
@@ -398,6 +402,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 canAddPlot={canEditFarmSetup}
                                 onOpenScheduleLibrary={onOpenScheduleLibrary}
                                 onOpenSchedule={onOpenSchedule}
+                                farmSetup={farmSetup}
+                                onOpenWaterPage={openWaterPage}
                             />
                         ),
                     },

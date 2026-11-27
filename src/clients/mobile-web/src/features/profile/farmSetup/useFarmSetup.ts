@@ -13,7 +13,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { getLocalFarmSetup, type LocalFarmSetup } from './farmSetupLocal';
 
 const notReceived = (farmId: string): LocalFarmSetup => ({
-    farmId, received: false, waterSources: [], machines: [], powerTimes: null, plotWater: new Map(), waitingCount: 0, refused: [],
+    farmId, received: false, waterSources: [], machines: [], powerTimes: null, plotWater: new Map(), waitingCount: 0, refused: [], farmPlotIds: new Set(),
 });
 
 /** No IndexedDB on this platform (never on a phone; a test runner without one): nothing can have been received - said at once, never "still reading". */

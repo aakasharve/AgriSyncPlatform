@@ -4,6 +4,11 @@
  *
  * Sub-plan 04 Task 6 — extracted verbatim from `pages/ProfilePage.tsx`.
  * 3-step wizard for adding a plot to a crop. Used only by StructureSection.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, P7; R2-A item 14) - with the open farm's set (`farmSetup`, once the server sent it), step 3
+ * also asks "या प्लॉटला पाण्याची सोय कशी केली आहे?" from the farm's own sources and motors (`PlotWaterQuestion`). The answer goes to `onSave` beside the
+ * plot (absent when he said nothing: the plot is saved and shows बाकी); the caller queues it AFTER the plot. The old `irrigationMethod: 'None'` default
+ * (never his answer) is not written then. Without the farm's set the plot is saved exactly as before.
  */
 
 import React, { useState } from 'react';
@@ -27,14 +32,24 @@ import {
     checkedScheduleForCrop, dayCountOn, earliestPlantingDate, plantingDateProblem, plantingWordKey,
     type NewPlotStart,
 } from '../plotStart/plotStartChoice';
+import type { LocalFarmSetup } from '../farmSetup/farmSetupLocal';
+import type { PlotWaterInput } from '../farmSetup/farmSetupCommands';
+import { PlotWaterQuestion, type PlotWaterAnswer } from '../farmSetup/PlotWaterQuestion';
 
 interface PlotWizardProps {
     crop: CropProfile;
     /** The farm setup on this phone. Not read since the machines question left (FIX-1 item 4); the plot's water question will read it (D-9). */
     profile: FarmerProfile;
-    /** The new plot, and (spec: plr-d10 lane WIZARD-F2) the day it counts from and the checked schedule that follows by itself. */
-    onSave: (plot: Plot, start: NewPlotStart) => void;
+    /**
+     * The new plot, and (spec: plr-d10 lane WIZARD-F2) the day it counts from and the checked schedule that follows by itself; and (repair D-9) its
+     * water answer, only when he gave one.
+     */
+    onSave: (plot: Plot, start: NewPlotStart, water?: Omit<PlotWaterInput, 'plotId'>) => void;
     onCancel: () => void;
+    /** repair D-9 - the open farm's set, once the server sent it (absent / not received: no water question, the plot as before). */
+    farmSetup?: LocalFarmSetup | null;
+    /** repair D-9 - "आधी पाण्याचा स्रोत जोडा": the door to पाणी आणि वीज. The plot is SAVED first (its water बाकी), then the page opens. */
+    onOpenWaterPage?: () => void;
 }
 
 /**
@@ -43,7 +58,7 @@ interface PlotWizardProps {
  */
 const LABEL = 'block text-[16px] font-bold text-stone-700 mb-1';
 
-const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) => {
+const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel, farmSetup, onOpenWaterPage }) => {
     const { t, language } = useLanguage();
     // The words of steps 1 and 2 that were English on a Marathi screen (placeholders, errors, hint, units); English mode keeps its English.
     const w = plotWizardWords(language);
@@ -76,6 +91,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) =>
     const chosenKey: string | null = startMode === 'today'
         ? todayKey
         : startMode === 'earlier' && earlierKey !== '' && earlierProblem === null ? earlierKey : null;
+
+    // repair D-9 - the plot's water, asked only when the server has sent the farm's set.
+    const server = farmSetup?.received ? farmSetup : null;
+    const [water, setWater] = useState<PlotWaterAnswer>({ method: null, links: [] });
 
     // --- VALIDATION STATE ---
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -136,8 +155,9 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) =>
             plantAgeDays: Number(plantAge)
         };
 
-        // Saved exactly as before (no machine was ever required): machines are the farm's, not the plot's (FIX-1 item 4).
-        const infrastructure: PlotInfrastructure = {
+        // Saved exactly as before (no machine was ever required): machines are the farm's, not the plot's (FIX-1 item 4). Repair D-9: with the farm's
+        // set the plot's water lives on the server, and the old 'None' default (never his answer) is not written.
+        const infrastructure: PlotInfrastructure | undefined = server ? undefined : {
             irrigationMethod: 'None',
             linkedMachineryIds: []
         };
@@ -172,11 +192,12 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) =>
                 unit: areaUnit
             },
             plantingMaterial,
-            infrastructure,
+            ...(infrastructure ? { infrastructure } : {}),
             schedule: instance
         };
 
-        onSave(newPlot, { scheduleTemplateId: checkedSchedule?.templateId ?? null, referenceDate: chosenKey });
+        const waterAnswer = server && water.method ? { farmId: server.farmId, method: water.method, links: water.method === 'none' ? [] : water.links } : undefined;
+        onSave(newPlot, { scheduleTemplateId: checkedSchedule?.templateId ?? null, referenceDate: chosenKey }, waterAnswer);
     };
 
     const nextStep = () => {
@@ -406,7 +427,11 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, onSave, onCancel }) =>
                                 checked={checkedSchedule}
                             />
                             {/* Repair FIX-1 item 4 (R2-A 14): no machines question here. Machines belong to the whole farm,
-                                not to one plot. The plot's water question comes with the per-farm setup on the server (D-9). */}
+                                not to one plot. Repair D-9: the plot's water question, from the farm's own sources and motors. */}
+                            {server && (
+                                <PlotWaterQuestion sources={server.waterSources.map(s => s.item)} value={water} onChange={setWater} language={language}
+                                    onOpenWaterPage={onOpenWaterPage && chosenKey ? () => { handleSave(); onOpenWaterPage(); } : undefined} />
+                            )}
                         </div>
                     )}
 

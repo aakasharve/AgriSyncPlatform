@@ -16,6 +16,7 @@ import { systemClock } from '../../../core/domain/services/Clock';
 import { getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 import { getNextUnusedColor } from '../helpers/cropPalette';
 import { registerNewPlotOnServer } from '../../sync/plots/registerNewPlotOnServer';
+import { setPlotWater, type PlotWaterInput } from '../farmSetup/farmSetupCommands';
 import type { NewPlotStart } from '../plotStart/plotStartChoice';
 
 export interface UseCropPlotStateInput {
@@ -38,7 +39,7 @@ export interface UseCropPlotStateResult {
     normalizedNewCropName: string;
     isDuplicateCropName: boolean;
     handleAddCrop: () => void;
-    handleAddPlot: (plot: Plot, start?: NewPlotStart) => void;
+    handleAddPlot: (plot: Plot, start?: NewPlotStart, water?: Omit<PlotWaterInput, 'plotId'>) => void;
     handleSaveMap: (cropId: string, plotId: string, geoData: PlotGeoData) => void;
     deleteCrop: (id: string) => void;
     deletePlot: (cId: string, pId: string) => void;
@@ -89,7 +90,7 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
         setNewCropData({ iconName: 'Sprout' });
     };
 
-    const handleAddPlot = (plot: Plot, start?: NewPlotStart) => {
+    const handleAddPlot = (plot: Plot, start?: NewPlotStart, water?: Omit<PlotWaterInput, 'plotId'>) => {
         // spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3) — the new plot and its
         // crop cycle are sent to the server (they never were). Fire-and-forget: it never
         // throws, and a failure is reported as unsent by the sync badge.
@@ -98,11 +99,18 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
         // behind the plot and its cycle; a crop with no checked schedule sends none (`schedule: null`).
         const cropName = crops.find(crop => crop.id === wizardCropId)?.name;
         if (cropName) {
-            void registerNewPlotOnServer({
+            const registered = registerNewPlotOnServer({
                 plot,
                 cropName,
                 schedule: start?.scheduleTemplateId ? { templateId: start.scheduleTemplateId, referenceDate: start.referenceDate } : null,
             });
+            // repair D-9 (P7) - the plot's water goes AFTER the plot (`create_plot` first, then `farmsetup.plot_water.set`; refused PlotNotFound while the
+            // plot is still on its way, it waits for it). Only when the plot itself was queued: a water answer for a plot that never goes up would wait for
+            // nothing. Never throws into the save.
+            if (water) {
+                void registered.then(outcome => (outcome === 'queued' ? setPlotWater({ ...water, plotId: plot.id }) : undefined))
+                    .catch((err: unknown) => console.error('[useCropPlotState] the new plot\'s water could not be queued', plot.id, err));
+            }
         }
 
         // spec: plr-d10 lane WIZARD-F2 — ONLY the new plot gets a schedule. The old code copied the wizard's pick onto EVERY plot of the

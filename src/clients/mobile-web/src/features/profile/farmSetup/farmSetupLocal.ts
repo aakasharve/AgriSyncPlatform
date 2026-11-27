@@ -49,6 +49,12 @@ export interface LocalFarmSetup {
     waitingCount: number;
     /** Every parked change of this farm, oldest first. */
     refused: FarmSetupRefusal[];
+    /**
+     * The plots this phone KNOWS are this farm's: the server's plots of the farm (the `plots` store) and the plots made here and queued for it. A plot's
+     * water is asked and marked only for these - a plot of another farm that the phone still lists here (repair FIX-2, not this lane) gets no water mark
+     * and no water door, so this lane never adds to that mix.
+     */
+    farmPlotIds: ReadonlySet<string>;
 }
 
 const WAITING: ReadonlySet<MutationQueueStatus> = new Set<MutationQueueStatus>(['PENDING', 'SENDING', 'FAILED']);
@@ -108,6 +114,12 @@ export async function getLocalFarmSetup(db: AgriLogDatabase, farmId: string): Pr
     const rows: MutationQueueItem[] = (await db.mutationQueue.where('mutationType').anyOf(TYPES).toArray())
         .filter(r => (WAITING.has(r.status) || r.status === PARKED) && (r.payload as P | null)?.farmId === farmId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0));
+
+    const farmPlotIds = new Set<string>((await db.plots.where('farmId').equals(farmId).toArray()).map(p => p.id));
+    for (const row of await db.mutationQueue.where('mutationType').equals(SyncMutationName.CreatePlot).toArray()) {
+        const p = (row.payload ?? {}) as P;
+        if (p.farmId === farmId && typeof p.plotId === 'string' && row.status !== 'REJECTED_DROPPED') farmPlotIds.add(p.plotId);
+    }
 
     let waitingCount = 0;
     const refused: FarmSetupRefusal[] = [];
@@ -177,5 +189,6 @@ export async function getLocalFarmSetup(db: AgriLogDatabase, farmId: string): Pr
         plotWater: plots,
         waitingCount,
         refused,
+        farmPlotIds,
     };
 }
