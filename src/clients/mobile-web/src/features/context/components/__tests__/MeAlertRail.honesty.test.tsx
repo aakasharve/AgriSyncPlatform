@@ -28,7 +28,7 @@ const withAlerts = (alerts: unknown[]) => {
     farmContext.meContext = { me: {}, farms: [{ farmId: 'f1', name: 'सोनाका शेत' }], share: {}, alerts };
 };
 
-// Repair R1-g 1c (founder, 28 Nov): the plan alerts are drawn only with the billing switch on (off by default;
+// Repair R1-g 1c (founder, 27 Nov): the plan alerts are drawn only with the billing switch on (off by default;
 // MeAlertRail.billingSwitch.test.tsx). This suite checks what they SAY once drawn, so it turns the switch on.
 beforeEach(() => { farmContext.meContext = null; billing.on = true; });
 afterEach(() => { cleanup(); billing.on = false; });

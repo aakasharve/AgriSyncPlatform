@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 28 Nov; CTO ruling 3). Does
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 27 Nov; CTO ruling 3). Does
  * this saved screen offer the setup hub ("तुमच्या शेताची माहिती पूर्ण करा…")? Only:
  *   - on a phone that went through the first-record card (its row exists, R1-g 1a). A phone with no row passed the first run
  *     before the card existed and sees the screen exactly as today (P11);

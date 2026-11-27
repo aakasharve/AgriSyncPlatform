@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1 (founder Q5 = Option A, 28 Nov; CTO rulings 1-3).
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1 (founder Q5 = Option A, 27 Nov; CTO rulings 1-3).
  * The facts the first-record card rests on, pure so each is tested alone.
  *
  * The card has its OWN once-only key. It is written `false` ("due") when an owner seat leaves the role welcome ("चला,
@@ -30,7 +30,7 @@ export function mayOfferFirstRecord(role: string | null | undefined): boolean {
 export const firstRecordOfferKey = (farmId: string | null | undefined): string => `shramsafal_first_record_offer_v1:${farmId ?? 'none'}`;
 export const FIRST_RECORD_OFFER_DONE = 'done';
 /**
- * Task 1d (founder Q-A, 28 Nov: "Save after बरोबर") — the same mark, set when the farm's first record was saved on his
+ * Task 1d (founder Q-A, 27 Nov: "Save after बरोबर") — the same mark, set when the farm's first record was saved on his
  * "बरोबर". From then on no record of the farm waits for "बरोबर"; the setup-hub line (1b) still follows that first record.
  */
 export const FIRST_RECORD_SAVED = 'saved';

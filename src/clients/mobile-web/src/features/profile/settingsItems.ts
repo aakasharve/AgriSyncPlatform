@@ -29,7 +29,7 @@ export type SettingsExtraId = 'language' | 'voice-diary' | 'consent' | 'billing'
 export function buildSettingsExtraIds(isOwner: boolean, hasWaitingDrafts = false): SettingsExtraId[] {
     const base: SettingsExtraId[] = ['language', 'voice-diary', 'consent'];
     if (hasWaitingDrafts) base.push('ai-drafts');
-    // Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users") — the owner's बिलिंग row only with the
+    // Repair R1-g 1c (founder, 27 Nov: "Don't show billing card yet for Pilot users") — the owner's बिलिंग row only with the
     // default-off billing switch on; off, the row is not drawn at all.
     return isOwner && isBillingVisible() ? [...base, 'billing'] : base;
 }

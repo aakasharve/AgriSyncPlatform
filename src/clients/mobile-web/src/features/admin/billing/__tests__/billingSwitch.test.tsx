@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c (founder change, 28 Nov: "Don't show billing
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c (founder change, 27 Nov: "Don't show billing
  * card yet for Pilot users"). Behind the default-off switch VITE_BILLING_VISIBLE: the बिलिंग card (`SubscriptionCard`) and the
  * hub's trial banner (`EntitlementBanner`). Off, neither draws anything — no empty box, no "coming soon" — even for a primary
  * owner on a trial. On, each shows exactly what it showed before (its own words are not changed by this repair).

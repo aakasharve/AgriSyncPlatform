@@ -87,7 +87,7 @@ const CONFIG: Record<string, StatusLook> = {
 };
 
 const SubscriptionCard: React.FC<SubscriptionCardProps> = ({ subscription, role, onManageBilling }) => {
-    // Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users") — nothing at all unless the default-off
+    // Repair R1-g 1c (founder, 27 Nov: "Don't show billing card yet for Pilot users") — nothing at all unless the default-off
     // billing switch is on: no box, no "not known", no "coming soon".
     if (!isBillingVisible()) return null;
     if (role !== 'PrimaryOwner') return null;

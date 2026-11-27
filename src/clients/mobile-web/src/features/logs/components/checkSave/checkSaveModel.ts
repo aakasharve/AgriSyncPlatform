@@ -20,7 +20,7 @@ import { entryText, withoutQuotes } from '../voiceResult/partNames';
 import { placeWords } from '../../../../shared/names/placeWords';
 import { recordingOf, withoutInventedStoppage, type BlockerEntry, type PartEntry } from '../voiceResult/resultModel';
 
-/** Repair R1-g 1d — `firstRecord`: the farm's first record, saved only on "बरोबर" (founder Q-A, 28 Nov). */
+/** Repair R1-g 1d — `firstRecord`: the farm's first record, saved only on "बरोबर" (founder Q-A, 27 Nov). */
 export type CheckCase = 'unclear' | 'otherPlot' | 'notWritten' | 'check' | 'firstRecord';
 
 const FARM_GLOBAL = 'FARM_GLOBAL';

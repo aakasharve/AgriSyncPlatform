@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c as the founder changed it on 28 Nov: "Do not
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c as the founder changed it on 27 Nov: "Do not
  * mention anything about pricing in the app anywhere right now." The "तुमचं शेत तयार आहे" screen says nothing about a price, a
  * plan, a trial or its days — for the primary owner too, and with the billing switch on or off (the price lines were never
  * built; this pins that they stay out).

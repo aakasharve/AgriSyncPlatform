@@ -57,7 +57,7 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const w = checkSaveWords(language);
     const unclear = p.kind === 'unclear';
-    // R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर") — the farm's FIRST record: "बरोबर" saves it, "बदल करा" corrects it.
+    // R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — the farm's FIRST record: "बरोबर" saves it, "बदल करा" corrects it.
     const first = p.kind === 'firstRecord';
     const card = attendanceCardCopy(language);
     const needsPlace = p.kind === 'otherPlot' && !p.placeLabel;

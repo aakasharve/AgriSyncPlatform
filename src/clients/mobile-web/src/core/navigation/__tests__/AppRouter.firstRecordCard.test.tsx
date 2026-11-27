@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1a (founder Q5 = Option A, 28 Nov; CTO
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1a (founder Q5 = Option A, 27 Nov; CTO
  * rulings 1-2). After "चला, सुरुवात करूया" a farm owner (or a co-owner) gets ONE card, in his words: "आज शेतात काय काय
  * केलं?" / "जसं आठवतंय, तसं सांगा. बाकी आम्ही करू." / "बोलायला सुरुवात करा" / "नंतर सांगेन".
  *   - once, on the first run only, with its own once-only key (`shramsafal_first_record_card_v1_seen`);

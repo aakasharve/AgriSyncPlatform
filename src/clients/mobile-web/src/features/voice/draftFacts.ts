@@ -17,7 +17,7 @@
 import type { VoiceRecordingRef } from './useVoiceRecorder.types';
 
 /**
- * Why the voice auto-save handed a parse back instead of saving it. Repair R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर"):
+ * Why the voice auto-save handed a parse back instead of saving it. Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर"):
  * `firstRecord` — the farm's FIRST record on this phone is saved only on his "बरोबर".
  */
 export type DeclineReason = 'unclear' | 'otherPlot' | 'notWritten' | 'firstRecord';

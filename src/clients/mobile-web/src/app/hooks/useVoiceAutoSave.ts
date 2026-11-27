@@ -19,7 +19,7 @@
  *   - Not taken, so today's review form gets the parse: the हजेरी door (labour has its own result screen),
  *     a parse with nothing understood in it, a parse that would MOVE the save to a plot the AI suggested
  *     (`suggestedContext` — he must choose that himself, never silently), and a save that wrote nothing.
- *     Nothing is ever lost. Repair R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर"): also the farm's FIRST record on this
+ *     Nothing is ever lost. Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर"): also the farm's FIRST record on this
  *     phone (`isFirstRecord`, given by the composition root only), saved on his "बरोबर" through `saveChecked`.
  *   - The day-closure analytics event (`closure.submitted`, method 'voice') is sent once the save is on the
  *     phone, as the review form's Save tap sent it before (DWC v2 §2.8): the admin MIS counts closed days,
@@ -94,7 +94,7 @@ export interface UseVoiceAutoSaveProps {
     /** Injected for tests; the real one validates and queues the analytics event. */
     emitClosure?: typeof emitClosureSubmitted;
     /**
-     * Repair R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर") — is this the farm's FIRST record on this phone? Then it is
+     * Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — is this the farm's FIRST record on this phone? Then it is
      * handed back to "तपासा आणि जतन करा" and saved only on "बरोबर" (`saveChecked`). Absent = every record auto-saves, as
      * before (only the app's composition root gives it); a gate that cannot answer counts as "no".
      */

@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 28 Nov: "Save after बरोबर").
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 27 Nov: "Save after बरोबर").
  * The farm's FIRST record on this phone is saved only on his "बरोबर"; every later record saves at once (D-44, unchanged).
  *
  * It is the first only when BOTH hold, read from the phone itself:

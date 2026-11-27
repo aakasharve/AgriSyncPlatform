@@ -1,5 +1,5 @@
 /**
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c as the founder changed it on 28 Nov ("Don't
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c as the founder changed it on 27 Nov ("Don't
  * show billing card yet for Pilot users this will not be applicable"; "Do not mention anything about pricing in the app anywhere
  * right now"). Everything about billing, the plan and the trial is hidden unless the phone switch VITE_BILLING_VISIBLE is on.
  * It is OFF by default, and no env file or release workflow sets it.

@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 28 Nov: "Save after बरोबर").
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 27 Nov: "Save after बरोबर").
  * The FIRST record of a farm on this phone is NOT auto-saved: the voice auto-save hands its parse back through the existing
  * "तपासा आणि जतन करा" path (`bindDraftDecline`, reason `firstRecord`), and it is saved only when he presses "बरोबर" there
  * (`saveChecked`, the same save). Every later record saves at once, exactly as today (D-44). Over a real phone database

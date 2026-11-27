@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1. The words of the first-record card, one language at
- * a time (Marathi mode: Marathi only; English mode: English only). The Marathi marked FOUNDER is his own, verbatim (Q5, 28 Nov,
+ * a time (Marathi mode: Marathi only; English mode: English only). The Marathi marked FOUNDER is his own, verbatim (Q5, 27 Nov,
  * PENDING-DECISIONS → Answered); every English twin is PROPOSED (English) until his string review.
  */
 import type { Language } from '../../../i18n/language';

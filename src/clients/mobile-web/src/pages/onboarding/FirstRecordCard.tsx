@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * FirstRecordCard — repair R1-g Part 1, task 1a (founder Q5 = Option A, 28 Nov; CTO rulings 1-2).
+ * FirstRecordCard — repair R1-g Part 1, task 1a (founder Q5 = Option A, 27 Nov; CTO rulings 1-2).
  * spec: plr-d10-schedule-mechanism-pilot-2026-11-22.
  *
  * After "चला, सुरुवात करूया" a new farm owner goes straight into his own REAL farm, to ONE card that asks for his first

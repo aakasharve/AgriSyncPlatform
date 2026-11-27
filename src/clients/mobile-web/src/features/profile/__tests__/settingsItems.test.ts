@@ -6,7 +6,7 @@ const billing = vi.hoisted(() => ({ on: false }));
 vi.mock('../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 import { buildSettingsExtraIds, PRIVACY_TITLE } from '../settingsItems';
 
-// Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users"): the owner's बिलिंग row only with the
+// Repair R1-g 1c (founder, 27 Nov: "Don't show billing card yet for Pilot users"): the owner's बिलिंग row only with the
 // billing switch on. OFF is the default on every phone.
 describe('buildSettingsExtraIds — billing switch OFF (the default)', () => {
     it('no billing row, even for the primary owner', () => {

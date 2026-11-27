@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 28 Nov; CTO ruling 3). On the
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 27 Nov; CTO ruling 3). On the
  * FIRST record's "जतन झालं" screen, right under the saved card: his line "तुमच्या शेताची माहिती पूर्ण करा. म्हणजे पुढील
  * कामांच्या नोंदी अधिक अचूक होतील.", "शेताची माहिती भरा" (the setup hub) and "नंतर". Offered as the natural next step and
  * never forced: it blocks nothing on the screen (the mic, "बदला", his voice all stay). Presentational; the container decides

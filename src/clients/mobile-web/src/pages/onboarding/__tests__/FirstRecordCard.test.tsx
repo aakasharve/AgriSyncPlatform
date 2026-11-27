@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1a. The first-record card: the founder's
- * own words in Marathi mode (Q5, 28 Nov, verbatim), English only in English mode (PROPOSED twins), one start, one "later",
+ * own words in Marathi mode (Q5, 27 Nov, verbatim), English only in English mode (PROPOSED twins), one start, one "later",
  * one "← मागे".
  */
 import '@testing-library/jest-dom/vitest';

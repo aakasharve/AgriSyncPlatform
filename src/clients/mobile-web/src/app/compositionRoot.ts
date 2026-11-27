@@ -143,7 +143,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         logIntent: navigation.logIntent,
         setStatus: voice.setStatus,
         farmId: currentFarmId ?? null,
-        // Repair R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर") — the farm's first record on this phone waits for "बरोबर".
+        // Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — the farm's first record on this phone waits for "बरोबर".
         isFirstRecord: isFirstRecordOnPhone,
     });
     const { setStatus: setVoiceStatus } = voice;

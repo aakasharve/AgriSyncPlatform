@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 28 Nov; CTO ruling 3). The
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1b (founder Q5, 27 Nov; CTO ruling 3). The
  * REAL container over a real Dexie (fake-indexeddb), with the voice flow v2 flag ON. After the FIRST record of this farm is
  * saved, its "जतन झालं" screen also shows his line "तुमच्या शेताची माहिती पूर्ण करा. म्हणजे पुढील कामांच्या नोंदी अधिक
  * अचूक होतील." with "शेताची माहिती भरा" (the setup hub) and "नंतर":

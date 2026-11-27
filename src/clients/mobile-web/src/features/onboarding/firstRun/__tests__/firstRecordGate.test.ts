@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 28 Nov: "Save after बरोबर").
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1d (founder Q-A, 27 Nov: "Save after बरोबर").
  * The FIRST record of a farm on this phone is saved only on "बरोबर". It is the first only when BOTH hold, read from the phone:
  *   - the farm's once-only mark is not set (the same per-farm mark the first record's setup-hub line uses, 1b);
  *   - the phone holds NO record of this farm (a record with no farm on it counts as this farm's: today's auto-save wins).

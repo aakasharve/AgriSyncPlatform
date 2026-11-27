@@ -110,7 +110,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const setVoiceSeenRef = React.useRef(setVoiceSeen);
     React.useEffect(() => { setVoiceSeenRef.current = setVoiceSeen; });
     const onWelcomeVoiceDone = React.useCallback(() => setVoiceSeenRef.current(true), []);
-    // Repair R1-g 1a (founder Q5, 28 Nov; CTO ruling 1) — the first-record card after "चला, सुरुवात करूया": its OWN
+    // Repair R1-g 1a (founder Q5, 27 Nov; CTO ruling 1) — the first-record card after "चला, सुरुवात करूया": its OWN
     // once-only key, written "due" (false) only when an owner seat leaves the role welcome. No row reads "seen", so an
     // installed phone that passed the first run long ago never sees it (P11).
     const [firstRecordCardSeen, setFirstRecordCardSeen, firstRecordCardLoaded] = useUiPref<boolean>(

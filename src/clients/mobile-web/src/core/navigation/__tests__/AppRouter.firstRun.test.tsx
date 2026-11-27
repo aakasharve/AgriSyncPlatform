@@ -132,7 +132,7 @@ const mount = async (props: React.ComponentProps<typeof AppRouter>) => {
 };
 
 describe('AppRouter — the first run after the farm', () => {
-    // R1-g 1a (founder Q5, 28 Nov): an OWNER's first run gained one step at its end — the first-record card after
+    // R1-g 1a (founder Q5, 27 Nov): an OWNER's first run gained one step at its end — the first-record card after
     // "चला, सुरुवात करूया". A worker's order is unchanged (next test, and AppRouter.firstRecordCard.test.tsx).
     it('order: permissions FIRST, then the voice note, then the welcome for the REAL role, then (owner) the first-record card, then the app', async () => {
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });

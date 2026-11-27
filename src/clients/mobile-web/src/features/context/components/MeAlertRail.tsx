@@ -45,7 +45,7 @@ const iconFor = (kind: MeAlertKind) => {
  * the number (or sent something that is not a count of days) the banner used to read "प्लॅन 0 दिवसांत संपेल" - a made-up zero. Now it is not drawn.
  */
 const textFor = (alert: MeAlert, farmName?: string): { mr: string; en: string } | null => {
-    // Repair R1-g 1c (founder, 28 Nov) — the two plan alerts only with the default-off billing switch on. `null` drops the row
+    // Repair R1-g 1c (founder, 27 Nov) — the two plan alerts only with the default-off billing switch on. `null` drops the row
     // before the rail is drawn (H9 below), so it leaves no gap.
     if ((alert.kind === 'plan_expiring' || alert.kind === 'plan_expired') && !isBillingVisible()) return null;
     switch (alert.kind) {

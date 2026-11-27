@@ -20,7 +20,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import SubscriptionCard, { BILLING_UNKNOWN } from '../SubscriptionCard';
 import type { SubscriptionSnapshotDto } from '../../../onboarding/qr/inviteApi';
 
-// Repair R1-g 1c (founder, 28 Nov): the card is drawn only with the billing switch on (off by default; billingSwitch.test.tsx).
+// Repair R1-g 1c (founder, 27 Nov): the card is drawn only with the billing switch on (off by default; billingSwitch.test.tsx).
 // This suite checks what the card SAYS once it is drawn, so it turns the switch on.
 beforeEach(() => { billing.on = true; });
 afterEach(() => { cleanup(); billing.on = false; });

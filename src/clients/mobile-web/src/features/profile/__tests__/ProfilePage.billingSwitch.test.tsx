@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c (founder change, 28 Nov: "Don't show billing
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c (founder change, 27 Nov: "Don't show billing
  * card yet for Pilot users this will not be applicable"). On the सेट-अप केंद्र of a PRIMARY OWNER whose farm is on a trial:
  *   - switch OFF (the default): no "बिलिंग" / "तुमचा प्लॅन" row, and the माझी ओळख page draws no trial banner — no gap, no
  *     "coming soon";
