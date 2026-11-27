@@ -608,6 +608,22 @@
 //     for the person who answered, and proves the request Completes and the rows are untouched.
 //     KEEP - conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.farm_water_sources, ssf.farm_motors, ssf.farm_power_times, ssf.farm_machines, ssf.plot_water_setups and ssf.plot_water_links (plr-d10 repair D-9,
+//     founder 27 Nov 2026: a farm's setup on the server, per farm) - KEEP. The rows describe the FARM, not a person: its water sources and their motors (name,
+//     type, HP, phase, power source, drip details), its power timetable (off-windows by phase), its machines (name, type, owned or rented, company, model, HP,
+//     nozzles, tank) and how each plot gets its water (method, and links to a source and a motor). The only person columns are opaque ids of who wrote a row
+//     (created_by_user_id / updated_by_user_id), with no name beside them - KEEP, exactly as ssf.own_schedule_items above and ssf.farms.owner_user_id. Doctrine
+//     P6: anonymise the person, never the work - erasing a सहमालक who typed the wells must not take the farm's setup away from everyone else who works it, and
+//     erasing the owner leaves the farm described for whoever farms it next. DISCLOSED: the free words (a source's name and note, a motor's and a machine's
+//     name, a machine's extra line, a power source's name) are a farmer's words about equipment and places, kept like observation_events text
+//     (D-FREETEXT-PRESERVE-2026-06-29); no field asks for a person's name. No table grants DELETE to the application role (a removal is a state), so no scrub
+//     is wired. EXPORTED for the farm's owner: ExportWorker writes /farm_setup.json (every row of the farms he owns). Proven through the WHOLE worker (a new
+//     step once made every erasure end Failed): ErasureWorkerFarmSetupRealPostgresTests runs the real worker with rows in all six tables, for the farm's owner
+//     and for the seat-holder who typed, and proves the request Completes and every row is untouched.
+//     The switch ssf.farms.reviewer_may_approve_own_bill (repair D-177) is a rule of the farm (true or false), no person's data: it rides the farm row's
+//     existing disposition.
+//     KEEP - conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
 //     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
 //     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with

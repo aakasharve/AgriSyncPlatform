@@ -219,6 +219,20 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // spec: plr-d10 schedule slice 11 - the season-end review's answers; FORCE-RLS on its own farm_id; migration AddOwnScheduleSeasonCarries.
     public DbSet<ShramSafal.Domain.Planning.OwnScheduleSeasonCarry> OwnScheduleSeasonCarries => Set<ShramSafal.Domain.Planning.OwnScheduleSeasonCarry>();
 
+    // spec: plr-d10 repair D-9 (founder 27 Nov) - a farm's setup on the server, per farm: water sources with their motors, the power timetable, machines and
+    // each plot's water arrangement. FORCE-RLS on each table's own farm_id (F8); no DELETE for the app role (a removal is a state); migration AddFarmSetup.
+    public DbSet<FarmWaterSource> FarmWaterSources => Set<FarmWaterSource>();
+
+    public DbSet<FarmMotor> FarmMotors => Set<FarmMotor>();
+
+    public DbSet<FarmPowerTimes> FarmPowerTimes => Set<FarmPowerTimes>();
+
+    public DbSet<FarmMachine> FarmMachines => Set<FarmMachine>();
+
+    public DbSet<PlotWaterSetup> PlotWaterSetups => Set<PlotWaterSetup>();
+
+    public DbSet<PlotWaterLink> PlotWaterLinks => Set<PlotWaterLink>();
+
     // spec: plr-d10 schedule slice 12b - the schedule owner's voice: clips' metadata, messages (FORCE-RLS by schedule chain) and what each farm's plots did with them (FORCE-RLS on farm_id);
     // migration AddScheduleOwnerVoice.
     public DbSet<ShramSafal.Domain.Planning.ScheduleOwnerClip> ScheduleOwnerClips => Set<ShramSafal.Domain.Planning.ScheduleOwnerClip>();

@@ -17,11 +17,17 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 /// it reads today's format only. Slice 1 only carries it; the slice that sends the new task format (slice 2) sends it to a phone that said 2 and
 /// sends a phone that said nothing the old projection.
 /// </param>
+/// <param name="FarmSetupFormat">
+/// spec: plr-d10 repair D-9 (farm setup on the server, per farm) — the phone ASKS for the farm's setup (<c>farmSetup=1</c> on the pull; a QUERY
+/// parameter, so CORS needs no new header; read as leniently as <c>scheduleFormat</c>, by the same reader). <c>null</c> = the phone did not ask
+/// (1.0.17, today's test build, or a value that could not be read): it is sent NO <c>farmSetup</c> key and its pull is what it was (P11).
+/// </param>
 public sealed record PullSyncChangesQuery(
     DateTime SinceUtc,
     Guid UserId,
     IReadOnlyList<Guid>? HeldFarmIds = null,
-    int? ScheduleFormat = null)
+    int? ScheduleFormat = null,
+    int? FarmSetupFormat = null)
 {
     /// <summary>
     /// Reads the <c>scheduleFormat</c> query value leniently (P11: an older or odd client is never refused for it): a positive whole number is

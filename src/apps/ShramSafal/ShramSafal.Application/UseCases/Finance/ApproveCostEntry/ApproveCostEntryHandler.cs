@@ -101,7 +101,13 @@ public sealed class ApproveCostEntryHandler(
         }
 
         // D-105 (a), founder C3 = C (2026-11-23): nobody approves his own bill, the owner may. A named refusal, nothing written.
-        if (!BillApprovalRules.MayApproveOwnBill(isPrimaryHolder, entry.CreatedByUserId.Value == caller))
+        // Repair D-177 (founder 27 Nov, B1.4): unless THIS farm's owner turned its switch on. The farm's value is read NOW, when the approval
+        // arrives: an approval tapped offline while the switch was on and arriving after the owner turned it off is refused. Read only when it
+        // decides (a reviewer's own bill); a farm that cannot be read allows nothing.
+        var isMaker = entry.CreatedByUserId.Value == caller;
+        var farmAllows = isMaker && !isPrimaryHolder
+            && (await repository.GetFarmByIdAsync(farmId, ct))?.ReviewerMayApproveOwnBill == true;
+        if (!BillApprovalRules.MayApproveOwnBill(isPrimaryHolder, isMaker, farmAllows))
         {
             return Result.Failure<CostEntryDto>(ShramSafalErrors.OwnBillApprovalForbidden);
         }

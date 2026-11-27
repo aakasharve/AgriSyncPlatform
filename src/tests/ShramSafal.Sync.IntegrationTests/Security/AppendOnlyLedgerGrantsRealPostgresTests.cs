@@ -357,6 +357,13 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    the SECURITY DEFINER function ssf.schedule_chain_totals (EXECUTE for the app role only) and an owner-only SELECT policy on eight tables. It GRANTs nothing on any ledger this suite asserts about and touches none of them.
         //    Down() REFUSES while the list has any row and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
         "20261125120000_AddScheduleTotals",
+        // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, repair D-9); Up() and Down() read in full: Up() creates six new tables (ssf.farm_water_sources, farm_motors, farm_power_times,
+        //    farm_machines, plot_water_setups, plot_water_links; FORCE RLS each). It GRANTs SELECT, INSERT, UPDATE and REVOKEs DELETE, TRUNCATE on those six tables only; no ledger this suite asserts about is touched.
+        //    Down() REFUSES while any row exists and otherwise drops exactly what Up() added, so on this harness's empty schema it reverts and re-applies.
+        "20261127020000_AddFarmSetup",
+        // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, repair D-177); Up() and Down() read in full: Up() adds ONE boolean column (NOT NULL DEFAULT false) to ssf.farms. It GRANTs and
+        //    REVOKEs nothing and touches no ledger this suite asserts about. Down() REFUSES while any farm has the switch on and otherwise drops the column, so on this harness's schema it reverts and re-applies.
+        "20261127021000_AddFarmOwnBillApprovalSwitch",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

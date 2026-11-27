@@ -19,6 +19,9 @@
  *     and remove buttons used to appear only on mouse hover, so a phone could not see them; they are
  *     now always shown, and removing asks first;
  *   - add a plot → the 3-step AddPlotWizard (rendered by ProfilePage, unchanged).
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, P7) - with the open farm's set (`farmSetup`), each plot card shows the plot's water
+ * from the FARM's set (`PlotWaterCard`) instead of the phone's own irrigation field, and a person who may change the farm setup changes it there.
  */
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, MapPin, Plus, Sprout, Trash2 } from 'lucide-react';
@@ -38,6 +41,9 @@ import { IRRIGATION_LABEL, LAND_UNIT_LABEL } from '../components/setupLabels';
 import { SCHEDULE_LINE_WORDS, plotsFollowingCount, scheduleLineText } from './cropScheduleLine';
 import { cropNameIn } from '../../../shared/names/namesIn';
 import { PLOT_PENDING_WORDS, pendingPlots, type PlotPendingReason } from './plotPending';
+import type { LocalFarmSetup } from '../farmSetup/farmSetupLocal';
+import { PlotWaterCard } from '../farmSetup/PlotWaterCard';
+import { plotWaterPendingFor } from '../farmSetup/hubFacts';
 
 /**
  * Repair FIX-1 item 5 (founder's word: RED) - the small red mark on a plot that still misses a link: the app's danger colour
@@ -75,6 +81,12 @@ interface StructureSectionProps {
      * has, `onOpenScheduleLibrary` (it opens the same tab on the same crop, on its library view).
      */
     onOpenSchedule?: (cropId?: string) => void;
+    /** repair D-9 - the open farm's set (absent / not received: the plot card as before). */
+    farmSetup?: LocalFarmSetup | null;
+    /** repair D-9 - "आधी पाण्याचा स्रोत जोडा": the door to पाणी आणि वीज. */
+    onOpenWaterPage?: () => void;
+    /** repair D-9 - may change a plot's water (the farm-setup authority on a seat that covers every plot). Absent = `canAddPlot`. */
+    canEditWater?: boolean;
 }
 
 /** The hook's error strings are English; the farmer reads one of these two instead. */
@@ -117,8 +129,9 @@ const CropScheduleLine: React.FC<{ crop: CropProfile; following: number; languag
 const StructureSection: React.FC<StructureSectionProps> = ({
     crops, isAddingCrop, setIsAddingCrop, newCropData, setNewCropData, cropNameError, setCropNameError,
     normalizedNewCropName, isDuplicateCropName, handleAddCrop,
-    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, onOpenSchedule, canAddPlot = true,
+    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, onOpenSchedule, canAddPlot = true, farmSetup, onOpenWaterPage, canEditWater,
 }) => {
+    const farmSet = farmSetup?.received ? farmSetup : null;
     const [confirmPlot, setConfirmPlot] = useState<string | null>(null);
     // From 4 plots a crop's plots are the shared grid and ONE plot's card is open under it (by crop id); a crop with up to 3 plots shows every card.
     const [openPlotByCrop, setOpenPlotByCrop] = useState<Record<string, string | null>>({});
@@ -148,7 +161,9 @@ const StructureSection: React.FC<StructureSectionProps> = ({
     const chosenName = picked ? cropLabel(picked, language) : (newCropData.name ?? '').trim();
 
     // Repair FIX-1 item 5 - the plots still missing a link (the hub's line counts the same list).
-    const pending = useMemo(() => pendingPlots(crops, scheduleChoices, todayKey), [crops, scheduleChoices, todayKey]);
+    // repair D-9 (P8): the plot's water is one more link, from the farm's set (no water reason before the set has come).
+    const waterRule = useMemo(() => plotWaterPendingFor(farmSet), [farmSet]);
+    const pending = useMemo(() => pendingPlots(crops, scheduleChoices, todayKey, waterRule), [crops, scheduleChoices, todayKey, waterRule]);
     const pendingById = useMemo(() => new Map(pending.map(x => [x.plotId, x.reasons])), [pending]);
     const pendingWords = PLOT_PENDING_WORDS[lineLanguage];
     const reasonsLine = (reasons: readonly PlotPendingReason[]) => reasons.map(r => pendingWords.reason[r]).join(' · ');
@@ -161,7 +176,7 @@ const StructureSection: React.FC<StructureSectionProps> = ({
 
     /** One plot's card, as it always was: area, irrigation, "mapped"; draw / redraw its boundary; remove it (asks first). */
     const renderPlotCard = (crop: CropProfile, p: Plot) => {
-        const irrigation = p.infrastructure?.irrigationMethod ? IRRIGATION_LABEL[p.infrastructure.irrigationMethod] : null;
+        const irrigation = !farmSet && p.infrastructure?.irrigationMethod ? IRRIGATION_LABEL[p.infrastructure.irrigationMethod] : null;
         const confirming = confirmPlot === p.id;
         return (
             <div key={p.id} id={`setup-plot-${p.id}`} className="relative space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`plot-${p.id}`}>
@@ -174,6 +189,8 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                         {p.geoData && <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[12px] font-extrabold text-emerald-800"><MapPin size={12} aria-hidden="true" />नकाशावर आखलेला</span>}
                     </p>
                 </div>
+                {/* only a plot the phone knows is this farm's (FIX-2 is not this lane: another farm's plot gets no water door) */}
+                {farmSet?.farmPlotIds.has(p.id) && <PlotWaterCard plotId={p.id} farmSetup={farmSet} canEdit={canEditWater ?? canAddPlot} language={lineLanguage} onOpenWaterPage={onOpenWaterPage} />}
                 {confirming ? (
                     <div className="rounded-xl bg-rose-50 p-2.5 ring-1 ring-rose-200" data-testid={`plot-remove-confirm-${p.id}`}>
                         <p className="m-0 text-[14px] font-extrabold text-rose-900">हा प्लॉट यादीतून काढायचा?</p>

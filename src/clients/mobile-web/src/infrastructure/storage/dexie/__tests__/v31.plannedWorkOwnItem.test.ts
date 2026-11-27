@@ -79,7 +79,7 @@ describe('Dexie v31 - plans made from an own work are found by the work', () => 
         const db = new AgriLogDatabase(NAME);
         await db.open();
         expect(db.verno).toBeGreaterThanOrEqual(31);
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleDayCards'].sort()); // scheduleDayCards is v32's (slice 8)
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleDayCards', 'farmMachines', 'farmPowerTimes', 'farmWaterSources', 'plotWater'].sort()); // scheduleDayCards is v32's (slice 8)
         expect((await db.appMeta.get('kept'))?.value).toBe(1);
         expect((await db.plannedWork.get('task-1'))?.status).toBe('Open');
         expect(await db.ownScheduleItems.count()).toBe(1);

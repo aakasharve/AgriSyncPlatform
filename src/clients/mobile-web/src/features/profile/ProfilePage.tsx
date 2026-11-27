@@ -46,7 +46,7 @@ import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
-import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
+import { HUB_STEP_ORDER, HUB_STEP_TAB, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
 import { hubWords } from './hubWords';
 import { useSentInvitations } from './components/TeamFirstStepCard';
 import { useFarmPlots } from './team/useFarmPlots';
@@ -56,6 +56,10 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
 import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
+import { useFarmSetup } from './farmSetup/useFarmSetup';
+import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
+import { MoveCard } from './farmSetup/MoveCard';
+import { OwnBillApprovalSwitch } from '../finance/OwnBillApprovalSwitch';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -129,6 +133,12 @@ interface ProfilePageProps {
     initialTab?: ProfileTab;
 }
 
+/**
+ * repair D-9 - the server lets a seat change the farm's water, motors, power and machines only when it covers EVERY plot (SERVER-REPORT §3: a
+ * chosen-plots or own-work seat holding the authority is refused). An older server sends no plot scope: every plot.
+ */
+const coversWholeFarm = (f: { plotScope?: string | null } | null): boolean => !f || !f.plotScope || f.plotScope === 'AllPlots';
+
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onOpenScheduleLibrary, onOpenSchedule, onOpenFinanceManager, onOpenLabour,
@@ -155,6 +165,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Repair FIX-1 item 2 (R2-A 03 + 20): the hub follows the farm OPEN in the app — the one the header
     // and the switcher show — never "the first farm I own".
     const farmAdmin = useFarmAdminState(appFarm?.farmId ?? profileFarmId ?? null);
+    // repair D-9 - the OPEN farm's water, motors, power times and machines as the server holds them (undefined: no farm open, the phone-only pages).
+    const openFarmId = appFarm?.farmId ?? profileFarmId ?? null;
+    const openFarmSetup = useFarmSetup(openFarmId);
+    const farmSetup = openFarmId ? openFarmSetup : undefined;
 
     // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
     // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
@@ -212,24 +226,30 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Guided-setup progress: a step counts as "done" once its core data is really saved.
     // Identity = name + village; water / motor / power = a source / a motor / power times the farmer
     // saved (repair FIX-1 item 3: three steps, one page); Crops = at least one crop.
+    // Repair D-9 (P8): with the open farm's set, water / motor / power / machines are the FARM's (`hubSetupFacts`); without it, the phone profile's.
+    const setupFacts = React.useMemo(() => hubSetupFacts(farmSetup, profile), [farmSetup, profile]);
     const doneIds = React.useMemo(() => {
         const s = new Set<HubStepId>();
         if (profile.name && profile.village) s.add('identity');
-        if ((profile.waterResources?.length ?? 0) > 0) s.add('water');
-        if ((profile.motors?.length ?? 0) > 0) s.add('motor');
-        if (powerTimesSaved(profile.electricityTiming)) s.add('power');
+        if (setupFacts.waterCount > 0) s.add('water');
+        if (setupFacts.motorCount > 0) s.add('motor');
+        if (setupFacts.powerSaved) s.add('power');
         if (crops.length > 0) s.add('structure');
-        if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
+        if (setupFacts.machineCount > 0) s.add('machines');
         // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
         // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
-    }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
+    }, [profile.name, profile.village, setupFacts, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+    // repair D-9 - "आधी पाण्याचा स्रोत जोडा": the add-plot form closes (the plot is not saved half) and पाणी आणि वीज opens.
+    const openWaterPage = () => { cropPlot.setWizardCropId(null); setActiveTab('utils'); };
+    const plotNames = React.useMemo(() => crops.flatMap(c => c.plots.map(p => ({ id: p.id, name: p.name }))), [crops]);
     // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
     const scheduleChoices = usePlotScheduleChoices();
     const todayKey = getDateKey();
-    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey).length, [crops, scheduleChoices, todayKey]);
+    const waterRule = React.useMemo(() => plotWaterPendingFor(farmSetup), [farmSetup]);
+    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey, waterRule).length, [crops, scheduleChoices, todayKey, waterRule]);
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner-only team roster, read ONCE here:
     // the hub's "माझी टीम" row shows how many people wait for an answer, the team page lists them.
@@ -249,6 +269,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const canEditFarmSetup = setupFarm
         ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
         : callerIsPrimary;
+    // repair D-9 - water, motors, power and machines: the server also needs the seat to cover EVERY plot (a chosen-plots or own-work seat holding the
+    // authority is refused, SERVER-REPORT §3), so those pages and the move ask for both. The server decides again whatever the phone shows.
+    const canEditFarmSetupWhole = canEditFarmSetup && coversWholeFarm(setupFarm);
+    const moveFarms = React.useMemo(() => meFarms
+        .filter(f => holdsAuthority(f, AUTHORITY.editFarmSetup) && coversWholeFarm(f))
+        .map(f => ({ farmId: f.farmId, name: f.name })), [meFarms]);
+    const moveCard = <MoveCard profile={profile} userId={authSession?.userId} editableFarms={moveFarms} />;
     // Repair FIX-1 item 10 (R2-B 15, founder 27 Nov) — the माझी टीम step: a MUST for the primary owner (red बाकी, counted by
     // "पुढचं", never a block), done once someone else is on the list, an invitation stands, or he says he runs this farm alone
     // for now — that mark is kept on this phone per farm (`teamSoloKey`; phone-only until the farm setup moves to the server).
@@ -306,6 +333,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     profile={profile}
                     onSave={cropPlot.handleAddPlot}
                     onCancel={() => cropPlot.setWizardCropId(null)}
+                    farmSetup={farmSetup}
+                    onOpenWaterPage={openWaterPage}
                 />
             )}
 
@@ -392,18 +421,25 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 canAddPlot={canEditFarmSetup}
                                 onOpenScheduleLibrary={onOpenScheduleLibrary}
                                 onOpenSchedule={onOpenSchedule}
+                                farmSetup={farmSetup}
+                                canEditWater={canEditFarmSetupWhole}
+                                onOpenWaterPage={openWaterPage}
                             />
                         ),
                     },
-                    { id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    {
+                        id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />,
+                        body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetupWhole} plots={plotNames} moveCard={moveCard} />,
+                    },
+                    {
+                        id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />,
+                        body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetupWhole} moveCard={moveCard} />,
+                    },
                     { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
 
                 // One plain line per row, from the farmer's REAL data (no sample values).
-                const waterCount = profile.waterResources?.length ?? 0;
-                const motorCount = profile.motors?.length ?? 0;
-                const machineCount = profile.machineries?.length ?? 0;
+                const { waterCount, motorCount, machineCount } = setupFacts;
                 const subtitleFor = (id: HubStepId): string => {
                     if (id === 'identity') return hw.line.identity(doneIds.has('identity'));
                     if (id === 'water') return hw.line.water(waterCount);
@@ -531,6 +567,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                     {plannedWorkWords(language).reminders.settingsEntry}
                                 </Tap>
                             )}
+                            {/* repair D-177 - the farm's own-bill switch: the primary owner's alone. */}
+                            {teamFarmId && <OwnBillApprovalSwitch farmId={teamFarmId} isPrimaryOwner={callerIsPrimary} />}
                             <TeamPage
                                 farmId={teamFarmId}
                                 farmCode={teamFarmCode}

@@ -521,6 +521,8 @@ public static class DependencyInjection
         services.AddScoped<IScheduleStepMoveStore, ScheduleStepMoveStore>();
         // spec: plr-d10 schedule slice 3 - the works of a farmer's own schedule while it is built.
         services.AddScoped<IOwnScheduleStore, OwnScheduleStore>();
+        // spec: plr-d10 repair D-9 - a farm's setup on the server, per farm (water sources with their motors, power times, machines, plot water).
+        services.AddScoped<IFarmSetupStore, FarmSetupStore>();
         // spec: plr-d10 schedule slice 12b - the schedule owner's voice: messages, clips' metadata and the farms' own state of each.
         services.AddScoped<IOwnerVoiceStore, OwnerVoiceStore>();
         // spec: plr-d10 schedule slice 13 - the totals of who follows a schedule: the ONE cross-farm read, a SECURITY DEFINER function that returns aggregates only.

@@ -183,6 +183,8 @@ function toLabourEvent(engagement: LabourEngagementDto): LabourEvent {
     const notes = statedText(engagement.notes);
     const shift = statedText(engagement.shift);
     const linkedActivityId = engagement.linkedActivityId ?? undefined;
+    // repair D-9 §8b (a): "कोणामार्फत?" read back - copied when the server sent it, absent otherwise (never defaulted).
+    const engagedThrough = statedText(engagement.engagedThroughFieldOperatorId);
 
     const maleCount = statedNumber(engagement.maleCount);
     const femaleCount = statedNumber(engagement.femaleCount);
@@ -224,6 +226,7 @@ function toLabourEvent(engagement: LabourEngagementDto): LabourEvent {
         ...(task !== undefined && { activity: task }),
         ...(notes !== undefined && { notes }),
         ...(linkedActivityId !== undefined && { linkedActivityId }),
+        ...(engagedThrough !== undefined && { engagedThroughFieldOperatorId: engagedThrough }),
         // Never null on the wire; empty is a complete record, not a gap, and it
         // is stored as the empty array so "the server said nobody" and "the
         // server said nothing" stay different states locally too.

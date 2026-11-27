@@ -79,6 +79,27 @@ public sealed class Farm : Entity<FarmId>
     /// </summary>
     public string? PinCode { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 repair D-177 (founder 27 Nov, B1.4: "an owner switch for each farm; off unless the owner turns it on") - may a person who checks
+    /// money on THIS farm approve a bill he made himself. <c>false</c> for every farm, old and new, until the farm's primary owner turns it on; only he
+    /// may (the <c>farm.own_bill_approval.set</c> door). Read when an approval ARRIVES at the server (<c>BillApprovalRules.MayApproveOwnBill</c>). It
+    /// covers approval only: correcting a bill is unchanged. The primary owner approves his own bills either way.
+    /// </summary>
+    public bool ReviewerMayApproveOwnBill { get; private set; }
+
+    /// <summary>repair D-177 - sets the farm's own-bill switch. Returns false, and changes nothing, when it already holds this value.</summary>
+    public bool SetReviewerMayApproveOwnBill(bool allowed, DateTime utcNow)
+    {
+        if (ReviewerMayApproveOwnBill == allowed)
+        {
+            return false;
+        }
+
+        ReviewerMayApproveOwnBill = allowed;
+        ModifiedAtUtc = utcNow;
+        return true;
+    }
+
     public static Farm Create(FarmId id, string name, UserId ownerUserId, DateTime createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(name))

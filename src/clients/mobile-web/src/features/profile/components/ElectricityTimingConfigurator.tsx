@@ -13,6 +13,11 @@
  *   - "दर दुसऱ्या आठवड्याला वेळ बदलते" → आठवडा अ / आठवडा ब, each with its own window;
  *   - the same check (start ≠ end), जतन करा (writes through `onUpdate`) and पूर्वीसारखं करा.
  * The rules live in `./electricityTiming.ts`.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, P5) - with `farmSetup` (the open farm's set, once the server has sent it) the page shows
+ * the FARM's timetable and जतन करा sends it whole through `farmsetup.power_times.set` (queued; base = the revision the phone last received). A waiting
+ * save says so (never "जतन झाली" while it is only queued); a refused one keeps its words. A person who may not change the farm setup (`canEdit` false)
+ * reads the hours and the strip, with no switch, time box or button. Without `farmSetup` the page is the phone-only page it was.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { RotateCcw, Save, Zap } from 'lucide-react';
@@ -26,10 +31,17 @@ import {
     weekWindows, type PhaseKey, type WeekKey, type WeekSummary,
 } from './electricityTiming';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import type { LocalFarmSetup } from '../farmSetup/farmSetupLocal';
+import { closeRefusedChange, setPowerTimes } from '../farmSetup/farmSetupCommands';
+import { RefusedBox, WaitingLine, saveProblemWords } from '../farmSetup/FarmSetupLines';
 
 interface ElectricityTimingConfiguratorProps {
     profile: FarmerProfile;
     onUpdate: (profile: FarmerProfile) => void;
+    /** repair D-9 - the open farm's set, once the server has sent it (null / absent: the phone-only timetable). */
+    farmSetup?: LocalFarmSetup | null;
+    /** repair D-9 - may change the farm setup on this farm (absent = yes). */
+    canEdit?: boolean;
 }
 
 /**
@@ -81,6 +93,8 @@ const TimeBox: React.FC<{ label: string; value: string; onChange: (v: string) =>
 );
 
 interface WeekEditorProps {
+    /** repair D-9 - a reader: the hours and the strip only, no switch or time box. */
+    readOnly?: boolean;
     id: string;
     title?: string;
     windows: ElectricityOffWindow[];
@@ -91,7 +105,7 @@ interface WeekEditorProps {
     language?: string | null;
 }
 
-const WeekEditor: React.FC<WeekEditorProps> = ({ id, title, windows, summary, onNoCut, onTime, words, language }) => {
+const WeekEditor: React.FC<WeekEditorProps> = ({ id, title, windows, summary, onNoCut, onTime, words, language, readOnly = false }) => {
     const window = windows[0];
     return (
         <div className="space-y-2.5 rounded-2xl bg-stone-50/80 p-2.5 ring-1 ring-stone-200" data-testid={`week-${id}`}>
@@ -107,8 +121,10 @@ const WeekEditor: React.FC<WeekEditorProps> = ({ id, title, windows, summary, on
                 </div>
             </div>
             <DayStrip windows={windows} testId={`strip-${id}`} words={words} />
-            <SwitchRow on={windows.length === 0} onChange={onNoCut} testId={`nocut-${id}`} label={words.noCut} />
-            {window && (
+            {readOnly
+                ? <p className="m-0 text-[13.5px] font-bold text-stone-600">{window ? words.onBetween(farmerClock(window.endTime, language), farmerClock(window.startTime, language)) : words.noCut}</p>
+                : <SwitchRow on={windows.length === 0} onChange={onNoCut} testId={`nocut-${id}`} label={words.noCut} />}
+            {window && !readOnly && (
                 <>
                     <p className="m-0 text-[13.5px] font-extrabold text-stone-700">{words.whenOff}</p>
                     <div className="flex gap-2">
@@ -124,18 +140,29 @@ const WeekEditor: React.FC<WeekEditorProps> = ({ id, title, windows, summary, on
     );
 };
 
-const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps> = ({ profile, onUpdate }) => {
+const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps> = ({ profile, onUpdate, farmSetup, canEdit = true }) => {
     const language = useOptionalLanguage()?.language;
     const words = language === 'en' ? POWER_WORDS.en : POWER_WORDS.mr;
-    const [draft, setDraft] = useState<ElectricityTimingConfiguration>(() => normalizeConfig(profile.electricityTiming));
+    const server = farmSetup?.received ? farmSetup : null;
+    const farmPower = server?.powerTimes ?? null;
+    const readOnly = !!server && !canEdit;
+    /** What the page starts from: the farm's timetable (repair D-9), or the phone's own. */
+    const source: ElectricityTimingConfiguration | undefined = server ? farmPower?.item.timetable : profile.electricityTiming;
+    const [draft, setDraft] = useState<ElectricityTimingConfiguration>(() => normalizeConfig(source));
     const [dirty, setDirty] = useState(false);
     const [message, setMessage] = useState('');
+    /** The farm's timetable is read again when the farm, its revision or its waiting change moves; the phone's when the profile's moves. */
+    const sourceKey: unknown = server
+        ? `${server.farmId}:${farmPower?.item.revision ?? 0}:${farmPower?.state ?? 'none'}:${farmPower?.item.updatedAtUtc ?? ''}`
+        : profile.electricityTiming;
 
     useEffect(() => {
-        setDraft(normalizeConfig(profile.electricityTiming));
+        setDraft(normalizeConfig(source));
         setDirty(false);
         setMessage('');
-    }, [profile.electricityTiming]);
+        // `source` is read through `sourceKey` (a new object on every render of the farm's set)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sourceKey]);
 
     const updatePhase = (phase: PhaseKey, updater: (value: ElectricityPhaseSchedule) => ElectricityPhaseSchedule) => {
         setDraft(prev => ({ ...prev, [phase]: updater(prev[phase]), updatedAt: systemClock.nowISO() }));
@@ -187,9 +214,23 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
 
     const hasErrors = errors.length > 0;
 
-    const save = () => {
+    const save = async () => {
         if (hasErrors) {
             setMessage(words.fixFirst);
+            return;
+        }
+        if (server) {
+            // repair D-9: the farm's timetable, whole; its waiting line says it has not reached the server yet (no "saved" while only queued)
+            try {
+                await setPowerTimes({ farmId: server.farmId, timetable: { singlePhase: draft.singlePhase, threePhase: draft.threePhase } });
+            } catch (error) {
+                const said = saveProblemWords(error, language);
+                if (!said) throw error;
+                setMessage(said);
+                return;
+            }
+            setDirty(false);
+            setMessage('');
             return;
         }
         const now = systemClock.nowISO();
@@ -200,7 +241,7 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
     };
 
     const reset = () => {
-        setDraft(normalizeConfig(profile.electricityTiming));
+        setDraft(normalizeConfig(source));
         setDirty(false);
         setMessage(words.putBack);
     };
@@ -218,13 +259,13 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
                         </p>
                         <p className="m-0 mt-0.5 text-[13px] font-semibold text-stone-500">{words.hint[phase]}</p>
                         <div className="mt-2.5 space-y-2.5">
-                            <WeekEditor id={`${phase}-A`} title={alternate ? words.weekA : undefined}
+                            <WeekEditor id={`${phase}-A`} title={alternate ? words.weekA : undefined} readOnly={readOnly}
                                 windows={phaseData.weekAOffWindows} summary={summaries[phase].A} words={words} language={language}
                                 onNoCut={v => setNoPowerCut(phase, 'A', v)} onTime={(f, v) => setWeekTime(phase, 'A', f, v)} />
-                            <SwitchRow on={alternate} onChange={v => setAlternateWeek(phase, v)} testId={`alternate-${phase}`}
-                                label={words.alternate} />
+                            {!readOnly && <SwitchRow on={alternate} onChange={v => setAlternateWeek(phase, v)} testId={`alternate-${phase}`}
+                                label={words.alternate} />}
                             {alternate && (
-                                <WeekEditor id={`${phase}-B`} title={words.weekB}
+                                <WeekEditor id={`${phase}-B`} title={words.weekB} readOnly={readOnly}
                                     windows={weekWindows(phaseData, 'B')} summary={summaries[phase].B} words={words} language={language}
                                     onNoCut={v => setNoPowerCut(phase, 'B', v)} onTime={(f, v) => setWeekTime(phase, 'B', f, v)} />
                             )}
@@ -239,16 +280,24 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
+            {farmPower?.state === 'waiting' && <WaitingLine language={language} />}
+            {farmPower?.refusal && <RefusedBox refusal={farmPower.refusal} language={language}
+                onSeeNew={() => { void closeRefusedChange(farmPower.refusal!.rowId); }}
+                onRedo={readOnly ? undefined : () => {
+                    const typed = farmPower.refusal!.payload.timetable as ElectricityTimingConfiguration | undefined;
+                    void closeRefusedChange(farmPower.refusal!.rowId).then(() => { setDraft(normalizeConfig(typed)); setDirty(true); });
+                }} />}
+
+            {!readOnly && <div className="grid grid-cols-2 gap-2">
                 <Tap onClick={reset} disabled={!dirty} data-testid="power-reset"
                     className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-full bg-white text-[15px] font-extrabold text-stone-700 ring-1 ring-stone-300 disabled:opacity-40">
                     <RotateCcw size={18} aria-hidden="true" />{words.reset}
                 </Tap>
-                <Tap onClick={save} disabled={!dirty || hasErrors} data-testid="power-save" rippleColor="rgba(255,255,255,0.35)"
+                <Tap onClick={() => { void save(); }} disabled={!dirty || hasErrors} data-testid="power-save" rippleColor="rgba(255,255,255,0.35)"
                     className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-full bg-emerald-700 text-[15px] font-extrabold text-white disabled:opacity-40">
                     <Save size={18} aria-hidden="true" />{words.save}
                 </Tap>
-            </div>
+            </div>}
 
             {message && (
                 <p className={`m-0 text-center text-[14px] font-extrabold ${hasErrors ? 'text-rose-700' : 'text-emerald-800'}`} role="status" data-testid="power-msg">

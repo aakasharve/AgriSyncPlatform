@@ -143,10 +143,11 @@ public sealed class CostEntryApprovalTests
     public void Fix_round_1_self_approval_follows_the_founders_answer_behind_one_named_rule()
     {
         // D-105 (a), answered 2026-11-23 (C3 = C): nobody approves his own bill, the owner may (EveryBillIsCheckedTests too).
-        BillApprovalRules.ReviewerMayApproveOwnBill.Should().BeFalse("founder C3 = C");
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true).Should().BeFalse();
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true).Should().BeTrue();
-        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false).Should().BeTrue();
+        // Repair D-177 (founder 27 Nov): the farm's own switch, off unless its owner turned it on, takes the place of the constant.
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true, farmAllows: false).Should().BeFalse();
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true, farmAllows: true).Should().BeTrue();
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true, farmAllows: false).Should().BeTrue();
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false, farmAllows: false).Should().BeTrue();
     }
 
     [Fact]

@@ -242,7 +242,44 @@ public sealed class ScheduleMechanismSwitchRealPostgresTests(ITestOutputHelper o
                 asked.Remove(key);
             }
 
+            // spec: repair D-9 - the farm's setup is its own key, asked for with its own parameter: a schedule format says nothing about it.
+            asked.ContainsKey("farmSetup").Should().BeFalse($"'{query}' does not ask for the farm's setup");
             JsonNode.DeepEquals(Same(asked), Same(before)).Should().BeTrue($"'{query}' changes nothing else");
         }
+
+        // ── spec: plr-d10 repair D-9 (farm setup on the server) - `farmSetup` is NEVER a key for a phone that does not ask (`farmSetup=1`, a query
+        // parameter like scheduleFormat, read leniently), so an old phone's pull is what it was (P11). D-9 is for every farm and is NOT behind the
+        // schedule switch: the answer is the same whatever the switch says.
+        foreach (var query in new[] { "&farmSetup=", "&farmSetup=abc", "&farmSetup=0", "&farmSetup=99999999999999" })
+        {
+            var notAsked = await Pull1017Async(query);
+            notAsked.ContainsKey("farmSetup").Should().BeFalse($"'{query}' is unreadable: it says nothing and never refuses the pull");
+            JsonNode.DeepEquals(Same(notAsked), Same(before)).Should().BeTrue($"'{query}' changes nothing");
+        }
+
+        // A phone that asks is sent ONE new key and nothing else moves: one entry per farm he reads, empty while the farm has no setup yet.
+        var askedSetup = await Pull1017Async("&farmSetup=1");
+        askedSetup.Select(p => p.Key).Except(after.Select(p => p.Key)).Should().Equal(new[] { "farmSetup" });
+        askedSetup["farmSetup"]!.ToJsonString().Should().Be(
+            "[{\"farmId\":\"" + FarmA + "\",\"waterSources\":[],\"powerTimes\":null,\"machines\":[],\"plotWater\":[]}]");
+        askedSetup.Remove("farmSetup");
+        JsonNode.DeepEquals(Same(askedSetup), Same(before)).Should().BeTrue("asking for the farm's setup changes nothing else");
+
+        // After the farm HAS a setup, the phone that does not ask still receives no such key, and EVERY part of its pull is what it was before any
+        // setup existed (the audit row of the save is not part of this pull either).
+        (await PushAsync(Owner, "farmsetup.machine.save", "switch-d9-machine", new Dictionary<string, object?>
+        {
+            ["farmId"] = FarmA,
+            ["machineId"] = Guid.Parse("d9cc0000-0000-4000-8000-000000000001"),
+            ["baseRevision"] = 0,
+            ["name"] = "ट्रॅक्टर",
+            ["machineType"] = "tractor",
+            ["ownership"] = "owned",
+        })).Status.Should().Be("applied");
+        var afterSetup = await Pull1017Async();
+        afterSetup.ContainsKey("farmSetup").Should().BeFalse("an old phone is never sent the farm's setup");
+        afterSetup.Select(p => p.Key).Should().BeEquivalentTo(after.Select(p => p.Key), "no key is added or lost");
+        JsonNode.DeepEquals(Same(afterSetup), Same(before)).Should().BeTrue("the old phone's pull is what it was before any setup existed");
+        (await Pull1017Async("&farmSetup=1"))["farmSetup"]![0]!["machines"]!.AsArray().Count.Should().Be(1);
     }
 }

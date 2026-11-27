@@ -17,6 +17,12 @@ export async function pushSyncBatch(t: HttpTransport, request: SyncPushRequest):
  */
 /** The schedule format this build reads (slice 3: the task format). */
 export const SCHEDULE_FORMAT = 2;
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9) - this build reads the farm's setup from the server (`farmSetup`: water sources, motors,
+ * power times, machines, plot water). A query, not a header: CORS needs nothing new. An older server ignores it; a phone that does not send it is sent
+ * no `farmSetup` key at all (its pull is byte for byte what it was).
+ */
+export const FARM_SETUP_FORMAT = 1;
 
 const normalizedCursorOrEmpty = (sinceCursorIso?: string): string | undefined => normalizeSyncCursorForApi(sinceCursorIso) || undefined;
 
@@ -34,6 +40,7 @@ export async function pullSyncChanges(
         ...(normalizedCursor ? { since: normalizedCursor } : {}),
         ...(farms !== undefined ? { farms } : {}),
         scheduleFormat: SCHEDULE_FORMAT,
+        farmSetup: FARM_SETUP_FORMAT,
     };
     const response = await t.http.get<SyncPullResponse>('/sync/pull', { params });
     return response.data;

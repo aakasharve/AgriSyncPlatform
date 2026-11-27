@@ -26,6 +26,7 @@ import { reconcilePlanningState } from './reconcilers/planningStateReconciler';
 import { reconcileScheduleMechanism } from './reconcilers/scheduleMechanismReconciler';
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { reconcileOwnScheduleItems } from './reconcilers/ownScheduleItemsReconciler';
+import { reconcileFarmSetup } from './reconcilers/farmSetupReconciler';
 import { reconcileOwnerVoice } from './reconcilers/ownerVoiceReconciler';
 import { prefetchOwnerVoiceAfterPull } from '../../scheduler/ownerVoice/ownerVoicePrefetch';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
@@ -120,6 +121,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.plannedWork, db.mutationQueue,
         // schedule mechanism slice 3 - a plot-season's own schedule while it is built (server cache, replaced whole when the pull carries it).
         db.ownScheduleItems, db.ownScheduleItemRevisions,
+        // repair D-9 - the farm's setup as the server holds it (server cache, replaced farm by farm when the pull carries it).
+        db.farmWaterSources, db.farmMachines, db.farmPowerTimes, db.plotWater,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(
@@ -146,6 +149,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         await reconcileScheduleMechanism(db, payload, receivedAtUtc);
         // slice 3 - the works of each plot-season's own schedule and their history, as the server holds them (an absent key leaves them).
         await reconcileOwnScheduleItems(db, payload);
+        // repair D-9 - each farm's water sources, motors, power times, machines and plot water, as the server holds them (an absent key leaves them).
+        await reconcileFarmSetup(db, payload, receivedAtUtc);
         // slice 12b - the schedule owner's messages, clip metadata and what this plot did with them (each key replaces whole; an absent key leaves them).
         await reconcileOwnerVoice(db, payload);
         await reconcileAttentionBoard(db, payload);

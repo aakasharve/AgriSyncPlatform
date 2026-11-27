@@ -155,7 +155,50 @@ public sealed record SyncPullResponseDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<OwnerClipSyncDto>? OwnerClips = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<OwnerMessageStateSyncDto>? OwnerMessageStates = null);
+    IReadOnlyList<OwnerMessageStateSyncDto>? OwnerMessageStates = null,
+    // spec: plr-d10 repair D-9 (founder 27 Nov: "send it to server; the phone is only a door") - each farm's SETUP: water sources with their motors, the power
+    // timetable, machines and each plot's water arrangement. FULL on every pull (a farm has a handful of rows), ONE entry per farm this person reads, even when
+    // the farm has nothing yet (so the phone tells "empty" from "not sent"); only active rows. Sent ONLY to a phone that asks (farmSetup=1): NEVER A KEY
+    // otherwise, so an old phone's pull is what it was (P11). Not behind the schedule switch: it is for every farm. No money is in any of it.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<FarmSetupDto>? FarmSetup = null);
+
+/// <summary>
+/// spec: plr-d10 repair D-9 - one farm's setup as the pull sends it. The phone replaces its copy of the farm WHOLE. Every Active member receives the sources,
+/// motors, power times and machines; <see cref="PlotWater"/> only for the plots his seat covers (the pull's own plot rule). Values are the contract's lower-case words.
+/// </summary>
+public sealed record FarmSetupDto(
+    Guid FarmId,
+    IReadOnlyList<FarmWaterSourceDto> WaterSources,
+    FarmPowerTimesDto? PowerTimes,
+    IReadOnlyList<FarmMachineDto> Machines,
+    IReadOnlyList<PlotWaterDto> PlotWater);
+
+/// <summary>One water source with its active motors. <see cref="Revision"/> is the base revision the phone sends back with its next change of this source.</summary>
+public sealed record FarmWaterSourceDto(
+    Guid Id, int Revision, string Name, string SourceType, bool IsAvailable, string? Notes, IReadOnlyList<FarmMotorDto> Motors, DateTime UpdatedAtUtc);
+
+/// <summary>One motor of a water source. <see cref="Drip"/> is null when no drip details were given.</summary>
+public sealed record FarmMotorDto(Guid Id, string Name, decimal Hp, int Phase, string PowerSource, string? PowerSourceName, FarmMotorDripDto? Drip);
+
+public sealed record FarmMotorDripDto(string? PipeSize, bool HasFilter, decimal? FlowLitresPerHour);
+
+/// <summary>The farm's power timetable in its one canonical form (both phases; <c>weekBOffWindows</c> always present, empty when none).</summary>
+public sealed record FarmPowerTimesDto(int Revision, DateTime UpdatedAtUtc, System.Text.Json.JsonElement Timetable);
+
+/// <summary>One machine of the farm. An optional detail that was never given is null (unknown), never 0.</summary>
+public sealed record FarmMachineDto(
+    Guid Id, int Revision, string Name, string MachineType, string Ownership, string? Company, string? Model, decimal? Hp, int? NozzleCount, decimal? TankLitres,
+    string? DetailLine, DateTime UpdatedAtUtc);
+
+/// <summary>
+/// One plot's water arrangement. A plot with NO entry was never asked (it shows बाकी); <c>method: "none"</c> is the stated "no water facility". An entry with a
+/// method and no link is a plot whose source is still to be named.
+/// </summary>
+public sealed record PlotWaterDto(Guid PlotId, int Revision, string Method, IReadOnlyList<PlotWaterLinkDto> Links, DateTime UpdatedAtUtc);
+
+/// <summary>One link of a plot to a water source; <see cref="MotorId"/> is null for water that comes without a motor (a canal by gravity).</summary>
+public sealed record PlotWaterLinkDto(Guid WaterSourceId, Guid? MotorId);
 
 /// <summary>
 /// spec: plr-d10 schedule slice 12b - one message of a schedule owner. <see cref="Kind"/> is <c>tip</c>, <c>change</c> or <c>look</c>. A change names <see cref="NewVersionId"/> (the checked
@@ -319,7 +362,12 @@ public sealed record FarmAccessScopeDto(
     // spec: plr-d10 lane L8c-1 fix round 1 (L001) - this person holds "see all tasks" now, computed with the clock (an ended
     // grant is false). Additive and nullable (P11): absent = an older server, and the phone removes no task. With PlotScope and
     // PlotIds it is all the phone needs to mirror which tasks he may see. A not-readable entry carries none.
-    bool? SeeAllTasks = null)
+    bool? SeeAllTasks = null,
+    // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the FARM's own-bill switch: true when its primary owner allowed a person who checks money
+    // to approve a bill he made himself. Written ONLY when true: off (the default for every farm) is no key at all, so an old phone's bytes are
+    // unchanged and it keeps the stricter behaviour (P11). A not-readable entry carries none. The server decides again when an approval arrives.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? ReviewerMayApproveOwnBill = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";
