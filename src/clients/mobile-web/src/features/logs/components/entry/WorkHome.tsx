@@ -56,6 +56,11 @@ export interface WorkHomeProps {
     cost?: RunningCost;
     /** Lane L8c-2 - the plan door (which kind, and its farm and person); absent = no door (no farm yet). */
     planDoor?: PlanDoorProps;
+    /**
+     * Repair R1-g Part 2 - the day card (day 3, 7, 14 or 18 of the farm; `features/farmDays`). Drawn UNDER the two doors and the
+     * हजेरी part, above the money card: never louder than the doors (lane UI-6), never over anything. Absent = nothing in its place.
+     */
+    dayCard?: React.ReactNode;
 }
 
 /**
@@ -112,7 +117,7 @@ const RestDayLine: React.FC<{ onTap: () => void }> = ({ onTap }) => {
     );
 };
 
-export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor }) => {
+export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor, dayCard }) => {
     // Only a person handed the हजेरी door (and its state) gets any हजेरी part; the others get none at all.
     const shape = onAttendance && attendance ? homeAttendanceShape(attendance) : null;
     return (
@@ -139,6 +144,8 @@ export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attend
                     {shape === 'rest' && <RestDayLine onTap={onAttendance} />}
                 </div>
             )}
+
+            {dayCard}
 
             {cost && <RunningCostCard cost={cost} />}
         </div>

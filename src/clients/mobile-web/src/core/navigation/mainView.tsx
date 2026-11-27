@@ -40,6 +40,7 @@ import { AppRouterContext } from './routeContext';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 import { ReflectPage, ComparePage } from './lazyComponents';
 import { compareTabProps } from './compareTab';
+import { farmDayCardFor } from './farmDayCardSlot';
 import { requestSpeak } from '../speak/speakStore';
 
 /*
@@ -285,6 +286,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             cost={!mayShowFarmMoney(ctx.farmRole, ctx.maySeeMoney) ? undefined : {
                                 today: costSnapshot.today, yesterday: yesterdayCost, soFar: costSnapshot.cropSoFar, scopeLabel: costSnapshot.scopeLabel,
                             }}
+                            // Repair R1-g Part 2 - the day-3 / 7 / 14 / 18 card of the open farm, under the doors (`farmDayCardSlot.tsx`).
+                            dayCard={farmDayCardFor(ctx)}
                             // Lane L8c-2 (founder D-24, D-26, P5) - the plan door: "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा" for the primary
                             // owner or a holder of PlanWork or AssignWork, "तुमच्यावर सोपवलेली कामे" for everyone else. Both open the route
                             // 'plan-work'. Drawn only with a farm (the tasks are the farm's).
