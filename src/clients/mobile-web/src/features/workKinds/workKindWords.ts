@@ -51,3 +51,43 @@ const en = (language: string | null | undefined): WorkKindWords => ({
 
 /** English only for 'en'; every other language reads Marathi. */
 export const workKindWords = (language: string | null | undefined): WorkKindWords => (language === 'en' ? en(language) : mr(language));
+
+/** pilot lane PERM (S4.5) - the words of the team card's row "काय नोंदवू शकतात" and its tick sheet. */
+export interface TeamWorkKindWords {
+    rowLabel: string;
+    all: string;
+    sheetTitle: string;
+    alwaysOpen: string;
+    newOnly: string;
+    pickOne: string;
+    save: string;
+    cancel: string;
+    /** The row's value: "सर्व कामं", or the kinds he may record in the contract's order. */
+    summary: (kinds: readonly WorkKind[] | null) => string;
+}
+
+const teamMr = (language: string | null | undefined): TeamWorkKindWords => ({
+    rowLabel: 'काय नोंदवू शकतात', // PROPOSED (Marathi) - contract §2.1
+    all: 'सर्व कामं', // PROPOSED (Marathi) - contract §2.1
+    sheetTitle: 'हे काय नोंदवू शकतात?', // PROPOSED (Marathi)
+    alwaysOpen: 'निरीक्षण आणि आठवणी नेहमी नोंदवता येतात.', // PROPOSED (Marathi) - CTO ruling Q2
+    newOnly: 'बदल फक्त यापुढच्या नोंदींना लागू. आधीच्या नोंदी आहेत तशाच राहतील.', // PROPOSED (Marathi) - founder 1-B
+    pickOne: 'किमान एक काम निवडा. एखाद्याचं काम थांबवायचं असेल तर "काम थांबवा" वापरा.', // PROPOSED (Marathi)
+    save: 'ठेवा', // REUSED - the plot row's word (plotScopeCopy.save)
+    cancel: 'राहू द्या', // REUSED - the plot row's word (plotScopeCopy.cancel)
+    summary: kinds => (kinds === null ? 'सर्व कामं' : kindNames(kinds, language)),
+});
+
+const teamEn = (language: string | null | undefined): TeamWorkKindWords => ({
+    rowLabel: 'May record', // PROPOSED (English)
+    all: 'All work', // PROPOSED (English)
+    sheetTitle: 'What may this person record?', // PROPOSED (English)
+    alwaysOpen: 'Observations and reminders can always be recorded.', // PROPOSED (English)
+    newOnly: 'A change applies to new records only. Earlier records stay as they are.', // PROPOSED (English)
+    pickOne: 'Choose at least one. To stop someone else from working, use "Pause work".', // PROPOSED (English)
+    save: 'Keep', // REUSED - plotScopeCopy.save (English)
+    cancel: 'Not now', // REUSED - plotScopeCopy.cancel (English)
+    summary: kinds => (kinds === null ? 'All work' : kindNames(kinds, language)),
+});
+
+export const teamWorkKindWords = (language: string | null | undefined): TeamWorkKindWords => (language === 'en' ? teamEn(language) : teamMr(language));

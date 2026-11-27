@@ -26,6 +26,7 @@ import {
     restoreMember,
     setMemberAccess,
     setMemberPlotScope,
+    setMemberWorkKinds,
     suspendMember,
     plotScopeBody,
     type ApprovePreset,
@@ -54,6 +55,8 @@ export interface UseMembershipDecisionsResult {
     approve: (userId: string, preset: ApprovePreset, plots?: PlotScopeChoice) => Promise<boolean>;
     /** lane MU-4 — which plots a let-in person covers (DESIRED state; the server's row is adopted). */
     setPlots: (userId: string, plots: PlotScopeChoice) => Promise<boolean>;
+    /** pilot lane PERM - the kinds of work he may record (the whole set; the server's row is adopted). */
+    setWorkKinds: (userId: string, workKinds: readonly string[]) => Promise<boolean>;
     decline: (userId: string, reason?: string) => Promise<boolean>;
     suspend: (userId: string, reason?: string) => Promise<boolean>;
     restore: (userId: string) => Promise<boolean>;
@@ -110,6 +113,9 @@ export function useMembershipDecisions(
     const setPlots = useCallback((userId: string, plots: PlotScopeChoice) =>
         run(userId, async farm => [await setMemberPlotScope(farm, userId, plots)]), [run]);
 
+    const setWorkKinds = useCallback((userId: string, workKinds: readonly string[]) =>
+        run(userId, async farm => [await setMemberWorkKinds(farm, userId, workKinds)]), [run]);
+
     const decline = useCallback((userId: string, reason?: string) =>
         run(userId, async farm => [await declineMember(farm, userId, reason)]), [run]);
 
@@ -128,5 +134,5 @@ export function useMembershipDecisions(
 
     const dismissError = useCallback(() => setError(null), []);
 
-    return { busyUserId, error, approve, setPlots, decline, suspend, restore, remove, changePreset, dismissError };
+    return { busyUserId, error, approve, setPlots, setWorkKinds, decline, suspend, restore, remove, changePreset, dismissError };
 }

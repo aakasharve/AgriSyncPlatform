@@ -31,6 +31,7 @@ import { LabourAccessControl, type LabourAccessView } from '../components/Labour
 import { ConfirmAccessControl, type ConfirmAccessView } from './ConfirmAccessControl';
 import { AuthoritySwitches, type AuthorityAccessView } from './AuthoritySwitches';
 import { PlotScopePicker } from './PlotScopePicker';
+import { WorkKindsPicker } from './WorkKindsPicker';
 import type { PlotScopeChoice, PlotScopeName } from '../data/membershipAdminClient';
 import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, seatWord, type DecisionRights } from './teamModel';
@@ -90,6 +91,11 @@ export interface TeamPersonCardProps {
         farmPlots: readonly FarmPlot[];
         onSave: (choice: PlotScopeChoice) => void;
     };
+    /**
+     * pilot lane PERM (S4.5) - the farm's registrant's row "काय नोंदवू शकतात: …" for this person, passed ONLY when he may set it (the
+     * registrant, on a let-in person who is not the primary owner, not himself). The server's row is adopted after a save.
+     */
+    workKindsAccess?: { value: readonly string[] | null | undefined; onSave: (kinds: string[]) => void };
     onChangePreset: (preset: ApprovePreset) => void;
     onSuspend: (reason: string) => void;
     onRestore: () => void;
@@ -99,7 +105,7 @@ export interface TeamPersonCardProps {
 type Step = null | 'pause' | 'remove';
 
 export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
-    row, name, isYou, rights, busy, labourAccess, confirmAccess, authorityAccess, plotAccess, onChangePreset, onSuspend, onRestore, onRemove,
+    row, name, isYou, rights, busy, labourAccess, confirmAccess, authorityAccess, plotAccess, workKindsAccess, onChangePreset, onSuspend, onRestore, onRemove,
 }) => {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>(null);
@@ -148,6 +154,11 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
                 </div>
             ) : duties && (
                 <p className="m-0 mt-0.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-plots">{plotText}</p>
+            )}
+            {workKindsAccess && (
+                <div className="mt-2">
+                    <WorkKindsPicker memberId={row.userId} value={workKindsAccess.value} busy={busy} onSave={workKindsAccess.onSave} />
+                </div>
             )}
             {duties && <p className="m-0 mt-0.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-can">{canDo}</p>}
             {paused && (

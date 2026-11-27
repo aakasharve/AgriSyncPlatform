@@ -168,6 +168,15 @@ export async function setMemberPlotScope(farmId: string, userId: string, choice:
     return response.data;
 }
 
+/**
+ * pilot lane PERM (contract §3.2) — the farm's registrant sets the kinds of work this person may record. The WHOLE desired set travels (all six =
+ * every kind, which the server stores as no limit); the server's row is adopted, never assumed. Refused for anyone else (403), a bad set (400).
+ */
+export async function setMemberWorkKinds(farmId: string, userId: string, workKinds: readonly string[]): Promise<LabourPermission> {
+    const response = await agriSyncClient.http.put<LabourPermission>(`${membershipPath(farmId, userId)}/work-kinds`, { workKinds: [...workKinds] });
+    return response.data;
+}
+
 /** Why a decision did not land, as the screen must say it (never "done" when it was not). */
 export type MembershipErrorKind = 'last_owner' | 'wrong_status' | 'forbidden' | 'failed';
 
