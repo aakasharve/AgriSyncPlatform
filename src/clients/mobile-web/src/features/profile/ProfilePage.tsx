@@ -405,7 +405,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                         id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />,
                         body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetup} plots={plotNames} />,
                     },
-                    { id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    {
+                        id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />,
+                        body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetup} />,
+                    },
                     { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
 

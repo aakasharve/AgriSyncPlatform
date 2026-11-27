@@ -16,6 +16,7 @@ import type { FarmMachinery } from '../../../domain/types/farm.types';
 import { BigButton, ChoiceChips, GlassCard, Tap, TextField } from '../../../shared/components/ui/placeUi';
 import { MACHINE_DETAILS, MACHINE_DETAIL_FIELD, MACHINE_TYPES, setupWords, type MachineDetail } from './setupLabels';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { twoDecimalsInput } from '../farmSetup/numbers';
 
 /** Repair FIX-1 round 1 (Bug 5) — the form's own words, one language at a time (Marathi exactly as before; English PROPOSED). */
 const FORM_WORDS = {
@@ -41,7 +42,9 @@ const AddMachineWizard: React.FC<AddMachineWizardProps> = ({ newMachine, onChang
     const type = newMachine.type ?? 'Tractor';
     const setDetail = (key: MachineDetail, raw: string) => {
         const kind = MACHINE_DETAIL_FIELD[key].kind;
-        const value = raw === '' ? undefined : kind === 'number' ? parseFloat(raw) : raw;
+        // repair D-9: a number keeps at most two decimals as he types (the server keeps two and refuses more; nothing is rounded in silence)
+        const typed = kind === 'number' ? twoDecimalsInput(raw) : raw;
+        const value = typed === '' ? undefined : kind === 'number' ? parseFloat(typed) : typed;
         onChange({ ...newMachine, [key]: value });
     };
     return (
