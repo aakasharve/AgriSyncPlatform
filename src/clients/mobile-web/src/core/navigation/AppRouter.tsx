@@ -111,8 +111,9 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     React.useEffect(() => { setVoiceSeenRef.current = setVoiceSeen; });
     const onWelcomeVoiceDone = React.useCallback(() => setVoiceSeenRef.current(true), []);
     // Repair R1-g 1a (founder Q5, 27 Nov; CTO ruling 1) — the first-record card after "चला, सुरुवात करूया": its OWN
-    // once-only key, written "due" (false) only when an owner seat leaves the role welcome. No row reads "seen", so an
-    // installed phone that passed the first run long ago never sees it (P11).
+    // once-only key, written "due" (false) only when a co-owner seat leaves the role welcome; for the primary owner (who no longer
+    // gets the role welcome, lane S2) it is due while the welcome is not marked seen. No row reads "seen", so an installed phone
+    // that passed the first run long ago never sees it (P11).
     const [firstRecordCardSeen, setFirstRecordCardSeen, firstRecordCardLoaded] = useUiPref<boolean>(
         FIRST_RECORD_CARD_KEY,
         FIRST_RECORD_CARD_FALLBACK,
@@ -334,7 +335,14 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                     </React.Suspense>
                 );
             }
-            if (!welcomeSeen) {
+            // Repair R3 lane S2 (V6a-B; R1 plan §05): the PRIMARY owner no longer gets the old "अभिनंदन! … चला, सुरुवात करूया"
+            // screen ("तुम्ही … चे मालक आहात" — an ownership claim the founder does not want). The farm he made was congratulated
+            // on the farm-name card; an existing owner on a new phone goes straight on (R1 §06). His first-record card takes the
+            // welcome's place: it is due while the welcome is not marked seen, and answering it marks both. Every joiner (सहमालक,
+            // मुकादम, worker, adviser) keeps the role welcome with its "‹शेत› वर तुम्ही ‹भूमिका› आहात" line until the joining
+            // lane moves that line onto its own card (R1 §05-§06).
+            const primaryOwner = toWelcomeRole(firstRunFarm.role) === 'owner';
+            if (!welcomeSeen && !primaryOwner) {
                 return (
                     <React.Suspense fallback={<RouteLoader />}>
                         <WelcomeScreen
@@ -350,11 +358,15 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                     </React.Suspense>
                 );
             }
-            if (!firstRecordCardSeen && mayOfferFirstRecord(firstRunFarm.role)) {
-                // Its "← मागे" re-opens the role welcome (whose own back goes on to the permissions).
+            const ownerCardDue = primaryOwner && !welcomeSeen;
+            if ((ownerCardDue || !firstRecordCardSeen) && mayOfferFirstRecord(firstRunFarm.role)) {
+                // Its "← मागे" re-opens the step before it: the role welcome for a co-owner, the permissions for the primary owner
+                // (the welcome's own back went there).
+                const answered = (go: () => void) => () => { if (!welcomeSeen) setWelcomeSeen(true); go(); };
                 return (
                     <React.Suspense fallback={<RouteLoader />}>
-                        <FirstRecordCard onStart={onFirstRecordStart} onLater={onFirstRecordLater} onBack={() => setWelcomeSeen(false)} />
+                        <FirstRecordCard onStart={answered(onFirstRecordStart)} onLater={answered(onFirstRecordLater)}
+                            onBack={primaryOwner ? () => setPermissionsAgain(true) : () => setWelcomeSeen(false)} />
                     </React.Suspense>
                 );
             }

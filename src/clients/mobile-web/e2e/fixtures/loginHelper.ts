@@ -142,12 +142,18 @@ export async function loginViaPassword(
     // spec: plr-d10 I16 — after sign-in, a first-run phone shows फोनच्या परवानग्या, then the founder's
     // welcome voice note (it plays by itself; specs skip it through its "please listen" sheet), then the
     // welcome written for the role (in that order). Click through whichever is on screen until home.
-    for (let step = 0; step < 4; step += 1) {
+    // Repair R1-g 1a / R3 lane S2: an owner seat then gets the first-record card (the primary owner instead of the
+    // role welcome); "नंतर सांगेन" goes home.
+    for (let step = 0; step < 5; step += 1) {
         const landing = await waitForLoginLanding(page);
         if (landing === 'home') break;
         if (landing === 'voice') {
             await page.getByTestId('welcome-story-skip').click();
             await page.getByTestId('welcome-skip-confirm').click();
+            continue;
+        }
+        if (landing === 'firstRecord') {
+            await page.getByTestId('first-record-later').click();
             continue;
         }
         await page.getByTestId(landing === 'welcome' ? 'welcome-continue' : 'permissions-continue').click();
@@ -158,12 +164,13 @@ export async function loginViaPassword(
     await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 }
 
-async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'voice' | 'welcome'> {
+async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'voice' | 'welcome' | 'firstRecord'> {
     const deadline = Date.now() + 30_000;
     const homeGreeting = page.getByTestId(HOME_READY_TESTID);
     const welcomeContinue = page.getByTestId('welcome-continue');
     const skipBtn = page.getByTestId('permissions-continue');
     const voiceSkip = page.getByTestId('welcome-story-skip');
+    const firstRecordLater = page.getByTestId('first-record-later');
     const alert = page.getByRole('alert').first();
 
     while (Date.now() < deadline) {
@@ -181,6 +188,10 @@ async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' |
 
         if (await voiceSkip.isVisible().catch(() => false)) {
             return 'voice';
+        }
+
+        if (await firstRecordLater.isVisible().catch(() => false)) {
+            return 'firstRecord';
         }
 
         if (await alert.isVisible().catch(() => false)) {

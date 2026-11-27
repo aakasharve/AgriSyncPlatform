@@ -59,10 +59,13 @@ export function buildRoleWelcome(role: string | null | undefined, farmName: stri
     const name = roleName(role, language);
 
     if (kind === 'owner') {
+        // Repair R3 lane S2 (V6a-B; R1 plan §06): no ownership line. The founder: "Do not claim that the user is a verified legal
+        // farm owner" — "तुम्ही ‹शेत› चे मालक आहात" said exactly that. The router no longer shows this welcome to the primary owner
+        // (his farm is congratulated on the farm-name card); a caller that still builds it gets no claim.
         return {
             role: kind,
             title: en ? 'Your farm is ready' : 'तुमचं शेत तयार आहे',
-            line: farm ? (en ? `You are the owner of ${farm}.` : `तुम्ही ${farm} चे मालक आहात.`) : null,
+            line: null,
             jobs: [
                 { icon: 'mic', text: en ? 'Tell what happened each day, by voice' : 'रोज काय झालं ते बोलून सांगा' },
                 { icon: 'plan', text: en ? 'Plan the work' : 'कामं ठरवा' }, // PROPOSED (Marathi) — the preview's line without "आणि सोपवा"
