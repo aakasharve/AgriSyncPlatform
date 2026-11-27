@@ -9,10 +9,10 @@ import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { APP_VERSION } from '../buildInfo';
 import { invalidateMeContext } from '../core/session/MeContextService';
 import { useLanguage } from '../i18n/LanguageContext';
-// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — consent is one tick here,
-// recorded before the phone number leaves the device (replaces the full-screen gate).
-import ConsentTick from '../features/consent/gate/ConsentTick';
-import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) — consent is the ONE long permissions and
+// privacy page, opened when he taps send and recorded before the phone number leaves the device (replaces the tick).
+import PermissionsPageGate from '../features/consent/permissionsPage/PermissionsPageGate';
+import { isPermissionsDeclined, useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
 // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join button no longer pops a
 // window.prompt for a link. The server answers a farm code only for a signed-in person, so
 // the button says so plainly and the join door (code or QR) opens by itself after sign-in.
@@ -119,8 +119,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
         try {
             try {
                 await consent.recordIfNeeded();
-            } catch {
-                setConsentError(t('consentGate.saveFailed'));
+            } catch (error) {
+                // "नको" on the page: nothing was sent or saved, and nothing is said.
+                if (!isPermissionsDeclined(error)) setConsentError(t('consentGate.saveFailed'));
                 return;
             }
             await login(normalizedPhone, normalizedPassword, rememberDevice);
@@ -156,7 +157,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                             {otpMeta === null ? (
                                 <OtpLoginForm
                                     onOtpSent={(ph, meta) => { setOtpPhone(ph); setOtpMeta(meta); }}
-                                    consentSlot={<ConsentTick consent={consent} />}
+                                    consentSlot={<PermissionsPageGate consent={consent} />}
                                     sendBlocked={!consent.canSend}
                                     beforeSend={consent.recordIfNeeded}
                                     beforeSendFailedMessage={t('consentGate.saveFailed')}
@@ -300,7 +301,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                         </label>
                     </div>
 
-                    <ConsentTick consent={consent} disabled={isLoading} />
+                    <PermissionsPageGate consent={consent} />
 
                     {shownError && (
                         <div role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">

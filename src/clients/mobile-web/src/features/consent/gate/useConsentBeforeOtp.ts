@@ -1,66 +1,71 @@
-// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25
+// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25; replaced by the permissions page in
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A; R1 item 02).
 //
-// The consent step every phone-number screen shares: login (OTP and password) and the QR
-// join page. Before this, consent was a full-screen gate in front of LoginPage only, and a
-// QR deep link skipped it entirely — the join page sent the phone number with no consent
-// anywhere (defect X1).
+// The consent step every phone-number screen shares: login (OTP and password), the QR join page and the joining
+// flow's own number screen. Until 27 Nov it was one tick beside the number; it is now the ONE long permissions and
+// privacy page (`features/consent/permissionsPage/PermissionsPage.tsx`), opened when he taps send.
 //
-// THE ORDER IS THE WHOLE POINT. `recordIfNeeded()` is awaited BEFORE the phone number
-// leaves the device. If the two legal records cannot be written, it throws, the caller
-// does not send, and the farmer stays where he is with the tick still ticked. The one
-// outcome consent exists to prevent is the app holding his data with no record of the
-// basis for holding it.
+// THE ORDER IS STILL THE WHOLE POINT. `recordIfNeeded()` is awaited BEFORE the phone number leaves the device. It opens
+// the page and settles only after his DELIBERATE tap at the end ("मी वाचलं, पुढे चला") and after the two legal records
+// landed. If they cannot be written it rejects, the caller does not send, and the farmer stays on his number. "नको"
+// rejects with `PermissionsDeclinedError`: nothing was sent, nothing was saved, and the screen says nothing.
 //
-// CONSENT BELONGS TO THE PERSON LOGGING IN, NOT TO THE PHONE (founder: "tick mark while
-// logging in"). The tick is shown on every visit to a phone-number screen, even on a phone
-// that accepted before: shared phones are normal here, and a device-level "already
-// accepted" let a second person through with no consent and no age declaration of his
-// own. Logins are rare (a session lasts until logout), so the cost is one tap.
+// CONSENT BELONGS TO THE PERSON LOGGING IN, NOT TO THE PHONE (founder): the page opens on every visit to a
+// phone-number screen, even on a phone that accepted before. Logins are rare (a session lasts until logout).
 //
-// ONE ACCEPTANCE, ONE SESSION ID. Each acceptance carries a freshly minted
-// pre-registration session id. The server links an acceptance to an account by
-// (account, session id); re-using the phone's one stored id made a second acceptance on
-// the same phone look "already linked" and stay attached to nobody.
+// ONE ACCEPTANCE, ONE SESSION ID; ONE TAP, ONE RECORD; THE DEVICE MARK ON DISK BEFORE THE NUMBER IS SENT (bounded to
+// 2 s); AN ACCEPTANCE BELONGS TO THE NUMBER IT WAS GIVEN FOR - all exactly as the tick had them. A second tap on send
+// while the page is open gets the same pending promise.
 //
-// ONE TAP, ONE RECORD. A second tap while the first acceptance is still being written
-// gets the same in-flight promise — never a second pair of rows in an append-only ledger.
-//
-// THE DEVICE MARK IS ON DISK BEFORE THE NUMBER IS SENT (spec
-// plr-d10-redesign-real-integration, I1). The voice-clip store reads it
-// (`coreConsentGate.ts`); it is awaited here — for at most 2 s, so a stuck IndexedDB
-// costs one clip we will not keep, never the farmer's login.
-//
-// AN ACCEPTANCE BELONGS TO THE NUMBER IT WAS GIVEN FOR (I1 review, B001). One mounted
-// screen can see two people: X ticks and sends, taps Back, and Y types his own number.
-// So the screen passes the number it shows; the acceptance only counts for that number,
-// and a successful accept clears the tick — a different number shows it again, unticked.
+// THE TWO SWITCHES are held on the phone with the acceptance (`HeldSwitchChoicesStore`) and written after sign-in,
+// each to its own record and never over an earlier choice (`permissionsPage/heldSwitchChoices.ts`). They are not part
+// of the two records written here.
 
 import { useRef, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { recordConsentGateAcceptance } from './consentGateApi';
 import { rememberConsentGateAcceptanceForLinking } from './consentGateLinkReconciler';
-import { buildConsentAcceptance, mintPreRegistrationSessionId } from './consentAcceptance';
+import { mintPreRegistrationSessionId } from './consentAcceptance';
 import { markCoreConsentOnThisDevice } from '../separation/coreConsentGate';
-import type { NoticeLanguage } from './consentNotice';
+import { PAGE_NOTICE_VERSION, type NoticeLanguage } from './consentNotice';
+import { buildPermissionsPageAcceptance } from '../permissionsPage/permissionsPageNotice';
+import type { SwitchChoices } from '../permissionsPage/PermissionsPage';
+import { saveHeldSwitchChoices } from '../../../infrastructure/storage/HeldSwitchChoicesStore';
+
+/** He tapped "नको" on the permissions page: nothing was sent or saved. Not a failure to report. */
+export class PermissionsDeclinedError extends Error {
+    constructor() {
+        super('The permissions page was declined; nothing was sent or saved.');
+        this.name = 'PermissionsDeclinedError';
+    }
+}
+
+export const isPermissionsDeclined = (error: unknown): boolean =>
+    error instanceof PermissionsDeclinedError
+    || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'PermissionsDeclinedError');
 
 export interface ConsentBeforeOtp {
-    /** `required` until an acceptance is recorded on this screen visit, then `passed`. */
+    /** `required` until an acceptance is recorded for the number on screen, then `passed`. */
     status: 'required' | 'passed';
-    ticked: boolean;
-    setTicked: (ticked: boolean) => void;
-    /** True while the acceptance is being written — the tick and the send are held. */
+    /** True while the acceptance is being written - the page's button and the send are held. */
     recording: boolean;
-    /** True when the phone number may be sent. Never true for an unticked, unrecorded visit. */
+    /** True when the send may be tapped (the page opens from it). False only while an acceptance is being written. */
     canSend: boolean;
-    /** The language the notice is displayed in — what the record will say he read. */
+    /** The language the page is displayed in - what the record will say he read. */
     language: NoticeLanguage;
-    noticeOpen: boolean;
-    setNoticeOpen: (open: boolean) => void;
+    /** The page is on screen. */
+    pageOpen: boolean;
     /**
-     * Writes both legal records unless this visit already did. Resolves only once they
-     * landed; throws (and marks nothing) when they did not, or when the box is not ticked.
+     * Opens the page unless this number already accepted on this visit. Resolves once his deliberate tap's two records
+     * landed; rejects with `PermissionsDeclinedError` on "नको", or with the write's error when they did not land.
      */
     recordIfNeeded: () => Promise<void>;
+    /** The page's green button. */
+    accept: (choices: SwitchChoices) => void;
+    /** The page's "नको" (and the phone's Back on the page). */
+    decline: () => void;
+    /** The page's मराठी / English switch: the app's language, so the whole screen follows it. */
+    setLanguage: (language: NoticeLanguage) => void;
 }
 
 const toNoticeLanguage = (lang: string): NoticeLanguage => (lang === 'mr' ? 'mr' : 'en');
@@ -68,59 +73,89 @@ const toNoticeLanguage = (lang: string): NoticeLanguage => (lang === 'mr' ? 'mr'
 const MARK_WRITE_LIMIT_MS = 2000;
 const normalizePhone = (phone: string): string => phone.replace(/\D+/g, '');
 
+interface PendingAsk {
+    number: string;
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: unknown) => void;
+}
+
 /** `phone` is the number on screen; an acceptance counts only for the number it was given for. */
 export function useConsentBeforeOtp(phone = ''): ConsentBeforeOtp {
-    const { language } = useLanguage();
-    const [ticked, setTicked] = useState(false);
-    const [noticeOpen, setNoticeOpen] = useState(false);
+    const { language, setLanguage } = useLanguage();
+    const [pageOpen, setPageOpen] = useState(false);
     const [recordedFor, setRecordedFor] = useState<string | null>(null);
     const [recording, setRecording] = useState(false);
-    const inFlight = useRef<Promise<void> | null>(null);
+    const pending = useRef<PendingAsk | null>(null);
+    const writing = useRef(false);
 
     const displayed = toNoticeLanguage(language);
     const number = normalizePhone(phone);
     const passed = recordedFor !== null && recordedFor === number;
 
+    const settle = (outcome: { ok: true } | { ok: false; error: unknown }) => {
+        const ask = pending.current;
+        pending.current = null;
+        setPageOpen(false);
+        if (!ask) return;
+        if (outcome.ok) ask.resolve();
+        else ask.reject(outcome.error);
+    };
+
     const recordIfNeeded = (): Promise<void> => {
         if (passed) return Promise.resolve();
-        if (inFlight.current) return inFlight.current;
-        if (!ticked) return Promise.reject(new Error('consent not given'));
+        if (pending.current) return pending.current.promise;
+        let resolve!: () => void;
+        let reject!: (error: unknown) => void;
+        const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
+        pending.current = { number, promise, resolve, reject };
+        setPageOpen(true);
+        return promise;
+    };
 
-        const acceptance = buildConsentAcceptance(displayed);
-        const sessionId = mintPreRegistrationSessionId();
+    const accept = (choices: SwitchChoices) => {
+        const ask = pending.current;
+        if (!ask || writing.current) return;
+        writing.current = true;
         setRecording(true);
-        const attempt = (async () => {
+        const acceptance = buildPermissionsPageAcceptance(displayed);
+        const sessionId = mintPreRegistrationSessionId();
+        void (async () => {
             try {
                 await recordConsentGateAcceptance(acceptance, sessionId);
-                // After the accepting write, never before: a payload kept for an acceptance
-                // that never landed would later produce a linking row asserting a consent
-                // that does not exist. Not awaited — a wedged IndexedDB must not hold him here.
+                // After the accepting write, never before (a payload kept for an acceptance that never landed would later
+                // assert a consent that does not exist). Not awaited - a wedged IndexedDB must not hold him here.
                 void rememberConsentGateAcceptanceForLinking(acceptance, sessionId);
+                void saveHeldSwitchChoices({ ...choices, language: displayed, preRegistrationSessionId: sessionId });
                 await Promise.race([
-                    markCoreConsentOnThisDevice(),
+                    markCoreConsentOnThisDevice(PAGE_NOTICE_VERSION),
                     new Promise<void>((resolve) => setTimeout(resolve, MARK_WRITE_LIMIT_MS)),
                 ]);
-                setRecordedFor(number);
-                // The tick was HIS; the next number on this screen must be ticked again.
-                setTicked(false);
+                setRecordedFor(ask.number);
+                settle({ ok: true });
+            } catch (error) {
+                settle({ ok: false, error });
             } finally {
-                inFlight.current = null;
+                writing.current = false;
                 setRecording(false);
             }
         })();
-        inFlight.current = attempt;
-        return attempt;
+    };
+
+    const decline = () => {
+        if (writing.current) return;
+        settle({ ok: false, error: new PermissionsDeclinedError() });
     };
 
     return {
         status: passed ? 'passed' : 'required',
-        ticked,
-        setTicked,
         recording,
-        canSend: passed || (ticked && !recording),
+        canSend: !recording,
         language: displayed,
-        noticeOpen,
-        setNoticeOpen,
+        pageOpen,
         recordIfNeeded,
+        accept,
+        decline,
+        setLanguage: (next: NoticeLanguage) => setLanguage(next),
     };
 }

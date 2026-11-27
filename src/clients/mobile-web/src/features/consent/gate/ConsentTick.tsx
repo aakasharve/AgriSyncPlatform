@@ -20,11 +20,25 @@
 
 import React from 'react';
 import ConsentNoticeSheet from './ConsentNoticeSheet';
-import { CONSENT_NOTICE } from './consentNotice';
-import type { ConsentBeforeOtp } from './useConsentBeforeOtp';
+import { CONSENT_NOTICE, type NoticeLanguage } from './consentNotice';
+
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) - the phone-number screens no longer draw
+ * this tick: the permissions page replaced it there. It stays for the one-time notice sheet of a farmer who is already
+ * signed in (`features/consent/reask/NoticeChangeSheet`), which holds its own tick state of this shape.
+ */
+export interface ConsentTickState {
+    status: 'required' | 'passed';
+    ticked: boolean;
+    setTicked: (ticked: boolean) => void;
+    recording: boolean;
+    language: NoticeLanguage;
+    noticeOpen: boolean;
+    setNoticeOpen: (open: boolean) => void;
+}
 
 interface Props {
-    consent: ConsentBeforeOtp;
+    consent: ConsentTickState;
     disabled?: boolean;
     /**
      * plr-d10 I25: the one-time notice-change sheet reuses this exact tick (same hashed words)

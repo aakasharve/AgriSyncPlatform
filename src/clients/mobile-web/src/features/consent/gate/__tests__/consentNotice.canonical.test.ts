@@ -23,6 +23,7 @@ import {
     NOTICE_PURPOSE_CODES,
     NOTICE_VERSION,
     OWED_TO_FULL_PRIVACY_NOTICE,
+    PAGE_NOTICE_VERSION,
     PRIVACY_POLICY_VERSION,
     TERMS_VERSION,
     canonicalNoticeText,
@@ -88,7 +89,9 @@ describe('NOTICE_VERSION — the words moved, so the version moved', () => {
         // stands alone and everyone who accepted notice-2026-10-30.1 (or older) is asked once.
         // lane OPS-1 (founder D-50): the evidence copy is always kept / the switch renamed is MATERIAL, so the new
         // version stands alone and a farmer who accepted notice-2026-11-02.2 is asked once.
-        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION]);
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A): the permissions page is a second EDITION
+        // (its own version and hashed text), not a change to this one - it counts beside it and re-asks nobody.
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION, PAGE_NOTICE_VERSION]);
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-11-02.2');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-30.1');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-25.1');

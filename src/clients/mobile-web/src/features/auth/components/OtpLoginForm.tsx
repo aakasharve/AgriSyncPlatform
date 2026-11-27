@@ -11,6 +11,7 @@ import PhoneField from '../../../shared/components/PhoneField';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { authCopy } from '../authCopy';
+import { isPermissionsDeclined } from '../../consent/gate/useConsentBeforeOtp';
 
 interface OtpLoginFormProps {
     onOtpSent: (phone: string, response: StartOtpResponse) => void;
@@ -55,8 +56,10 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
         if (beforeSend) {
             try {
                 await beforeSend();
-            } catch {
-                setError(beforeSendFailedMessage ?? c.saveFailed);
+            } catch (err) {
+                // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A) — "नको" on the permissions page is
+                // his answer, not a failure: nothing was sent, nothing saved, nothing said; he is back on his number.
+                if (!isPermissionsDeclined(err)) setError(beforeSendFailedMessage ?? c.saveFailed);
                 setIsLoading(false);
                 sendingRef.current = false;
                 return;

@@ -64,9 +64,11 @@ export async function hasCoreConsent(): Promise<boolean> {
  * by the tick before the phone number is sent. Never throws: a mark we failed to write
  * costs one clip we will not keep, never the farmer's login.
  */
-export async function markCoreConsentOnThisDevice(): Promise<void> {
+export async function markCoreConsentOnThisDevice(version: string = NOTICE_VERSION): Promise<void> {
+    // `version`: the edition he accepted (spec plr-d10-schedule-mechanism-pilot-2026-11-22, lane JOIN: the permissions page
+    // records its own, PAGE_NOTICE_VERSION). Either counts while it is in ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT.
     try {
-        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: NOTICE_VERSION });
+        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: version });
     } catch {
         // see above
     }

@@ -17,7 +17,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { loginViaPassword, passFirstRunWelcomeIfPresent, tickConsentIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
+import { acceptPermissionsPageIfPresent, loginViaPassword, passFirstRunWelcomeIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
@@ -50,9 +50,9 @@ test.describe('Login', () => {
         await passwordInput.fill('wrong_password_xyz');
 
         const submitBtn = page.locator('button[type="submit"]').first();
-        // Consent is one tick on this screen; the submit stays disabled until it is ticked.
-        await tickConsentIfPresent(page, submitBtn);
+        // Consent is the permissions page (lane JOIN, V6c-A): it opens from the submit and is accepted at its end.
         await submitBtn.click();
+        await acceptPermissionsPageIfPresent(page);
 
         // An inline alert div (role="alert") should appear with an error message.
         // spec: plr-d10 I16 (LANG-2, round-2 review E2E-1) — a fresh browser context has no chosen

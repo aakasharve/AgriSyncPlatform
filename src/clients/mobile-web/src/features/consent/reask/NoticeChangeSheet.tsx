@@ -23,9 +23,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
-import ConsentTick from '../gate/ConsentTick';
+import ConsentTick, { type ConsentTickState } from '../gate/ConsentTick';
 import { type NoticeLanguage } from '../gate/consentNotice';
-import type { ConsentBeforeOtp } from '../gate/useConsentBeforeOtp';
 import ImprovementPermissionToggle from '../improvement/ImprovementPermissionToggle';
 import { IMPROVEMENT_WORDING_VERSION } from '../improvement/improvementPermissionCopy';
 import { flushNoticeReacceptance, needsNoticeReacceptance, recordNoticeReacceptance } from './noticeReacceptance';
@@ -108,16 +107,14 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
     }, [userId]);
 
     // ConsentTick reads this shape; only the parts it uses are meaningful here.
-    const tick: ConsentBeforeOtp = useMemo(() => ({
+    const tick: ConsentTickState = useMemo(() => ({
         status: 'required',
         ticked,
         setTicked,
         recording: phase === 'saving',
-        canSend: ticked,
         language: lang,
         noticeOpen,
         setNoticeOpen,
-        recordIfNeeded: () => Promise.resolve(),
     }), [ticked, phase, lang, noticeOpen]);
 
     if (phase === 'checking' || phase === 'done') return null;

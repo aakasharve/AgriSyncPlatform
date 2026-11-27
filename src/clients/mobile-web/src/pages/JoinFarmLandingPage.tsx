@@ -37,9 +37,10 @@ import { useLanguage } from '../i18n/LanguageContext';
 import PhoneField from '../shared/components/PhoneField';
 // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
 // skip consent entirely: this page sent the number (startOtp) and verified it with no
-// consent anywhere. The tick now sits on the phone step and is recorded before the send.
-import ConsentTick from '../features/consent/gate/ConsentTick';
-import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
+// consent anywhere. spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A): the permissions page now
+// opens from the send and is recorded before the number leaves the phone (it replaced the tick).
+import PermissionsPageGate from '../features/consent/permissionsPage/PermissionsPageGate';
+import { isPermissionsDeclined, useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
 // spec: plr-d10 lane NP-1 (founder D-56) — the one-time "is this your account?" question on a new phone.
 import DeviceCheckQuestion from '../features/auth/deviceCheck/DeviceCheckQuestion';
 
@@ -305,8 +306,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         // Consent FIRST. If the two records cannot be written the number is not sent.
         try {
             await consent.recordIfNeeded();
-        } catch {
-            setError({ key: 'consentSave' });
+        } catch (failure) {
+            // "नको" on the page: nothing sent, nothing saved, nothing said - he is back on his number.
+            if (!isPermissionsDeclined(failure)) setError({ key: 'consentSave' });
             setIsSubmitting(false);
             sendingRef.current = false;
             return;
@@ -541,9 +543,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             />
                         </div>
 
-                        <div className="mt-4">
-                            <ConsentTick consent={consent} disabled={isSubmitting} />
-                        </div>
+                        <PermissionsPageGate consent={consent} />
 
                         {errorText && (
                             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">

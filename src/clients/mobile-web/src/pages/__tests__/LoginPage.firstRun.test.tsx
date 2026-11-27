@@ -5,8 +5,8 @@
  *   - Marathi only: no "/ Use password", "· Phone", "Sign in with your phone number", "Secure /
  *     Reliable / Built for Farmers", "Sign In", "AgriSync Platform" (both modes);
  *   - ONE "← मागे" per step: the number step goes back to स्वागत, the OTP step back to the number;
- *   - the consent tick is unchanged: until it is given the number cannot be sent, and the consent is
- *     recorded BEFORE the number leaves the phone.
+ *   - consent (since spec plr-d10-schedule-mechanism-pilot-2026-11-22, lane JOIN, V6c-A: the permissions page in place
+ *     of the tick): until it is given the number is not sent, and the consent is recorded BEFORE the number leaves.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
     calls: [] as string[],
     canSend: true,
     status: 'passed' as 'passed' | 'required',
+    /** The permissions page is open and not yet answered: `recordIfNeeded` does not settle. */
+    pending: false,
     authError: null as string | null,
 }));
 
@@ -32,7 +34,11 @@ vi.mock('../../features/consent/gate/useConsentBeforeOtp', () => ({
     useConsentBeforeOtp: () => ({
         status: h.status, ticked: false, setTicked: vi.fn(), canSend: h.canSend, recording: false, language: 'mr',
         noticeOpen: false, setNoticeOpen: vi.fn(),
-        recordIfNeeded: vi.fn(async () => { h.calls.push('recordConsent'); }),
+        pageOpen: false, accept: vi.fn(), decline: vi.fn(), setLanguage: vi.fn(),
+        recordIfNeeded: vi.fn(() => {
+            h.calls.push('recordConsent');
+            return h.pending ? new Promise<void>(() => undefined) : Promise.resolve();
+        }),
     }),
 }));
 vi.mock('../../i18n/LanguageContext', () => ({
@@ -46,6 +52,7 @@ beforeEach(() => {
     h.calls = [];
     h.canSend = true;
     h.status = 'passed';
+    h.pending = false;
     h.authError = null;
     window.sessionStorage.clear();
 });
@@ -76,16 +83,16 @@ describe('LoginPage in the first run', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('the tick still comes first: no tick → the number cannot be sent', () => {
+    it('consent still comes first: while the permissions page is unanswered, the number is not sent', async () => {
         h.status = 'required';
-        h.canSend = false;
+        h.pending = true;
         render(<LoginPage onBack={vi.fn()} />);
-        expect(screen.getByTestId('consent-tick')).not.toBeChecked();
+        expect(screen.queryByTestId('consent-tick')).toBeNull();
         typeNumber();
-        const send = screen.getByRole('button', { name: 'OTP पाठवा' });
-        expect(send).toBeDisabled();
-        fireEvent.click(send);
-        expect(h.calls).toEqual([]);
+        fireEvent.click(screen.getByRole('button', { name: 'OTP पाठवा' }));
+        await waitFor(() => expect(h.calls).toEqual(['recordConsent']));
+        await new Promise((r) => setTimeout(r, 40));
+        expect(h.calls).toEqual(['recordConsent']);
     });
 
     it('with consent given, the consent is recorded BEFORE the number is sent; then the OTP step', async () => {

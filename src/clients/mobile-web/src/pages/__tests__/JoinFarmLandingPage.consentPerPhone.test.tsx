@@ -77,6 +77,7 @@ vi.mock('../../features/consent/gate/consentGateLinkReconciler', () => ({
 }));
 
 import JoinFarmLandingPage, { __resetCompletedJoinsForTests } from '../JoinFarmLandingPage';
+import { acceptPermissionsPage } from '../../features/consent/permissionsPage/__tests__/permissionsPageDriver';
 import { resetDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { setActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
 import { UNIDENTIFIED_DATABASE_NAME } from '../../infrastructure/storage/userDatabaseName';
@@ -97,15 +98,6 @@ const acceptCalls = () =>
 const acceptSessionIds = () =>
     acceptCalls().map(([, init]) => JSON.parse(String(init?.body)).preRegistrationSessionId as unknown);
 
-function tickState(el: HTMLElement): boolean {
-    if (el instanceof HTMLInputElement) return el.checked;
-    const aria = el.getAttribute('aria-checked');
-    if (aria !== null) return aria === 'true';
-    const inner = el.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    if (inner) return inner.checked;
-    throw new Error('consent-tick is not a checkbox');
-}
-
 const getOtpButton = () => screen.getByRole('button', { name: /OTP मिळवा/ });
 const phoneInput = () => screen.getByPlaceholderText('9876543210') as HTMLInputElement;
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 40)); });
@@ -113,34 +105,25 @@ const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 40
 async function openAndAcceptFor(phone: string): Promise<void> {
     await act(async () => { render(<JoinFarmLandingPage onComplete={() => undefined} />); });
     fireEvent.change(await screen.findByPlaceholderText('9876543210', {}, { timeout: 5000 }), { target: { value: phone } });
-    fireEvent.click(await screen.findByTestId('consent-tick', {}, { timeout: 5000 }));
     await waitFor(() => expect(getOtpButton()).toBeEnabled(), { timeout: 5000 });
     fireEvent.click(getOtpButton());
+    await acceptPermissionsPage();
     await waitFor(() => expect(h.startOtp).toHaveBeenCalledTimes(1));
     expect(h.startOtp.mock.calls[0][0]).toBe(phone);
     expect(acceptCalls()).toHaveLength(1);
 }
 
-/** Number B on a screen that already accepted for A: blocked until ticked, then sent with a new id. */
-async function expectBIsBlockedUntilTickedThenSentWithNewId(): Promise<void> {
+/** Number B on a screen that already accepted for A: the page opens again, nothing goes until B's tap, then a new id. */
+async function expectBOpensThePageAgainThenSentWithNewId(): Promise<void> {
     fireEvent.change(phoneInput(), { target: { value: PHONE_B } });
-
-    const box = await screen.findByTestId('consent-tick', {}, { timeout: 5000 });
-    expect(tickState(box)).toBe(false);
-    await settle();
-    expect(getOtpButton()).toBeDisabled();
-
+    await waitFor(() => expect(getOtpButton()).toBeEnabled(), { timeout: 5000 });
     fireEvent.click(getOtpButton());
-    const form = phoneInput().closest('form');
-    if (form) fireEvent.submit(form);
+    await screen.findByTestId('permissions-page', {}, { timeout: 5000 });
     await settle();
     expect(acceptCalls()).toHaveLength(1);
     expect(h.startOtp).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(box);
-    await waitFor(() => expect(getOtpButton()).toBeEnabled(), { timeout: 5000 });
-    fireEvent.click(getOtpButton());
-
+    await acceptPermissionsPage();
     await waitFor(() => expect(h.startOtp).toHaveBeenCalledTimes(2));
     expect(h.startOtp.mock.calls[1][0]).toBe(PHONE_B);
     expect(acceptCalls()).toHaveLength(2);
@@ -203,23 +186,22 @@ afterEach(async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────────────
 describe('(h) QR join phone step — the acceptance belongs to the number it was given for', () => {
-    it('A accepted (OTP request then refused, still on the phone step) → B is blocked until ticked and gets a new session id', async () => {
+    it('A accepted (OTP request then refused, still on the phone step) → B opens the page again and gets a new session id', async () => {
         h.startOtp.mockImplementationOnce(async (phone: string) => { h.order.push(`start-otp:${phone}`); throw RATE_LIMITED; });
         await openAndAcceptFor(PHONE_A);
-        await waitFor(() => expect(screen.queryByTestId('consent-tick')).toBeNull());
         expect(screen.getByText(STEP1)).toBeInTheDocument();
 
-        await expectBIsBlockedUntilTickedThenSentWithNewId();
+        await expectBOpensThePageAgainThenSentWithNewId();
     });
 
-    it('A accepted and the OTP sent → "Change phone number" → B is blocked until ticked and gets a new session id', async () => {
+    it('A accepted and the OTP sent → "Change phone number" → B opens the page again and gets a new session id', async () => {
         await openAndAcceptFor(PHONE_A);
         await waitFor(() => expect(screen.getByText(STEP2)).toBeInTheDocument());
 
         fireEvent.click(screen.getByRole('button', { name: /फोन नंबर बदला/ }));
         await waitFor(() => expect(screen.getByText(STEP1)).toBeInTheDocument());
 
-        await expectBIsBlockedUntilTickedThenSentWithNewId();
+        await expectBOpensThePageAgainThenSentWithNewId();
         await waitFor(() => expect(screen.getByText(STEP2)).toBeInTheDocument());
     });
 });

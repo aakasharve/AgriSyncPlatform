@@ -63,6 +63,7 @@ vi.mock('../features/sync', () => ({ OfflineBanner: () => null }));
 vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabled: vi.fn(), clearAiTestMode: vi.fn() }));
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+vi.mock('../features/consent/permissionsPage/useHeldSwitchChoices', () => ({ useHeldSwitchChoices: vi.fn() }));
 vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({ default: () => null }));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 vi.mock('../pages/LoginPage', () => ({ default: () => <div data-testid="login-page" /> }));

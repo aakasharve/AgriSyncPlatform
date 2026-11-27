@@ -1,24 +1,18 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-// spec: plr-d10-redesign-real-integration-2026-10-25 (I1 / X6 — acceptance g)
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I1 / X6 — acceptance g); rewritten for the permissions page in
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A).
 //
-// Authored by test-writer from the spec alone.
+// The consent step is now the ONE long permissions page, opened by `recordIfNeeded()` and accepted only by his
+// deliberate tap (`accept`). Pinned here, as before:
+//   (p) the page opens and NOTHING is sent until the tap; "नको" sends nothing and says it was declined;
+//   (g) when `recordIfNeeded()` resolves, the device mark is already on disk (so the number is sent after it);
+//   (j) a stuck IndexedDB never holds the number back (the mark write gives up after 2 s; the guard fails closed);
+//   (h) an acceptance belongs to the phone number it was given for;
+//   (s) the two switches are held on the phone with the acceptance, after the accepting write and never before.
 //
-// "after a successful accept, `await markCoreConsentOnThisDevice()` BEFORE
-// `recordIfNeeded()` resolves (so the mark is on disk before the number is sent)."
-//
-// The page sends the phone number the moment `recordIfNeeded()` resolves. If the device
-// mark is still on its way to disk at that point, a farmer who goes offline right after
-// signing in can lose his first voice capture although he consented. So the order is
-// pinned here, including against a slow disk.
-//
-// Mocked: the network (consentGateApi), the link store (consentGateLinkReconciler) and the
-// app language. Real: Dexie over fake-indexeddb, the real database switch, and the real
-// `markCoreConsentOnThisDevice` — wrapped only so a test can hold it back like a slow disk.
-//
-// Amended (B001–B003): (j) the awaited mark write gives up after 2 s, so a stuck IndexedDB
-// never holds the number back (the guard then fails closed); and, at hook level, (h) an
-// acceptance belongs to the phone number it was given for — `useConsentBeforeOtp(phone)`.
+// Mocked: the network (consentGateApi), the link store (consentGateLinkReconciler) and the app language. Real: Dexie over
+// fake-indexeddb, the real database switch, the real mark write (wrapped only to hold it back like a slow disk).
 
 import React from 'react';
 import Dexie from 'dexie';
@@ -28,17 +22,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
     record: vi.fn(),
     remember: vi.fn(),
-    /** While set, the mark write has not started yet — a slow disk. */
     markGate: null as Promise<void> | null,
     markCalls: 0,
 }));
 
 vi.mock('../../../../i18n/LanguageContext', () => {
-    const value = {
-        language: 'mr' as const,
-        setLanguage: () => undefined,
-        t: (key: string) => key,
-    };
+    const value = { language: 'mr' as const, setLanguage: () => undefined, t: (key: string) => key };
     return {
         useLanguage: () => value,
         useOptionalLanguage: () => value,
@@ -61,17 +50,19 @@ vi.mock('../../separation/coreConsentGate', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../separation/coreConsentGate')>();
     return {
         ...actual,
-        markCoreConsentOnThisDevice: async (): Promise<void> => {
+        markCoreConsentOnThisDevice: async (version?: string): Promise<void> => {
             h.markCalls += 1;
             if (h.markGate) await h.markGate;
-            await actual.markCoreConsentOnThisDevice();
+            await actual.markCoreConsentOnThisDevice(version);
         },
     };
 });
 
-import { useConsentBeforeOtp } from '../useConsentBeforeOtp';
-import { NOTICE_VERSION } from '../consentNotice';
+import { PermissionsDeclinedError, isPermissionsDeclined, useConsentBeforeOtp, type ConsentBeforeOtp } from '../useConsentBeforeOtp';
+import { PAGE_NOTICE_VERSION } from '../consentNotice';
+import { canonicalPermissionsPageText } from '../../permissionsPage/permissionsPageNotice';
 import { hasCoreConsent } from '../../separation/coreConsentGate';
+import { readHeldSwitchChoices } from '../../../../infrastructure/storage/HeldSwitchChoicesStore';
 import { getDatabase, resetDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { setActiveDatabaseName } from '../../../../infrastructure/storage/activeDatabaseName';
 import {
@@ -80,29 +71,43 @@ import {
     perUserDatabaseName,
 } from '../../../../infrastructure/storage/userDatabaseName';
 
-/** The uiPrefs key the spec names for the device consent mark. */
 const MARK_KEY = 'shramsafal_consent_gate_accepted_notice';
 const PRE_LOGIN = UNIDENTIFIED_DATABASE_NAME;
-const FARMER_DB = perUserDatabaseName('test'); // 'AgriLogDB_u_test'
+const FARMER_DB = perUserDatabaseName('test');
 const IDS = { termsAcceptanceEventId: 't-1', consentGrantEventId: 'c-1' };
+const BOTH_ON = { voicePlayback: true, improvement: true };
 
-/** The mark as it stands in whichever database is ACTIVE right now. */
 const markInActiveDatabase = async (): Promise<unknown> => (await getDatabase().uiPrefs.get(MARK_KEY))?.value;
-
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 40)); });
 
-async function renderTicked() {
-    const rendered = renderHook(() => useConsentBeforeOtp());
-    act(() => rendered.result.current.setTicked(true));
-    await waitFor(() => expect(rendered.result.current.canSend).toBe(true));
-    return rendered;
+type HookResult = { current: ConsentBeforeOtp };
+
+/**
+ * Taps send: the page opens. Returns the pending call WRAPPED - an async function that returned the promise itself
+ * would wait for it (an awaited promise adopts the one it returns), and it only settles on the page's answer.
+ */
+async function ask(rendered: HookResult): Promise<{ call: Promise<void> }> {
+    let call: Promise<void> = Promise.resolve();
+    act(() => { call = rendered.current.recordIfNeeded(); });
+    call.catch(() => undefined); // a test that declines reads the rejection itself
+    await waitFor(() => expect(rendered.current.pageOpen).toBe(true));
+    return { call };
+}
+
+async function askAndAccept(rendered: HookResult, choices = BOTH_ON): Promise<unknown> {
+    const { call } = await ask(rendered);
+    let markWhenResolved: unknown = 'not read';
+    await act(async () => {
+        rendered.current.accept(choices);
+        await call;
+        markWhenResolved = await markInActiveDatabase();
+    });
+    return markWhenResolved;
 }
 
 async function wipe(): Promise<void> {
     try { await resetDatabase(); } catch { /* nothing open */ }
-    for (const name of [PRE_LOGIN, FARMER_DB, LEGACY_DATABASE_NAME]) {
-        await Dexie.delete(name);
-    }
+    for (const name of [PRE_LOGIN, FARMER_DB, LEGACY_DATABASE_NAME]) await Dexie.delete(name);
     localStorage.clear();
     await resetDatabase();
 }
@@ -123,112 +128,111 @@ afterEach(async () => {
     await wipe();
 });
 
-// ─────────────────────────────────────────────────────────────────────────────────────
+describe('(p) the page opens from the send, and only the deliberate tap records', () => {
+    it('opens the page, sends nothing while it is open, and the send stays possible (not held by a tick)', async () => {
+        const { result } = renderHook(() => useConsentBeforeOtp('9876543210'));
+        expect(result.current.pageOpen).toBe(false);
+        expect(result.current.canSend).toBe(true);
+        await ask(result);
+        await settle();
+        expect(h.record).not.toHaveBeenCalled();
+        expect(h.markCalls).toBe(0);
+    });
+
+    it('a second tap on send while the page is open gets the SAME pending answer (one page, one record)', async () => {
+        const { result } = renderHook(() => useConsentBeforeOtp('9876543210'));
+        const { call: first } = await ask(result);
+        let second: Promise<void> = Promise.resolve();
+        act(() => { second = result.current.recordIfNeeded(); });
+        expect(second).toBe(first);
+        await act(async () => { result.current.accept(BOTH_ON); await first; });
+        expect(h.record).toHaveBeenCalledTimes(1);
+    });
+
+    it('the record carries the PAGE edition: its version and the exact page text that was on screen', async () => {
+        const { result } = renderHook(() => useConsentBeforeOtp('9876543210'));
+        await askAndAccept(result);
+        const acceptance = h.record.mock.calls[0][0] as { noticeVersion: string; canonicalNotice: string; ageDeclaredAdult: boolean };
+        expect(acceptance.noticeVersion).toBe(PAGE_NOTICE_VERSION);
+        expect(acceptance.canonicalNotice).toBe(canonicalPermissionsPageText('mr'));
+        expect(acceptance.ageDeclaredAdult).toBe(true);
+    });
+
+    it('"नको" rejects as DECLINED, closes the page, sends nothing and marks nothing', async () => {
+        const { result } = renderHook(() => useConsentBeforeOtp('9876543210'));
+        const { call } = await ask(result);
+        let caught: unknown = null;
+        await act(async () => {
+            result.current.decline();
+            try { await call; } catch (e) { caught = e; }
+        });
+        expect(caught).toBeInstanceOf(PermissionsDeclinedError);
+        expect(isPermissionsDeclined(caught)).toBe(true);
+        expect(result.current.pageOpen).toBe(false);
+        expect(result.current.status).toBe('required');
+        expect(h.record).not.toHaveBeenCalled();
+        expect(await markInActiveDatabase()).toBeUndefined();
+        expect(await readHeldSwitchChoices()).toBeNull();
+    });
+});
+
 describe('(g) when recordIfNeeded() resolves, the mark is already in the active database', () => {
     it('at the phone-number screen (pre-login database active)', async () => {
-        const { result } = await renderTicked();
-        expect(await markInActiveDatabase()).toBeUndefined();
-
-        let markWhenResolved: unknown = 'not read';
-        await act(async () => {
-            await result.current.recordIfNeeded();
-            // Read on the very next step — no waiting for a background write to catch up.
-            markWhenResolved = await markInActiveDatabase();
-        });
-
+        const { result } = renderHook(() => useConsentBeforeOtp());
+        const mark = await askAndAccept(result);
         expect(getDatabase().name).toBe(PRE_LOGIN);
-        expect(markWhenResolved).toBe(NOTICE_VERSION);
+        expect(mark).toBe(PAGE_NOTICE_VERSION);
         expect(h.markCalls).toBe(1);
+        await expect(hasCoreConsent()).resolves.toBe(true);
     });
 
     it('with a signed-in farmer\'s own database active, and hasCoreConsent() agrees', async () => {
         setActiveDatabaseName(FARMER_DB);
-        const { result } = await renderTicked();
-
-        let markWhenResolved: unknown = 'not read';
-        await act(async () => {
-            await result.current.recordIfNeeded();
-            markWhenResolved = await markInActiveDatabase();
-        });
-
+        const { result } = renderHook(() => useConsentBeforeOtp());
+        const mark = await askAndAccept(result);
         expect(getDatabase().name).toBe(FARMER_DB);
-        expect(markWhenResolved).toBe(NOTICE_VERSION);
+        expect(mark).toBe(PAGE_NOTICE_VERSION);
         await expect(hasCoreConsent()).resolves.toBe(true);
     });
 
     it('on a slow disk, recordIfNeeded() does not resolve until the mark has been written', async () => {
         let releaseDisk: () => void = () => undefined;
         h.markGate = new Promise<void>((resolve) => { releaseDisk = resolve; });
-        const { result } = await renderTicked();
-
+        const { result } = renderHook(() => useConsentBeforeOtp());
+        const { call } = await ask(result);
         let resolved = false;
-        let call: Promise<void> = Promise.resolve();
-        act(() => {
-            call = result.current.recordIfNeeded();
-            void call.then(() => { resolved = true; }, () => { resolved = true; });
-        });
+        void call.then(() => { resolved = true; }, () => { resolved = true; });
+        act(() => result.current.accept(BOTH_ON));
 
-        // The accept landed and the mark was asked for…
         await waitFor(() => expect(h.markCalls).toBe(1));
         expect(h.record).toHaveBeenCalledTimes(1);
         await settle();
-        // …but the disk has not taken it yet, so the number may not be sent yet.
         expect(resolved).toBe(false);
         expect(await markInActiveDatabase()).toBeUndefined();
 
-        let markWhenResolved: unknown = 'not read';
-        await act(async () => {
-            releaseDisk();
-            await call;
-            markWhenResolved = await markInActiveDatabase();
-        });
-
+        await act(async () => { releaseDisk(); await call; });
         expect(resolved).toBe(true);
-        expect(markWhenResolved).toBe(NOTICE_VERSION);
+        expect(await markInActiveDatabase()).toBe(PAGE_NOTICE_VERSION);
     });
 
-    it('the mark is asked for only AFTER the accept has landed on the server', async () => {
-        let landAccept: (v: typeof IDS) => void = () => undefined;
-        h.record.mockImplementation(() => new Promise((resolve) => { landAccept = resolve; }));
-        const { result } = await renderTicked();
-
-        let call: Promise<void> = Promise.resolve();
-        act(() => { call = result.current.recordIfNeeded(); });
-        await waitFor(() => expect(h.record).toHaveBeenCalledTimes(1));
-        await settle();
-
-        expect(h.markCalls).toBe(0);
-        expect(await markInActiveDatabase()).toBeUndefined();
-
-        let markWhenResolved: unknown = 'not read';
-        await act(async () => {
-            landAccept(IDS);
-            await call;
-            markWhenResolved = await markInActiveDatabase();
-        });
-
-        expect(h.markCalls).toBe(1);
-        expect(markWhenResolved).toBe(NOTICE_VERSION);
-    });
-
-    it('a failed accept writes no mark', async () => {
+    it('a failed accept writes no mark, holds no switches, and rejects with the failure (not as declined)', async () => {
         h.record.mockRejectedValue(new Error('offline'));
-        const { result } = await renderTicked();
-
+        const { result } = renderHook(() => useConsentBeforeOtp());
+        const { call } = await ask(result);
         let caught: unknown = null;
         await act(async () => {
-            try { await result.current.recordIfNeeded(); } catch (e) { caught = e; }
+            result.current.accept(BOTH_ON);
+            try { await call; } catch (e) { caught = e; }
         });
         await settle();
-
         expect(caught).toBeInstanceOf(Error);
+        expect(isPermissionsDeclined(caught)).toBe(false);
         expect(h.markCalls).toBe(0);
         expect(await markInActiveDatabase()).toBeUndefined();
+        expect(await readHeldSwitchChoices()).toBeNull();
     });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────────────
-/** Every write a Table offers. Stubbed on the ACTIVE handle to model a stuck IndexedDB. */
 const WRITE_METHODS = ['put', 'add', 'bulkPut', 'bulkAdd', 'update', 'upsert'] as const;
 
 function jamWritesOnActiveUiPrefs(): () => void {
@@ -236,7 +240,7 @@ function jamWritesOnActiveUiPrefs(): () => void {
     const jammed: string[] = [];
     for (const method of WRITE_METHODS) {
         if (typeof table[method] === 'function') {
-            table[method] = () => new Promise<never>(() => undefined); // never settles
+            table[method] = () => new Promise<never>(() => undefined);
             jammed.push(method);
         }
     }
@@ -245,93 +249,73 @@ function jamWritesOnActiveUiPrefs(): () => void {
 
 describe('(j) a stuck IndexedDB never holds the number back', () => {
     it('when the mark write never settles, recordIfNeeded() still resolves within ~2 s, and the guard fails closed', async () => {
-        const { result } = await renderTicked();
+        const { result } = renderHook(() => useConsentBeforeOtp());
         const unjam = jamWritesOnActiveUiPrefs();
         try {
+            const { call } = await ask(result);
             let outcome = 'not settled';
             let elapsedMs = -1;
             await act(async () => {
                 const started = Date.now();
+                result.current.accept(BOTH_ON);
                 outcome = await Promise.race([
-                    result.current.recordIfNeeded().then(() => 'resolved', () => 'rejected'),
+                    call.then(() => 'resolved', () => 'rejected'),
                     new Promise<string>((resolve) => setTimeout(() => resolve('still waiting after 3.5 s'), 3500)),
                 ]);
                 elapsedMs = Date.now() - started;
             });
-
             expect(outcome).toBe('resolved');
             expect(elapsedMs).toBeLessThan(3500);
-            expect(h.record).toHaveBeenCalledTimes(1);
             expect(result.current.status).toBe('passed');
-            expect(result.current.canSend).toBe(true);
         } finally {
             unjam();
         }
-
-        // The mark never landed, so the voice-clip guard says no: fail CLOSED.
         expect(await markInActiveDatabase()).toBeUndefined();
         await expect(hasCoreConsent()).resolves.toBe(false);
     });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────────────
-describe('(h) hook level — an acceptance belongs to the phone number it was given for', () => {
+describe('(h) an acceptance belongs to the phone number it was given for', () => {
     const PHONE_A = '9876543210';
     const PHONE_B = '9123456780';
 
-    it('accepted for A → the number becomes B → required, unticked, refuses until ticked, and B is recorded with a new session id', async () => {
+    it('accepted for A: A sends again without the page; B opens the page again and is recorded with a new session id', async () => {
         const { result, rerender } = renderHook(
             ({ phone }: { phone: string }) => useConsentBeforeOtp(phone),
             { initialProps: { phone: PHONE_A } },
         );
-        act(() => result.current.setTicked(true));
-        await waitFor(() => expect(result.current.canSend).toBe(true));
-        await act(async () => { await result.current.recordIfNeeded(); });
-
+        await askAndAccept(result);
         expect(result.current.status).toBe('passed');
-        // A successful accept clears the tick.
-        expect(result.current.ticked).toBe(false);
-        expect(result.current.canSend).toBe(true);
 
-        rerender({ phone: PHONE_B });
-
-        await waitFor(() => expect(result.current.status).toBe('required'));
-        expect(result.current.ticked).toBe(false);
-        expect(result.current.canSend).toBe(false);
-
-        let caught: unknown = null;
-        await act(async () => {
-            try { await result.current.recordIfNeeded(); } catch (e) { caught = e ?? 'thrown'; }
-        });
-        expect(caught).not.toBeNull();
+        // A again (back from the OTP step): no page, no record.
+        await act(async () => { await result.current.recordIfNeeded(); });
+        expect(result.current.pageOpen).toBe(false);
         expect(h.record).toHaveBeenCalledTimes(1);
 
-        act(() => result.current.setTicked(true));
-        await waitFor(() => expect(result.current.canSend).toBe(true));
-        await act(async () => { await result.current.recordIfNeeded(); });
-
+        rerender({ phone: PHONE_B });
+        await waitFor(() => expect(result.current.status).toBe('required'));
+        await askAndAccept(result);
         expect(h.record).toHaveBeenCalledTimes(2);
-        const firstId = h.record.mock.calls[0][1];
-        const secondId = h.record.mock.calls[1][1];
-        expect(typeof secondId).toBe('string');
-        expect((secondId as string).length).toBeGreaterThan(0);
-        expect(secondId).not.toBe(firstId);
+        expect(h.record.mock.calls[1][1]).not.toBe(h.record.mock.calls[0][1]);
         expect(result.current.status).toBe('passed');
     });
+});
 
-    it('the default number is the empty string — useConsentBeforeOtp() and useConsentBeforeOtp(\'\') behave alike', async () => {
-        const { result, rerender } = renderHook(
-            ({ phone }: { phone?: string }) => useConsentBeforeOtp(phone),
-            { initialProps: { phone: undefined as string | undefined } },
-        );
-        act(() => result.current.setTicked(true));
-        await waitFor(() => expect(result.current.canSend).toBe(true));
-        await act(async () => { await result.current.recordIfNeeded(); });
-        expect(result.current.status).toBe('passed');
-
-        rerender({ phone: '' });
+describe('(s) the two switches are held with the acceptance', () => {
+    it('as he left them, with the acceptance\'s own session id, only after the accepting write landed', async () => {
+        let landAccept: (v: typeof IDS) => void = () => undefined;
+        h.record.mockImplementation(() => new Promise((resolve) => { landAccept = resolve; }));
+        const { result } = renderHook(() => useConsentBeforeOtp('9876543210'));
+        const { call } = await ask(result);
+        act(() => result.current.accept({ voicePlayback: false, improvement: true }));
+        await waitFor(() => expect(h.record).toHaveBeenCalledTimes(1));
         await settle();
-        expect(result.current.status).toBe('passed');
-        expect(result.current.canSend).toBe(true);
+        expect(await readHeldSwitchChoices()).toBeNull();
+
+        await act(async () => { landAccept(IDS); await call; });
+        await waitFor(async () => expect(await readHeldSwitchChoices()).not.toBeNull());
+        const held = await readHeldSwitchChoices();
+        expect(held).toMatchObject({ voicePlayback: false, improvement: true, language: 'mr' });
+        expect(held?.preRegistrationSessionId).toBe(h.record.mock.calls[0][1]);
     });
 });

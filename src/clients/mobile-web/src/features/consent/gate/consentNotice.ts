@@ -232,7 +232,18 @@ export const TERMS_VERSION = 'terms-2026-11-06.1';
  * alone: an acceptance of `notice-2026-10-30.1` or older is asked once more. `notice-2026-11-06.1` (D-50, the
  * evidence copy is always kept / the switch renamed) is material too, so it stands alone: `.11-02.2` is asked once.
  */
-export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION];
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) - the notice as the ONE long permissions
+ * and privacy page shows it before the OTP (`features/consent/permissionsPage`). Its own text
+ * (`canonicalPermissionsPageText`) and therefore its own version; the tick edition above stays the text of the
+ * one-time notice sheet. Not material against `NOTICE_VERSION`: the purposes, the data, the rights and the "will not
+ * do" promises are the same statements, only laid out as one page, with the phone permissions and who-sees-what added
+ * as plain disclosure. So BOTH editions count as an acceptance in force, and nobody already signed in is re-asked for
+ * it. LEGAL CHECK NEEDED before release (the page, and its two optional switches ON by default).
+ */
+export const PAGE_NOTICE_VERSION = 'notice-2026-11-27.1';
+
+export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION, PAGE_NOTICE_VERSION];
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a

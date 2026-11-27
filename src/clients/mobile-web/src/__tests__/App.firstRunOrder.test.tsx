@@ -53,6 +53,7 @@ vi.mock('../features/sync', () => ({ OfflineBanner: () => null }));
 vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabled: vi.fn(), clearAiTestMode: vi.fn() }));
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+vi.mock('../features/consent/permissionsPage/useHeldSwitchChoices', () => ({ useHeldSwitchChoices: vi.fn() }));
 // plr-d10 I25: the one-time notice-change sheet (own tests in features/consent/reask) — a marker here.
 vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({
     default: ({ userId }: { userId: string }) => <div data-testid="notice-change-sheet-mount" data-user={userId} />,
