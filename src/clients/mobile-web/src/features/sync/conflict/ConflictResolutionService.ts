@@ -25,6 +25,8 @@ import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { ownScheduleRefusalWords } from '../../scheduler/ownSchedule/ownScheduleWords';
+import { farmSetupWords } from '../../profile/farmSetup/farmSetupWords';
+import { refusalKindOf } from '../../profile/farmSetup/refusalKind';
 import { refusalHintForRow, refusalReasonOf } from '../../logs/components/correction/refusedRevision';
 import { applyPendingWithdrawals } from '../pull/reconcilers/withdrawnRecordsReconciler';
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
@@ -64,6 +66,12 @@ export const SCHEDULE_CHOICE_NEEDED_CODE = 'ShramSafal.ScheduleChoiceNeeded';
 export const SCHEDULE_MECHANISM_OFF_CODE = 'ShramSafal.ScheduleMechanismOff';
 /** spec: schedule mechanism slice 3 - an own-schedule change the server cannot apply as sent. PERMANENT. */
 export const OWN_SCHEDULE_INVALID_CODE = 'ShramSafal.OwnScheduleInvalid';
+
+/** spec: repair D-9 - the farm-setup changes: refused ones say why in the farm-setup words. */
+const FARM_SETUP_TYPES: ReadonlySet<string> = new Set([
+    SyncMutationName.FarmsetupWaterSourceSave, SyncMutationName.FarmsetupWaterSourceRemove, SyncMutationName.FarmsetupPowerTimesSet,
+    SyncMutationName.FarmsetupMachineSave, SyncMutationName.FarmsetupMachineRemove, SyncMutationName.FarmsetupPlotWaterSet,
+]);
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -238,6 +246,10 @@ export class ConflictResolutionService {
 
     private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string, mutationType?: string, language?: string | null): string | undefined {
         const lang = language === 'en' ? 'en' : 'mr';
+        // spec: repair D-9 (P11) - a refused farm-setup change, in its own words (contract §5.4), by the code's kind. PROPOSED (Marathi / English)
+        if (mutationType && FARM_SETUP_TYPES.has(mutationType)) {
+            return farmSetupWords(lang).refused[refusalKindOf(errorCode ?? reason)];
+        }
         // spec: pre-launch-repair L2b (R-1) — the server holds this money entry's id on ANOTHER farm or for
         // another person, so it refused the entry instead of saving it twice. Re-sending cannot change that.
         // PROPOSED (Marathi)

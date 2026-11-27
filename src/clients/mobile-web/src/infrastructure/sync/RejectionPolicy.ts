@@ -197,6 +197,11 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (slice 7) - an old whole edit (schedule.edit with stages and works) of a schedule written in the task
     // format: it would drop its works, so the server refuses it and writes nothing. The same bytes get the same answer for ever: parked with its words.
     'ScheduleTaskFormatEdit',
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9) - the farm-setup changes (farmsetup.*): content that does not hold together
+    // (`ShramSafal.FarmSetupInvalid`, e.g. a motor of 600 HP, a time "25:00", three decimals). The same bytes get the same answer for ever: parked with its
+    // words (features/profile/farmSetup/farmSetupWords.ts), never re-sent. `ShramSafal.FarmSetup.Conflict` (another phone changed it first) is permanent
+    // already through its tail CONFLICT; `ShramSafal.PlotNotFound` for a plot's water queued right after its plot WAITS (MutationDependency.plotParentsOf).
+    'FarmSetupInvalid',
 ];
 
 const PERMANENT_SET = new Set(

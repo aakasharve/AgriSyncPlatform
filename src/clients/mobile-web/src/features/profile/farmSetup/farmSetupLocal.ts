@@ -13,13 +13,13 @@
 import type { AgriLogDatabase, MutationQueueItem, MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
 import { DexieFarmSetupRepository } from '../../../infrastructure/storage/DexieFarmSetupRepository';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import { refusalKindOf, type FarmSetupRefusalKind } from './refusalKind';
 import type {
     FarmSetupMachine, FarmSetupMotor, FarmSetupPowerTimes, FarmSetupTimetable, FarmSetupWaterSource, PlotWaterSetup,
 } from '../../../domain/types/farmSetup.types';
 
 export type FarmSetupItemState = 'saved' | 'waiting' | 'refused';
-/** stale = another phone changed it first (`ShramSafal.FarmSetup.Conflict`); forbidden = no "edit farm setup" here; invalid = the content. */
-export type FarmSetupRefusalKind = 'stale' | 'forbidden' | 'invalid' | 'other';
+export { refusalKindOf, type FarmSetupRefusalKind } from './refusalKind';
 
 export interface FarmSetupRefusal {
     rowId: number;
@@ -57,15 +57,6 @@ const TYPES = [
     SyncMutationName.FarmsetupWaterSourceSave, SyncMutationName.FarmsetupWaterSourceRemove, SyncMutationName.FarmsetupPowerTimesSet,
     SyncMutationName.FarmsetupMachineSave, SyncMutationName.FarmsetupMachineRemove, SyncMutationName.FarmsetupPlotWaterSet,
 ];
-
-/** The kind of a refusal, by the code's last segment (the rule `RejectionPolicy.normalizeCode` follows). */
-export function refusalKindOf(errorCode: string | null | undefined): FarmSetupRefusalKind {
-    const tail = (errorCode ?? '').trim().split('.').pop()?.toUpperCase() ?? '';
-    if (tail === 'CONFLICT') return 'stale';
-    if (tail === 'FORBIDDEN' || tail === 'UNAUTHORIZED') return 'forbidden';
-    if (tail === 'FARMSETUPINVALID' || tail === 'SYNCINVALIDPAYLOAD' || tail === 'INVALIDCOMMAND') return 'invalid';
-    return 'other';
-}
 
 type P = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);

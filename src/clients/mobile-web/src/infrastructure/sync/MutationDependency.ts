@@ -353,7 +353,9 @@ export function cropCycleParentClientRequestId(cropCycleId: string): string {
  * own `cropCycleId` is itself, never its parent).
  */
 export function plotParentsOf(mutationType: string, payload: unknown): QueuedParent[] {
-    if (mutationType === SyncMutationName.CreateCropCycle) {
+    // spec: repair D-9 - a plot's water (`farmsetup.plot_water.set`) is queued right after the plot it is about (add plot, step 3): refused
+    // `PlotNotFound` while that plot is still on its way, it WAITS for it, uncharged, like a crop cycle does.
+    if (mutationType === SyncMutationName.CreateCropCycle || mutationType === SyncMutationName.FarmsetupPlotWaterSet) {
         const plotId = readStringField(payload, 'plotId');
         return plotId ? [{ kind: 'plot', id: plotId, clientRequestId: plotParentClientRequestId(plotId) }] : [];
     }
