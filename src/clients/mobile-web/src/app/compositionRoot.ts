@@ -24,6 +24,7 @@ import { BackendFarmGeographyClient } from '../infrastructure/farmGeography';
 import { FarmAnchoredWeatherService } from '../infrastructure/weather/FarmAnchoredWeatherService';
 import { BackendWeatherClient } from '../infrastructure/weather/BackendWeatherClient';
 import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
+import { useVoiceSetupContext } from '../features/profile/farmSetup/voiceSetupContext';
 import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 // FEEL-1 — the toast owner: the outcome buzz is attached to the call that asks for a message (never to a render or a timeout).
 import { toastFromGlobalDetail, useFeelToast } from '../shared/hooks/useFeel';
@@ -91,11 +92,14 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
     // PLR-D10 I13 — the voice auto-save is built after the commands it calls (step 5b), so the recorder
     // reaches it through this ref. Until it is set, the hand-off declines and the review form is used.
     const voiceDraftSink = useRef<VoiceDraftSink | null>(null);
+    // spec: repair D-9 (P9) - the voice parse's farm context (motors, sources, machines, each plot's method and motor) comes from the OPEN farm's set once
+    // the server has sent it; until then the phone profile goes as before. The AI call's shape is unchanged (infrastructure/ai is not edited).
+    const voiceSetup = useVoiceSetupContext(currentFarmId, appData.farmerProfile, appData.crops);
     const voice = useVoiceRecorder({
         currentLogContext,
         hasActiveLogContext,
-        crops: appData.crops,
-        farmerProfile: appData.farmerProfile,
+        crops: voiceSetup.crops,
+        farmerProfile: voiceSetup.profile,
         setMode: (newMode: InputMode) => {
             setMode(newMode);
             if (newMode === 'voice') navigation.setMainView('log');
