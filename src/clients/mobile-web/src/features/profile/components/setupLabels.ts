@@ -55,14 +55,18 @@ export const MACHINE_DETAIL_FIELD: Record<MachineDetail, { label: string; testId
     otherDetails: { label: 'इतर माहिती', testId: 'machine-other', kind: 'text' },
 };
 
-/** "स्वतःचं · ब्लोअर · मित्रा टर्बो · 4 नोझल · टाकी 600 लिटर": every detail the machine carries, in plain words. */
-export const machineLine = (m: FarmMachinery): string => {
-    const parts = [OWNERSHIP_LABEL[m.ownership] ?? m.ownership, MACHINE_TYPE_LABEL[m.type] ?? m.type];
+/**
+ * "स्वतःचं · ब्लोअर · मित्रा टर्बो · 4 नोझल · टाकी 600 लिटर": every detail the machine carries, in plain words. English mode
+ * (FIX-1 round 1, Bug 5): "Owned · Blower · Mitra Turbo · 4 nozzles · Tank 600 litres". Numbers stay Latin in both.
+ */
+export const machineLine = (m: FarmMachinery, language?: string | null): string => {
+    const w = setupWords(language);
+    const parts = [w.ownership[m.ownership] ?? m.ownership, w.machineType[m.type] ?? m.type];
     const make = [m.company, m.model].map(s => s?.trim()).filter(Boolean).join(' ');
     if (make) parts.push(make);
     if (m.hp) parts.push(`${m.hp} HP`);
-    if (m.nozzleCount) parts.push(`${m.nozzleCount} नोझल`);
-    if (m.capacity) parts.push(`टाकी ${m.capacity} लिटर`);
+    if (m.nozzleCount) parts.push(w.nozzles(m.nozzleCount));
+    if (m.capacity) parts.push(w.tank(m.capacity));
     return parts.join(' · ');
 };
 
@@ -73,6 +77,61 @@ export const IRRIGATION_LABEL: Record<PlotInfrastructure['irrigationMethod'], st
     Drip: 'ठिबक', Flood: 'पाट पाणी', Sprinkler: 'तुषार', None: null,
 };
 
-/** "7.5 HP · थ्री फेज · महावितरण वीज" */
-export const motorLine = (m: FarmMotor): string =>
-    `${m.hp} HP · ${PHASE_LABEL[m.phase] ?? m.phase} · ${POWER_SOURCE_LABEL[m.powerSourceType] ?? m.powerSourceType}`;
+/** "7.5 HP · थ्री फेज · महावितरण वीज"; English mode "7.5 HP · Three phase · Grid (MSEB)". */
+export const motorLine = (m: FarmMotor, language?: string | null): string => {
+    const w = setupWords(language);
+    return `${m.hp} HP · ${w.phase[m.phase] ?? m.phase} · ${w.powerSource[m.powerSourceType] ?? m.powerSourceType}`;
+};
+
+/**
+ * Repair FIX-1 round 1 (Bug 5, CTO ruling: English mode is English only on the पाणी आणि वीज page and the machine form) —
+ * the shown words of the stored setup values, one language at a time. Marathi is exactly the constants above; English is
+ * their twin, every line PROPOSED (English).
+ */
+export interface SetupWords {
+    sourceType: Record<WaterResource['type'], string>;
+    phase: Record<FarmMotor['phase'], string>;
+    powerSource: Record<FarmMotor['powerSourceType'], string>;
+    machineType: Record<FarmMachinery['type'], string>;
+    ownership: Record<FarmMachinery['ownership'], string>;
+    detail: Record<MachineDetail, { label: string; placeholder?: string }>;
+    pipe: (size?: string) => string;
+    nozzles: (n: number) => string;
+    tank: (litres: number) => string;
+}
+
+const SETUP_WORDS_MR: SetupWords = {
+    sourceType: SOURCE_TYPE_LABEL,
+    phase: PHASE_LABEL,
+    powerSource: POWER_SOURCE_LABEL,
+    machineType: MACHINE_TYPE_LABEL,
+    ownership: OWNERSHIP_LABEL,
+    detail: MACHINE_DETAIL_FIELD,
+    pipe: pipeLabel,
+    nozzles: n => `${n} नोझल`,
+    tank: litres => `टाकी ${litres} लिटर`,
+};
+
+const SETUP_WORDS_EN: SetupWords = {
+    sourceType: { Well: 'Well', Borewell: 'Borewell', Canal: 'Canal', 'Farm Pond': 'Farm pond', Tanker: 'Tanker' },
+    phase: { '1': 'Single phase', '3': 'Three phase' },
+    powerSource: { MSEB: 'Grid (MSEB)', Solar: 'Solar', Generator: 'Diesel' },
+    machineType: { Tractor: 'Tractor', Blower: 'Blower', Sprayer: 'Sprayer', Rotavator: 'Rotavator', Harvester: 'Harvester', Other: 'Other' },
+    ownership: { Owned: 'Owned', Rented: 'Rented' },
+    detail: {
+        company: { label: 'Company' },
+        model: { label: 'Model' },
+        hp: { label: 'HP', placeholder: 'e.g. 45' },
+        nozzleCount: { label: 'Number of nozzles', placeholder: 'e.g. 4' },
+        capacity: { label: 'Tank (litres)', placeholder: 'e.g. 200' },
+        otherDetails: { label: 'Other details' },
+    },
+    pipe: size => (size ? size.replace(/mm$/, ' mm') : ''),
+    nozzles: n => `${n} ${n === 1 ? 'nozzle' : 'nozzles'}`,
+    tank: litres => `Tank ${litres} litres`,
+};
+
+/** English only for 'en'; every other language reads the Marathi. */
+export function setupWords(language: string | null | undefined): SetupWords {
+    return language === 'en' ? SETUP_WORDS_EN : SETUP_WORDS_MR;
+}

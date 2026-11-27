@@ -19,7 +19,7 @@ import React from 'react';
 import { Check, Mic, Pencil, Plus } from 'lucide-react';
 import type { AgriLogResponse } from '../../../types';
 import type { LabourAnchor } from '../labourAnchor';
-import { ATTENDANCE_COPY as COPY, NAME_STATE_COPY, THROUGH_COPY } from '../attendanceCopy';
+import { NAME_STATE_COPY, THROUGH_COPY, attendanceCardCopy } from '../attendanceCopy';
 import { selectLadderRung } from '../attendanceLadder';
 import { findDayContradictions, type DayContradiction, type DayShift } from '../attendanceContradiction';
 import { selectConfirmSurface } from '../attendanceDisagreement';
@@ -46,7 +46,6 @@ export interface AttendanceResultProps {
     onSpeakMore: () => void;
 }
 
-const shiftWord = (s: DayShift): string => COPY.markWord[s];
 
 /** Lane OF — a person's day as he taps it on बदल करा (the working phones' words). */
 export type TapMark = 'Full' | 'Half' | 'Absent';
@@ -71,6 +70,9 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const language = useOptionalLanguage()?.language;
     const tapWords = language === 'en' ? TAP_WORDS.en : TAP_WORDS.mr;
     const nameWords = language === 'en' ? NAME_STATE_COPY.en : NAME_STATE_COPY.mr;
+    // FIX-1 round 1 (Bug 5): the card's own words in the app's language (Marathi = the founder's, unchanged).
+    const COPY = attendanceCardCopy(language);
+    const shiftWord = (shift: DayShift): string => COPY.markWord[shift];
     const [editing, setEditing] = React.useState(false);
     // Repair FIX-1 item 6 — a spoken name the farmer resolved himself (spoken name → field operator id): picked from the
     // list ("यादीतून निवडा", "सारखं नाव — कोण?") or just added ("नवीन नाव जोडा"). Never set by the app.
@@ -245,7 +247,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                 {knownCount != null && (
                     <div className="mt-2 flex items-center gap-2">
                         <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]" style={{ fontFamily: "'DM Sans', sans-serif" }}>{knownCount}</b>
-                        <span className="text-[15px] font-bold text-slate-700">जण</span>
+                        <span className="text-[15px] font-bold text-slate-700">{COPY.people}</span>
                         {/* 3.4b review finding 9 (P7): the chip must attribute the
                             count to its ACTUAL source. knownCount is
                             spokenCount ?? anchorHeadcount — when it came from the
@@ -455,7 +457,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                     {(rung === 2 || rung === 3) && (
                         <button type="button" onClick={onSpeakMore}
                             className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-dashed border-emerald-200 bg-emerald-50 p-3 text-[14px] font-extrabold text-emerald-700 active:scale-[0.98]">
-                            <Mic size={16} /> बोला
+                            <Mic size={16} /> {COPY.speak}
                         </button>
                     )}
                 </div>

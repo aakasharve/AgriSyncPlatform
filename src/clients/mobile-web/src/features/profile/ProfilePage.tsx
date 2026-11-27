@@ -29,7 +29,7 @@ import { SetupHubMenu, type HubMenuItem } from './components/SetupHubMenu';
 import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
-import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, PRIVACY_TITLE } from './settingsItems';
+import { buildSettingsExtraIds } from './settingsItems';
 import { useWaitingDraftCount } from './hooks/useWaitingDraftCount';
 import { useWaitingVoiceNotes } from '../voiceDiary/waiting/useWaitingVoiceNotes';
 import { voiceNotesWords } from '../voiceDiary/waiting/voiceNotesWords';
@@ -47,6 +47,7 @@ import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
 import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
+import { hubWords } from './hubWords';
 import { useSentInvitations } from './components/TeamFirstStepCard';
 import { useFarmPlots } from './team/useFarmPlots';
 import { InviteBuilderSheet } from '../invitations/InviteBuilderSheet';
@@ -55,34 +56,15 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
 import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
-import { digitsFor } from '../../shared/utils/marathiDigits';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
 
 /**
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — one plain Marathi title per hub
- * page, the same words on the hub row and on the page's title bar (no English doubling).
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — one plain title per hub page, the same words on the
+ * hub row and on the page's title bar. Repair FIX-1 round 1 (Bug 5): every hub word now lives in `hubWords.ts`, one
+ * language at a time (Marathi exactly as before, English PROPOSED).
  */
-const HUB_TITLE: Record<'identity' | 'structure' | 'utils' | 'machines' | 'health', string> = {
-    identity: 'माझी ओळख',
-    structure: 'पिकं आणि प्लॉट',
-    utils: 'पाणी आणि वीज',
-    machines: 'यंत्रं',
-    health: 'माती व पाणी अहवाल',
-};
-
-/** Repair FIX-1 item 3 — each hub STEP's title (water, motor and power are three steps of the one पाणी आणि वीज page). */
-const STEP_LABEL: Record<HubStepId, string> = {
-    identity: HUB_TITLE.identity,
-    water: 'पाण्याचे स्रोत',
-    motor: 'मोटर',
-    power: 'वीज आणि वेळापत्रक',
-    structure: HUB_TITLE.structure,
-    team: TEAM_COPY.pageTitle,
-    machines: HUB_TITLE.machines,
-    health: HUB_TITLE.health,
-};
 const STEP_ICON: Record<HubStepId, React.ReactNode> = {
     identity: <User size={20} />,
     water: <Droplets size={20} />,
@@ -355,10 +337,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             )}
 
             {(() => {
+                // Repair FIX-1 round 1 (Bug 5): the hub's words in the app's language (hubWords.ts).
+                const hw = hubWords(language);
                 const sections: HubSection[] = [
                     {
                         id: 'identity',
-                        label: HUB_TITLE.identity,
+                        label: hw.pages.identity,
                         icon: <User size={20} />,
                         body: (
                             <IdentitySection
@@ -387,7 +371,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     },
                     {
                         id: 'structure',
-                        label: HUB_TITLE.structure,
+                        label: hw.pages.structure,
                         icon: <Sprout size={20} />,
                         body: (
                             <StructureSection
@@ -411,9 +395,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             />
                         ),
                     },
-                    { id: 'utils', label: HUB_TITLE.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'machines', label: HUB_TITLE.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'health', label: HUB_TITLE.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
+                    { id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
 
                 // One plain line per row, from the farmer's REAL data (no sample values).
@@ -421,38 +405,28 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const motorCount = profile.motors?.length ?? 0;
                 const machineCount = profile.machineries?.length ?? 0;
                 const subtitleFor = (id: HubStepId): string => {
-                    if (id === 'identity') return doneIds.has('identity') ? 'नाव आणि गाव भरलं' : 'नाव आणि गाव भरा';
-                    if (id === 'water') return waterCount > 0 ? `${waterCount} स्रोत` : 'विहीर, बोअर, कालवा, शेततळं';
-                    if (id === 'motor') return motorCount > 0 ? `${motorCount} मोटर` : 'स्रोतावरची मोटर';
-                    if (id === 'power') return doneIds.has('power') ? 'विजेच्या वेळा जतन झाल्या' : 'सिंगल फेज आणि थ्री फेज';
+                    if (id === 'identity') return hw.line.identity(doneIds.has('identity'));
+                    if (id === 'water') return hw.line.water(waterCount);
+                    if (id === 'motor') return hw.line.motor(motorCount);
+                    if (id === 'power') return hw.line.power(doneIds.has('power'));
                     if (id === 'structure') {
-                        if (crops.length === 0) return 'पिकं आणि प्लॉट जोडा';
-                        // Marathi digits, like every other "पिकं · प्लॉट" line in the app; the pending count (FIX-1 item 5) only when there is one.
-                        const line = `${digitsFor(crops.length, 'mr')} पिकं · ${digitsFor(plotCount, 'mr')} प्लॉट`;
-                        return pendingPlotCount > 0 ? `${line} · ${PLOT_PENDING_WORDS.mr.hubCount(pendingPlotCount)}` : line;
+                        // The pending count (FIX-1 item 5) only when there is one.
+                        const line = hw.line.structure(crops.length, plotCount);
+                        return crops.length > 0 && pendingPlotCount > 0
+                            ? `${line} · ${PLOT_PENDING_WORDS[language === 'en' ? 'en' : 'mr'].hubCount(pendingPlotCount)}` : line;
                     }
-                    if (id === 'machines') return machineCount > 0 ? `${machineCount} यंत्रं` : 'ट्रॅक्टर, फवारणी यंत्र';
-                    if (id === 'health') return 'अहवाल जोडण्याची सोय अजून नाही';
+                    if (id === 'machines') return hw.line.machines(machineCount);
+                    if (id === 'health') return hw.line.health;
                     return '';
                 };
-                // The three water / motor / power steps open one page, so they share its one guide.
-                const UTILS_HELP = { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' };
-                const SETUP_HELP: Partial<Record<HubStepId, { what: string; do: string; why: string }>> = {
-                    identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
-                    water: UTILS_HELP,
-                    motor: UTILS_HELP,
-                    power: UTILS_HELP,
-                    structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
-                    machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
-                    // P5: no promise of an upload that does not exist.
-                    health: { what: 'तुमच्या मातीची आणि पाण्याची तपासणी.', do: 'अहवाल जोडण्याची सोय अजून तयार नाही — लवकरच.', why: 'तयार झाल्यावर तुमच्या मातीप्रमाणे खताचा विचार करता येईल.' },
-                };
+                // The three water / motor / power steps open one page, so they share its one guide (hubWords).
+                const SETUP_HELP = hw.guide;
                 // Repair FIX-1 item 3: the founder's order (hubSteps.ts). माझी टीम sits in it for whoever has the team door.
                 const steps = HUB_STEP_ORDER.filter(id => id !== 'team' || openTeam);
                 // FIX-1 item 10: the team step is a counted step only for the primary owner, once its facts are known.
                 const isDone = (id: HubStepId): boolean => (id === 'team' ? teamStep.counted && teamStep.done : doneIds.has(id));
                 const menuItems: HubMenuItem[] = steps.map(id => ({
-                    id, tab: HUB_STEP_TAB[id], label: STEP_LABEL[id], icon: STEP_ICON[id], subtitle: subtitleFor(id),
+                    id, tab: HUB_STEP_TAB[id], label: hw.steps[id], icon: STEP_ICON[id], subtitle: subtitleFor(id),
                     done: id === 'team' && !teamStep.counted ? undefined : isDone(id), soon: id === 'health', help: SETUP_HELP[id],
                     ...(id === 'team' && teamStep.counted && { mustDo: true, firstCard: teamStep.firstCard }),
                 }));
@@ -467,7 +441,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     total: setupOrder.length,
                     percent: Math.round((doneCount / setupOrder.length) * 100),
                     nextId,
-                    nextLabel: nextId ? STEP_LABEL[nextId] : undefined,
+                    nextLabel: nextId ? hw.steps[nextId] : undefined,
                 };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';
@@ -476,21 +450,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
                 // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }> = {
-                    language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
+                    language: { label: hw.settings.language, icon: <Globe size={22} />, subtitle: langLabel },
                     // Lane OF (founder D-59) — recordings not saved yet live here: the row says how many (THE one reader,
                     // the same number as on the gear and the page).
                     'voice-diary': {
-                        label: 'आवाज नोंदी', icon: <BookOpen size={22} />,
-                        subtitle: voiceNotesWords(language).rowLine(waitingCounts(waitingVoice), 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका'),
+                        label: hw.settings.voiceDiary, icon: <BookOpen size={22} />,
+                        subtitle: voiceNotesWords(language).rowLine(waitingCounts(waitingVoice), hw.settings.voiceDiaryLine),
                         ...(waitingVoice.length > 0 && { badge: <span data-testid="voice-notes-row-count"><Chip tone="amber">{waitingVoice.length}</Chip></span> }),
                     },
                     // PROPOSED (Marathi): "परवानग्या · माझा डेटा" (the preview's line; copy + erase now live inside).
-                    consent: { label: PRIVACY_TITLE, icon: <Shield size={22} />, subtitle: 'परवानग्या · माझा डेटा' },
-                    billing: { label: 'बिलिंग', icon: <CreditCard size={22} />, subtitle: 'तुमचा प्लॅन' },
+                    consent: { label: hw.settings.privacy, icon: <Shield size={22} />, subtitle: hw.settings.privacyLine },
+                    billing: { label: hw.settings.billing, icon: <CreditCard size={22} />, subtitle: hw.settings.billingLine },
                     // PROPOSED (Marathi): one name with its page (OFFLINE_NOTES_TITLE). Lane OF (D-59): voice recordings moved
                     // to आवाज नोंदी; this row now counts only bill / sale-slip photos made without internet.
                     'ai-drafts': {
-                        label: OFFLINE_NOTES_TITLE, icon: <Mic size={22} />, subtitle: 'बिलाचे / पट्टीचे फोटो', // PROPOSED (Marathi) — lane OF
+                        label: hw.settings.offlineNotes, icon: <Mic size={22} />, subtitle: hw.settings.offlineNotesLine, // PROPOSED (Marathi) — lane OF
                         badge: <Chip tone="amber">{waitingDrafts}</Chip>,
                     },
                 };
@@ -580,7 +554,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             verified={profile.verificationStatus === VerificationStatus.GovernmentVerified}
                             farmName={farmAdmin.myFarm?.name ?? undefined}
                             farms={farmAdmin.myMemberships}
-                            familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
+                            familyName={profile.name ? hubWords(language).family(profile.name.split(' ')[0]) : undefined}
                             onOpenFarm={handleOpenFarm}
                             currentFarmId={profileFarmId ?? undefined}
                             onSwitchFarm={handleSwitchFarmFromMenu}
@@ -608,7 +582,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 }
                 return (
                     <div data-testid={`hub-page-${current.id}`}>
-                        <PageBar title={current.label} onBack={() => setActiveTab(null)} />
+                        <PageBar title={current.label} onBack={() => setActiveTab(null)} backLabel={hw.back} />
                         {current.body}
                     </div>
                 );

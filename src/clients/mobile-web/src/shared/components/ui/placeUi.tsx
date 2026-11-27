@@ -138,17 +138,23 @@ export function ChoiceChips<K extends string>({ items, value, onPick, testId }: 
     );
 }
 
-/** A part that is not built yet: said plainly, never a dead button (doctrine P5). */
-export const Soon: React.FC<{ what: string }> = ({ what }) => (
+/**
+ * A part that is not built yet: said plainly, never a dead button (doctrine P5). `language` 'en' (repair FIX-1 round 1,
+ * Bug 5) says it in English; absent or any other = Marathi, exactly as before.
+ */
+export const Soon: React.FC<{ what: string; language?: string | null }> = ({ what, language }) => (
     <p className="m-0 flex items-start gap-2 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-3 text-[13.5px] font-bold leading-snug text-stone-600" data-testid="soon">
-        <Clock3 size={17} className="mt-0.5 shrink-0" aria-hidden="true" />{what} — लवकरच.
+        <Clock3 size={17} className="mt-0.5 shrink-0" aria-hidden="true" />{what} — {language === 'en' ? 'coming soon' : 'लवकरच'}.
     </p>
 );
 
-/** Setup that lives only on this phone says so (PENDING D-9: not shared with the farm's other phones). */
-export const ThisPhoneOnly: React.FC = () => (
+/** Setup that lives only on this phone says so (PENDING D-9: not shared with the farm's other phones). `language` as `Soon`. */
+export const ThisPhoneOnly: React.FC<{ language?: string | null }> = ({ language }) => (
     <p data-testid="setup-this-phone-only" className="m-0 flex items-start gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-[13.5px] font-bold leading-snug text-amber-800 ring-1 ring-amber-200">
-        <Smartphone size={17} className="mt-0.5 shrink-0" aria-hidden="true" />फक्त या फोनवर साठवलं जातं — शेतातल्या इतर फोनवर दिसत नाही.
+        <Smartphone size={17} className="mt-0.5 shrink-0" aria-hidden="true" />
+        {language === 'en'
+            ? "Saved on this phone only — not shown on the farm's other phones." // PROPOSED (English)
+            : 'फक्त या फोनवर साठवलं जातं — शेतातल्या इतर फोनवर दिसत नाही.'}
     </p>
 );
 

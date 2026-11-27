@@ -21,13 +21,13 @@ import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
 import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
-import { TEAM_COPY } from '../team/teamCopy';
 import { AppVersionRow } from '../../appUpdate/AppVersionRow';
 import { MyResponsibilities } from '../../relationships/MyResponsibilities';
 import { ownsNoFarm, switcherRows } from '../../relationships/relationshipModel';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { InvitationLabel } from '../../invitations/personalInvitationClient';
 import { TeamFirstStepCard, TeamPendingChip, TEAM_FIRST_WORDS } from './TeamFirstStepCard';
+import { hubWords, type HubWords } from '../hubWords';
 
 export interface SetupHelp {
     what: string;
@@ -112,12 +112,12 @@ interface SetupHubMenuProps {
     logout: () => void;
 }
 
-/** "शेत तयार करणं" — one honest bar over the setup sections. Marathi `X पैकी Y` = Y out of X. */
-const ProgressCard: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ p, onNext }) => (
+/** "शेत तयार करणं" — one honest bar over the setup sections. Marathi `X पैकी Y` = Y out of X. Words: `hubWords` (FIX-1 round 1). */
+const ProgressCard: React.FC<{ p: SetupProgressData; onNext: () => void; w: HubWords }> = ({ p, onNext, w }) => (
     <GlassCard testId="hub-progress">
         <div className="flex items-baseline justify-between gap-2">
-            <p className="m-0 text-[16px] font-extrabold text-stone-900">शेत तयार करणं</p>
-            <p className="m-0 text-[15px] font-extrabold text-emerald-800">{p.total} पैकी {p.done} पूर्ण</p>
+            <p className="m-0 text-[16px] font-extrabold text-stone-900">{w.progressTitle}</p>
+            <p className="m-0 text-[15px] font-extrabold text-emerald-800">{w.progressCount(p.total, p.done)}</p>
         </div>
         <div className="mt-2 h-3 overflow-hidden rounded-full bg-stone-200">
             <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-700 transition-[width] duration-500" style={{ width: `${p.percent}%` }} />
@@ -125,20 +125,20 @@ const ProgressCard: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ 
         {p.done < p.total && p.nextLabel ? (
             <Tap onClick={onNext} data-testid="hub-next" rippleColor="rgba(255,255,255,0.35)"
                 className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 text-[15px] font-extrabold text-white shadow">
-                पुढचं: {p.nextLabel}
+                {w.next(p.nextLabel)}
             </Tap>
         ) : (
             <p className="m-0 mt-3 flex items-center gap-1.5 text-[15px] font-extrabold text-emerald-800" data-testid="hub-all-done">
-                <CheckCircle2 size={18} aria-hidden="true" />सगळं पूर्ण! छान काम.
+                <CheckCircle2 size={18} aria-hidden="true" />{w.allDone}
             </p>
         )}
     </GlassCard>
 );
 
 /** One setup section: the row, its status, and a "?" that opens a short plain guide. */
-const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => void }> = ({ item, isNext, onSelect }) => {
+const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => void; w: HubWords }> = ({ item, isNext, onSelect, w }) => {
     const [open, setOpen] = useState(false);
-    const badge = item.done ? <Chip tone="green">पूर्ण</Chip> : item.soon ? <Chip tone="stone">लवकरच</Chip> : <Chip tone="amber">बाकी</Chip>;
+    const badge = item.done ? <Chip tone="green">{w.status.done}</Chip> : item.soon ? <Chip tone="stone">{w.status.soon}</Chip> : <Chip tone="amber">{w.status.pending}</Chip>;
     return (
         <div className={`overflow-hidden rounded-2xl border bg-white shadow-[0_1px_2px_rgba(28,25,23,0.05)] ${isNext ? 'border-emerald-300 ring-2 ring-emerald-200' : 'border-stone-200/80'}`}
             data-testid={`hub-row-${item.id}`}>
@@ -152,13 +152,13 @@ const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => v
                 </Tap>
                 {badge}
                 {item.help && (
-                    <Tap aria-label="मदत" aria-expanded={open} onClick={() => setOpen(o => !o)} data-testid={`hub-help-${item.id}`}
+                    <Tap aria-label={w.help.aria} aria-expanded={open} onClick={() => setOpen(o => !o)} data-testid={`hub-help-${item.id}`}
                         className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-[16px] font-extrabold ${open ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-300'}`}>?</Tap>
                 )}
             </div>
             {open && item.help && (
                 <div className="mx-3 mb-3 rounded-2xl bg-emerald-50 p-3 ring-1 ring-emerald-100">
-                    {([['काय आहे', item.help.what], ['काय करायचं', item.help.do], ['का?', item.help.why]] as [string, string][]).map(([k, v], i) => (
+                    {([[w.help.what, item.help.what], [w.help.do, item.help.do], [w.help.why, item.help.why]] as [string, string][]).map(([k, v], i) => (
                         <div key={k} className={`flex gap-2.5 ${i > 0 ? 'mt-2.5 border-t border-emerald-100 pt-2.5' : ''}`}>
                             <span className="w-[84px] shrink-0 text-[13px] font-extrabold leading-snug text-emerald-800">{k}</span>
                             <span className="flex-1 text-[14px] font-semibold leading-snug text-stone-700">{v}</span>
@@ -177,18 +177,20 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
     farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, onInviteLabel, onTeamSolo, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
+    // Repair FIX-1 round 1 (Bug 5): every word of the menu in the app's language (Marathi exactly as before).
+    const w = hubWords(language);
     // spec: plr-d10 lane MU-1 - the same relationship read model (/me/context) feeds this sheet's rows as the header's.
     const meContext = useOptionalFarmContext()?.meContext ?? null;
 
     // spec: owner-oversight-loop (Task 12) — all wired together, or the row does not render at all.
     const farmSwitcherReady = !!(farms && onSwitchFarm && onCreateFarm && onJoinViaQr);
     const farmSwitcherSubtitle = farms && farms.length > 0
-        ? `${(farms.find(f => f.farmId === currentFarmId) ?? farms[0]).name} · ${farms.length} शेती`
+        ? w.farmsLine((farms.find(f => f.farmId === currentFarmId) ?? farms[0]).name, farms.length)
         : undefined;
 
     return (
         <div style={{ fontFamily: SANS }} data-testid="setup-hub">
-            <PageBar title="सेट-अप केंद्र" onBack={onExit} />
+            <PageBar title={w.title} onBack={onExit} backLabel={w.back} />
             <div className="space-y-3 pb-4">
                 <GlassCard testId="hub-me">
                     <div className="flex items-center gap-3">
@@ -196,18 +198,18 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                         <div className="min-w-0 flex-1">
                             <p className="m-0 text-[19px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{farmerName || '—'}</p>
                             {farmName && <p className="m-0 flex items-center gap-1 text-[14px] font-semibold text-stone-600"><MapPin size={15} aria-hidden="true" />{farmName}</p>}
-                            {verified && <p className="m-0 mt-0.5 flex items-center gap-1 text-[13px] font-extrabold text-emerald-800" data-testid="hub-verified"><ShieldCheck size={15} aria-hidden="true" />ओळख पडताळलेली</p>}
+                            {verified && <p className="m-0 mt-0.5 flex items-center gap-1 text-[13px] font-extrabold text-emerald-800" data-testid="hub-verified"><ShieldCheck size={15} aria-hidden="true" />{w.verified}</p>}
                         </div>
                         {/* spec: plr-d7-m1 step 2 (MU-11) — the farm's permanent code, as on the approved hub card. */}
                         {farmCode && (
                             <span className="shrink-0 rounded-xl bg-stone-100 px-2.5 py-1.5 text-center text-[11px] font-bold leading-tight text-stone-600" data-testid="hub-farm-code">
-                                शेत कोड<br /><b className="text-[13px] tracking-wider text-stone-900">{farmCode}</b>
+                                {w.farmCode}<br /><b className="text-[13px] tracking-wider text-stone-900">{farmCode}</b>
                             </span>
                         )}
                     </div>
                 </GlassCard>
 
-                {setupProgress && <ProgressCard p={setupProgress} onNext={() => {
+                {setupProgress && <ProgressCard p={setupProgress} w={w} onNext={() => {
                     const next = items.find(it => it.id === setupProgress.nextId);
                     if (next) onSelect(next.tab);
                 }} />}
@@ -222,9 +224,9 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 )}
 
                 <div className="space-y-2" data-testid="hub-farm">
-                    <SectionHead title="माझं शेत" />
+                    <SectionHead title={w.sections.farm} />
                     {items.map(it => {
-                        if (it.id !== 'team') return <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.tab)} />;
+                        if (it.id !== 'team') return <SetupRow key={it.id} item={it} w={w} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.tab)} />;
                         // Repair FIX-1 item 10 — the owner alone, nothing sent: the first-setup question card stands in for the row.
                         if (it.firstCard && onInviteLabel && onTeamSolo) {
                             return <TeamFirstStepCard key={it.id} language={language} isNext={setupProgress?.nextId === it.id} onPick={onInviteLabel} onSolo={onTeamSolo} />;
@@ -232,12 +234,12 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                         // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the farm QR + code,
                         // and the people waiting for the owner's answer. In the sequence since FIX-1 item 3; its पूर्ण / red बाकी
                         // only where it is a counted step (FIX-1 item 10).
-                        const status = it.done === true ? <Chip tone="green">पूर्ण</Chip>
+                        const status = it.done === true ? <Chip tone="green">{w.status.done}</Chip>
                             : it.mustDo ? <TeamPendingChip label={TEAM_FIRST_WORDS[language === 'en' ? 'en' : 'mr'].pending} /> : null;
                         const requests = teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : null;
                         return onOpenTeam && (
-                            <RowLink key={it.id} testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={TEAM_COPY.pageTitle}
-                                line={teamViewOnly ? TEAM_COPY.crewLine : teamRequestCount > 0 ? TEAM_COPY.requestsTitle(teamRequestCount) : TEAM_COPY.hubLine}
+                            <RowLink key={it.id} testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={w.team.title}
+                                line={teamViewOnly ? w.team.crewLine : teamRequestCount > 0 ? w.team.requests(teamRequestCount) : w.team.hubLine}
                                 badge={requests || status ? <span className="flex shrink-0 items-center gap-1">{requests}{status}</span> : undefined}
                                 onClick={onOpenTeam} />
                         );
@@ -246,25 +248,25 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
 
                 {onOpenFinance && (
                     <div className="space-y-2" data-testid="hub-money">
-                        <SectionHead title="पैसे" />
-                        <RowLink testId="hub-finance" icon={<BarChart3 size={22} aria-hidden="true" />} tone="blue" title="पैसे व हिशोब" onClick={onOpenFinance} />
+                        <SectionHead title={w.sections.money} />
+                        <RowLink testId="hub-finance" icon={<BarChart3 size={22} aria-hidden="true" />} tone="blue" title={w.finance} onClick={onOpenFinance} />
                     </div>
                 )}
 
                 {(onOpenLabour || farmSwitcherReady) && (
                     <div className="space-y-2" data-testid="hub-people">
-                        <SectionHead title="माणसं आणि शेती" />
+                        <SectionHead title={w.sections.people} />
                         {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree).
                             The subtitle stays `मजुरी` — Task 7 / 7b honesty deletions stand. */}
-                        {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title="कामगार व हजेरी" line="मजुरी" onClick={onOpenLabour} />}
+                        {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title={w.labour} line={w.labourLine} onClick={onOpenLabour} />}
                         {/* `तुमच्या शेती` is copied verbatim from FarmContextSwitcher.tsx — also how a farm is created or joined. */}
-                        {farmSwitcherReady && <RowLink testId="hub-farms" icon={<Sprout size={22} aria-hidden="true" />} tone="green" title="तुमच्या शेती" line={farmSwitcherSubtitle} onClick={() => setShowFarmSwitcher(true)} />}
+                        {farmSwitcherReady && <RowLink testId="hub-farms" icon={<Sprout size={22} aria-hidden="true" />} tone="green" title={w.farms} line={farmSwitcherSubtitle} onClick={() => setShowFarmSwitcher(true)} />}
                     </div>
                 )}
 
                 {/* Lane UPD-1 (D-53): the group always shows, because the installed app version always does. */}
                 <div className="space-y-2" data-testid="hub-app">
-                    <SectionHead title="अ‍ॅप" />
+                    <SectionHead title={w.sections.app} />
                     {settingsItems?.map(it => (
                         <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} badge={it.badge} onClick={() => onSelectExtra?.(it.id)} />
                     ))}
@@ -273,7 +275,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
 
                 <Tap onClick={logout} data-testid="hub-logout" rippleColor="rgba(225,29,72,0.15)"
                     className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full border border-rose-200 bg-white text-[16px] font-extrabold text-rose-700">
-                    <LogOut size={19} aria-hidden="true" />बाहेर पडा
+                    <LogOut size={19} aria-hidden="true" />{w.logout}
                 </Tap>
             </div>
 

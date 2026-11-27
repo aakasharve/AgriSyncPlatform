@@ -48,10 +48,11 @@ export const parseMinutes = (time: string): number | null => {
     return (h * 60) + m;
 };
 
-/** "6 तास", "7.5 तास" — hours in a day. */
-export const formatHours = (minutes: number): string => {
+/** "6 तास", "7.5 तास" — hours in a day. English mode (FIX-1 round 1, Bug 5): "6 hours", "1 hour". */
+export const formatHours = (minutes: number, language?: string | null): string => {
     const hours = minutes / 60;
     const text = Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1);
+    if (language === 'en') return `${text} ${hours === 1 ? 'hour' : 'hours'}`;
     return `${text} तास`;
 };
 
@@ -60,10 +61,27 @@ export const formatHours = (minutes: number): string => {
  * display module plus its 12-hour clock (founder 2026-08-16: 12-hour, AM/PM). Malformed input is
  * shown as it is.
  */
-export const farmerClock = (hhmm: string): string => {
+export const farmerClock = (hhmm: string, language?: string | null): string => {
     const minutes = parseMinutes(hhmm);
     if (minutes === null) return hhmm;
+    // English mode (FIX-1 round 1, Bug 5): the 12-hour clock alone, "6:00 PM" — no Marathi day-period word.
+    if (language === 'en') return formatDisplayTimeFromHHmm(hhmm);
     return `${marathiDayPeriod(Math.floor(minutes / 60))} ${formatDisplayTimeFromHHmm(hhmm)}`;
+};
+
+/** FIX-1 round 1 (Bug 5) — the phase titles in English (Marathi is `PHASE_TITLE`). PROPOSED (English). */
+export const PHASE_TITLE_EN: Record<PhaseKey, string> = { singlePhase: 'Single phase', threePhase: 'Three phase' };
+export const phaseTitle = (phase: PhaseKey, language?: string | null): string => (language === 'en' ? PHASE_TITLE_EN : PHASE_TITLE)[phase];
+
+/**
+ * FIX-1 round 1 (Bug 5) — a week's check, said in the page's language. `summarizeWeek` keeps returning the Marathi words
+ * (the check itself is unchanged); English mode shows their twins. PROPOSED (English).
+ */
+export const timeErrorText = (error: string, language?: string | null): string => {
+    if (language !== 'en') return error;
+    if (error === ERR_INVALID_TIME) return 'Fill in the time properly';
+    if (error === ERR_SAME_TIME) return 'The power cannot go and come back at the same time';
+    return error;
 };
 
 export const summarizeWeek = (windows: ElectricityOffWindow[]): WeekSummary => {

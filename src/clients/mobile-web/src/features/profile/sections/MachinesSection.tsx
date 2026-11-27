@@ -20,6 +20,13 @@ import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import AddMachineWizard from '../components/AddMachineWizard';
 import { BigButton, GlassCard, IconDot, Tap, ThisPhoneOnly } from '../../../shared/components/ui/placeUi';
 import { MACHINE_DETAILS, MACHINE_DETAIL_KEYS, machineLine } from '../components/setupLabels';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+
+/** Repair FIX-1 round 1 (Bug 5) — the page's own words, one language at a time (Marathi exactly as before; English PROPOSED). */
+const PAGE_WORDS = {
+    mr: { edit: 'हे यंत्र बदला', remove: 'हे यंत्र काढा', empty: 'अजून एकही यंत्र जोडलेलं नाही.', add: 'यंत्र जोडा' },
+    en: { edit: 'Change this machine', remove: 'Remove this machine', empty: 'No machine added yet.', add: 'Add a machine' },
+} as const;
 
 interface MachinesSectionProps {
     profile: FarmerProfile;
@@ -55,6 +62,8 @@ function toMachine(id: string, draft: Partial<FarmMachinery>, original?: FarmMac
 }
 
 const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate }) => {
+    const language = useOptionalLanguage()?.language;
+    const words = language === 'en' ? PAGE_WORDS.en : PAGE_WORDS.mr;
     const [isAdding, setIsAdding] = useState(false);
     /** The machine being changed (its id), or null. */
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -90,30 +99,30 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate }) 
 
     return (
         <div className="space-y-3" data-testid="hub-machines">
-            <ThisPhoneOnly />
+            <ThisPhoneOnly language={language} />
             {machines.map(m => (m.id === editingId ? <React.Fragment key={m.id}>{form}</React.Fragment> : (
                 <GlassCard key={m.id} testId={`machine-${m.id}`}>
                     <div className="flex items-center gap-3">
                         <IconDot tone="amber">{m.type === 'Tractor' ? <Tractor size={22} aria-hidden="true" /> : <Wrench size={22} aria-hidden="true" />}</IconDot>
                         <div className="min-w-0 flex-1">
                             <p className="m-0 text-[16px] font-extrabold text-stone-900">{m.name}</p>
-                            <p className="m-0 text-[13.5px] font-semibold text-stone-600">{machineLine(m)}</p>
+                            <p className="m-0 text-[13.5px] font-semibold text-stone-600">{machineLine(m, language)}</p>
                             {m.otherDetails && <p className="m-0 text-[13.5px] font-semibold text-stone-600 [overflow-wrap:anywhere]">{m.otherDetails}</p>}
                         </div>
-                        <Tap onClick={() => startEdit(m)} aria-label="हे यंत्र बदला" data-testid={`machine-edit-${m.id}`}
+                        <Tap onClick={() => startEdit(m)} aria-label={words.edit} data-testid={`machine-edit-${m.id}`}
                             className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-600 ring-1 ring-stone-200"><Pencil size={17} aria-hidden="true" /></Tap>
-                        <Tap onClick={() => deleteMachine(m.id)} aria-label="हे यंत्र काढा" data-testid={`machine-remove-${m.id}`}
+                        <Tap onClick={() => deleteMachine(m.id)} aria-label={words.remove} data-testid={`machine-remove-${m.id}`}
                             className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200"><Trash2 size={18} aria-hidden="true" /></Tap>
                     </div>
                 </GlassCard>
             )))}
             {machines.length === 0 && !isAdding && (
                 <GlassCard testId="machines-empty">
-                    <p className="m-0 text-[15px] font-bold text-stone-700">अजून एकही यंत्र जोडलेलं नाही.</p>
+                    <p className="m-0 text-[15px] font-bold text-stone-700">{words.empty}</p>
                 </GlassCard>
             )}
             {isAdding ? form : editingId === null && (
-                <BigButton onClick={() => setIsAdding(true)} tone="white" testId="machine-add"><Plus size={20} aria-hidden="true" />यंत्र जोडा</BigButton>
+                <BigButton onClick={() => setIsAdding(true)} tone="white" testId="machine-add"><Plus size={20} aria-hidden="true" />{words.add}</BigButton>
             )}
         </div>
     );

@@ -69,6 +69,72 @@ export const ATTENDANCE_COPY = {
 } as const;
 
 /**
+ * Repair FIX-1 round 1 (Bug 5) — the words of the हजेरी CONFIRM CARD (AttendanceResult and the HeadcountDisagreementCard
+ * it draws), one language at a time. Marathi is `ATTENDANCE_COPY` exactly (the founder's words, never changed here) plus
+ * the card's few inline words, unchanged; English is its twin, every line PROPOSED (English).
+ */
+export interface AttendanceCardCopy {
+    understoodHeading: string;
+    youSaidChip: string;
+    markedChip: string;
+    explicitChip: string;
+    provisionalChip: string;
+    rungWho: (n: number) => string;
+    rungRemainder: string;
+    rungConfirm: string;
+    preSaveHonesty: string;
+    confirmButton: string;
+    editButton: string;
+    contradictionTitle: string;
+    contradictionBody: (name: string, first: string, second: string) => string;
+    contradictionReassurance: string;
+    markWord: { full: string; half: string; night: string };
+    /** After the head count: "8 जण". */
+    people: string;
+    /** The mic button under a question. */
+    speak: string;
+    /** The disagreement card: what was understood before, then that both stay. */
+    understoodBefore: (n: number) => string;
+    bothStay: string;
+}
+
+const ATTENDANCE_CARD_MR: AttendanceCardCopy = {
+    ...ATTENDANCE_COPY,
+    people: 'जण',
+    speak: 'बोला',
+    understoodBefore: n => `आजच्या कामात ${n} जण होते, असं आधी समजलं होतं.`,
+    bothStay: 'दोन्ही गोष्टी तशाच राहतील.',
+};
+
+/** PROPOSED (English) — the card's English twin. */
+export const ATTENDANCE_COPY_EN: AttendanceCardCopy = {
+    understoodHeading: 'ShramSafal understood',
+    youSaidChip: 'You said',
+    markedChip: 'Marked',
+    explicitChip: 'Clearly stated',
+    provisionalChip: 'Not yet confirmed',
+    rungWho: n => `Who were these ${n} people?`,
+    rungRemainder: 'Who else was there?',
+    rungConfirm: 'Is this right?',
+    preSaveHonesty: 'Nothing is saved until you press "Correct".',
+    confirmButton: 'Correct',
+    editButton: 'Change',
+    contradictionTitle: 'Make one thing clear',
+    contradictionBody: (name, first, second) => `${name} shows in two works today — ${first} in one, ${second} in the other. Which is today's attendance?`,
+    contradictionReassurance: 'Answer once — what was said for both works stays as it was.',
+    markWord: { full: 'Present', half: 'Half', night: 'Night' },
+    people: 'people',
+    speak: 'Speak',
+    understoodBefore: n => `Earlier it was understood that ${n} people were in today's work.`,
+    bothStay: 'Both stay as they are.',
+};
+
+/** English only for 'en'; every other language reads the Marathi (as `authorityCopy` does). */
+export function attendanceCardCopy(language: string | null | undefined): AttendanceCardCopy {
+    return language === 'en' ? ATTENDANCE_COPY_EN : ATTENDANCE_CARD_MR;
+}
+
+/**
  * Repair FIX-1 item 6 (R2-B 19-B, founder 27 Nov) — where each spoken name stands on the confirm card, said BEFORE "बरोबर".
  * The six Marathi state words are the founder's own; the add form's words are the existing add's (AttendanceRoster /
  * FieldOperatorPicker). English twins follow `TAP_WORDS` in AttendanceResult. The count uses Latin digits like the card's head count; one name is singular.
