@@ -29,6 +29,11 @@ export function mayOfferFirstRecord(role: string | null | undefined): boolean {
  */
 export const firstRecordOfferKey = (farmId: string | null | undefined): string => `shramsafal_first_record_offer_v1:${farmId ?? 'none'}`;
 export const FIRST_RECORD_OFFER_DONE = 'done';
+/**
+ * Task 1d (founder Q-A, 28 Nov: "Save after बरोबर") — the same mark, set when the farm's first record was saved on his
+ * "बरोबर". From then on no record of the farm waits for "बरोबर"; the setup-hub line (1b) still follows that first record.
+ */
+export const FIRST_RECORD_SAVED = 'saved';
 
 export type FirstRecordVerdict = 'first' | 'notFirst' | 'unknown';
 

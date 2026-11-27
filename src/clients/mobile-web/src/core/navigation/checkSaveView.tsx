@@ -30,6 +30,7 @@ import { DayPickSheet } from '../../features/logs/components/dayPick/DayPickShee
 import { dayFull, dayRel } from '../../features/logs/components/dayPick/dayWords';
 import { PlacePickerSheet } from '../../features/context/components/PlacePickerSheet';
 import { requestSpeak } from '../speak/speakStore';
+import { markFirstRecordSaved } from '../../features/onboarding/firstRun/firstRecordGate';
 import type { AppRouterContext } from './routeContext';
 
 type Open = 'place' | 'day' | 'type' | null;
@@ -86,6 +87,9 @@ export const CheckSaveHost: React.FC<{ ctx: AppRouterContext }> = ({ ctx }) => {
                 const afterSave = draftAfterSave(draft);
                 bindDraftAfterSave(draft, undefined);
                 afterSave?.(written.map(l => l.id));
+                // R1-g 1d — the farm's first record, saved on his "बरोबर": its once-only mark is set. (The setup-hub line on
+                // the result screen reads "not set" and "saved" alike, so the order of the two is free.)
+                if (kind === 'firstRecord') void markFirstRecordSaved(ctx.activeFarmId);
                 // The result screen's "आणखी सांगा" speaks for the place he chose here.
                 ctx.setLogScope(chosen);
                 ctx.setDraftLog(null);

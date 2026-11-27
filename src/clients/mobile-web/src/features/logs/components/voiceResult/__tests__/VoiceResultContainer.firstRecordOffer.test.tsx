@@ -150,6 +150,14 @@ describe('R1-g 1b — the FIRST record\'s saved screen offers the setup hub', ()
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
     });
 
+    // R1-g 1d: the farm's first record is saved on "बरोबर", which sets the mark to "saved"; its saved screen still offers the hub.
+    it('after the first record was saved on "बरोबर" (mark "saved"), its saved screen offers the setup hub', async () => {
+        await getDatabase().uiPrefs.put({ key: OFFER_KEY, value: 'saved' });
+        mount(props());
+        expect(await screen.findByTestId('vr2-first-record-offer', {}, DB_WAIT)).toBeTruthy();
+        await waitFor(async () => expect(await offerMark()).toBe('clip-first|T'), DB_WAIT);
+    });
+
     it('once: the same farm\'s mark already used, the next "first-looking" record shows the screen as today', async () => {
         await getDatabase().uiPrefs.put({ key: OFFER_KEY, value: 'done' });
         mount(props());

@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 import type { DailyLog } from '../../../../types';
 import { useUiPref } from '../../../../shared/hooks/useUiPref';
 import {
-    FIRST_RECORD_CARD_KEY, FIRST_RECORD_OFFER_DONE, firstRecordOfferKey, firstRecordVerdict, mayOfferFirstRecord,
+    FIRST_RECORD_CARD_KEY, FIRST_RECORD_OFFER_DONE, FIRST_RECORD_SAVED, firstRecordOfferKey, firstRecordVerdict, mayOfferFirstRecord,
 } from '../../../onboarding/firstRun/firstRecord';
 
 export interface FirstRecordOfferInput {
@@ -40,7 +40,9 @@ export function useFirstRecordOffer({ farmId, farmRole, recordingKey, logIds, hi
     const [cardRow, , cardLoaded] = useUiPref<boolean | null>(FIRST_RECORD_CARD_KEY, null);
     const [mark, setMark, markLoaded] = useUiPref<string>(firstRecordOfferKey(farmId), '');
     const eligible = enabled && !!farmId && cardLoaded && cardRow !== null && mayOfferFirstRecord(farmRole) && markLoaded;
-    const verdict = eligible && mark === '' ? firstRecordVerdict(logIds, history, farmId) : 'unknown';
+    // R1-g 1d — "saved" (the first record was saved on his "बरोबर") is still undecided here: the line follows that record.
+    const undecided = mark === '' || mark === FIRST_RECORD_SAVED;
+    const verdict = eligible && undecided ? firstRecordVerdict(logIds, history, farmId) : 'unknown';
     const decided = verdict === 'first' ? recordingKey : verdict === 'notFirst' ? FIRST_RECORD_OFFER_DONE : null;
     // An answer can come before React has run the effect of the render that drew the offer (a tap in the same frame). That
     // effect still holds "mark this recording" and would land AFTER "done", bringing the offer back: the answer is kept here,

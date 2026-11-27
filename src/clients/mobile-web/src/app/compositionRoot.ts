@@ -27,6 +27,7 @@ import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
 import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 // FEEL-1 — the toast owner: the outcome buzz is attached to the call that asks for a message (never to a render or a timeout).
 import { toastFromGlobalDetail, useFeelToast } from '../shared/hooks/useFeel';
+import { isFirstRecordOnPhone } from '../features/onboarding/firstRun/firstRecordGate';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
@@ -142,6 +143,8 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         logIntent: navigation.logIntent,
         setStatus: voice.setStatus,
         farmId: currentFarmId ?? null,
+        // Repair R1-g 1d (founder Q-A, 28 Nov: "Save after बरोबर") — the farm's first record on this phone waits for "बरोबर".
+        isFirstRecord: isFirstRecordOnPhone,
     });
     const { setStatus: setVoiceStatus } = voice;
     useEffect(() => { voiceDraftSink.current = withSpeakPurpose(autoSave.sink, { setStatus: setVoiceStatus }); }, [autoSave.sink, setVoiceStatus]);
