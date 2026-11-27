@@ -3,3 +3,6 @@
 # The government village list (LGD) the server embeds: the same bytes on every checkout (pilot lane IDENT).
 src/apps/User/User.Infrastructure/Places/lgd-*.tsv text eol=lf
 src/apps/User/User.Infrastructure/Places/lgd-*.json text eol=lf
+# The phone's copy of the same list (bundled in the app): byte for byte the server's files.
+src/clients/mobile-web/public/places/lgd-*.tsv text eol=lf
+src/clients/mobile-web/public/places/lgd-*.json text eol=lf
