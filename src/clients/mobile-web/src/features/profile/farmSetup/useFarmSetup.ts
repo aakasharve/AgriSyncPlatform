@@ -1,0 +1,36 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, phone task P3) - the hook the setup screens read: the farm's setup as this phone knows it
+ * (`getLocalFarmSetup`), for ONE farm - the farm open in the app (`FarmContext`, the one source of the open farm since repair FIX-1). Live: it follows the
+ * pull (the v33 stores) and the outbox (a change queued, sent, answered or refused) by itself. `null` while it is first read, or when no farm is open.
+ * A NEW farm id starts again from `null` in the same render: one farm's set is never shown on another farm.
+ */
+import { liveQuery } from 'dexie';
+import { useEffect, useState } from 'react';
+import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { getLocalFarmSetup, type LocalFarmSetup } from './farmSetupLocal';
+
+export function useFarmSetup(farmId: string | null | undefined): LocalFarmSetup | null {
+    const [state, setState] = useState<{ farmId: string | null; value: LocalFarmSetup | null }>({ farmId: farmId ?? null, value: null });
+    if (state.farmId !== (farmId ?? null)) setState({ farmId: farmId ?? null, value: null });
+
+    useEffect(() => {
+        if (!farmId) return;
+        let alive = true;
+        let unsubscribe: (() => void) | undefined;
+        try {
+            const sub = liveQuery(() => getLocalFarmSetup(getDatabase(), farmId)).subscribe({
+                next: value => { if (alive) setState({ farmId, value }); },
+                error: () => { if (alive) setState({ farmId, value: null }); },
+            });
+            unsubscribe = () => sub.unsubscribe();
+        } catch {
+            setState({ farmId, value: null });
+        }
+        return () => { alive = false; unsubscribe?.(); };
+    }, [farmId]);
+
+    return state.farmId === (farmId ?? null) ? state.value : null;
+}
