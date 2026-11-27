@@ -386,6 +386,44 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
     }
 
     /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — the waiting screen offers "add your own
+    /// farm" only after 2 days of waiting, so the phone needs the SERVER's time of the request: the seat's own
+    /// <c>granted_at_utc</c>, the same value the owner's team list already shows as RequestedAtUtc. Sent for a waiting
+    /// request only, and LEFT OUT (never null) for every other seat, so an older phone's answer is unchanged (P11).
+    /// </summary>
+    [Fact]
+    public async Task Farms_mine_with_includePending_says_when_the_request_was_sent_and_other_seats_carry_no_such_key()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await JoinAndExpectPendingAsync(Stranger);
+        var sentAt = await GrantedAtAsync(Stranger);
+
+        using var response = await GetAsync("/shramsafal/farms/mine?includePending=true", Stranger);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        using (var doc = JsonDocument.Parse(body))
+        {
+            var farm = doc.RootElement.EnumerateArray().Single();
+            farm.GetProperty("status").GetString().Should().Be("PendingApproval");
+            farm.TryGetProperty("requestedAtUtc", out var requested).Should().BeTrue(
+                $"the waiting screen's 2-day offer reads the server's time of the request: {body}");
+            requested.GetDateTime().ToUniversalTime().Should().BeCloseTo(sentAt, TimeSpan.FromMilliseconds(1),
+                "it is the seat's own granted_at_utc, never the phone's clock");
+        }
+
+        // CONTROL 1: an Active seat (the owner) carries no such key at all — not even null.
+        using var ownerResponse = await GetAsync("/shramsafal/farms/mine?includePending=true", Owner);
+        var ownerBody = await ownerResponse.Content.ReadAsStringAsync();
+        ownerBody.Should().NotContain("requestedAtUtc", "only a waiting request is sent its time");
+
+        // CONTROL 2: a paused seat is not a request: no time either.
+        await SetSeatStatusAsync(Stranger, status: 4);
+        using var paused = await GetAsync("/shramsafal/farms/mine?includePending=true", Stranger);
+        var pausedBody = await paused.Content.ReadAsStringAsync();
+        pausedBody.Should().Contain("Suspended").And.NotContain("requestedAtUtc");
+    }
+
+    /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — the installed 1.0.16 APK (and every app
     /// before step 1) calls <c>/farms/mine</c> with no <c>includePending</c> and ignores
     /// <c>status</c>: it would show a waiting request as an ordinary farm it then cannot open. So
@@ -932,6 +970,18 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
             """;
         cmd.Parameters.AddWithValue("f", Farm);
         return Convert.ToInt64(await cmd.ExecuteScalarAsync());
+    }
+
+    private async Task<DateTime> GrantedAtAsync(Guid who)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT granted_at_utc FROM ssf.farm_memberships WHERE farm_id = @f AND user_id = @u AND status = 2";
+        cmd.Parameters.AddWithValue("f", Farm);
+        cmd.Parameters.AddWithValue("u", who);
+        var value = (DateTime)(await cmd.ExecuteScalarAsync())!;
+        return DateTime.SpecifyKind(value, DateTimeKind.Utc);
     }
 
     private async Task SetSeatStatusAsync(Guid who, int status)

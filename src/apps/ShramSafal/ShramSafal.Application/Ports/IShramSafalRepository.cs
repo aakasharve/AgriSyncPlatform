@@ -28,6 +28,10 @@ namespace ShramSafal.Application.Ports;
 /// whether that seat is Active (access) or only a relationship (a PendingApproval request,
 /// a Suspended seat). The registrant is always <see cref="MembershipStatus.Active"/>.
 /// Optional and last, so existing constructions keep compiling.</para>
+/// <para>spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — <paramref name="RequestedAtUtc"/>:
+/// for a PendingApproval request only, when it was made (the seat's own <c>GrantedAtUtc</c>, the value the owner's team
+/// list already shows as RequestedAtUtc). The joiner's waiting screen offers "add your own farm" after 2 days of
+/// waiting and reads this, never the phone's clock alone. Null for every other seat.</para>
 /// </summary>
 public sealed record MyFarmProjection(
     Guid FarmId,
@@ -36,7 +40,8 @@ public sealed record MyFarmProjection(
     Guid OwnerAccountId,
     AppRole? Role,
     MembershipStatus Status = MembershipStatus.Active,
-    string? StatusReason = null);
+    string? StatusReason = null,
+    DateTime? RequestedAtUtc = null);
 
 /// <summary>
 /// Labour V2 R1 Task 3.5b — one engagement's day-fact about a person, as read
