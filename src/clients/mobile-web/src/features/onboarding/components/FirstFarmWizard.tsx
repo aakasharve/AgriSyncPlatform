@@ -29,8 +29,33 @@ import {
     Sparkles,
 } from 'lucide-react';
 import { bootstrapFirstFarm, isInviteApiError, type BootstrapFirstFarmResponse } from '../qr/inviteApi';
+import { isBillingVisible } from '../../../app/featureFlags';
 
 type Step = 'welcome' | 'farm-name' | 'village' | 'confirm' | 'submitting' | 'done';
+
+/**
+ * Repair R1-g (founder 27 Nov: "Do not mention anything about pricing in the app anywhere right now"): the trial cell
+ * ("21 days free") is drawn only behind the default-off billing switch; the role cell always shows.
+ */
+export const WizardSummaryRoleTrial: React.FC = () => {
+    const showTrial = isBillingVisible();
+    return (
+        <div className={`mt-4 grid ${showTrial ? 'grid-cols-2' : 'grid-cols-1'} gap-2 rounded-2xl bg-stone-50 p-3 text-center`}>
+            <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Role · भूमिका</div>
+                <div className="text-sm font-bold text-stone-900">Primary Owner</div>
+                <div className="text-[10px] text-stone-500">मुख्य मालक</div>
+            </div>
+            {showTrial && (
+                <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Trial · ट्रायल</div>
+                    <div className="text-sm font-bold text-emerald-700">21 days free</div>
+                    <div className="text-[10px] text-stone-500">21 दिवस मोफत</div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface FirstFarmWizardProps {
     isOpen: boolean;
@@ -303,18 +328,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                         )}
                                     </div>
                                 </div>
-                                <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-stone-50 p-3 text-center">
-                                    <div>
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Role · भूमिका</div>
-                                        <div className="text-sm font-bold text-stone-900">Primary Owner</div>
-                                        <div className="text-[10px] text-stone-500">मुख्य मालक</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Trial · ट्रायल</div>
-                                        <div className="text-sm font-bold text-emerald-700">21 days free</div>
-                                        <div className="text-[10px] text-stone-500">21 दिवस मोफत</div>
-                                    </div>
-                                </div>
+                                <WizardSummaryRoleTrial />
                             </div>
 
                             {error && (
