@@ -2220,6 +2220,30 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<Guid>>([]);
 
     /// <summary>
+    /// spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) — of <paramref name="farmIds"/>, the farms whose registrant turned "पैशांच्या नोंदी
+    /// फक्त मला दिसू दे" on (<c>Farm.MoneyPrivateToHolder</c>), read FULL on every pull (a flip moves no cursor a reader holds). Default body: none (a
+    /// test double has every farm off), doctrine F7.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> GetFarmsWithMoneyPrivateAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane PERM — the ids of the work records of <paramref name="farmId"/> on <paramref name="logDate"/> whose MONEY was made
+    /// private when they arrived (<c>daily_logs.money_audience</c>): their line money is born private too, even when it arrives after the switch was
+    /// turned off. One indexed read of ids only. Default body: none (a test double has no private record), doctrine F7.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetMoneyPrivateLogIdsForFarmDateAsync(Guid farmId, DateOnly logDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane PERM (S1) — the cheap pre-filter of the kinds-of-work gate: does this person's live seat on this farm carry a limit
+    /// (<c>allowed_work_kinds</c> not null)? Only then is his standing read (<c>WorkKindGate</c>). Default body: no (a test double limits nobody),
+    /// doctrine F7 — so no existing double is asked anything new by the writes that ask this.
+    /// </summary>
+    Task<bool> HasWorkKindLimitAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// lane MU-4 — the place of ONE work (<c>DailyLog</c>) or money (<c>CostEntry</c>) record, read without tracking; null
     /// when it is not found under the caller's scope. Default body: none (a test double narrows nothing by place).
     /// </summary>

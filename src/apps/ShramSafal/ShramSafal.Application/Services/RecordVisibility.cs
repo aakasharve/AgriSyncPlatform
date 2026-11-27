@@ -325,6 +325,9 @@ public sealed class RecordVisibility
     private readonly HashSet<Guid> audienceHiddenLogIds;
     private readonly HashSet<Guid> audienceHiddenCostIds;
 
+    /// <summary>pilot lane PERM — the reader this view is for (a record's money stamp is asked against him).</summary>
+    public Guid ReaderUserId => readerUserId;
+
     /// <summary>lane MU-4 — farms whose seat reads by place (plots / own work): their bill photos follow the money he sees.</summary>
     private readonly HashSet<Guid> placeNarrowedFarms;
 

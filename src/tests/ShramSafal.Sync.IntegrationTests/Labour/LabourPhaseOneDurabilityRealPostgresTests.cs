@@ -699,7 +699,8 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
     {
         public Task<DerivationOutcome> DeriveAsync(
             ShramSafal.Domain.Logs.DailyLog log, ShramSafal.Domain.AI.AiJob sourceJob,
-            IIdGenerator ids, IClock clock, bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default)
+            IIdGenerator ids, IClock clock, bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default,
+            IReadOnlySet<string>? closedKinds = null)
             => throw new InvalidOperationException("Task 6.5 — forced side-car derivation failure.");
 
         // Added by the main->dfes merge, which widened ILedgerDerivationService with the
@@ -708,7 +709,8 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
         // assert durability it never actually exercised.
         public Task<DerivationOutcome> DeriveFromManualDraftAsync(
             ShramSafal.Domain.Logs.DailyLog log, string manualWireJson, string? appVersion,
-            IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default)
+            IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default,
+            IReadOnlySet<string>? closedKinds = null)
             => throw new InvalidOperationException("Task 6.5 — forced side-car derivation failure.");
     }
 

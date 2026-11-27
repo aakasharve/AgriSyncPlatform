@@ -103,6 +103,12 @@ public sealed class ManageMembershipHandler(
             return Invalid();
         }
 
+        // pilot lane PERM — the kinds of work belong to their own decision (required there, refused on every other).
+        if (!TryReadWorkKinds(command, out var requestedWorkKinds))
+        {
+            return Invalid();
+        }
+
         if (command.Decision == MembershipDecision.SetAccess
             && requestedRole is null && command.Permissions is null && !command.ResetPermissions
             && command.LabourGrant is null)
@@ -215,6 +221,21 @@ public sealed class ManageMembershipHandler(
             }
         }
 
+        // ── 6d. pilot lane PERM — the kinds of work are chosen for a person who was let in (working or paused), never for the primary owner's label
+        //        (he records every kind; refused as a bad request, contract §3.2).
+        if (command.Decision == MembershipDecision.SetWorkKinds)
+        {
+            if (seat.Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipWrongStatus);
+            }
+
+            if (seat.Role == AppRole.PrimaryOwner)
+            {
+                return Invalid();
+            }
+        }
+
         // ── 7. What the seat becomes (approve / change). Only the primary owner gets here, and he
         //       holds every power, so nothing he gives is a power he lacks (no re-delegation exists).
         var target = ResolveAccess(command, seat, requestedRole, requestedPermissions);
@@ -238,11 +259,11 @@ public sealed class ManageMembershipHandler(
         // ── 9. Apply ─────────────────────────────────────────────────────────
         var before = new SeatSnapshot(
             seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords, AuthorityList(seat),
-            seat.PlotScope, seat.ScopePlotIds.Order().ToList());
+            seat.PlotScope, seat.ScopePlotIds.Order().ToList(), seat.AllowedWorkKinds?.ToList());
         bool changed;
         try
         {
-            changed = Apply(command, seat, target, reason, requestedAuthorities, isLastActivePrimaryOwner, now);
+            changed = Apply(command, seat, target, reason, requestedAuthorities, requestedWorkKinds, isLastActivePrimaryOwner, now);
             // lane MU-4 — an approval may choose the plots in the same tap (the preset's default, कामगार → स्वतःचं काम).
             if (requestedPlotScope is { } plots
                 && command.Decision is MembershipDecision.Approve or MembershipDecision.SetPlotScope)
@@ -370,6 +391,7 @@ public sealed class ManageMembershipHandler(
         AccessTarget? target,
         string? reason,
         IReadOnlyDictionary<FarmAuthority, DateTime?>? authorities,
+        IReadOnlyCollection<string>? workKinds,
         bool isLastActivePrimaryOwner,
         DateTime now)
     {
@@ -418,6 +440,10 @@ public sealed class ManageMembershipHandler(
                 // lane MU-4 — applied by the caller with the parsed choice (it also rides an approval).
                 return false;
 
+            case MembershipDecision.SetWorkKinds:
+                // pilot lane PERM — the whole set; all six store no limit; a re-sent set changes nothing.
+                return seat.SetWorkKinds(workKinds!, now);
+
             default:
                 // Unreachable: HandleAsync refuses an undefined decision first.
                 return false;
@@ -459,7 +485,30 @@ public sealed class ManageMembershipHandler(
 
     private AuditEvent BuildAudit(
         ManageMembershipCommand command, AppRole callerRole, FarmMembership seat, SeatSnapshot before) =>
-        AuditEventFactory.Create(
+        command.Decision == MembershipDecision.SetWorkKinds
+            ? AuditEventFactory.Create(
+                entityType: "FarmMembership",
+                entityId: seat.Id,
+                action: Services.WorkKindGate.ChangedAction,
+                actorUserId: command.CallerUserId.Value,
+                actorRole: callerRole.ToString().ToLowerInvariant(),
+                // pilot lane PERM (P3) — from and to, null = every kind. The late-arrival window reads "workKindsBefore" of the newest row.
+                payload: new
+                {
+                    farmId = command.FarmId.Value,
+                    targetUserId = command.TargetUserId.Value,
+                    workKindsBefore = before.WorkKinds,
+                    workKinds = seat.AllowedWorkKinds?.ToList(),
+                },
+                farmId: command.FarmId.Value,
+                clientCommandId: null,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null)
+            : AuditEventFactory.Create(
             entityType: "FarmMembership",
             entityId: seat.Id,
             action: command.Decision switch
@@ -657,6 +706,37 @@ public sealed class ManageMembershipHandler(
         }
     }
 
+    /// <summary>
+    /// pilot lane PERM — reads the requested kinds of work: only on <see cref="MembershipDecision.SetWorkKinds"/> (required there), refused everywhere
+    /// else. The domain rule (<see cref="WorkKinds.Normalize"/>) refuses an empty set, an unknown or always-open name and a name twice: Invalid, never
+    /// trimmed.
+    /// </summary>
+    private static bool TryReadWorkKinds(ManageMembershipCommand command, out IReadOnlyCollection<string>? workKinds)
+    {
+        workKinds = null;
+        if (command.Decision != MembershipDecision.SetWorkKinds)
+        {
+            return command.WorkKinds is null;
+        }
+
+        if (command.WorkKinds is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = WorkKinds.Normalize(command.WorkKinds);
+            workKinds = command.WorkKinds;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("membership.work_kinds.refused_shape"));
+            return false;
+        }
+    }
+
     private static IReadOnlyList<object> AuthorityList(FarmMembership seat) =>
         seat.StoredAuthorities()
             .Select(a => (object)new { name = FarmAuthorities.NameOf(a.Key), expiresAtUtc = a.Value })
@@ -675,7 +755,8 @@ public sealed class ManageMembershipHandler(
         bool LabourGrant,
         IReadOnlyList<object> Authorities,
         MembershipPlotScope PlotScope,
-        IReadOnlyList<Guid> PlotIds);
+        IReadOnlyList<Guid> PlotIds,
+        IReadOnlyList<string>? WorkKinds);
 
     /// <summary>lane MU-4 — one parsed plot choice: the scope and its plots (empty unless chosen plots).</summary>
     private sealed record PlotChoice(MembershipPlotScope Scope, IReadOnlySet<Guid> PlotIds)

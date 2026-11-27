@@ -367,7 +367,17 @@ public sealed record FarmAccessScopeDto(
     // to approve a bill he made himself. Written ONLY when true: off (the default for every farm) is no key at all, so an old phone's bytes are
     // unchanged and it keeps the stricter behaviour (P11). A not-readable entry carries none. The server decides again when an approval arrives.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    bool? ReviewerMayApproveOwnBill = null)
+    bool? ReviewerMayApproveOwnBill = null,
+    // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the FARM's "पैशांच्या नोंदी फक्त मला दिसू दे": true while its registrant has it on.
+    // Written ONLY when on: off (every farm's default) is no key at all, so an old phone's bytes are unchanged (P11). A not-readable entry carries none.
+    // The server stamps each NEW money record when it arrives; the phone only shows the line and its waiting state.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? MoneyPrivate = null,
+    // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") - the kinds of work THIS reader may record on this farm, in the
+    // contract's order (sync-contract/schemas/work-kinds.json). Written ONLY when his seat is limited: absent = every kind (every seat today, and every
+    // older server), so an old phone's bytes are unchanged (P11). A not-readable entry carries none. The server decides again on every write.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? WorkKinds = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";

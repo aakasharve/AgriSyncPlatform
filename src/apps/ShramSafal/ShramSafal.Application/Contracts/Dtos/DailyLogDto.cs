@@ -178,7 +178,15 @@ public sealed record DailyLogDto(
     string? Audience = null,
 
     /// <summary>lane PRV — the people the holder chose (<c>Selected</c>); sent only with <see cref="Audience"/>.</summary>
-    IReadOnlyList<Guid>? AudienceUserIds = null);
+    IReadOnlyList<Guid>? AudienceUserIds = null,
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane PERM (founder 27 Nov follow-ups 1 and 2) — <c>"OnlyMe"</c> when the record arrived while the farm's money was private:
+    /// its MONEY is the registrant's and its maker's. Sent ONLY to those two (<see cref="Services.ReadScopeProjection.Record"/>); everyone else gets the
+    /// record without its money and with the existing withheld flags, and no key at all. LEFT OUT when null (P11: an old phone's bytes are unchanged).
+    /// </summary>
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? MoneyAudience = null);
 
 /// <summary>
 /// spec: plr-d10 (lane F1) — one stored content row on the wire.

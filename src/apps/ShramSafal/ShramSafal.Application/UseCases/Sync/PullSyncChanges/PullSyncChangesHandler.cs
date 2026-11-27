@@ -900,6 +900,9 @@ public sealed class PullSyncChangesHandler(
         // spec: plr-d10 repair D-177 - the farms of this pull whose owner turned the own-bill switch on (FULL every pull: a flip moves no cursor he reads).
         var ownBillApprovalFarms = await farmSetupStore.GetFarmsAllowingOwnBillApprovalAsync(window.FarmIds, ct);
 
+        // spec: plr-d10 pilot lane PERM - the farms of this pull whose registrant made their money private (FULL every pull, like the own-bill switch).
+        var moneyPrivateFarms = await repository.GetFarmsWithMoneyPrivateAsync(window.FarmIds, ct);
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -964,6 +967,13 @@ public sealed class PullSyncChangesHandler(
                     WithheldRecordDays = audience.WithheldDays(window.Scopes[id]) is { Count: > 0 } days ? days : null,
                     // repair D-177 — the farm's own-bill switch, written only when its owner turned it on (off is no key at all).
                     ReviewerMayApproveOwnBill = ownBillApprovalFarms.Contains(id) ? true : null,
+                    // pilot lane PERM — the farm's money-private switch, written only when its registrant turned it on (off is no key at all).
+                    MoneyPrivate = moneyPrivateFarms.Contains(id) ? true : null,
+                    // pilot lane PERM — the kinds of work HE may record here, written only when his seat is limited (absent = every kind).
+                    WorkKinds = accesses.GetValueOrDefault(id) is { IsRegistrant: false, WorkKinds: { } kinds } access
+                        && access.Role != AppRole.PrimaryOwner
+                            ? kinds.ToList()
+                            : null,
                 })
                 .Concat(notReadable)
                 .ToList(),

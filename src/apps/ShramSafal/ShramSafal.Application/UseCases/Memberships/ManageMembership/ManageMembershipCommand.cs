@@ -40,6 +40,12 @@ public enum MembershipDecision
     /// chosen plots of THIS farm, or स्वतःचं काम. The label and the authorities are untouched.
     /// </summary>
     SetPlotScope,
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") — set which kinds of work a let-in person may RECORD (the WHOLE
+    /// set; all six = no limit). The label, the authorities and the plots are untouched; what he may read does not move.
+    /// </summary>
+    SetWorkKinds,
 }
 
 /// <param name="FarmId">The farm.</param>
@@ -65,6 +71,8 @@ public enum MembershipDecision
 /// <param name="PlotScope">lane MU-4 — SetPlotScope (required) and Approve (optional; absent = every plot): the
 /// <c>MembershipPlotScope</c> NAME (<c>AllPlots</c> / <c>ChosenPlots</c> / <c>OwnWork</c>). Refused on every other decision.</param>
 /// <param name="PlotIds">lane MU-4 — with <c>ChosenPlots</c> only: one or more plots, each of THIS farm (E4).</param>
+/// <param name="WorkKinds">pilot lane PERM — SetWorkKinds only (required there, refused elsewhere): the WHOLE set of kinds he may record, each a
+/// <c>WorkKinds</c> name; all six = no limit; empty, unknown or repeated names are refused.</param>
 public sealed record ManageMembershipCommand(
     FarmId FarmId,
     UserId TargetUserId,
@@ -81,4 +89,5 @@ public sealed record ManageMembershipCommand(
     string AuditIpHash = "sha256:unknown",
     IReadOnlyList<ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto>? Authorities = null,
     string? PlotScope = null,
-    IReadOnlyList<Guid>? PlotIds = null);
+    IReadOnlyList<Guid>? PlotIds = null,
+    IReadOnlyList<string>? WorkKinds = null);

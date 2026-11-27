@@ -357,6 +357,7 @@ internal sealed class EditMoney(
         DailyLog log, Staged staged, ContentAuditStamp stamp, DateTime now, CancellationToken ct)
     {
         var made = new List<CostEntry>();
+        Domain.Farms.Farm? moneyFarm = null;
         var notFollowed = staged.Steps.Where(s => s.Action == EditMoneyAction.NotFollowed).ToList();
         foreach (var step in staged.Steps.Where(s => s.Action == EditMoneyAction.Create))
         {
@@ -383,10 +384,28 @@ internal sealed class EditMoney(
                 entry.SetAudience(log.Audience, now);
             }
 
+            // spec: plr-d10 pilot lane PERM (follow-ups 1 and 2) — money an edit makes is a NEW money record: born OnlyMe while the farm's money is
+            // private, and always for a record whose money was made private (its money never reaches others through an edit).
+            moneyFarm ??= await repository.GetFarmByIdAsync((Guid)log.FarmId, ct);
+            var bornPrivate = Services.MoneyPrivacy.Covers(entry) && (log.MoneyIsPrivate || moneyFarm?.MoneyPrivateToHolder == true);
+            var audienceBefore = entry.Audience;
+            if (bornPrivate)
+            {
+                entry.SetAudience(Domain.RecordPrivacy.RecordAudience.OnlyMe, now);
+            }
+
             if (await repository.TryAddRecordMoneyAsync(entry, created, ct))
             {
                 made.Add(entry);
-                if (log.Audience == Domain.RecordPrivacy.RecordAudience.Selected)
+                if (bornPrivate)
+                {
+                    await Services.MoneyPrivacy.AddTrailAsync(
+                        repository, entry, audienceBefore, [],
+                        new Services.BornPrivateStamp(stamp.ActorUserId, stamp.ActorRole, stamp.ClientCommandId, stamp.AppVersion, stamp.DeviceId, stamp.IpHash),
+                        ct);
+                    await repository.SaveChangesAsync(ct);
+                }
+                else if (log.Audience == Domain.RecordPrivacy.RecordAudience.Selected)
                 {
                     await repository.ReplaceRecordAudienceMembersAsync(
                         (Guid)log.FarmId, Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id,

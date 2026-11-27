@@ -336,6 +336,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Farms.FarmSetup.SetPlotWaterHandler>();
         // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch (farm.own_bill_approval.set).
         services.AddScoped<ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalHandler>();
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the farm's money-private switch (farm.money_private.set), the registrant's alone.
+        services.AddScoped<ShramSafal.Application.UseCases.Farms.SetMoneyPrivate.SetMoneyPrivateHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();
