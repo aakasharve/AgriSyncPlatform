@@ -41,15 +41,19 @@ export interface FirstRunCopy {
         leaveYes: string;
         leaveNo: string;
     };
+    /**
+     * Repair R3 lane S2 (founder pick V6a-B, 27 Nov; R1 plan §06) — the farm-name card and, once the server has answered
+     * "created", the congratulations in the same card. No owner claim on either (founder: "Do not claim that the user is a
+     * verified legal farm owner"); his own name comes from the OTP screen, so the card asks the farm's name only.
+     */
     create: {
-        title: string;
-        line: string;
-        farmerName: string;
-        farmerNamePlaceholder: string;
-        farmName: string;
+        question: string;
         farmNamePlaceholder: string;
         submit: string;
         submitting: string;
+        /** The congratulations line, around the farm's name as the server sent it back: before + name + after. */
+        readyBefore: string;
+        readyAfter: string;
         /** The request never reached the server (no internet). */
         failed: string;
         /** The server answered with a refusal this screen has no own words for. */
@@ -108,14 +112,12 @@ const MR: FirstRunCopy = {
         leaveNo: 'इथेच राहा', // PROPOSED (Marathi)
     },
     create: {
-        title: 'माझं शेत सुरू करायचं',
-        line: 'तुम्ही शेताचे मालक',
-        farmerName: 'तुमचे नाव',
-        farmerNamePlaceholder: 'उदा. पुरुषोत्तम पाटील',
-        farmName: 'शेताचे नाव',
+        question: 'तुमच्या शेताचं नाव काय आहे?', // PROPOSED (Marathi) — R1 plan §06, drawn on the approved V6a-B
         farmNamePlaceholder: 'उदा. रामू पाटील शेत',
         submit: 'शेत तयार करा',
         submitting: 'सुरू होत आहे…',
+        readyBefore: 'तुमचं ', // PROPOSED (Marathi) — R1 plan §06: "तुमचं ‹नाव› श्रमसफलमध्ये तयार आहे. चला, सुरुवात करूया."
+        readyAfter: ' श्रमसफलमध्ये तयार आहे. चला, सुरुवात करूया.', // PROPOSED (Marathi)
         failed: 'शेत तयार करता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.', // PROPOSED (Marathi)
         failedServer: 'शेत तयार करता आलं नाही. थोड्या वेळाने पुन्हा प्रयत्न करा.', // PROPOSED (Marathi)
         failedPhone: 'शेत तयार करता आलं नाही. आधी फोन नंबर OTP ने पडताळा.', // PROPOSED (Marathi)
@@ -170,14 +172,12 @@ const EN: FirstRunCopy = {
         leaveNo: 'Stay here',
     },
     create: {
-        title: 'I want to start my farm',
-        line: 'You are the farm owner',
-        farmerName: 'Your name',
-        farmerNamePlaceholder: 'e.g. Purushottam Patil',
-        farmName: 'Farm name',
+        question: "What is your farm's name?",
         farmNamePlaceholder: 'e.g. Ramu Patil farm',
         submit: 'Create the farm',
         submitting: 'Starting…',
+        readyBefore: 'Your ',
+        readyAfter: " is ready in Shram Safal. Let's begin.",
         failed: 'Could not create the farm. Check the internet and try again.',
         failedServer: 'Could not create the farm. Try again in a little while.',
         failedPhone: 'Could not create the farm. First verify your phone number with the OTP.',

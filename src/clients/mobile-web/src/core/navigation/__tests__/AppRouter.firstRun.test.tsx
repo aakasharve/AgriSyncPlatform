@@ -53,8 +53,11 @@ vi.mock('../lazyComponents', () => ({
         </div>
     ),
     // R1-g 1a — the first-record card after the welcome (an owner seat only); its own suite is AppRouter.firstRecordCard.test.tsx.
-    FirstRecordCard: ({ onLater }: { onLater: () => void }) => (
-        <div data-testid="stub-first-record-card"><button type="button" onClick={onLater}>first-record-later</button></div>
+    FirstRecordCard: ({ onLater, onBack }: { onLater: () => void; onBack: () => void }) => (
+        <div data-testid="stub-first-record-card">
+            <button type="button" onClick={onLater}>first-record-later</button>
+            <button type="button" onClick={onBack}>first-record-back</button>
+        </div>
     ),
 }));
 
@@ -132,9 +135,10 @@ const mount = async (props: React.ComponentProps<typeof AppRouter>) => {
 };
 
 describe('AppRouter — the first run after the farm', () => {
-    // R1-g 1a (founder Q5, 27 Nov): an OWNER's first run gained one step at its end — the first-record card after
-    // "चला, सुरुवात करूया". A worker's order is unchanged (next test, and AppRouter.firstRecordCard.test.tsx).
-    it('order: permissions FIRST, then the voice note, then the welcome for the REAL role, then (owner) the first-record card, then the app', async () => {
+    // R1-g 1a (founder Q5, 27 Nov): an OWNER's first run gained one step at its end — the first-record card. Repair R3 lane S2
+    // (V6a-B; R1 §05): the PRIMARY owner no longer gets the old role welcome ("तुम्ही … चे मालक आहात"); his card takes its place.
+    // A worker's order is unchanged (next test, and AppRouter.firstRecordCard.test.tsx).
+    it('order for the primary owner: permissions FIRST, then the voice note, then the first-record card (NO role welcome), then the app', async () => {
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         expect(screen.getByTestId('stub-permissions')).toBeInTheDocument();
         expect(screen.queryByTestId('stub-voice-note')).toBeNull();
@@ -145,11 +149,7 @@ describe('AppRouter — the first run after the farm', () => {
         expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
 
         fireEvent.click(screen.getByText('voice-done'));
-        const hello = screen.getByTestId('stub-role-welcome');
-        expect(hello).toHaveAttribute('data-role', 'PrimaryOwner');
-        expect(hello).toHaveAttribute('data-farm', 'आर्वे शेती');
-
-        fireEvent.click(screen.getByText('welcome-continue'));
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
         expect(screen.getByTestId('stub-first-record-card')).toBeInTheDocument();
         expect(screen.queryByTestId('app-body')).toBeNull();
 
@@ -159,6 +159,17 @@ describe('AppRouter — the first run after the farm', () => {
             shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true, shramsafal_welcome_seen: true,
             shramsafal_first_record_card_v1_seen: true,
         });
+    });
+
+    it('a co-owner (a joiner) keeps the role welcome with his role line, then gets the first-record card', async () => {
+        await mount({ firstRunFarm: { name: 'पवार मळा', role: 'SecondaryOwner' }, farmsKnown: true });
+        fireEvent.click(screen.getByText('perm-continue'));
+        fireEvent.click(screen.getByText('voice-done'));
+        expect(screen.getByTestId('stub-role-welcome')).toHaveAttribute('data-role', 'SecondaryOwner');
+        fireEvent.click(screen.getByText('welcome-continue'));
+        expect(screen.getByTestId('stub-first-record-card')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('first-record-later'));
+        expect(screen.getByTestId('app-body')).toBeInTheDocument();
     });
 
     it('order for a worker: permissions, the voice note, the welcome, then the app (no first-record card)', async () => {
@@ -196,11 +207,14 @@ describe('AppRouter — the first run after the farm', () => {
     it('the permissions step gets NO back from the real router (deviation from FR-8, reported): the farm is already made', async () => {
         await mount({ firstRunFarm: OWNER_FARM, farmsKnown: true });
         expect(screen.getByTestId('stub-permissions')).toHaveAttribute('data-has-back', 'no');
-        // Reached again from the role welcome's back: still none — the welcome's back is the way here.
+        // Reached again from the owner's first-record card's back: still none — the card's back is the way here.
         fireEvent.click(screen.getByText('perm-continue'));
         fireEvent.click(screen.getByText('voice-done'));
-        fireEvent.click(screen.getByText('welcome-back'));
+        fireEvent.click(screen.getByText('first-record-back'));
         expect(screen.getByTestId('stub-permissions')).toHaveAttribute('data-has-back', 'no');
+        fireEvent.click(screen.getByText('perm-continue'));
+        expect(screen.getByTestId('stub-first-record-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
     });
 
     it('no farm yet (0 farms, or only a request still waiting): no first-run step here — the doors are the screen', async () => {

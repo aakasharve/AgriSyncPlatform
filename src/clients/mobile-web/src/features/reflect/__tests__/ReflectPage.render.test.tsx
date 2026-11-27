@@ -60,6 +60,7 @@ vi.mock('../../../i18n/LanguageContext', async (importActual) => ({
 }));
 
 import ReflectPage from '../ReflectPage';
+import { requestReflectDay } from '../reflectOpening';
 import { CROPS, TODAY_KEY, crop, log, money, plot, task } from './reflectFixtures';
 
 const history = [
@@ -210,6 +211,19 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect(screen.getByTestId('plot-card-cane:c1')).toHaveAttribute('data-status', 'worked');
         expect(screen.getByTestId('plot-empty-grape:g1')).toHaveTextContent('या दिवशी काही सांगितलं नाही');
         expect(screen.getByTestId('plot-empty-grape:g1').textContent).not.toContain('नोंद');
+    });
+
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 2: the day-3 card opens आढावा on THAT day, once.
+    it('opened from Home\'s day card on a day: it opens on that day, and the next opening is today again', () => {
+        requestReflectDay('2026-10-21');
+        renderPage();
+        openAll();
+        expect(screen.getByTestId('day-label')).toHaveTextContent('बुधवार, 21 ऑक्टो');
+        expect(screen.getByTestId('plot-card-cane:c1')).toHaveAttribute('data-status', 'worked');
+        cleanup();
+        renderPage();
+        openAll();
+        expect(screen.getByTestId('day-label')).toHaveTextContent('आज');
     });
 
     it('ticking a to-do hands the whole updated task to onUpdateTask (what the app\'s task store expects)', () => {

@@ -19,11 +19,16 @@ describe('toWelcomeRole', () => {
 });
 
 describe('buildRoleWelcome', () => {
-    it('owner: names the farm he owns and three real jobs', () => {
+    // Repair R3 lane S2 (V6a-B; R1 §06, founder: "Do not claim that the user is a verified legal farm owner").
+    it('owner: three real jobs, and NO ownership claim ("तुम्ही … चे मालक आहात" is gone, in both languages)', () => {
         const w = buildRoleWelcome('PrimaryOwner', '  आर्वे शेती ', 'mr');
         expect(w.title).toBe('तुमचं शेत तयार आहे');
-        expect(w.line).toBe('तुम्ही आर्वे शेती चे मालक आहात.');
+        expect(w.line).toBeNull();
         expect(w.jobs.map(j => j.icon)).toEqual(['mic', 'plan', 'team']);
+        expect([w.title, ...w.jobs.map(j => j.text)].join(' ')).not.toMatch(/मालक/);
+        const en = buildRoleWelcome('PrimaryOwner', 'Arve farm', 'en');
+        expect(en.line).toBeNull();
+        expect([en.title, ...en.jobs.map(j => j.text)].join(' ')).not.toMatch(/owner/i);
     });
 
     it('co-owner is told he is सहमालक, not the owner, and gets no "add the team" promise', () => {

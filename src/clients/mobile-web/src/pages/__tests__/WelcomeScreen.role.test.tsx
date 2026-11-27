@@ -30,11 +30,14 @@ const visibleText = () => {
 const jobs = () => Array.from(screen.getByTestId('role-welcome-jobs').querySelectorAll('li')).map(li => li.textContent);
 
 describe('WelcomeScreen — a welcome written for the role', () => {
-    it('मालक: his farm is ready, he owns it by name, and the three things he will do', () => {
+    // Repair R3 lane S2 (V6a-B; R1 §06): the router no longer shows this screen to the primary owner, and its owner line —
+    // an ownership claim — is gone (founder: "Do not claim that the user is a verified legal farm owner").
+    it('मालक: his farm is ready and the three things he will do — never "तुम्ही … चे मालक आहात"', () => {
         render(<WelcomeScreen onContinue={vi.fn()} farmRole="PrimaryOwner" farmName="आर्वे शेती" />);
         expect(screen.getByText('अभिनंदन!')).toBeInTheDocument();
         expect(textOf('role-welcome-title')).toBe('तुमचं शेत तयार आहे');
-        expect(textOf('role-welcome-line')).toBe('तुम्ही आर्वे शेती चे मालक आहात.');
+        expect(screen.queryByTestId('role-welcome-line')).toBeNull();
+        expect(visibleText()).not.toMatch(/मालक आहात/);
         expect(jobs()).toEqual(['रोज काय झालं ते बोलून सांगा', 'कामं ठरवा', 'टीम जोडा — QR दाखवा']);
         expect(screen.getByTestId('role-welcome')).toHaveAttribute('data-role', 'owner');
     });

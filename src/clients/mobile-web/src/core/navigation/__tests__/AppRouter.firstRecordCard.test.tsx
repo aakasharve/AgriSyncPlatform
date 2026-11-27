@@ -123,7 +123,7 @@ import { clearEntryOpening, peekEntryOpening } from '../../../features/logs/comp
 
 const CARD_KEY = 'shramsafal_first_record_card_v1_seen';
 const OWNER_FARM = { name: 'आर्वे शेती', role: 'PrimaryOwner' };
-/** The prefs of a NEW phone that has just heard the voice note: the role welcome ("चला, सुरुवात करूया") is next. */
+/** The prefs of a NEW phone that has just heard the voice note: a joiner's role welcome, or the primary owner's card, is next. */
 const AT_WELCOME = { shramsafal_permissions_granted: true, shramsafal_welcome_voice_v1_seen: true };
 const WHOLE_FARM = { selectedCropIds: ['FARM_GLOBAL'], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 const NO_PLACE = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -148,20 +148,29 @@ const mount = async (firstRunFarm: { name: string; role: string } | null = OWNER
 const textOf = (testId: string) => screen.getByTestId(testId).textContent ?? '';
 
 describe('R1-g 1a — the first-record card after "चला, सुरुवात करूया"', () => {
-    it('an owner: the card, in his own words, once he leaves the welcome', async () => {
+    // Repair R3 lane S2 (V6a-B; R1 §05): the primary owner has no role welcome any more — the card follows the voice note.
+    it('the primary owner: the card, in his own words, right after the voice note (no role welcome)', async () => {
         h.prefs = { ...AT_WELCOME };
         await mount();
-        expect(screen.queryByTestId('first-record-card')).toBeNull();
-        fireEvent.click(screen.getByText('welcome-continue'));
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
         expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
         expect(screen.queryByTestId('app-body')).toBeNull();
         expect(textOf('first-record-title')).toBe('आज शेतात काय काय केलं?');
         expect(textOf('first-record-line')).toBe('जसं आठवतंय, तसं सांगा. बाकी आम्ही करू.');
         expect(textOf('first-record-start')).toBe('बोलायला सुरुवात करा');
         expect(textOf('first-record-later')).toBe('नंतर सांगेन');
-        // Its own once-only key: "not seen yet" is written when it is due.
-        expect(h.prefs[CARD_KEY]).toBe(false);
-        expect(h.prefs.shramsafal_welcome_seen).toBe(true);
+        // Nothing is written until he answers it (the welcome's "not seen" is what keeps it due).
+        expect(h.prefs[CARD_KEY]).toBeUndefined();
+        expect(h.prefs.shramsafal_welcome_seen).toBeUndefined();
+    });
+
+    it('the primary owner: the app closed while the card showed — it shows again on the next open', async () => {
+        h.prefs = { ...AT_WELCOME };
+        await mount();
+        expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
+        cleanup();
+        await mount();
+        expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
     });
 
     it('a co-owner sees it too ("the farm owner"); a worker and a मुकादम land where they land today', async () => {
@@ -184,11 +193,11 @@ describe('R1-g 1a — the first-record card after "चला, सुरुवा
     it('"नंतर सांगेन": Home, the card is never shown again, and nothing is started', async () => {
         h.prefs = { ...AT_WELCOME };
         await mount();
-        fireEvent.click(screen.getByText('welcome-continue'));
         fireEvent.click(screen.getByTestId('first-record-later'));
         expect(screen.queryByTestId('first-record-card')).toBeNull();
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
         expect(h.prefs[CARD_KEY]).toBe(true);
+        expect(h.prefs.shramsafal_welcome_seen).toBe(true);
         expect(h.setLogScope).not.toHaveBeenCalled();
         expect(h.setMode).not.toHaveBeenCalled();
         expect(peekEntryOpening()).toBeNull();
@@ -225,15 +234,26 @@ describe('R1-g 1a — the first-record card after "चला, सुरुवा
         expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
     });
 
-    it('its "मागे" returns to the welcome, and forward again to the card', async () => {
+    it('a co-owner: its "मागे" returns to the welcome, and forward again to the card', async () => {
         h.prefs = { ...AT_WELCOME };
-        await mount();
+        await mount({ name: 'पवार मळा', role: 'SecondaryOwner' });
         fireEvent.click(screen.getByText('welcome-continue'));
         fireEvent.click(screen.getByTestId('first-run-back'));
         expect(screen.getByTestId('stub-role-welcome')).toBeInTheDocument();
         expect(screen.queryByTestId('first-record-card')).toBeNull();
         fireEvent.click(screen.getByText('welcome-continue'));
         expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
+    });
+
+    it('the primary owner: its "मागे" returns to the permissions (the step before), and forward again to the card', async () => {
+        h.prefs = { ...AT_WELCOME };
+        await mount();
+        fireEvent.click(screen.getByTestId('first-run-back'));
+        expect(screen.getByTestId('stub-permissions')).toBeInTheDocument();
+        expect(screen.queryByTestId('first-record-card')).toBeNull();
+        fireEvent.click(screen.getByText('perm-continue'));
+        expect(screen.getByTestId('first-record-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-role-welcome')).toBeNull();
     });
 });
 
@@ -242,7 +262,6 @@ describe('R1-g 1a — "बोलायला सुरुवात करा" op
         h.prefs = { ...AT_WELCOME };
         h.crops = [];
         await mount();
-        fireEvent.click(screen.getByText('welcome-continue'));
         fireEvent.click(screen.getByTestId('first-record-start'));
         expect(screen.queryByTestId('first-record-card')).toBeNull();
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
@@ -259,7 +278,6 @@ describe('R1-g 1a — "बोलायला सुरुवात करा" op
         h.prefs = { ...AT_WELCOME };
         h.crops = [GRAPES];
         await mount();
-        fireEvent.click(screen.getByText('welcome-continue'));
         fireEvent.click(screen.getByTestId('first-record-start'));
         expect(screen.getByTestId('app-body')).toBeInTheDocument();
         expect(h.setLogScope).toHaveBeenCalledTimes(1);

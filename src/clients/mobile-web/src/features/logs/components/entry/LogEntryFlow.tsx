@@ -81,6 +81,8 @@ export interface LogEntryFlowProps {
     cost?: RunningCost;
     /** Lane L8c-2 - the plan door on the work home (its kind follows the server's authorities); absent = none. */
     planDoor?: PlanDoorProps;
+    /** Repair R1-g Part 2 - the day card on the work home (under the doors); absent = none. */
+    dayCard?: React.ReactNode;
     /** Sathi's question he chose to answer by speaking (wave-3.7) — stays visible above the mic. */
     pinnedQuestion?: string | null;
     /** Lane MIC-1 — why he is speaking (the ONE mic's band), shown above the mic. */
@@ -109,7 +111,7 @@ export function plotsByCrop(crops: CropProfile[], scope: LogScope): Record<strin
 export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
-        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost, planDoor,
+        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost, planDoor, dayCard,
         pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay, fullScreen = false, history,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
@@ -177,7 +179,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
             <div data-testid="log-entry-flow" data-step="home">
                 {/* The हजेरी card's button is this same "झालेले काम सांगा" step: the crop question first (rule CTX-1). */}
                 <WorkHome onTell={() => { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); setStep('entry'); }} onAttendance={onOpenAttendance}
-                    attendance={attendance} onAttendanceNames={onOpenAttendanceNames} cost={cost} planDoor={planDoor} />
+                    attendance={attendance} onAttendanceNames={onOpenAttendanceNames} cost={cost} planDoor={planDoor} dayCard={dayCard} />
             </div>
         );
     }

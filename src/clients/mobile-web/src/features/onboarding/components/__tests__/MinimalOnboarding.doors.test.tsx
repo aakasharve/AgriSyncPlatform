@@ -2,8 +2,8 @@
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-3 / MU-1, FR-7, FR-8, LANG-2).
  * A signed-in person with no farm sees two EQUAL doors and no role question (PLR-D7 §5):
- *   - "माझं शेत सुरू करायचं" opens the REAL create-farm form (his name kept + the farm's name →
- *     POST /bootstrap/first-farm);
+ *   - "माझं शेत सुरू करायचं" opens the REAL farm-name card (repair R3 lane S2, V6a-B: the farm's name →
+ *     POST /bootstrap/first-farm; its own suite is MinimalOnboarding.farmNameCard.test.tsx);
  *   - "मला बोलावलं आहे" opens the REAL join door (the caller's `onJoinViaQr` → JoinByCodeScreen).
  * Each step has ONE "← मागे"; a request still waiting for the owner is said on top; Marathi only.
  */
@@ -75,40 +75,38 @@ describe('the 0-farm screen: two equal doors', () => {
         expect(p.onJoinViaQr).toHaveBeenCalledTimes(1);
     });
 
-    it('"माझं शेत सुरू करायचं" opens the real create form; his name is kept; it creates the farm', async () => {
+    it('"माझं शेत सुरू करायचं" opens the real farm-name card; it creates the farm, then "सुरू करूया" goes on', async () => {
         h.impl = async () => ({ farmId: 'f-new', farmName: 'आर्वे शेती', farmCode: 'ABC123', ownerAccountId: 'o', subscription: null, wasAlreadyBootstrapped: false });
         const p = mount();
         fireEvent.click(screen.getByTestId('door-own-farm'));
 
         const form = screen.getByTestId('first-farm-create');
-        expect(screen.getByLabelText('तुमचे नाव')).toBeInTheDocument();
-        expect(screen.getByLabelText('शेताचे नाव')).toBeInTheDocument();
+        expect(screen.getByRole('textbox', { name: 'तुमच्या शेताचं नाव काय आहे?' })).toBeInTheDocument();
         expect(latinWords(form)).toBeNull();
 
         const submit = screen.getByTestId('first-farm-create-submit');
         expect(submit).toHaveTextContent('शेत तयार करा');
         expect(submit).toBeDisabled();
 
-        fireEvent.change(screen.getByLabelText('तुमचे नाव'), { target: { value: 'पुरुषोत्तम' } });
-        fireEvent.change(screen.getByLabelText('शेताचे नाव'), { target: { value: 'आर्वे शेती' } });
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'आर्वे शेती' } });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
 
+        fireEvent.click(await screen.findByTestId('farm-ready-start'));
         await waitFor(() => expect(p.onComplete).toHaveBeenCalledWith(expect.objectContaining({ farmId: 'f-new' })));
-        expect(h.calls).toEqual([['आर्वे शेती', undefined, 'पुरुषोत्तम']]);
+        expect(h.calls).toEqual([['आर्वे शेती']]);
     });
 
     it('a failed create says so in Marathi (never the server\'s English) and keeps what he typed', async () => {
         h.impl = () => Promise.reject(Object.assign(new Error('Farm name already exists'), { status: 409 }));
         mount();
         fireEvent.click(screen.getByTestId('door-own-farm'));
-        fireEvent.change(screen.getByLabelText('तुमचे नाव'), { target: { value: 'पुरुषोत्तम' } });
-        fireEvent.change(screen.getByLabelText('शेताचे नाव'), { target: { value: 'आर्वे शेती' } });
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'आर्वे शेती' } });
         fireEvent.click(screen.getByTestId('first-farm-create-submit'));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('शेत तयार करता आलं नाही');
         expect(alert.textContent).not.toMatch(/[A-Za-z]{3,}/);
-        expect(screen.getByLabelText('शेताचे नाव')).toHaveValue('आर्वे शेती');
+        expect(screen.getByRole('textbox')).toHaveValue('आर्वे शेती');
     });
 
     it('ONE "← मागे" on each step: the form goes back to the doors; the doors go back to the phone number', () => {
@@ -168,8 +166,7 @@ describe('the 0-farm screen: two equal doors', () => {
             h.impl = () => Promise.reject(err);
             mount();
             fireEvent.click(screen.getByTestId('door-own-farm'));
-            fireEvent.change(screen.getByLabelText('तुमचे नाव'), { target: { value: 'पुरुषोत्तम' } });
-            fireEvent.change(screen.getByLabelText('शेताचे नाव'), { target: { value: 'आर्वे शेती' } });
+            fireEvent.change(screen.getByRole('textbox'), { target: { value: 'आर्वे शेती' } });
             fireEvent.click(screen.getByTestId('first-farm-create-submit'));
             return (await screen.findByRole('alert')).textContent;
         };
@@ -218,10 +215,14 @@ describe('the 0-farm screen: two equal doors', () => {
         const props = { onComplete: vi.fn(), onJoinViaQr: vi.fn() };
         const { rerender } = render(<MinimalOnboarding isOpen {...props} />);
         fireEvent.click(screen.getByTestId('door-own-farm'));
-        fireEvent.change(screen.getByLabelText('शेताचे नाव'), { target: { value: 'x' } });
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
         rerender(<MinimalOnboarding isOpen={false} {...props} />);
         rerender(<MinimalOnboarding isOpen {...props} />);
         expect(screen.getByTestId('first-farm-doors')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('door-own-farm'));
+        expect(screen.getByRole('textbox')).toHaveValue('');
+        cleanup();
+        render(<MinimalOnboarding isOpen {...props} />);
         // Without an onBack there is no back on the doors (no control that cannot act).
         expect(screen.queryByRole('button', { name: 'मागे' })).toBeNull();
     });
