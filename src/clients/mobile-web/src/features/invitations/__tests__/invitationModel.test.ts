@@ -18,12 +18,14 @@ import {
     withMoney,
     withPlots,
 } from '../invitationModel';
+import { SWITCHABLE_AUTHORITIES } from '../../../core/session/farmAuthorities';
 
 const names = (g: { authorities: { name: string }[] }) => g.authorities.map(a => a.name);
 
 describe('the starting sets (D-26) — a label grants nothing, it only pre-fills', () => {
     it('सहमालक: setup, attendance, confirm, money · कुटुंब: attendance and confirm · कामगार: nothing, his own work', () => {
-        expect(names(presetGrant('CoOwner'))).toEqual(['EditFarmSetup', 'TakeAttendance', 'ConfirmRecords', 'SeeMoney']);
+        // pilot lane PERM S5.4 (CTO ruling Q4): a new सहमालक starts with every switch on (was D-26's four).
+        expect(names(presetGrant('CoOwner'))).toEqual([...SWITCHABLE_AUTHORITIES]);
         expect(names(presetGrant('Family'))).toEqual(['TakeAttendance', 'ConfirmRecords']);
         expect(names(presetGrant('Mukadam'))).toEqual(['TakeAttendance']);
         expect(presetGrant('Worker')).toEqual({ label: 'Worker', plotScope: 'OwnWork', plotIds: [], authorities: [] });

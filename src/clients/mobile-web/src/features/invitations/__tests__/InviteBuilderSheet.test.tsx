@@ -16,6 +16,7 @@ vi.mock('../personalInvitationClient', async (actual) => ({
 }));
 
 import { InviteBuilderSheet } from '../InviteBuilderSheet';
+import { SWITCHABLE_AUTHORITIES } from '../../../core/session/farmAuthorities';
 
 const view = (body: Record<string, unknown>) => ({
     id: 'inv-1', farmId: 'farm-1', code: '48217730', link: 'https://shramsafal.in/i/48217730', label: body.label,
@@ -66,13 +67,15 @@ describe('the invite builder sends the grant it shows', () => {
         fireEvent.click(screen.getByTestId('invite-label-CoOwner'));
         fireEvent.click(screen.getByTestId('invite-change-each'));
         fireEvent.click(screen.getByTestId('authority-ConfirmRecords-invite'));
-        expect(shown()).toEqual(['शेताची रचना बदलू शकतात', 'हजेरी घेऊ शकतात', 'पैसे दिसतात']);
+        // pilot lane PERM S5.4 (CTO ruling Q4): a सहमालक starts with every switch on; the one taken off is not shown, nor sent.
+        expect(shown()).toHaveLength(SWITCHABLE_AUTHORITIES.length - 1);
+        for (const line of ['शेताची रचना बदलू शकतात', 'हजेरी घेऊ शकतात', 'पैसे दिसतात']) expect(shown()).toContain(line);
 
         fireEvent.click(screen.getByTestId('invite-make'));
         await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
         const body = mockCreate.mock.calls[0][1] as { label: string; authorities: { name: string }[] };
         expect(body.label).toBe('CoOwner');
-        expect(body.authorities.map(a => a.name)).toEqual(['EditFarmSetup', 'TakeAttendance', 'SeeMoney']);
+        expect(body.authorities.map(a => a.name)).toEqual(SWITCHABLE_AUTHORITIES.filter(n => n !== 'ConfirmRecords'));
     });
 
     it('a wrong mobile is not sent; a कामगार starts with his own work and nothing granted', () => {
