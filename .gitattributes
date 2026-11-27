@@ -1,2 +1,5 @@
 # Shell scripts must keep LF endings — CRLF breaks them on Linux/CI ("bad interpreter").
 *.sh text eol=lf
+# The government village list (LGD) the server embeds: the same bytes on every checkout (pilot lane IDENT).
+src/apps/User/User.Infrastructure/Places/lgd-*.tsv text eol=lf
+src/apps/User/User.Infrastructure/Places/lgd-*.json text eol=lf
