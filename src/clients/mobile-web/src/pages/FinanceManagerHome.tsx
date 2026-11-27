@@ -9,10 +9,14 @@
  * approve a money entry yet (PENDING D-12), so it was ₹ 0 for every farmer. It is now the real total spent,
  * named as such. The मंजूर pile shows no figure at all, only why: nothing can produce a मंजूर entry, so its
  * "0 / ₹ 0" was a constant dressed as a measurement (I8 review B003, P4). A pile with no entry says नोंद नाही.
+ *
+ * Pilot lane RATE (founder 27 Nov, answer 7) - under the figures, apart from them: the "अंदाजे" machine cost of the open farm's records that
+ * state no machine cost, from the rates he typed in the दरपत्रक (`MachineEstimateCard`). It is never added to any figure on this page.
  */
 import React, { useMemo } from 'react';
 import { BarChart3, BookOpen, CheckCircle2, ClipboardCheck, RefreshCw, Tags, TriangleAlert, TrendingUp } from 'lucide-react';
-import { AppRoute } from '../types';
+import { AppRoute, type DailyLog } from '../types';
+import { MachineEstimateCard } from '../features/finance/machineRates/MachineEstimateCard';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import type { FinancePipelineBucket } from '../features/finance/finance.types';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
@@ -25,6 +29,9 @@ interface FinanceManagerHomeProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
     onBack?: () => void;
+    /** lane RATE - the farm open now and its records, for the "अंदाजे" machine cost (absent: no card). */
+    farmId?: string | null;
+    logs?: readonly DailyLog[];
 }
 
 const BUCKET_LOOK: Record<FinancePipelineBucket['key'], { tone: Tone; icon: React.ReactNode }> = {
@@ -34,7 +41,7 @@ const BUCKET_LOOK: Record<FinancePipelineBucket['key'], { tone: Tone; icon: Reac
     Adjusted: { tone: 'violet', icon: <TrendingUp size={20} aria-hidden="true" /> },
 };
 
-const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate, onBack }) => {
+const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate, onBack, farmId, logs }) => {
     // `currentRoute` is a re-read trigger: the selectors read a mutable store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
@@ -87,6 +94,8 @@ const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, o
                     अजून एकही नोंद नाही. खर्च किंवा जमा सांगितल्यावर इथे दिसेल.
                 </p>
             )}
+
+            {farmId && logs && <MachineEstimateCard farmId={farmId} logs={logs} />}
 
             <SectionHead title="हिशोबाचे भाग" />
             <div className="space-y-2">

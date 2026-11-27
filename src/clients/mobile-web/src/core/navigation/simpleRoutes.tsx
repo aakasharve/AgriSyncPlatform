@@ -345,6 +345,9 @@ export const renderFinanceManagerRoute = (ctx: AppRouterContext): React.ReactNod
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
             onBack={() => ctx.goBackOr('main')}
+            // pilot lane RATE — the open farm and its records, for the "अंदाजे" machine cost (kept apart from every figure there).
+            farmId={ctx.activeFarmId}
+            logs={ctx.history}
         />
     );
 };

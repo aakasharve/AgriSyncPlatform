@@ -17,11 +17,22 @@
  * (machines belong to the whole farm) and every change goes through the farm-setup doors: a new machine gets a bare GUID, a change keeps the id and
  * sends the revision the phone last received, a removal is a state on the server. The honest lines replace "फक्त या फोनवर…"; a person who may not
  * change the farm setup reads only. Before the server has sent the farm's set the page is the phone-only page it was.
+ *
+ * Pilot lane RATE (founder 27 Nov, answer 7: "the rate card question must be asked right after user adds a machine to his farm"). On the farm's
+ * set only: right after a NEW machine is saved, a small optional step asks its rate (`MachineRateStep`; "नंतर" always closes it, P9), for a person
+ * the server lets set the farm's rates. The rate is a line of the farm's दरपत्रक keyed by the machine's id (`machineRateModel`). Each card says
+ * its rate (`MachineRateLine`), with "दर लिहा / दर बदला". Changing a machine never asks.
  */
 import React, { useState } from 'react';
 import { Pencil, Plus, Tractor, Trash2, Wrench } from 'lucide-react';
 import type { FarmerProfile, FarmMachinery } from '../../../domain/types/farm.types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import type { FarmRateBasis } from '../../finance/farmRates/farmRateSchema';
+import { canHoldRate, machineRateInput } from '../../finance/machineRates/machineRateModel';
+import { useMachineRates } from '../../finance/machineRates/useMachineRates';
+import { MachineRateLine } from '../../finance/machineRates/MachineRateLine';
+import { MachineRateStep } from '../../finance/machineRates/MachineRateStep';
 import AddMachineWizard from '../components/AddMachineWizard';
 import { BigButton, GlassCard, IconDot, Tap, ThisPhoneOnly } from '../../../shared/components/ui/placeUi';
 import { MACHINE_DETAILS, MACHINE_DETAIL_KEYS, machineLine } from '../components/setupLabels';
@@ -49,6 +60,12 @@ interface MachinesSectionProps {
 }
 
 interface MachineView { machine: FarmMachinery; state: 'saved' | 'waiting' | 'refused'; refusal: FarmSetupRefusal | null }
+
+/**
+ * lane RATE - the machine whose rate is being asked, and the rate it starts from (a change), if any. `underCard`: opened from the machine's card
+ * (drawn under it); a new machine's step stays where its form was, so it is never moved (and never loses what he typed) when the card arrives.
+ */
+interface RateAsk { id: string; name: string; start?: { amount: number; basis: FarmRateBasis }; underCard: boolean }
 
 const EMPTY_DRAFT: Partial<FarmMachinery> = { type: 'Tractor', ownership: 'Owned' };
 
@@ -92,6 +109,10 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
         ? server.machines.map(m => ({ machine: toMachinery(m.item), state: m.state, refusal: m.refusal }))
         : (profile.machineries || []).map(machine => ({ machine, state: 'saved', refusal: null }));
     const machines = views.map(v => v.machine);
+    // lane RATE - the farm's rate card for its machines (the farm's set only), and the machine whose rate is being asked now.
+    const rates = useMachineRates(server ? server.farmId : null);
+    const [rateFor, setRateFor] = useState<RateAsk | null>(null);
+    const rateShown = !!server && !!rateFor && rates.mayWrite;
 
     const closeForm = () => { setIsAdding(false); setEditingId(null); setNewMachine(EMPTY_DRAFT); };
 
@@ -114,6 +135,8 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
             const id = editingId ?? idGenerator.generate();
             const original = editingId ? machines.find(m => m.id === editingId) : undefined;
             if (!(await send(() => saveMachine(machineInputOf(server.farmId, toMachine(id, newMachine, original)))))) return;
+            // lane RATE - a NEW machine: ask its rate right away (shown only to a person the server lets set rates).
+            setRateFor(!editingId && canHoldRate(id) ? { id, name: (newMachine.name ?? '').trim(), underCard: false } : null);
         } else if (editingId) {
             const original = machines.find(m => m.id === editingId);
             onUpdate({ ...profile, machineries: machines.map(m => (m.id === editingId ? toMachine(editingId, newMachine, original) : m)) });
@@ -124,6 +147,7 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
     };
 
     const startEdit = (m: FarmMachinery) => {
+        setRateFor(null);
         setIsAdding(false);
         setEditingId(m.id);
         setNewMachine({ ...m });
@@ -150,6 +174,30 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
         <AddMachineWizard newMachine={newMachine} onChange={setNewMachine} onSave={() => { void saveThisMachine(); }} onCancel={closeForm} editing={editingId !== null} />
     );
 
+    /** lane RATE - "दर लिहा / दर बदला" on a card: the step opens with the rate as it stands (his waiting change first). */
+    const openRate = (m: FarmMachinery) => {
+        closeForm();
+        const queued = rates.queuedOf(m.id)?.payload;
+        const live = rates.lineOf(m.id)?.current;
+        const start = queued?.change === 'set' && queued.amount !== undefined && queued.basis
+            ? { amount: queued.amount, basis: queued.basis }
+            : live && !live.retired ? { amount: live.amount, basis: live.basis } : undefined;
+        setRateFor({ id: m.id, name: m.name, ...(start ? { start } : {}), underCard: true });
+    };
+
+    const saveRate = async (amount: number, basis: FarmRateBasis): Promise<boolean> => {
+        if (!server || !rateFor) return false;
+        const saved = await rates.save(machineRateInput(server.farmId, rateFor, amount, basis, getDateKey()));
+        if (saved) setRateFor(null);
+        return saved;
+    };
+
+    const rateStep = rateShown && rateFor ? (
+        <MachineRateStep key={rateFor.id} machineName={rateFor.name} language={language} start={rateFor.start}
+            onSave={saveRate} onLater={() => setRateFor(null)} />
+    ) : null;
+    const rateStepUnderCard = rateShown && rateFor?.underCard === true;
+
     if (farmSetup === null) return <div className="space-y-3" data-testid="hub-machines" aria-busy="true" />;
 
     return (
@@ -159,7 +207,8 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
             {server && moveCard}
             <SetupMessage text={message} />
             {views.map(({ machine: m, state, refusal }) => (m.id === editingId ? <React.Fragment key={m.id}>{form}</React.Fragment> : (
-                <GlassCard key={m.id} testId={`machine-${m.id}`}>
+                <React.Fragment key={m.id}>
+                <GlassCard testId={`machine-${m.id}`}>
                     <div className="flex items-center gap-3">
                         <IconDot tone="amber">{m.type === 'Tractor' ? <Tractor size={22} aria-hidden="true" /> : <Wrench size={22} aria-hidden="true" />}</IconDot>
                         <div className="min-w-0 flex-1">
@@ -175,14 +224,18 @@ const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate, fa
                     {state === 'waiting' && <WaitingLine language={language} />}
                     {refusal && <RefusedBox refusal={refusal} language={language} onSeeNew={() => { void closeRefusedChange(refusal.rowId); }}
                         onRedo={mayEdit && refusal.mutationType.endsWith('.save') ? () => { void redo(refusal); } : undefined} />}
+                    {server && <MachineRateLine machineId={m.id} rates={rates} language={language} open={rateShown && rateFor?.id === m.id} onOpen={() => openRate(m)} />}
                 </GlassCard>
+                {rateStepUnderCard && rateFor?.id === m.id && rateStep}
+                </React.Fragment>
             )))}
-            {machines.length === 0 && !isAdding && (
+            {machines.length === 0 && !isAdding && !rateShown && (
                 <GlassCard testId="machines-empty">
                     <p className="m-0 text-[15px] font-bold text-stone-700">{words.empty}</p>
                 </GlassCard>
             )}
-            {isAdding ? form : editingId === null && mayEdit && (
+            {rateShown && !rateStepUnderCard && rateStep}
+            {isAdding ? form : editingId === null && mayEdit && !rateShown && (
                 <BigButton onClick={() => setIsAdding(true)} tone="white" testId="machine-add"><Plus size={20} aria-hidden="true" />{words.add}</BigButton>
             )}
         </div>
