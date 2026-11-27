@@ -12,7 +12,7 @@ import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { configure, act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn(async () => undefined) } }));
 const h = vi.hoisted(() => ({ language: 'mr' as 'mr' | 'en' }));
@@ -30,6 +30,10 @@ import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatal
 import { validatePayload } from '../../../infrastructure/sync/PayloadValidator';
 import { useFarmSetup } from '../farmSetup/useFarmSetup';
 import { FARM_A, FARM_B, MACHINE_A, emptyFarmDto, fullFarmDto } from '../../../infrastructure/storage/__tests__/farmSetupFixtures';
+
+// The screens follow Dexie live queries: under a loaded whole-suite run an update can take longer than the 1 s default (seen 27 Nov), so the
+// waits here allow 5 s. A wait that never comes still fails.
+configure({ asyncUtilTimeout: 5000 });
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEVANAGARI = /[ऀ-ॿ]/;

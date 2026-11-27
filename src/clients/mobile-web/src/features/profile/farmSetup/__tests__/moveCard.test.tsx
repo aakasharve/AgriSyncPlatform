@@ -12,7 +12,7 @@ import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn(async () => undefined) } }));
 vi.mock('../../../../i18n/LanguageContext', async importOriginal => ({
@@ -28,6 +28,10 @@ import { farmSetupFromDto } from '../../../../infrastructure/storage/farmSetupRo
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { FARM_A, FARM_B, emptyFarmDto, fullFarmDto } from '../../../../infrastructure/storage/__tests__/farmSetupFixtures';
 import { VerificationStatus, type FarmerProfile } from '../../../../domain/types/farm.types';
+
+// The screens follow Dexie live queries: under a loaded whole-suite run an update can take longer than the 1 s default (seen 27 Nov), so the
+// waits here allow 5 s. A wait that never comes still fails.
+configure({ asyncUtilTimeout: 5000 });
 
 const ME = '0a0a0a0a-0000-4000-8000-00000000000a';
 const W = '11111111-2222-4333-8444-555555555551';

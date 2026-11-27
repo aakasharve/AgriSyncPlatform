@@ -12,7 +12,7 @@ import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn(async () => undefined) } }));
 vi.mock('../../../i18n/LanguageContext', async importOriginal => ({
@@ -27,6 +27,10 @@ import { ACCESS_SCOPES_META_KEY } from '../../../infrastructure/storage/accessSc
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { validatePayload } from '../../../infrastructure/sync/PayloadValidator';
 import type { FarmAccessScopeDto } from '../../../infrastructure/api/accessScopeDtos';
+
+// The screens follow Dexie live queries: under a loaded whole-suite run an update can take longer than the 1 s default (seen 27 Nov), so the
+// waits here allow 5 s. A wait that never comes still fails.
+configure({ asyncUtilTimeout: 5000 });
 
 const FARM = '3d030000-0000-4000-8000-0000000000a1';
 const reviewer = { role: 'Mukadam', authorities: [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }] } as never;

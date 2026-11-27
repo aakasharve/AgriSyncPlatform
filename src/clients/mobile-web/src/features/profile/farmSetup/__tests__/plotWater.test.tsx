@@ -15,7 +15,7 @@ import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { configure, act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn(async () => undefined) } }));
 vi.mock('../../../../i18n/LanguageContext', async importOriginal => ({
@@ -37,6 +37,10 @@ import { getLocalFarmSetup, type LocalFarmSetup } from '../farmSetupLocal';
 import { removeWaterSource } from '../farmSetupCommands';
 import { FARM_A, FARM_B, MOTOR_A1, MOTOR_A2, PLOT_A, SOURCE_A, emptyFarmDto, fullFarmDto } from '../../../../infrastructure/storage/__tests__/farmSetupFixtures';
 import type { CropProfile, FarmerProfile, Plot } from '../../../../types';
+
+// The screens follow Dexie live queries: under a loaded whole-suite run an update can take longer than the 1 s default (seen 27 Nov), so the
+// waits here allow 5 s. A wait that never comes still fails.
+configure({ asyncUtilTimeout: 5000 });
 
 const crop: CropProfile = { id: 'c_1', name: 'Grapes', iconName: 'Grape', color: 'bg-purple-500', plots: [], activeScheduleId: null, supportedTasks: [], workflow: [] } as CropProfile;
 const profile = { name: 'T', village: '', phone: '', language: 'mr', operators: [], waterResources: [], motors: [], machineries: [] } as unknown as FarmerProfile;
