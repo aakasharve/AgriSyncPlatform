@@ -40,6 +40,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S0) - the government village list (LGD), built by
+         ops/places/build_place_list.py. The migration AddLgdPlaceList and the boot check read it from here. -->
+    <EmbeddedResource Include="Places\lgd-mh-2026-11-26.tsv" LogicalName="User.Infrastructure.Places.lgd-mh-2026-11-26.tsv" />
+    <EmbeddedResource Include="Places\lgd-mh-2026-11-26-areas.json" LogicalName="User.Infrastructure.Places.lgd-mh-2026-11-26-areas.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\User.Application\User.Application.csproj" />
     <ProjectReference Include="..\User.Domain\User.Domain.csproj" />
     <ProjectReference Include="..\..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />

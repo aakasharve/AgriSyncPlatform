@@ -36,7 +36,13 @@ public sealed record MeIdentityDto(
     string PhoneMasked,
     DateTime? PhoneVerifiedAtUtc,
     string PreferredLanguage,
-    string AuthMode);
+    string AuthMode,
+    // spec: plr-d10 pilot lane IDENT (S1; P11) - ADDITIVE, last, LEFT OUT when empty: his name in Marathi and in English letters as he saved
+    // them on his own identity card (typed or confirmed by him). The header and other screens can follow the app's language later.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? NameMr = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? NameEn = null);
 
 public sealed record MeFarmDto(
     Guid FarmId,

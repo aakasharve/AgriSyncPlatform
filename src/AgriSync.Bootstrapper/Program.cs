@@ -357,6 +357,9 @@ try
     // spec: plr-d10 lane MU-2 — the waiting personal invitations /me/context lists (ShramSafal's own reader).
     builder.Services.AddScoped<User.Application.Ports.IMeInvitationSnapshotReader,
         AgriSync.Bootstrapper.Adapters.MeInvitationSnapshotReader>();
+    // spec: plr-d10 pilot lane IDENT (S3) — his own face for his identity card (ShramSafal's ssf.pictures, read under his own user scope).
+    builder.Services.AddScoped<User.Application.Ports.IMePictureSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.MePictureSnapshotReader>();
 
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")
@@ -1137,6 +1140,11 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (Phase 2)");
         var analyticsSchemaCreated = analyticsPhase1Created || analyticsPhase2Created;
         var ssfSchemaCreated = ssfPhaseACreated || ssfPhaseBCreated;
+
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S2) - the government village list. The migration AddLgdPlaceList
+        // loads it; this checks it on every boot (and loads it once where the tables were made without the migration). A list whose counts do
+        // not match THROWS here, outside any non-fatal catch: the boot must not swallow it (doctrine F3).
+        logger.LogInformation("{PlaceList}", await User.Infrastructure.Places.LgdPlaceListLoader.EnsureLoadedAsync(userContext, CancellationToken.None));
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),

@@ -22,12 +22,18 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 /// parameter, so CORS needs no new header; read as leniently as <c>scheduleFormat</c>, by the same reader). <c>null</c> = the phone did not ask
 /// (1.0.17, today's test build, or a value that could not be read): it is sent NO <c>farmSetup</c> key and its pull is what it was (P11).
 /// </param>
+/// <param name="PeopleFormat">
+/// spec: plr-d10 pilot lane IDENT (S3) — the phone ASKS for the people rows' new fields (<c>people=1</c> on the pull; a QUERY parameter, read as
+/// leniently as <c>scheduleFormat</c>): each row's <c>nameMr</c> / <c>nameEn</c> and the face it may see (<c>pictureId</c>, <c>pictureSha256</c>).
+/// <c>null</c> = the phone did not ask: its <c>operators</c> are exactly what they were (P11).
+/// </param>
 public sealed record PullSyncChangesQuery(
     DateTime SinceUtc,
     Guid UserId,
     IReadOnlyList<Guid>? HeldFarmIds = null,
     int? ScheduleFormat = null,
-    int? FarmSetupFormat = null)
+    int? FarmSetupFormat = null,
+    int? PeopleFormat = null)
 {
     /// <summary>
     /// Reads the <c>scheduleFormat</c> query value leniently (P11: an older or odd client is never refused for it): a positive whole number is

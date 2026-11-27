@@ -13,9 +13,9 @@ namespace ShramSafal.Application.Services;
 /// <list type="bullet">
 /// <item><b>Which picture</b>: <see cref="PicturePolicy.Choose"/> - an outside (Public) schedule shows its institution logo; any other shows
 /// its own SCHEDULE picture, else its owner's PERSON picture, else none (a letter badge).</item>
-/// <item><b>Who may see it</b>: <see cref="PictureViewer"/> - the owner sees his own; a seat that reads other people's records on a farm of
-/// the owner also sees the owner's face; a seat that reads only its own records gets no PERSON picture (it gets no other person's name either)
-/// but does get a SCHEDULE or INSTITUTION picture (a logo is not a face). A schedule that reaches him only because a plot of his follows it
+/// <item><b>Who may see it</b>: <see cref="PictureViewer"/> - the owner sees his own; his farm-mates see his face (pilot lane IDENT S3: a seat
+/// that reads only its own records sees the faces of the farm's owner, मालक, सहमालक and मुकादम, never another कामगार's); everyone with the
+/// schedule gets a SCHEDULE or INSTITUTION picture (a logo is not a face). A schedule that reaches him only because a plot of his follows it
 /// (the pull's followed extras), and that the viewer rule would not show him, carries no picture at all.</item>
 /// <item><b>The root.</b> A picture hangs on the root of a schedule's edit chain; the listing already holds every version of every chain this
 /// person may see, so the root is found in it. A previous version that is not in the listing is read once by id.</item>
@@ -27,6 +27,7 @@ public static class SchedulePictureAttacher
     public static async Task<IReadOnlyList<ScheduleTemplateDto>> AttachAsync(
         IShramSafalRepository repository,
         IPictureStore store,
+        IFarmMateSeatReader mates,
         Guid callerUserId,
         IEnumerable<FarmReadScope> scopes,
         IReadOnlyList<ScheduleTemplateDto> templates,
@@ -34,6 +35,7 @@ public static class SchedulePictureAttacher
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(mates);
         ArgumentNullException.ThrowIfNull(scopes);
         ArgumentNullException.ThrowIfNull(templates);
         if (templates.Count == 0 || callerUserId == Guid.Empty)
@@ -76,7 +78,7 @@ public static class SchedulePictureAttacher
         }
 
         // 3. Choose, per schedule, under this reader's rights.
-        var viewer = await PictureViewer.CreateAsync(repository, callerUserId, scopes, ct);
+        var viewer = await PictureViewer.CreateAsync(repository, mates, callerUserId, scopes, ct);
         var result = new List<ScheduleTemplateDto>(templates.Count);
         foreach (var template in templates)
         {

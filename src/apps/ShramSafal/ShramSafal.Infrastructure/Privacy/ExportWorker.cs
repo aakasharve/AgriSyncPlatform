@@ -287,6 +287,9 @@ public sealed class ExportWorker(
             // and receives none of it. Admin context, so row security does not hide the farm rows; the filter is the farm's owner.
             await WriteFarmSetupAsync(zip, admin, userId, ct).ConfigureAwait(false);
 
+            // identity_profile (pilot lane IDENT): his own identity card, the whole row as stored (or null when he never saved one).
+            await WriteIdentityProfileAsync(zip, admin, userId, ct).ConfigureAwait(false);
+
             // cross_border_transfers — Phase 08 has no direct subject-user
             // pointer on the row (the table is keyed on AI job, not
             // user). For the export bundle we emit the full set scoped
@@ -563,6 +566,22 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
                     }),
                 }),
             },
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane IDENT (S1; DPDP export). Writes <c>identity_profile.json</c>: <c>{ "card": ... }</c>, his own identity card
+    /// (<c>public.user_identity_profiles</c>, the User context's table) exactly as stored, every column, or <c>null</c> when he never saved one.
+    /// Only his row: the filter is the person.
+    /// </summary>
+    internal static async Task WriteIdentityProfileAsync(ZipArchive zip, ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<string>("SELECT row_to_json(p)::text AS \"Value\" FROM public.user_identity_profiles p WHERE p.user_id = {0}", userId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        await WriteJsonEntryAsync(zip, "identity_profile.json",
+            new { card = row is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(row) },
             ct).ConfigureAwait(false);
     }
 

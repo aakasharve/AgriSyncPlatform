@@ -364,6 +364,15 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, repair D-177); Up() and Down() read in full: Up() adds ONE boolean column (NOT NULL DEFAULT false) to ssf.farms. It GRANTs and
         //    REVOKEs nothing and touches no ledger this suite asserts about. Down() REFUSES while any farm has the switch on and otherwise drops the column, so on this harness's schema it reverts and re-applies.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, pilot lane IDENT S2); Up() and Down() read in full: a User-context migration (public schema;
+        //    the ShramSafal migrator never reverts or re-applies it, it only shares the scratch database's history table). Up() creates the four public.lgd_* reference tables,
+        //    GRANTs SELECT and REVOKEs INSERT, UPDATE, DELETE, TRUNCATE on those four new tables only; no ledger this suite asserts about is touched. Down() drops exactly
+        //    those four tables.
+        "20261127040000_AddLgdPlaceList",
+        // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, pilot lane IDENT S1); Up() and Down() read in full: a User-context migration (public schema;
+        //    the ShramSafal migrator never reverts or re-applies it). Up() creates public.user_identity_profiles and GRANTs SELECT, INSERT, UPDATE on that new table only;
+        //    no ledger this suite asserts about is touched. Down() refuses while any card exists and otherwise drops the table.
+        "20261127041000_AddPersonIdentityProfile",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

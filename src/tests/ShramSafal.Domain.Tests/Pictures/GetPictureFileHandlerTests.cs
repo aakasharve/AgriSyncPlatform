@@ -27,11 +27,12 @@ public sealed class GetPictureFileHandlerTests
     public GetPictureFileHandlerTests()
     {
         _repo.Farms[OwnerFarm] = PictureTestKit.FarmOwnedBy(OwnerFarm, Owner);
+        _repo.Seat(OwnerFarm, Owner, AppRole.PrimaryOwner);
         _repo.Seat(OwnerFarm, CoOwner, AppRole.SecondaryOwner);
         _repo.Seat(OwnerFarm, Worker, AppRole.Worker);
     }
 
-    private GetPictureFileHandler Handler() => new(_repo, _store, _storage, new FixedClock(PictureTestKit.Now));
+    private GetPictureFileHandler Handler() => new(_repo, _store, _storage, new FixedClock(PictureTestKit.Now), new PictureRepoMates(_repo));
 
     private Picture Store(PictureKind kind, Guid subject, Guid setBy, byte fill = 1)
     {
@@ -66,16 +67,35 @@ public sealed class GetPictureFileHandlerTests
         copy.ToArray().Should().Equal(_storage.Files[face.StorageKey]);
     }
 
+    // spec: plr-d10 pilot lane IDENT (S3; CTO ruling on founder question 2 = B). Before this lane a worker on an own-records seat got no face at all
+    // and an owner could not see his worker's face; now farm-mates see each other, and a कामगार sees the people he works for.
     [Fact]
-    public async Task A_seat_that_reads_the_owners_farm_sees_his_face_and_a_worker_on_an_own_records_seat_does_not()
+    public async Task Farm_mates_see_each_others_faces_and_a_worker_sees_the_owner_he_works_for()
     {
-        var face = Store(PictureKind.Person, Owner, Owner);
+        var ownersFace = Store(PictureKind.Person, Owner, Owner);
+        var workersFace = Store(PictureKind.Person, Worker, Worker, 2);
 
-        (await Handler().HandleAsync(new GetPictureFileQuery(face.Id, CoOwner))).IsSuccess.Should().BeTrue();
+        (await Handler().HandleAsync(new GetPictureFileQuery(ownersFace.Id, CoOwner))).IsSuccess.Should().BeTrue();
+        (await Handler().HandleAsync(new GetPictureFileQuery(ownersFace.Id, Worker))).IsSuccess.Should().BeTrue("a कामगार sees the owner he works for");
+        (await Handler().HandleAsync(new GetPictureFileQuery(workersFace.Id, Owner))).IsSuccess.Should().BeTrue("an owner sees his worker's face");
+        (await Handler().HandleAsync(new GetPictureFileQuery(workersFace.Id, CoOwner))).IsSuccess.Should().BeTrue();
+    }
 
-        var worker = await Handler().HandleAsync(new GetPictureFileQuery(face.Id, Worker));
-        worker.IsSuccess.Should().BeFalse();
-        worker.Error.Should().Be(ShramSafalErrors.PictureNotFound);
+    [Fact]
+    public async Task A_worker_never_sees_another_workers_face_and_a_seat_that_is_not_active_shows_none()
+    {
+        var coWorker = Guid.NewGuid();
+        var waiting = Guid.NewGuid();
+        _repo.Seat(OwnerFarm, coWorker, AppRole.Worker);
+        _repo.Access[(OwnerFarm, waiting)] = new ShramSafal.Application.Services.FarmAccess(
+            AppRole.Worker, ShramSafal.Domain.Farms.MembershipStatus.PendingApproval, IsRegistrant: false, StoredPermissions: null);
+        var coWorkersFace = Store(PictureKind.Person, coWorker, coWorker, 3);
+        var waitingFace = Store(PictureKind.Person, waiting, waiting, 4);
+
+        (await Handler().HandleAsync(new GetPictureFileQuery(coWorkersFace.Id, Worker))).Error.Should().Be(ShramSafalErrors.PictureNotFound);
+        (await Handler().HandleAsync(new GetPictureFileQuery(coWorkersFace.Id, Owner))).IsSuccess.Should().BeTrue();
+        (await Handler().HandleAsync(new GetPictureFileQuery(waitingFace.Id, Owner))).Error.Should().Be(ShramSafalErrors.PictureNotFound,
+            "a waiting request is not a farm-mate");
     }
 
     [Fact]
