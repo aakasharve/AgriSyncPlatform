@@ -62,11 +62,19 @@ async function remembered(db: AgriLogDatabase, farmId: string): Promise<Remember
         : undefined;
 }
 
+/**
+ * Pilot lane RATE — `offers: false` for a page that only READS the list and writes one machine's rate (the यंत्रं page, the money home): no
+ * ShramSafal suggestions are asked for and no old drafts are read (those are the दरपत्रक's own offers). Default: the दरपत्रक's whole view.
+ */
+export interface FarmRatesOptions { offers?: boolean }
+
 export async function loadFarmRatesView(
     farmId: string | null,
     stand: { isPrimaryHolder?: boolean; selfUserId: string | null },
     db: AgriLogDatabase = getDatabase(),
+    options: FarmRatesOptions = {},
 ): Promise<FarmRatesView> {
+    const offers = options.offers !== false;
     if (!farmId) return { ...EMPTY, loading: false };
     const server = await fetchFarmRates(farmId).then(answer => answer, () => null);
     const now = new Date().toISOString();
@@ -90,7 +98,7 @@ export async function loadFarmRatesView(
         : (await readFarmRates(farmId, db)).filter(r => seeWorkRates !== false || r.kind !== 'Work');
     const mayWrite = last ? last.mayWrite : stand.isPrimaryHolder === true;
     // fix round 1 (F7) — ShramSafal's suggestions are asked for only by a person who can confirm one.
-    const suggestions = mayWrite ? await fetchRateSuggestions().then(list => list, () => [] as RateSuggestion[]) : [];
+    const suggestions = mayWrite && offers ? await fetchRateSuggestions().then(list => list, () => [] as RateSuggestion[]) : [];
     const unreadable = seeInputPrices === false ? 0 : await readUnreadableFarmRates(farmId, db);
     return {
         loading: false,
@@ -99,7 +107,7 @@ export async function loadFarmRatesView(
         ...(seeInputPrices === undefined ? {} : { seeInputPrices }),
         ...(seeWorkRates === undefined ? {} : { seeWorkRates }),
         queued: await readQueuedFarmRates(farmId, db),
-        drafts: mayWrite ? await readRateDrafts(stand.selfUserId, db) : [],
+        drafts: mayWrite && offers ? await readRateDrafts(stand.selfUserId, db) : [],
         suggestions,
         fromServer: !!server,
         ...(unreadable > 0 ? { unreadable } : {}),
@@ -109,21 +117,23 @@ export async function loadFarmRatesView(
 export function useFarmRates(
     farmId: string | null,
     stand: { isPrimaryHolder?: boolean; selfUserId: string | null },
+    options: FarmRatesOptions = {},
 ): FarmRatesView & { reload: () => void } {
     const [view, setView] = useState<FarmRatesView>(EMPTY);
     const [tick, setTick] = useState(0);
     const reload = useCallback(() => setTick(t => t + 1), []);
     const { isPrimaryHolder, selfUserId } = stand;
+    const offers = options.offers !== false;
 
     useEffect(() => {
         let cancelled = false;
-        loadFarmRatesView(farmId, { isPrimaryHolder, selfUserId }).then(
+        loadFarmRatesView(farmId, { isPrimaryHolder, selfUserId }, getDatabase(), { offers }).then(
             next => { if (!cancelled) setView(next); },
             // The phone's own copy could not be read: say nothing is known rather than show an empty list as the truth.
             () => { if (!cancelled) setView({ ...EMPTY, loading: false, failed: true }); },
         );
         return () => { cancelled = true; };
-    }, [farmId, isPrimaryHolder, selfUserId, tick]);
+    }, [farmId, isPrimaryHolder, selfUserId, offers, tick]);
 
     // A sync that lands while the page is open (his change sent, or the pull bringing a rate) is shown without reopening.
     useEffect(() => {
