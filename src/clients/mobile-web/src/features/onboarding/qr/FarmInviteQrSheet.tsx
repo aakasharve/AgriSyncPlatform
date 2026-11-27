@@ -5,7 +5,7 @@
  *   - One screen, no settings, no policy controls.
  *   - QR is big. Farm name is big. Everything else is secondary.
  *   - "Share" button uses navigator.share so WhatsApp is one tap.
- *   - Marathi first, English in the same visual weight.
+ *   - One language at a time (pilot lane IDENT): Marathi mode Marathi only, English mode English only (`inviteQrWords`).
  *
  * Backend: calls POST /shramsafal/farms/{farmId}/invite-qr. The server
  * is the authoritative source for the token + farmCode; opening the
@@ -22,21 +22,21 @@ import {
     isInviteApiError,
     type InviteResponse,
 } from './inviteApi';
-import { getShareOrigin } from '../../../shared/config/publicWebOrigin';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
-import { JOIN_DOOR_LABEL } from './farmCodeEntry';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { inviteShareUrl } from './inviteShareUrl';
+import { inviteQrWords } from './inviteQrWords';
 
-/**
+/*
  * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — "type this code" is TRUE now (the joiner's
  * app has a door that takes it), so the line says where to type it, in the words on that door.
- * PROPOSED Marathi.
  *
  * F5 (doctrine P11): that door exists only in the NEW app. An installed 1.0.16 has no such button
  * (its only code box asks for a link), so the line says so and what to do — update the app —
  * instead of naming a button the worker cannot find. Scanning the QR works on every version.
+ * Both lines live in `inviteQrWords` (typeCodeLine, oldAppLine).
  */
-const TYPE_CODE_LINE = `QR स्कॅन करता येत नसेल तर: त्यांनी ॲपमध्ये "${JOIN_DOOR_LABEL}" दाबून हा कोड टाकावा.`;
-const OLD_APP_LINE = 'हे बटण नवीन ॲपमध्ये आहे — जुने ॲप असेल तर आधी ॲप अपडेट करायला सांगा.';
+type SheetProblem = { kind: 'unreachable' } | { kind: 'refused'; message: string } | { kind: 'rotateFailed' };
 
 interface FarmInviteQrSheetProps {
     isOpen: boolean;
@@ -46,10 +46,11 @@ interface FarmInviteQrSheetProps {
 }
 
 const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, farmId, farmName }) => {
+    const w = inviteQrWords(useOptionalLanguage()?.language);
     const [invite, setInvite] = useState<InviteResponse | null>(null);
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-    const [qrError, setQrError] = useState<string | null>(null);
-    const [apiError, setApiError] = useState<string | null>(null);
+    const [qrError, setQrError] = useState<boolean>(false);
+    const [problem, setProblem] = useState<SheetProblem | null>(null);
     const [copied, setCopied] = useState<'link' | 'code' | null>(null);
     const [confirmingRotate, setConfirmingRotate] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -58,7 +59,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
         if (!isOpen) return;
         let cancelled = false;
         setIsLoading(true);
-        setApiError(null);
+        setProblem(null);
         setCopied(null);
         setConfirmingRotate(false);
         setInvite(null);
@@ -69,10 +70,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
             })
             .catch(err => {
                 if (cancelled) return;
-                const message = isInviteApiError(err)
-                    ? err.message
-                    : 'Could not reach the server. Pull down to retry.';
-                setApiError(message);
+                setProblem(isInviteApiError(err) ? { kind: 'refused', message: err.message } : { kind: 'unreachable' });
             })
             .finally(() => {
                 if (!cancelled) setIsLoading(false);
@@ -80,20 +78,8 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
         return () => { cancelled = true; };
     }, [isOpen, farmId]);
 
-    const shareUrl = useMemo(() => {
-        if (!invite) return '';
-        // Web: current origin. Native (APK, origin https://localhost): the public
-        // web origin, so the link works for whoever scans it. When running on the mobile-web origin (localhost in dev, app.shramsafal.in
-        // in prod), build an internal deep-link so scanning lands on the
-        // JoinFarmLandingPage without a round-trip through the marketing site.
-        // The server also returned `invite.qrPayload` with the public marketing
-        // URL that will 302 here in prod.
-        if (typeof window === 'undefined') return invite.qrPayload;
-        const params = new URLSearchParams();
-        params.set('join', invite.token);
-        params.set('farm', invite.farmCode);
-        return new URL(`/?${params.toString()}`, getShareOrigin()).toString();
-    }, [invite]);
+    // The same address the hub's farm card draws (`inviteShareUrl`): an internal deep link that lands on the join page.
+    const shareUrl = useMemo(() => (invite ? inviteShareUrl(invite) : ''), [invite]);
 
     useEffect(() => {
         if (!shareUrl) return;
@@ -107,11 +93,11 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
             .then(url => {
                 if (cancelled) return;
                 setQrDataUrl(url);
-                setQrError(null);
+                setQrError(false);
             })
-            .catch(err => {
+            .catch(() => {
                 if (cancelled) return;
-                setQrError(err instanceof Error ? err.message : 'QR generation failed.');
+                setQrError(true);
             });
         return () => {
             cancelled = true;
@@ -133,8 +119,8 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
             try {
                 await navigator.share({
-                    title: `Join ${invite.farmName} on ShramSafal`,
-                    text: `${invite.farmName} मध्ये सामील व्हा · Join ${invite.farmName}`,
+                    title: w.shareTitle(invite.farmName),
+                    text: w.shareText(invite.farmName),
                     url: shareUrl,
                 });
                 return;
@@ -151,12 +137,12 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
             return;
         }
         setIsLoading(true);
-        setApiError(null);
+        setProblem(null);
         try {
             const fresh = await apiRotateInvite(farmId);
             setInvite(fresh);
         } catch (err) {
-            setApiError(isInviteApiError(err) ? err.message : 'Rotation failed.');
+            setProblem(isInviteApiError(err) ? { kind: 'refused', message: err.message } : { kind: 'rotateFailed' });
         } finally {
             setIsLoading(false);
             setConfirmingRotate(false);
@@ -178,7 +164,8 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                 <button
                     type="button"
                     onClick={onClose}
-                    aria-label="Close"
+                    aria-label={w.close}
+                    data-testid="invite-close"
                     className="absolute right-3 top-3 rounded-full bg-stone-100 p-2 text-stone-600 hover:bg-stone-200"
                 >
                     <X size={18} />
@@ -187,38 +174,36 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                 <div className="px-6 pb-5 pt-8">
                     <div className="mb-4 text-center">
                         <div className="mx-auto mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700">
-                            <Users size={12} /> Invite to farm
+                            <Users size={12} /> {w.badge}
                         </div>
                         <h2 className="font-display text-2xl font-black text-stone-900">
                             {invite?.farmName ?? farmName}
                         </h2>
                         <p className="mt-1 text-sm font-semibold text-stone-500">
-                            कामाला येणाऱ्यांना ही QR दाखवा
-                        </p>
-                        <p className="text-xs text-stone-400">
-                            Show this QR to your workers.
+                            {w.caption}
                         </p>
                     </div>
 
                     <div className="flex justify-center">
-                        {apiError ? (
-                            <div className="flex h-[320px] w-[320px] items-center justify-center rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center text-sm font-semibold text-rose-700">
-                                {apiError}
+                        {problem ? (
+                            <div data-testid="invite-problem" className="flex h-[280px] w-full max-w-[320px] items-center justify-center rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center text-sm font-semibold text-rose-700">
+                                {problem.kind === 'refused' ? w.refused(problem.message) : problem.kind === 'rotateFailed' ? w.rotateFailed : w.unreachable}
                             </div>
                         ) : qrError ? (
-                            <div className="flex h-[320px] w-[320px] items-center justify-center rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center text-sm font-semibold text-rose-700">
-                                {qrError}
+                            <div className="flex h-[280px] w-full max-w-[320px] items-center justify-center rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center text-sm font-semibold text-rose-700">
+                                {w.qrFailed}
                             </div>
                         ) : (isLoading || !qrDataUrl) ? (
-                            <div className="flex h-[320px] w-[320px] items-center justify-center rounded-3xl border border-stone-200 bg-stone-50">
+                            <div className="flex h-[280px] w-full max-w-[320px] items-center justify-center rounded-3xl border border-stone-200 bg-stone-50">
                                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-stone-200 border-t-emerald-500" />
                             </div>
                         ) : (
                             <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-md">
                                 <img
                                     src={qrDataUrl}
-                                    alt={`QR code to join ${invite?.farmName ?? farmName}`}
-                                    className="h-[300px] w-[300px]"
+                                    alt={w.qrAlt(invite?.farmName ?? farmName)}
+                                    data-testid="invite-qr-image"
+                                    className="h-[260px] w-[260px] max-w-full"
                                 />
                             </div>
                         )}
@@ -229,13 +214,13 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                     {invite && (invite.farmCode ?? '').trim() !== '' && (
                         <div data-testid="invite-farm-code-card" className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-center">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                                Farm code · शेती कोड
+                                {w.codeLabel}
                             </div>
                             <button
                                 type="button"
                                 onClick={() => handleCopy(invite.farmCode, 'code')}
                                 className="group mt-1 inline-flex items-center gap-2 font-mono text-3xl font-black tracking-[0.35em] text-stone-900"
-                                aria-label="Copy farm code"
+                                aria-label={w.copyCode}
                             >
                                 {invite.farmCode}
                                 {copied === 'code' ? (
@@ -245,10 +230,10 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                                 )}
                             </button>
                             <div data-testid="invite-type-code-line" className="mt-1 text-[12px] font-semibold leading-snug text-stone-600">
-                                {TYPE_CODE_LINE}
+                                {w.typeCodeLine}
                             </div>
                             <div data-testid="invite-old-app-line" className="mt-1 text-[11px] leading-snug text-stone-500">
-                                {OLD_APP_LINE}
+                                {w.oldAppLine}
                             </div>
                         </div>
                     )}
@@ -257,18 +242,20 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                         <button
                             type="button"
                             onClick={handleShare}
+                            data-testid="invite-share"
                             className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
                         >
                             <Share2 size={16} />
-                            Share
+                            {w.share}
                         </button>
                         <button
                             type="button"
                             onClick={() => handleCopy(shareUrl, 'link')}
+                            data-testid="invite-copy-link"
                             className="flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-bold text-stone-700 hover:bg-stone-50"
                         >
                             {copied === 'link' ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                            {copied === 'link' ? 'Copied' : 'Copy link'}
+                            {copied === 'link' ? w.copied : w.copyLink}
                         </button>
                     </div>
 
@@ -276,6 +263,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                         <button
                             type="button"
                             onClick={handleRotate}
+                            data-testid="invite-rotate"
                             className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-bold transition-colors ${
                                 confirmingRotate
                                     ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -283,14 +271,12 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                             }`}
                         >
                             <RefreshCcw size={11} />
-                            {confirmingRotate ? 'Tap again to replace QR' : 'Generate new QR'}
+                            {confirmingRotate ? w.rotateConfirm : w.rotate}
                         </button>
                     </div>
 
-                    <p className="mt-4 text-center text-[11px] leading-relaxed text-stone-400">
-                        समोरच्याने ही QR स्कॅन केल्यावर त्याला त्याचा फोन नंबर आणि OTP द्यावा लागेल.
-                        <br />
-                        Once a worker scans, they enter their phone and OTP. That's it.
+                    <p className="mt-4 text-center text-[11px] leading-relaxed text-stone-400" data-testid="invite-footer">
+                        {w.footer}
                     </p>
                 </div>
             </div>
