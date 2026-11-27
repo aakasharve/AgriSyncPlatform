@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 /**
@@ -43,39 +43,40 @@ export interface LoginOptions {
 }
 
 /**
- * spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — consent is one tick on the
- * phone-number screen (LoginPage, both modes; the QR join page), recorded before the
- * number leaves the device. There is no full-screen gate any more, and the tick is shown
- * on EVERY login (consent belongs to the person logging in, not the phone), so the submit
- * button stays disabled until it is ticked - including after a logout.
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) — consent is the ONE long permissions and
+ * privacy page (it replaced the tick of plr-d10-x1-consent-tick-on-phone-screen-2026-10-25). It opens when the number is
+ * SENT (OTP, the password sign-in, the QR join page) and is shown on EVERY login (consent belongs to the person logging
+ * in, not the phone); its green button turns on only once the end of the page has been on screen.
  *
- * DELIBERATELY NOT FLAG-GATED AWAY. A real farmer has to tick this box, so the test
- * ticks it too, the way he does - and the submit then records consent for real before
- * signing in, so every login spec exercises the consent write.
+ * DELIBERATELY NOT FLAG-GATED AWAY. A real farmer has to read to the end and tap, so the test does the same - scrolls the
+ * page to its end and taps "मी वाचलं, पुढे चला" - and the acceptance is recorded for real before signing in, so every
+ * login spec exercises the consent write.
  *
- * Waits for ONE of two things rather than sleeping: the tick appearing (tick it, then the
- * submit must turn enabled), or the submit turning enabled on its own (the tick was
- * already given on this visit). Neither is true while the screen is still mounting, and
- * clicking a disabled submit would do nothing.
- *
- * Returns true when the tick was present and ticked. Never throws on absence: if neither
- * happens it returns false and lets the CALLER's own wait produce the real failure.
+ * Call it right AFTER tapping the send / sign-in button. Returns true when the page was there and accepted; never throws
+ * on absence (the caller's own wait produces the real failure).
  */
-export async function tickConsentIfPresent(page: Page, submit: Locator): Promise<boolean> {
-    const tick = page.getByTestId('consent-tick');
+export async function acceptPermissionsPageIfPresent(page: Page): Promise<boolean> {
+    const pageRoot = page.getByTestId('permissions-page');
+    try {
+        await pageRoot.waitFor({ timeout: 15_000 });
+    } catch {
+        return false;
+    }
+    const go = page.getByTestId('permissions-page-go');
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
-        if (await tick.isVisible().catch(() => false)) {
-            await tick.check();
-            await expect(submit).toBeEnabled({ timeout: 10_000 });
-            return true;
-        }
-        if (await submit.isEnabled().catch(() => false)) return false;
+        await page.getByTestId('permissions-page-scroll').evaluate((el) => {
+            el.scrollTop = el.scrollHeight;
+            el.dispatchEvent(new Event('scroll'));
+        });
+        if ((await go.getAttribute('data-ready').catch(() => null)) === 'yes') break;
         await page.waitForTimeout(250);
     }
-    return false;
+    await expect(go).toHaveAttribute('data-ready', 'yes', { timeout: 5_000 });
+    await go.click();
+    await expect(pageRoot).toBeHidden({ timeout: 20_000 });
+    return true;
 }
-
 
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-1) — स्वागत is the first screen on a
@@ -84,13 +85,14 @@ export async function tickConsentIfPresent(page: Page, submit: Locator): Promise
  */
 export async function passFirstRunWelcomeIfPresent(page: Page): Promise<void> {
     const start = page.getByTestId('first-run-start');
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — after स्वागत comes "तुम्ही कोण?"; a returning
+    // person takes its "आधीच श्रमसफल वापरता? लॉगिन करा" to the login.
+    const alreadyUse = page.getByTestId('join-start-login');
     const login = page.getByRole('button', { name: /पासवर्डने/ });
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
-        if (await start.isVisible().catch(() => false)) {
-            await start.click();
-            return;
-        }
+        if (await start.isVisible().catch(() => false)) await start.click();
+        if (await alreadyUse.isVisible().catch(() => false)) await alreadyUse.click();
         if (await login.isVisible().catch(() => false)) return;
         await page.waitForTimeout(250);
     }
@@ -136,8 +138,9 @@ export async function loginViaPassword(
     // The submit button text varies by mode (Sign In / Register / etc).
     // Use the form's button[type="submit"] as the canonical selector.
     const submitButton = page.locator('button[type="submit"]').first();
-    await tickConsentIfPresent(page, submitButton);
+    await expect(submitButton).toBeEnabled({ timeout: 10_000 });
     await submitButton.click();
+    await acceptPermissionsPageIfPresent(page);
 
     // spec: plr-d10 I16 — after sign-in, a first-run phone shows फोनच्या परवानग्या, then the founder's
     // welcome voice note (it plays by itself; specs skip it through its "please listen" sheet), then the

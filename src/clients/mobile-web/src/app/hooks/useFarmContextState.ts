@@ -25,6 +25,7 @@ import {
     type MyFarmDto,
 } from '../../features/onboarding/qr/inviteApi';
 import { takeJoinAfterSignIn } from '../../features/onboarding/qr/farmCodeEntry';
+import { takeHeldJoin, takeOwnFarmStart, type HeldJoin } from '../../features/onboarding/joinStart/heldJoin';
 
 export interface FarmContextState {
     /**
@@ -55,6 +56,14 @@ export interface FarmContextState {
      * the server refused or could not be reached, so the caller can say so.
      */
     handleWithdrawRequest: (farmId: string) => Promise<void>;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — the QR or code he gave BEFORE the SMS
+     * code: taken once right after sign-in and handed to the join door, which sends it (the server answers a join only
+     * for a proven number). Null when there is none.
+     */
+    heldJoin: HeldJoin | null;
+    /** V1-A: he said "नाही, मी स्वतः सुरू करतोय" before sign-in: the 0-farm screen opens on making his own farm. */
+    ownFarmFirst: boolean;
 }
 
 /**
@@ -146,8 +155,24 @@ export function useFarmContextState(): FarmContextState {
         window.addEventListener(OPEN_JOIN_FARM_EVENT, open);
         return () => window.removeEventListener(OPEN_JOIN_FARM_EVENT, open);
     }, []);
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — what he chose BEFORE sign-in, taken once.
+    const [heldJoin, setHeldJoin] = React.useState<HeldJoin | null>(null);
+    const [ownFarmFirst, setOwnFarmFirst] = React.useState(false);
     React.useEffect(() => {
-        if (isAuthenticated && takeJoinAfterSignIn()) setShowJoinByCode(true);
+        if (!isAuthenticated) {
+            setHeldJoin(null);
+            setOwnFarmFirst(false);
+            return;
+        }
+        const held = takeHeldJoin();
+        const ownFirst = takeOwnFarmStart();
+        if (held) {
+            setHeldJoin(held);
+            setShowJoinByCode(true);
+        } else if (takeJoinAfterSignIn()) {
+            setShowJoinByCode(true);
+        }
+        if (ownFirst) setOwnFarmFirst(true);
     }, [isAuthenticated]);
 
     React.useEffect(() => {
@@ -276,6 +301,7 @@ export function useFarmContextState(): FarmContextState {
 
     const closeJoinByCode = React.useCallback(() => {
         setShowJoinByCode(false);
+        setHeldJoin(null); // sent once: the door opened again later starts empty
     }, []);
 
     // A seat on another farm is usually PendingApproval: the lists are re-read from the
@@ -312,5 +338,7 @@ export function useFarmContextState(): FarmContextState {
         closeJoinByCode,
         handleJoinComplete,
         handleWithdrawRequest,
+        heldJoin,
+        ownFarmFirst,
     };
 }

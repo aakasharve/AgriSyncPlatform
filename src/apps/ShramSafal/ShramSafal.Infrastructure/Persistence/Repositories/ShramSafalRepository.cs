@@ -1600,7 +1600,10 @@ internal sealed class ShramSafalRepository(
             // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a paused person is told WHY (the
             // owner's written reason); no other status carries one to the person.
             var reason = status == MembershipStatus.Suspended ? seat?.StatusReason : null;
-            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role, status, reason);
+            // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — a waiting request says when it
+            // was made (its own GrantedAtUtc, as the owner's team list shows it), for the joiner's 2-day "own farm" offer.
+            var requestedAt = status == MembershipStatus.PendingApproval ? seat?.GrantedAtUtc : null;
+            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role, status, reason, requestedAt);
         }).ToList();
     }
 

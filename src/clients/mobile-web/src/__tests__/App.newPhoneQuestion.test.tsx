@@ -63,6 +63,10 @@ vi.mock('../features/sync', () => ({ OfflineBanner: () => null }));
 vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabled: vi.fn(), clearAiTestMode: vi.fn() }));
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+vi.mock('../features/consent/permissionsPage/useHeldSwitchChoices', () => ({ useHeldSwitchChoices: vi.fn() }));
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — the signed-out screens are now the first
+// questions and then the login (`PreSignInFlow`, own suites); stubbed to the same marker this suite reads.
+vi.mock('../features/onboarding/joinStart/PreSignInFlow', () => ({ default: () => <div data-testid="login-page" /> }));
 vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({ default: () => null }));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 vi.mock('../pages/LoginPage', () => ({ default: () => <div data-testid="login-page" /> }));

@@ -11,6 +11,7 @@ import PhoneField from '../../../shared/components/PhoneField';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { authCopy } from '../authCopy';
+import { isPermissionsDeclined } from '../../consent/gate/useConsentBeforeOtp';
 
 interface OtpLoginFormProps {
     onOtpSent: (phone: string, response: StartOtpResponse) => void;
@@ -28,6 +29,12 @@ interface OtpLoginFormProps {
     beforeSendFailedMessage?: string;
     /** The number as typed — the page's consent belongs to the number it was given for. */
     onPhoneChange?: (phone: string) => void;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — the joining flow's number screen says
+     * "पुढे जाण्यासाठी तुमचा मोबाईल नंबर" in place of "लॉग इन करा" (and no second line). Default: the login words.
+     */
+    title?: string;
+    line?: string | null;
 }
 
 // 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
@@ -35,7 +42,7 @@ interface OtpLoginFormProps {
 // design-mode brief; stealth back-door removed). Demo testers type the literal
 // phone 8888888888.
 const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
-    onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage, onPhoneChange,
+    onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage, onPhoneChange, title, line,
 }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const c = authCopy(language).otp;
@@ -55,8 +62,10 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
         if (beforeSend) {
             try {
                 await beforeSend();
-            } catch {
-                setError(beforeSendFailedMessage ?? c.saveFailed);
+            } catch (err) {
+                // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A) — "नको" on the permissions page is
+                // his answer, not a failure: nothing was sent, nothing saved, nothing said; he is back on his number.
+                if (!isPermissionsDeclined(err)) setError(beforeSendFailedMessage ?? c.saveFailed);
                 setIsLoading(false);
                 sendingRef.current = false;
                 return;
@@ -83,9 +92,9 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
         <form onSubmit={handleSubmit} className="space-y-5">
             <div className="text-center space-y-1">
                 <h2 className="text-xl font-serif font-bold text-stone-800">
-                    {c.title}
+                    {title ?? c.title}
                 </h2>
-                <p className="text-xs text-stone-500">{c.line}</p>
+                {line !== null && <p className="text-xs text-stone-500">{line ?? c.line}</p>}
             </div>
 
             <div className="space-y-1">

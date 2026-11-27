@@ -84,6 +84,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         closeJoinByCode,
         handleJoinComplete,
         handleWithdrawRequest,
+        heldJoin,
+        ownFarmFirst,
     } = useFarmContextState();
 
     const currentFarmName = myFarms?.find(f => f.farmId === currentFarmId)?.name;
@@ -304,6 +306,9 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 /* spec: plr-d10 lane MU-2 — an invitation answered on the 0-farm screen re-reads the farm lists (the same
                    refresh as the join door): Active opens the farm, a request stays waiting. */
                 onInvitationAnswered={() => handleJoinComplete({ farmId: '', farmName: '', status: 'PendingApproval' })}
+                /* spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — "नाही, मी स्वतः सुरू करतोय" before
+                   sign-in: open straight on making his own farm. */
+                openOnCreate={ownFarmFirst}
             />
 
             {/* Heavy wizard — still available from AppHeader "create farm" CTA
@@ -321,6 +326,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 isOpen={showJoinByCode}
                 onClose={closeJoinByCode}
                 onJoined={handleJoinComplete}
+                /* V1-A: the QR / code he gave before the SMS code, sent once now that his number is proven. */
+                held={heldJoin}
             />
 
             {weather.pendingWeatherEvent && (

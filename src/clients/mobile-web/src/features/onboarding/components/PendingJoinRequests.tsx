@@ -57,6 +57,8 @@ export interface WaitingSeat {
     status?: string | null;
     /** spec: plr-d7-m1 step 2 — the owner's reason, sent for a paused seat only. */
     statusReason?: string | null;
+    /** spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — when a waiting request was made (server time). */
+    requestedAtUtc?: string | null;
 }
 
 export interface PendingJoinRequestsProps {

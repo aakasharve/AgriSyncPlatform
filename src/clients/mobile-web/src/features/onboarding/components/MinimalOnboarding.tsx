@@ -39,6 +39,11 @@ interface MinimalOnboardingProps {
     onBack?: () => void;
     /** spec: plr-d10 lane MU-2 — an invitation was answered (in at once, or a request): the caller refreshes his farms. */
     onInvitationAnswered?: () => void;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — he chose "नाही, मी स्वतः सुरू करतोय" before
+     * sign-in: open on making his own farm, not on the two doors (its "← मागे" still returns to the doors).
+     */
+    openOnCreate?: boolean;
 }
 
 const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
@@ -49,14 +54,16 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     onWithdrawRequest,
     onBack,
     onInvitationAnswered,
+    openOnCreate = false,
 }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const [step, setStep] = useState<'doors' | 'create'>('doors');
 
-    // Every opening starts at the two doors (the card starts empty: it mounts afresh).
+    // Every opening starts at the two doors, or (V1-A) on his own farm's name card when he chose that before sign-in.
+    // The farm-name card starts empty: it mounts afresh.
     useEffect(() => {
-        if (isOpen) setStep('doors');
-    }, [isOpen]);
+        if (isOpen) setStep(openOnCreate ? 'create' : 'doors');
+    }, [isOpen, openOnCreate]);
 
     if (!isOpen) return null;
 

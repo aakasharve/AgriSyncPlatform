@@ -36,6 +36,10 @@ public sealed record SubscriptionSnapshot(
 /// value is a relationship the phone must show as such, never as an ordinary farm. Older apps
 /// ignore the field, which is why they are never sent a non-Active seat: those are listed only
 /// on <c>?includePending=true</c> (<see cref="GetMyFarmsCommand.IncludePending"/>).</param>
+/// <param name="RequestedAtUtc">spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — ADDITIVE, last:
+/// when a waiting request (<c>"PendingApproval"</c>) was made, for the joiner's 2-day "add your own farm" offer. LEFT OUT
+/// of the JSON (never null) for every other seat, so the answer an Active seat or an older phone gets is unchanged
+/// (doctrine P11); only a request listed through <c>?includePending=true</c> can carry it.</param>
 public sealed record MyFarmDto(
     Guid FarmId,
     string Name,
@@ -43,7 +47,9 @@ public sealed record MyFarmDto(
     string? FarmCode,
     SubscriptionSnapshot? Subscription,
     string Status = "Active",
-    string? StatusReason = null);
+    string? StatusReason = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? RequestedAtUtc = null);
 
 public sealed record MyFarmsResult(IReadOnlyList<MyFarmDto> Farms);
 
@@ -98,7 +104,9 @@ public sealed class GetMyFarmsHandler(
                     Status: row.Status.ToString(),
                     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE, last: the owner's
                     // reason, for a paused seat only ("काम थांबवलं — कारण…").
-                    StatusReason: row.StatusReason));
+                    StatusReason: row.StatusReason,
+                    // pilot lane JOIN (V1-A) — ADDITIVE, last: a waiting request's own time; null (left out) otherwise.
+                    RequestedAtUtc: row.Status == MembershipStatus.PendingApproval ? row.RequestedAtUtc : null));
                 continue;
             }
 

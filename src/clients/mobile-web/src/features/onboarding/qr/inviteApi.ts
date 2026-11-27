@@ -94,6 +94,12 @@ export interface MyFarmDto {
      * for a PAUSED seat only (shown to the person: "काम थांबवलं — कारण…").
      */
     statusReason?: string | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — ADDITIVE (absent from older servers, and
+     * from every seat that is not a waiting request): when the request was made, server time. The waiting screen's 2-day
+     * own-farm offer reads it.
+     */
+    requestedAtUtc?: string;
 }
 
 export interface InviteApiError {

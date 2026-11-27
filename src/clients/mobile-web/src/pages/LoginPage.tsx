@@ -9,10 +9,10 @@ import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { APP_VERSION } from '../buildInfo';
 import { invalidateMeContext } from '../core/session/MeContextService';
 import { useLanguage } from '../i18n/LanguageContext';
-// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — consent is one tick here,
-// recorded before the phone number leaves the device (replaces the full-screen gate).
-import ConsentTick from '../features/consent/gate/ConsentTick';
-import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) — consent is the ONE long permissions and
+// privacy page, opened when he taps send and recorded before the phone number leaves the device (replaces the tick).
+import PermissionsPageGate from '../features/consent/permissionsPage/PermissionsPageGate';
+import { isPermissionsDeclined, useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
 // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join button no longer pops a
 // window.prompt for a link. The server answers a farm code only for a signed-in person, so
 // the button says so plainly and the join door (code or QR) opens by itself after sign-in.
@@ -22,6 +22,9 @@ import { rememberJoinAfterSignIn } from '../features/onboarding/qr/farmCodeEntry
 // "← मागे" back to स्वागत on the number step.
 import { authCopy } from '../features/auth/authCopy';
 import { FirstRunBack } from '../features/onboarding/firstRun/FirstRunShell';
+import HeldJoinCard from '../features/onboarding/joinStart/HeldJoinCard';
+import { joinStartCopy } from '../features/onboarding/joinStart/joinStartCopy';
+import type { HeldJoin } from '../features/onboarding/joinStart/heldJoin';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
 // phone, verify via OTP once, and the account is created-or-found by phone
@@ -69,11 +72,17 @@ const TrustItem: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, l
 );
 
 interface LoginPageProps {
-    /** Back to स्वागत (the step before this one in the first run). Not drawn on the OTP step, which has its own. */
+    /** Back to the step before this one in the first run. Not drawn on the OTP step, which has its own. */
     onBack?: () => void;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — the QR or code he gave BEFORE signing in
+     * (held on the phone, sent by the signed-in app after the SMS code). The screen shows it and asks for the number "to
+     * go on"; the join-after-sign-in button is not drawn (he has already given the farm).
+     */
+    heldJoin?: HeldJoin;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onBack, heldJoin }) => {
     const { login, isLoading, authError, clearAuthError } = useAuth();
     const [topMode, setTopMode] = useState<TopMode>('otp');
     const [phone, setPhone] = useState('');
@@ -119,8 +128,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
         try {
             try {
                 await consent.recordIfNeeded();
-            } catch {
-                setConsentError(t('consentGate.saveFailed'));
+            } catch (error) {
+                // "नको" on the page: nothing was sent or saved, and nothing is said.
+                if (!isPermissionsDeclined(error)) setConsentError(t('consentGate.saveFailed'));
                 return;
             }
             await login(normalizedPhone, normalizedPassword, rememberDevice);
@@ -144,23 +154,29 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                                 <FirstRunBack onBack={onBack} label={c.back} testId="login-back" />
                             </div>
                         )}
-                        {/* Brand lockup (shield + wordmark + tagline) — optimized WebP. */}
-                        <img
-                            src="/brand/logo-full.webp"
-                            alt={c.logoAlt}
-                            className="mb-6 h-auto w-[min(300px,82%)] select-none"
-                            draggable={false}
-                        />
+                        {heldJoin && otpMeta === null ? (
+                            <HeldJoinCard held={heldJoin} />
+                        ) : (
+                            /* Brand lockup (shield + wordmark + tagline) — optimized WebP. */
+                            <img
+                                src="/brand/logo-full.webp"
+                                alt={c.logoAlt}
+                                className="mb-6 h-auto w-[min(300px,82%)] select-none"
+                                draggable={false}
+                            />
+                        )}
 
                         <div className="w-full max-w-sm glass-panel space-y-5 border border-stone-200/70 p-6 shadow-xl">
                             {otpMeta === null ? (
                                 <OtpLoginForm
                                     onOtpSent={(ph, meta) => { setOtpPhone(ph); setOtpMeta(meta); }}
-                                    consentSlot={<ConsentTick consent={consent} />}
+                                    consentSlot={<PermissionsPageGate consent={consent} />}
                                     sendBlocked={!consent.canSend}
                                     beforeSend={consent.recordIfNeeded}
                                     beforeSendFailedMessage={t('consentGate.saveFailed')}
                                     onPhoneChange={setOtpTypedPhone}
+                                    title={heldJoin ? joinStartCopy(language).toGoOn : undefined}
+                                    line={heldJoin ? null : undefined}
                                 />
                             ) : (
                                 <OtpVerifyForm
@@ -181,8 +197,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                                 </button>
                             </div>
 
-                            {/* Worker QR join */}
-                            <div className="space-y-2 pt-1">
+                            {/* Worker QR join (not drawn when the farm was already given before sign-in) */}
+                            {!heldJoin && <div className="space-y-2 pt-1">
                                 <div className="flex items-center gap-2">
                                     <div className="h-px flex-1 bg-stone-200" />
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{c.joinSeparator}</span>
@@ -202,7 +218,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                                         {c.joinAfterSignInHint}
                                     </p>
                                 )}
-                            </div>
+                            </div>}
                         </div>
 
                         {/* Trust signals */}
@@ -300,7 +316,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
                         </label>
                     </div>
 
-                    <ConsentTick consent={consent} disabled={isLoading} />
+                    <PermissionsPageGate consent={consent} />
 
                     {shownError && (
                         <div role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">

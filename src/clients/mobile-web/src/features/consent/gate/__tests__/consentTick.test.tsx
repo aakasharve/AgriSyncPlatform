@@ -4,8 +4,13 @@
 //
 // Authored by test-writer from the spec alone.
 //
-// `useConsentBeforeOtp` + `<ConsentTick>` + `<ConsentNoticeSheet>`, driven through a tiny
-// harness. Mocked: the network (consentGateApi), the link store (consentGateLinkReconciler),
+// `<ConsentTick>` + `<ConsentNoticeSheet>`, driven through a tiny harness that holds the tick
+// state the way its one remaining caller does (the signed-in one-time notice sheet,
+// `features/consent/reask/NoticeChangeSheet`). spec: plr-d10-schedule-mechanism-pilot-2026-11-22
+// (pilot lane JOIN, V6c-A): the phone-number screens no longer draw this tick - the permissions
+// page replaced it there - so the RECORDING rules that used to be pinned here through
+// `useConsentBeforeOtp` (AC4, AC10, AC16, AC19) now live in
+// `useConsentBeforeOtp.markBeforeSend.test.tsx` and the LoginPage / JoinFarmLandingPage suites. Mocked: the network (consentGateApi), the link store (consentGateLinkReconciler),
 // the app language (LanguageContext) and the Capacitor App plugin (so Android Back can be
 // pressed). Real: `useConsentGate` over fake-indexeddb, so the device mark the voice-clip
 // store reads is checked where it actually lives.
@@ -113,49 +118,52 @@ vi.mock('@capacitor/app', () => {
     };
 });
 
-import { useConsentBeforeOtp } from '../useConsentBeforeOtp';
+import { useLanguage } from '../../../../i18n/LanguageContext';
 import * as ConsentTickModule from '../ConsentTick';
-import { buildConsentAcceptance } from '../consentAcceptance';
 import {
     CONSENT_NOTICE,
     DATA_FIDUCIARY,
-    NOTICE_VERSION,
     canonicalNoticeText,
     type NoticeLanguage,
 } from '../consentNotice';
 import { t as translate } from '../../../../i18n/translations';
-import { getDatabase, resetDatabase } from '../../../../infrastructure/storage/DexieDatabase';
+import { resetDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { setActiveDatabaseName } from '../../../../infrastructure/storage/activeDatabaseName';
 import { UNIDENTIFIED_DATABASE_NAME } from '../../../../infrastructure/storage/userDatabaseName';
 
-type ConsentBeforeOtp = ReturnType<typeof useConsentBeforeOtp>;
-type TickComponent = React.FC<{ consent: ConsentBeforeOtp; disabled?: boolean }>;
+type TickState = ConsentTickModule.ConsentTickState;
+type HarnessState = TickState & { canSend: boolean };
+type TickComponent = React.FC<{ consent: TickState; disabled?: boolean }>;
 // The spec names the component, not the export form; accept either.
 const tickExports = ConsentTickModule as unknown as { default?: TickComponent; ConsentTick?: TickComponent };
 const ConsentTick = (tickExports.default ?? tickExports.ConsentTick) as TickComponent;
 
 const IDS = { termsAcceptanceEventId: 't-1', consentGrantEventId: 'c-1' };
-/** The device mark the voice-clip store reads (unchanged device semantics). */
-const ACCEPTED_NOTICE_PREF = 'shramsafal_consent_gate_accepted_notice';
-const deviceMark = async (): Promise<unknown> => (await getDatabase().uiPrefs.get(ACCEPTED_NOTICE_PREF))?.value;
 
 // ── harness ──────────────────────────────────────────────────────────────────────────
-let latest: ConsentBeforeOtp | null = null;
+let latest: HarnessState | null = null;
+/** The tick state as its caller holds it (NoticeChangeSheet's shape): ticked, notice open, the language on screen. */
 const Harness: React.FC<{ tickDisabled?: boolean }> = ({ tickDisabled }) => {
-    const consent = useConsentBeforeOtp();
-    latest = consent;
+    const { language } = useLanguage();
+    const [ticked, setTicked] = React.useState(false);
+    const [noticeOpen, setNoticeOpen] = React.useState(false);
+    const consent: TickState = {
+        status: 'required', ticked, setTicked, recording: false,
+        language: language === 'en' ? 'en' : 'mr', noticeOpen, setNoticeOpen,
+    };
+    latest = { ...consent, canSend: ticked };
     return (
         <div>
             <input data-testid="harness-phone" type="tel" defaultValue="" />
             <div data-testid="tick-host">
                 <ConsentTick consent={consent} disabled={tickDisabled} />
             </div>
-            <output data-testid="harness-can-send">{String(consent.canSend)}</output>
+            <output data-testid="harness-can-send">{String(ticked)}</output>
             <output data-testid="harness-language">{consent.language}</output>
         </div>
     );
 };
-const hook = (): ConsentBeforeOtp => {
+const hook = (): HarnessState => {
     if (!latest) throw new Error('harness not rendered');
     return latest;
 };
@@ -256,13 +264,6 @@ const isScroller = (el: Element) =>
 
 const LEGAL_MD = '# Legal heading\n\nLegal body paragraph.';
 
-/** Tick, then record once, through the hook — the shape every page uses. */
-async function tickAndRecord(): Promise<void> {
-    fireEvent.click(screen.getByTestId('consent-tick'));
-    await waitFor(() => expect(hook().canSend).toBe(true));
-    await act(async () => { await hook().recordIfNeeded(); });
-}
-
 beforeEach(async () => {
     try { await resetDatabase(); } catch { /* none open */ }
     await Dexie.delete(UNIDENTIFIED_DATABASE_NAME);
@@ -348,92 +349,6 @@ describe('ConsentTick — never pre-ticked, and the only thing that enables send
         expect(tickState(box)).toBe(false);
         expect(hook().ticked).toBe(false);
         expect(hook().canSend).toBe(false);
-    });
-});
-
-describe('AC4 — consent belongs to the person at the screen, not to the phone', () => {
-    it('a phone that accepted before still shows the tick, unticked, on a new visit', async () => {
-        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF, value: NOTICE_VERSION });
-
-        render(<Harness />);
-        await settle();
-
-        expect(screen.getByTestId('consent-tick')).toBeInTheDocument();
-        expect(tickState(screen.getByTestId('consent-tick'))).toBe(false);
-        expect(hook().status).toBe('required');
-        expect(hook().canSend).toBe(false);
-    });
-
-    it('within one visit, a successful accept removes the tick and allows sending without a tick', async () => {
-        render(<Harness />);
-        await tickAndRecord();
-
-        await waitFor(() => expect(hook().status).toBe('passed'));
-        expect(screen.getByTestId('tick-host')).toBeEmptyDOMElement();
-        expect(screen.queryByTestId('consent-tick')).toBeNull();
-        expect(screen.queryByTestId('consent-tick-hint')).toBeNull();
-        expect(screen.queryByTestId('consent-open-notice')).toBeNull();
-        expect(hook().canSend).toBe(true);
-    });
-
-    it('within one visit, a retry after a successful accept records nothing more', async () => {
-        render(<Harness />);
-        await tickAndRecord();
-        await waitFor(() => expect(hook().status).toBe('passed'));
-
-        await act(async () => { await hook().recordIfNeeded(); });
-        await act(async () => { await hook().recordIfNeeded(); });
-
-        expect(h.record).toHaveBeenCalledTimes(1);
-        expect(h.remember).toHaveBeenCalledTimes(1);
-    });
-
-    it('each acceptance writes the device mark the voice-clip store reads', async () => {
-        render(<Harness />);
-        expect(await deviceMark()).not.toBe(NOTICE_VERSION);
-        await tickAndRecord();
-        await waitFor(async () => expect(await deviceMark()).toBe(NOTICE_VERSION), { timeout: 5000 });
-    });
-
-    it('a later visit on the same phone shows the tick again and records again', async () => {
-        render(<Harness />);
-        await tickAndRecord();
-        await waitFor(async () => expect(await deviceMark()).toBe(NOTICE_VERSION), { timeout: 5000 });
-        cleanup();
-        latest = null;
-
-        render(<Harness />);
-        await settle();
-        expect(tickState(screen.getByTestId('consent-tick'))).toBe(false);
-        expect(hook().status).toBe('required');
-        expect(hook().canSend).toBe(false);
-
-        await tickAndRecord();
-        expect(h.record).toHaveBeenCalledTimes(2);
-    });
-});
-
-describe('AC19 — every acceptance carries its own pre-registration session id', () => {
-    it('two acceptances send two different ids, and each remembered link payload carries its own', async () => {
-        render(<Harness />);
-        await tickAndRecord();
-        cleanup();
-        latest = null;
-        render(<Harness />);
-        await tickAndRecord();
-
-        expect(h.record).toHaveBeenCalledTimes(2);
-        const firstId = h.record.mock.calls[0][1];
-        const secondId = h.record.mock.calls[1][1];
-        expect(typeof firstId).toBe('string');
-        expect(typeof secondId).toBe('string');
-        expect((firstId as string).length).toBeGreaterThan(0);
-        expect((secondId as string).length).toBeGreaterThan(0);
-        expect(secondId).not.toBe(firstId);
-
-        expect(h.remember).toHaveBeenCalledTimes(2);
-        expect(h.remember.mock.calls[0][1]).toBe(firstId);
-        expect(h.remember.mock.calls[1][1]).toBe(secondId);
     });
 });
 
@@ -793,171 +708,3 @@ describe('AC9 — every string the tick row and the sheet render is in the hashe
     });
 });
 
-describe('useConsentBeforeOtp.recordIfNeeded — record first, mark after, never on failure', () => {
-    it('rejects when not ticked, and records nothing (AC10)', async () => {
-        render(<Harness />);
-        let caught: unknown = null;
-        await act(async () => {
-            try { await hook().recordIfNeeded(); } catch (e) { caught = e ?? 'thrown'; }
-        });
-        expect(caught).not.toBeNull();
-        expect(h.record).not.toHaveBeenCalled();
-        expect(h.remember).not.toHaveBeenCalled();
-        expect(await deviceMark()).not.toBe(NOTICE_VERSION);
-        expect(hook().status).toBe('required');
-    });
-
-    it('when ticked: records buildConsentAcceptance(language) with a minted session id, then remembers, marks the device and passes', async () => {
-        let resolveRecord: (v: typeof IDS) => void = () => undefined;
-        h.record.mockImplementation(() => new Promise((resolve) => { resolveRecord = resolve; }));
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        let pending: Promise<void> = Promise.resolve();
-        act(() => { pending = hook().recordIfNeeded(); });
-        await waitFor(() => expect(h.record).toHaveBeenCalledTimes(1));
-
-        // Nothing is remembered or marked while the write is in flight.
-        await settle();
-        expect(h.remember).not.toHaveBeenCalled();
-        expect(await deviceMark()).not.toBe(NOTICE_VERSION);
-        expect(hook().status).toBe('required');
-
-        const [acceptance, sessionId] = h.record.mock.calls[0];
-        expect(acceptance).toEqual(buildConsentAcceptance('mr'));
-        expect(typeof sessionId).toBe('string');
-        expect((sessionId as string).length).toBeGreaterThan(0);
-
-        await act(async () => { resolveRecord(IDS); await pending; });
-
-        expect(h.remember).toHaveBeenCalledTimes(1);
-        expect(h.remember.mock.calls[0][0]).toEqual(buildConsentAcceptance('mr'));
-        expect(h.remember.mock.calls[0][1]).toBe(sessionId);
-        await waitFor(async () => expect(await deviceMark()).toBe(NOTICE_VERSION), { timeout: 5000 });
-        expect(hook().status).toBe('passed');
-        expect(hook().canSend).toBe(true);
-    });
-
-    it('records the language on screen at the time — English after a switch', async () => {
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        fireEvent.click(screen.getByTestId('consent-open-notice'));
-        const sheet = await screen.findByTestId('consent-notice-sheet');
-        fireEvent.click(within(sheet).getByText('English'));
-        fireEvent.click(screen.getByTestId('consent-notice-close'));
-        await waitFor(() => expect(hook().language).toBe('en'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        await act(async () => { await hook().recordIfNeeded(); });
-
-        const acceptance = h.record.mock.calls[0][0] as ReturnType<typeof buildConsentAcceptance>;
-        expect(acceptance.displayedLanguage).toBe('en');
-        expect(acceptance.canonicalNotice).toBe(canonicalNoticeText('en'));
-    });
-
-    it('on failure rethrows, marks nothing, remembers nothing, keeps the tick and stays required', async () => {
-        const failure = new Error('offline');
-        h.record.mockRejectedValue(failure);
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        let caught: unknown = null;
-        await act(async () => {
-            try { await hook().recordIfNeeded(); } catch (e) { caught = e; }
-        });
-
-        expect(caught).toBe(failure);
-        await settle();
-        expect(h.remember).not.toHaveBeenCalled();
-        expect(await deviceMark()).not.toBe(NOTICE_VERSION);
-        expect(hook().ticked).toBe(true);
-        expect(hook().recording).toBe(false);
-        expect(hook().status).toBe('required');
-        expect(hook().canSend).toBe(true);
-        expect(tickState(screen.getByTestId('consent-tick'))).toBe(true);
-    });
-
-    it('a second attempt after a failure records again (retry)', async () => {
-        h.record.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(IDS);
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        await act(async () => { try { await hook().recordIfNeeded(); } catch { /* first attempt fails */ } });
-        await act(async () => { await hook().recordIfNeeded(); });
-
-        expect(h.record).toHaveBeenCalledTimes(2);
-        expect(h.remember).toHaveBeenCalledTimes(1);
-        await waitFor(() => expect(hook().status).toBe('passed'));
-    });
-});
-
-describe('AC16 — while the acceptance is being written', () => {
-    it('the tick is held, sending is off, and a second call makes no second write', async () => {
-        const user = userEvent.setup();
-        let resolveRecord: (v: typeof IDS) => void = () => undefined;
-        h.record.mockImplementation(() => new Promise((resolve) => { resolveRecord = resolve; }));
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        let first: Promise<void> = Promise.resolve();
-        act(() => { first = hook().recordIfNeeded(); });
-        await waitFor(() => expect(hook().recording).toBe(true));
-        expect(h.record).toHaveBeenCalledTimes(1);
-        expect(hook().canSend).toBe(false);
-        expect(hook().status).toBe('required');
-
-        // The tick cannot be changed while recording.
-        const box = screen.getByTestId('consent-tick');
-        expect(isTickDisabled(box)).toBe(true);
-        await user.click(box);
-        await settle();
-        expect(hook().ticked).toBe(true);
-        expect(tickState(box)).toBe(true);
-
-        // A second tap reuses the one in-flight write and does not report success early.
-        let secondSettled = false;
-        let second: Promise<void> = Promise.resolve();
-        act(() => { second = hook().recordIfNeeded(); });
-        void second.then(() => { secondSettled = true; }, () => { secondSettled = true; });
-        await settle();
-        expect(h.record).toHaveBeenCalledTimes(1);
-        expect(secondSettled).toBe(false);
-
-        await act(async () => { resolveRecord(IDS); await first; await second; });
-
-        expect(h.record).toHaveBeenCalledTimes(1);
-        expect(h.remember).toHaveBeenCalledTimes(1);
-        expect(hook().recording).toBe(false);
-        expect(hook().status).toBe('passed');
-        expect(hook().canSend).toBe(true);
-    });
-
-    it('a failed in-flight write rejects every caller that joined it, once', async () => {
-        let rejectRecord: (e: unknown) => void = () => undefined;
-        h.record.mockImplementation(() => new Promise((_resolve, reject) => { rejectRecord = reject; }));
-        render(<Harness />);
-        fireEvent.click(screen.getByTestId('consent-tick'));
-        await waitFor(() => expect(hook().canSend).toBe(true));
-
-        const outcomes: string[] = [];
-        act(() => {
-            void hook().recordIfNeeded().then(() => outcomes.push('ok'), () => outcomes.push('failed'));
-        });
-        await waitFor(() => expect(hook().recording).toBe(true));
-        act(() => {
-            void hook().recordIfNeeded().then(() => outcomes.push('ok'), () => outcomes.push('failed'));
-        });
-
-        await act(async () => { rejectRecord(new Error('offline')); await new Promise((r) => setTimeout(r, 20)); });
-
-        expect(h.record).toHaveBeenCalledTimes(1);
-        expect(outcomes).toEqual(['failed', 'failed']);
-        expect(hook().recording).toBe(false);
-        expect(hook().status).toBe('required');
-        expect(hook().ticked).toBe(true);
-    });
-});

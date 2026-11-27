@@ -2,8 +2,10 @@
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-1, FR-8). The REAL App + AppFrame +
  * AuthProvider decide the first screen (harness as App.offlineColdStart.test.tsx):
- *   - a signed-out person on a phone that has not seen it gets स्वागत FIRST, then the login;
- *   - the login's "← मागे" brings स्वागत back; a phone that passed it goes straight to the login;
+ *   - a signed-out person on a phone that has not seen it gets स्वागत FIRST, then the signed-out screens
+ *     (spec plr-d10-schedule-mechanism-pilot-2026-11-22, lane JOIN, V1-A: the first questions before the number,
+ *     `PreSignInFlow` - their own suites in features/onboarding/joinStart);
+ *   - their "← मागे" brings स्वागत back; a phone that passed it goes straight to them;
  *   - a scanned QR still goes straight to its own join page; a signed-in person never sees स्वागत.
  */
 import '@testing-library/jest-dom/vitest';
@@ -53,13 +55,14 @@ vi.mock('../features/sync', () => ({ OfflineBanner: () => null }));
 vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabled: vi.fn(), clearAiTestMode: vi.fn() }));
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+vi.mock('../features/consent/permissionsPage/useHeldSwitchChoices', () => ({ useHeldSwitchChoices: vi.fn() }));
 // plr-d10 I25: the one-time notice-change sheet (own tests in features/consent/reask) — a marker here.
 vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({
     default: ({ userId }: { userId: string }) => <div data-testid="notice-change-sheet-mount" data-user={userId} />,
 }));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 // The three screens are stubbed to the props App gives them; their content has its own suites.
-vi.mock('../pages/LoginPage', () => ({
+vi.mock('../features/onboarding/joinStart/PreSignInFlow', () => ({
     default: ({ onBack }: { onBack?: () => void }) => (
         <div data-testid="login-page">{onBack && <button type="button" onClick={onBack}>login-back</button>}</div>
     ),
