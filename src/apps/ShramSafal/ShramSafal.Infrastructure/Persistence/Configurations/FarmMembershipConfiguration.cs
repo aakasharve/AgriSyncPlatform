@@ -9,10 +9,18 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
     public void Configure(EntityTypeBuilder<FarmMembership> builder)
     {
         // lane MU-4 — ck_farm_memberships_plot_scope: chosen plots name one or more plots, every other scope names none.
-        builder.ToTable("farm_memberships", t => t.HasCheckConstraint(
-            "ck_farm_memberships_plot_scope",
-            "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) "
-            + "AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')"));
+        builder.ToTable("farm_memberships", t =>
+        {
+            t.HasCheckConstraint(
+                "ck_farm_memberships_plot_scope",
+                "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) "
+                + "AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')");
+            // spec: plr-d10 pilot lane PERM — ck_farm_memberships_work_kinds: no limit (NULL), or one or more of the six kinds that can be limited.
+            t.HasCheckConstraint(
+                "ck_farm_memberships_work_kinds",
+                "allowed_work_kinds IS NULL OR (cardinality(allowed_work_kinds) >= 1 AND allowed_work_kinds <@ "
+                + "ARRAY['cropActivities','irrigation','inputs','labour','machinery','activityExpenses']::text[])");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -183,6 +191,19 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
             .HasDefaultValueSql("'{}'::uuid[]")
             .IsRequired();
         builder.Ignore(x => x.ScopePlotIds);
+
+        // spec: plr-d10 pilot lane PERM — migration AddMemberWorkKinds. The kinds of work the seat may record, as a native text[] of the record's own
+        // bucket names, NULLABLE with no default and no back-fill: every existing row reads NULL = every kind (P9, P11). When it last changed: NULLABLE.
+        // No new table, so no new RLS policy: p_tenant_farm_memberships names the row, not the column.
+        builder.PrimitiveCollection<List<string>>("_allowedWorkKinds")
+            .HasField("_allowedWorkKinds")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasColumnName("allowed_work_kinds")
+            .HasColumnType("text[]")
+            .IsRequired(false);
+        builder.Ignore(x => x.AllowedWorkKinds);
+        builder.Property(x => x.WorkKindsChangedAtUtc)
+            .HasColumnName("work_kinds_changed_at_utc");
 
         // spec: plr-d10 lane MU-2 — three additive, nullable columns: every existing row reads NULL (no label guessed,
         // no invitation, no worker link), so an old seat answers exactly what it answered (P10, P11).

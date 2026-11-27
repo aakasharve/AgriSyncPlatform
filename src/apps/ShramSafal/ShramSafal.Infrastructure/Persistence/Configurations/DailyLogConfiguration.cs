@@ -8,7 +8,11 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
 {
     public void Configure(EntityTypeBuilder<DailyLog> builder)
     {
-        builder.ToTable("daily_logs");
+        // spec: plr-d10 pilot lane PERM - ck_daily_logs_money_audience: a record's money is either its normal readers' (NULL) or the registrant's and
+        // its maker's ('OnlyMe'); nothing else is a value.
+        builder.ToTable("daily_logs", t => t.HasCheckConstraint(
+            "ck_daily_logs_money_audience",
+            "money_audience IS NULL OR money_audience = 'OnlyMe'"));
 
         builder.HasKey(x => x.Id);
 
@@ -179,6 +183,15 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .IsRequired();
         builder.Property(x => x.AudienceChangedAtUtc)
             .HasColumnName("audience_changed_at_utc");
+
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-ups 1 and 2) - who sees the MONEY the record states: NULL = its normal readers (every
+        // record made while the farm's money was not private, and every older record), 'OnlyMe' = the registrant and its maker. NULLABLE, no default,
+        // no back-fill; CHECK ck_daily_logs_money_audience in migration AddMoneyPrivateSwitch. An older binary never names it.
+        builder.Property(x => x.MoneyAudience)
+            .HasColumnName("money_audience")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+        builder.Ignore(x => x.MoneyIsPrivate);
 
         // spec: plr-d10 lane MU-4 fix pass 1 (M2) — the last move to another place, and every plot it stood on before.
         builder.Property(x => x.PlaceChangedAtUtc)
