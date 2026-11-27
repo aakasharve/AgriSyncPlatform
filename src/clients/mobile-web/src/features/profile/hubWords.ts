@@ -37,7 +37,7 @@ export interface HubWords {
     /** "‹name› कुटुंब" over the farms list. */
     family: (firstName: string) => string;
     /** The pages' own titles (their title bars). */
-    pages: { identity: string; structure: string; utils: string; machines: string; health: string };
+    pages: { identity: string; structure: string; utils: string; machines: string; health: string; farm: string };
     steps: Record<HubStepId, string>;
     line: {
         identity: (done: boolean) => string;
@@ -79,7 +79,7 @@ const MR: HubWords = {
     // The team screen's own words (teamCopy), so the row and its page never say two things.
     team: { title: TEAM_COPY.pageTitle, hubLine: TEAM_COPY.hubLine, crewLine: TEAM_COPY.crewLine, requests: TEAM_COPY.requestsTitle },
     family: firstName => `${firstName} कुटुंब`,
-    pages: { identity: 'माझी ओळख', structure: 'पिकं आणि प्लॉट', utils: 'पाणी आणि वीज', machines: 'यंत्रं', health: 'माती व पाणी अहवाल' },
+    pages: { identity: 'माझी ओळख', structure: 'पिकं आणि प्लॉट', utils: 'पाणी आणि वीज', machines: 'यंत्रं', health: 'माती व पाणी अहवाल', farm: 'शेताची ओळख' },
     steps: {
         identity: 'माझी ओळख', water: 'पाण्याचे स्रोत', motor: 'मोटर', power: 'वीज आणि वेळापत्रक',
         structure: 'पिकं आणि प्लॉट', team: 'माझी टीम', machines: 'यंत्रं', health: 'माती व पाणी अहवाल',
@@ -138,7 +138,7 @@ const EN: HubWords = {
         requests: n => (n === 1 ? '1 person wants to join' : `${n} people want to join`),
     },
     family: firstName => `${firstName} family`,
-    pages: { identity: 'My identity', structure: 'Crops and plots', utils: 'Water and power', machines: 'Machines', health: 'Soil and water reports' },
+    pages: { identity: 'My identity', structure: 'Crops and plots', utils: 'Water and power', machines: 'Machines', health: 'Soil and water reports', farm: 'Farm identity' },
     steps: {
         identity: 'My identity', water: 'Water sources', motor: 'Motor', power: 'Power and timetable',
         structure: 'Crops and plots', team: 'My team', machines: 'Machines', health: 'Soil and water reports',
