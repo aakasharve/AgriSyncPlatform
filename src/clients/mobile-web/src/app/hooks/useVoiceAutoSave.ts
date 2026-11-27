@@ -19,7 +19,8 @@
  *   - Not taken, so today's review form gets the parse: the हजेरी door (labour has its own result screen),
  *     a parse with nothing understood in it, a parse that would MOVE the save to a plot the AI suggested
  *     (`suggestedContext` — he must choose that himself, never silently), and a save that wrote nothing.
- *     Nothing is ever lost.
+ *     Nothing is ever lost. Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर"): also the farm's FIRST record on this
+ *     phone (`isFirstRecord`, given by the composition root only), saved on his "बरोबर" through `saveChecked`.
  *   - The day-closure analytics event (`closure.submitted`, method 'voice') is sent once the save is on the
  *     phone, as the review form's Save tap sent it before (DWC v2 §2.8): the admin MIS counts closed days,
  *     action time and repeat use from it, and voice is now the main way a day is closed.
@@ -42,7 +43,7 @@ import { logger } from '../../infrastructure/observability/Logger';
 import { noteVoiceJourney, type VoiceJourneyEvent } from '../../infrastructure/voice/voiceJourneySignal';
 import { emitClosureSubmitted } from '../../core/telemetry/eventEmitters';
 import { isAutoSavableVoiceDraft, primaryLogOf } from '../helpers/autoSavedVoiceLog';
-import { bindDraftDecline, draftDay } from '../../features/voice/draftFacts';
+import { bindDraftDecline, draftDay, draftDecline } from '../../features/voice/draftFacts';
 import type { UseLogCommandsResult } from './useLogCommands.types';
 import type { LogIntent } from './useAppNavigation';
 
@@ -92,6 +93,12 @@ export interface UseVoiceAutoSaveProps {
     farmId?: string | null;
     /** Injected for tests; the real one validates and queues the analytics event. */
     emitClosure?: typeof emitClosureSubmitted;
+    /**
+     * Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — is this the farm's FIRST record on this phone? Then it is
+     * handed back to "तपासा आणि जतन करा" and saved only on "बरोबर" (`saveChecked`). Absent = every record auto-saves, as
+     * before (only the app's composition root gives it); a gate that cannot answer counts as "no".
+     */
+    isFirstRecord?: (farmId: string | null) => Promise<boolean>;
 }
 
 /** How many of the eight parts the parse filled (the review form's `fields_used`, counted the same way). */
@@ -114,7 +121,7 @@ export { primaryLogOf };
 
 export function useVoiceAutoSave({
     handleAutoSave, logIntent, setStatus, linkClip = linkClipToLog, archiveIdOf = archiveIdForRecording, farmId = null,
-    emitClosure = emitClosureSubmitted,
+    emitClosure = emitClosureSubmitted, isFirstRecord,
 }: UseVoiceAutoSaveProps) {
     const [voiceResult, setVoiceResult] = useState<VoiceResultState | null>(null);
     // 'saving' while a save is in flight, 'saved' once it wrote. Absent = never handled (or wrote nothing).
@@ -135,6 +142,8 @@ export function useVoiceAutoSave({
             if (seen === 'saved') setStatus('success');
             return true;
         }
+        // R1-g 1d — the farm's FIRST record waits for his "बरोबर" on "तपासा आणि जतन करा" (nothing written, nothing queued).
+        if (isFirstRecord && await isFirstRecord(farmId).catch(() => false)) { bindDraftDecline(draft, 'firstRecord', recording); return false; }
         handled.current.set(key, 'saving');
         // L6b — typed to Sathi: no recording exists, so none is named, looked for or linked.
         const typed = recording.typed === true;
@@ -179,7 +188,7 @@ export function useVoiceAutoSave({
         handled.current.delete(key);
         bindDraftDecline(draft, 'notWritten', recording);
         return false;
-    }, [handleAutoSave, logIntent, setStatus, linkClip, archiveIdOf, farmId, emitClosure]);
+    }, [handleAutoSave, logIntent, setStatus, linkClip, archiveIdOf, farmId, emitClosure, isFirstRecord]);
 
     /**
      * Lane OF (D-58 / D-59) — "जतन करा" on the "तपासा आणि जतन करा" screen: the parse he looked at, saved through the
@@ -195,7 +204,10 @@ export function useVoiceAutoSave({
             const voiceClipId = recording && !typed ? await archiveIdOf(recording).catch((error: unknown) => { logger.warn('checked save: the archive id of the recording could not be read', { error: String(error) }); return undefined; }) : undefined;
             // A plot Sathi only suggested is never where it lands: the place he chose is (CTX-1).
             const { suggestedContext: _suggested, ...chosen } = draft;
-            return await handleAutoSave(chosen as AgriLogResponse, provenance, {
+            // R1-g 1d — a first record saved here on "बरोबर" is owned by its result screen from now on: the same recording
+            // handed over again (a re-entry) is never written a second time (the gate no longer holds it back).
+            const heldAsFirst = recording && draftDecline(draft)?.reason === 'firstRecord' ? recordingKey(recording) : null;
+            const saved = await handleAutoSave(chosen as AgriLogResponse, provenance, {
                 autoSavedFromVoice: true,
                 ...(typed && { typedEntry: true }),
                 ...(voiceClipId && { voiceClipId }),
@@ -211,6 +223,8 @@ export function useVoiceAutoSave({
                     setVoiceResult({ logIds: logs.map(l => l.id), clipId, key: recording ? recordingKey(recording) : `checked|${Date.now()}`, unclear, written: logs, ...(typed && { typed: true }) });
                 },
             });
+            if (saved && heldAsFirst) handled.current.set(heldAsFirst, 'saved');
+            return saved;
         } catch (error) {
             logger.error('Checked voice save failed', error);
             return null;

@@ -32,6 +32,8 @@ export const OnboardingPermissionsPage = React.lazy(() => import('../../pages/On
 export const WelcomeScreen = React.lazy(() => import('../../pages/WelcomeScreen'));
 // The founder's welcome voice note — first-run step between the permissions and the role welcome.
 export const WelcomeStory = React.lazy(() => import('../../pages/onboarding/welcome/WelcomeStory'));
+// Repair R1-g 1a — the first-record card, after the role welcome (an owner or co-owner seat, once, on the first run only).
+export const FirstRecordCard = React.lazy(() => import('../../pages/onboarding/FirstRecordCard'));
 export const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 export const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 export const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));

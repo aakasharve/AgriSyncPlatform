@@ -40,6 +40,7 @@ import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { placeLabelOf } from '../../../../core/navigation/placeLabel';
 import { resultStr } from '../voiceResult/resultStrings';
 import { VoiceLayer } from '../voiceFlowV2/VoiceLayer';
+import { clearEntryOpening, peekEntryOpening } from './entryOpening';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -112,8 +113,13 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay, fullScreen = false, history,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
-    const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
-    const [entryStep, setEntryStep] = useState<StepperStep>(() => (hasSelection && !homeRequested ? 'plot' : 'crop'));
+    // Repair R1-g 1a (CTO ruling 2) — the first-record card's "बोलायला सुरुवात करा" asked the log tab to open on the crop
+    // question, the step "झालेले काम सांगा" opens (`entryOpening.ts`). Read once, by the log tab's own flow only (the ONE
+    // mic's flow has `startAt`); a tab tap (`homeRequested`) still wins.
+    const [openOnCrop] = useState(() => startAt === undefined && !homeRequested && !labourIntent && peekEntryOpening() === 'crop');
+    useEffect(() => { if (startAt === undefined) clearEntryOpening(); }, [startAt]);
+    const [step, setStep] = useState<FlowStep>(() => (startAt ?? (openOnCrop ? 'entry' : homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
+    const [entryStep, setEntryStep] = useState<StepperStep>(() => (hasSelection && !homeRequested && !openOnCrop ? 'plot' : 'crop'));
     const [recording, setRecording] = useState(false);
     // spec voice-flow-v2-2026-11-23 (H7) — only with the flag on does a plot tap change any new state.
     const micCountdown = FEATURE_FLAGS.voiceFlowV2 === true && !labourIntent;

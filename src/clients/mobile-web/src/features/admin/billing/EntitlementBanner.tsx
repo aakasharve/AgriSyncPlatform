@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { isBillingVisible } from '../../../app/featureFlags';
 
 export interface SubscriptionSnapshotView {
     statusCode: number;
@@ -27,6 +28,8 @@ interface EntitlementBannerProps {
 }
 
 const EntitlementBanner: React.FC<EntitlementBannerProps> = ({ subscription, role, onManageBilling }) => {
+    // Repair R1-g 1c (founder, 27 Nov) — nothing at all unless the default-off billing switch is on (no box, no gap).
+    if (!isBillingVisible()) return null;
     // Workers never see a billing banner — plan §D6 (visibility preserved).
     if (role !== 'PrimaryOwner' && role !== 'SecondaryOwner') return null;
     if (!subscription) {

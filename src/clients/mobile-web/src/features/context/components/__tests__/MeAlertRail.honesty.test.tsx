@@ -11,6 +11,11 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The billing switch (VITE_BILLING_VISIBLE, default off). featureFlags.ts reads its env in a form vi.stubEnv does not reach in
+// this repo (see MeterQuestionHost.test.tsx), so the switch is turned through the module.
+const billing = vi.hoisted(() => ({ on: false }));
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
@@ -23,8 +28,10 @@ const withAlerts = (alerts: unknown[]) => {
     farmContext.meContext = { me: {}, farms: [{ farmId: 'f1', name: 'सोनाका शेत' }], share: {}, alerts };
 };
 
-beforeEach(() => { farmContext.meContext = null; });
-afterEach(cleanup);
+// Repair R1-g 1c (founder, 27 Nov): the plan alerts are drawn only with the billing switch on (off by default;
+// MeAlertRail.billingSwitch.test.tsx). This suite checks what they SAY once drawn, so it turns the switch on.
+beforeEach(() => { farmContext.meContext = null; billing.on = true; });
+afterEach(() => { cleanup(); billing.on = false; });
 
 describe('H9 - the plan-ending banner never invents a number of days', () => {
     it('daysLeft missing (undefined, null, NaN): nothing is drawn - not "0 दिवसांत"', () => {

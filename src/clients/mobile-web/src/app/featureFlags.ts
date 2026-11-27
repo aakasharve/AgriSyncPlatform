@@ -19,6 +19,17 @@ export const isWeatherBackendFetchEnabled = (): boolean =>
 export const isVoiceDoomLoopDetectorEnabled = (): boolean =>
     !['0', 'false', 'off', 'no'].includes(readEnv('VITE_VOICE_DOOM_LOOP_DETECTOR'));
 
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 — repair R1-g Part 1, task 1c, as the founder changed it on 27 Nov: "Don't
+ * show billing card yet for Pilot users this will not be applicable" and "Do not mention anything about pricing in the app
+ * anywhere right now". Everything about billing, the plan and the trial stays HIDDEN unless this switch is on: the सेट-अप केंद्र
+ * "बिलिंग" row and the card it opens (`SubscriptionCard`), the trial banner (`EntitlementBanner`) and the server's plan alerts
+ * (`MeAlertRail`). Off, none of them is drawn and none leaves a gap. Default OFF (env VITE_BILLING_VISIBLE absent -> false); no
+ * env file and no release workflow sets it. Read at render time (a runtime gate, like the two above).
+ */
+export const isBillingVisible = (): boolean =>
+    isEnabled('VITE_BILLING_VISIBLE');
+
 // Direct literal-comparison form so Vite can constant-fold this at build
 // time and tree-shake the gated `React.lazy(() => import('../pages/TestE2EPage'))`
 // branch in AppRouter. The other flags above use the dynamic `isEnabled`

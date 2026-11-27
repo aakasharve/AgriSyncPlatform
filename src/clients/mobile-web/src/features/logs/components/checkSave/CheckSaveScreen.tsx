@@ -21,6 +21,7 @@ import { AddedRow, BlockerRow, TypedTag } from '../voiceResult/DayParts';
 import type { BlockerEntry, PartEntry } from '../voiceResult/resultModel';
 import { checkSaveWords } from './checkSaveWords';
 import type { CheckCase } from './checkSaveModel';
+import { attendanceCardCopy } from '../../../labour/attendanceCopy';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -56,6 +57,9 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const w = checkSaveWords(language);
     const unclear = p.kind === 'unclear';
+    // R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — the farm's FIRST record: "बरोबर" saves it, "बदल करा" corrects it.
+    const first = p.kind === 'firstRecord';
+    const card = attendanceCardCopy(language);
     const needsPlace = p.kind === 'otherPlot' && !p.placeLabel;
     return (
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="check-save" data-kind={p.kind}>
@@ -130,10 +134,19 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
             {!unclear && (
                 <>
                     {!p.placeLabel && <p className="m-0 px-1 text-[14px] font-bold text-sky-800" data-testid="check-place-first">{w.choosePlaceFirst}</p>}
+                    {/* R1-g 1d — the farm's first record: the हजेरी card's own pre-save line (`attendanceCardCopy`). */}
+                    {first && <p className="m-0 px-1 text-[15px] font-bold text-stone-800" data-testid="check-first-honesty">{card.preSaveHonesty}</p>}
                     <button type="button" onClick={p.onSave} disabled={p.saving || !p.placeLabel || p.needsDay} data-testid="check-save-button"
                         className="min-h-[56px] w-full rounded-2xl bg-emerald-700 text-[18px] font-extrabold text-white disabled:bg-stone-300">
-                        {p.saving ? w.saving : p.kind === 'notWritten' ? w.saveAgain : w.save}
+                        {p.saving ? w.saving : p.kind === 'notWritten' ? w.saveAgain : first ? card.confirmButton : w.save}
                     </button>
+                    {/* R1-g 1d — "बदल करा" corrects it before anything is saved: said again on THE one mic, same place and day. */}
+                    {first && (
+                        <button type="button" onClick={p.onSayAgain} disabled={p.saving} data-testid="check-first-change"
+                            className="min-h-[52px] w-full rounded-2xl border-2 border-stone-300 bg-white text-[17px] font-extrabold text-stone-800 disabled:opacity-50">
+                            {card.editButton}
+                        </button>
+                    )}
                     {p.saveFailed && <p className="m-0 text-[14px] font-bold text-red-700" data-testid="check-save-failed">{w.saveFailed}</p>}
                 </>
             )}
