@@ -1138,6 +1138,11 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var analyticsSchemaCreated = analyticsPhase1Created || analyticsPhase2Created;
         var ssfSchemaCreated = ssfPhaseACreated || ssfPhaseBCreated;
 
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S2) - the government village list. The migration AddLgdPlaceList
+        // loads it; this checks it on every boot (and loads it once where the tables were made without the migration). A list whose counts do
+        // not match THROWS here, outside any non-fatal catch: the boot must not swallow it (doctrine F3).
+        logger.LogInformation("{PlaceList}", await User.Infrastructure.Places.LgdPlaceListLoader.EnsureLoadedAsync(userContext, CancellationToken.None));
+
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
             "true",

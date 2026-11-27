@@ -12,6 +12,12 @@ public sealed class UserDbContext(DbContextOptions<UserDbContext> options) : DbC
     public DbSet<AppMembership> Memberships => Set<AppMembership>();
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
 
+    // spec: plr-d10 pilot lane IDENT (S2) - the government village list (LGD), reference data read by code.
+    public DbSet<Places.LgdDistrict> LgdDistricts => Set<Places.LgdDistrict>();
+    public DbSet<Places.LgdTaluka> LgdTalukas => Set<Places.LgdTaluka>();
+    public DbSet<Places.LgdVillage> LgdVillages => Set<Places.LgdVillage>();
+    public DbSet<Places.LgdListVersion> LgdListVersions => Set<Places.LgdListVersion>();
+
     /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Maps to the same physical
     /// <c>ssf.outbox_messages</c> table that ShramSafalDbContext owns,

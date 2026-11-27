@@ -1479,6 +1479,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms and nothing
         // else. It never touches ssf.audit_events, its policies or its grants. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S2) - Up() and Down() read in full: a User-context migration (public schema; it shares the
+        // scratch database's history table, so it is only LISTED here: the ShramSafal migrator never reverts or re-applies it). Up() creates public.lgd_districts, lgd_talukas,
+        // lgd_villages and lgd_list_versions (the government village list, loaded from the embedded file; RLS enabled with a read-all policy; SELECT granted to the app role and
+        // every write revoked). It never touches ssf.audit_events, its policies or its grants. Down() drops exactly those four tables. Safe mid-proof.
+        "20261127040000_AddLgdPlaceList",
     ];
 
     /// <summary>

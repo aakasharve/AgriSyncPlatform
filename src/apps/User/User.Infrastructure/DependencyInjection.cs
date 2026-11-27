@@ -82,6 +82,8 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IOtpChallengeRepository, OtpChallengeRepository>();
+        // spec: plr-d10 pilot lane IDENT (S2) - the server's copy of the government village list.
+        services.AddScoped<IPlaceListReader, Places.LgdPlaceListReader>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IJwtTokenService, JwtTokenIssuer>();
 

@@ -293,6 +293,150 @@ namespace User.Infrastructure.Persistence.Migrations
                     b.ToTable("refresh_tokens", "public");
                 });
 
+            modelBuilder.Entity("User.Infrastructure.Places.LgdDistrict", b =>
+                {
+                    b.Property<int>("Code")
+                        .HasColumnType("integer")
+                        .HasColumnName("code");
+
+                    b.Property<string>("ListVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("list_version");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_mr");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("lgd_districts", "public");
+                });
+
+            modelBuilder.Entity("User.Infrastructure.Places.LgdListVersion", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("version");
+
+                    b.Property<int>("DistrictCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("district_count");
+
+                    b.Property<DateTime>("LoadedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("loaded_at_utc");
+
+                    b.Property<string>("Provenance")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provenance");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("source");
+
+                    b.Property<int>("TalukaCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("taluka_count");
+
+                    b.Property<int>("VillageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("village_count");
+
+                    b.HasKey("Version");
+
+                    b.ToTable("lgd_list_versions", "public");
+                });
+
+            modelBuilder.Entity("User.Infrastructure.Places.LgdTaluka", b =>
+                {
+                    b.Property<int>("Code")
+                        .HasColumnType("integer")
+                        .HasColumnName("code");
+
+                    b.Property<int>("DistrictCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("district_code");
+
+                    b.Property<string>("ListVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("list_version");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_mr");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("DistrictCode");
+
+                    b.ToTable("lgd_talukas", "public");
+                });
+
+            modelBuilder.Entity("User.Infrastructure.Places.LgdVillage", b =>
+                {
+                    b.Property<int>("Code")
+                        .HasColumnType("integer")
+                        .HasColumnName("code");
+
+                    b.Property<string>("ListVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("list_version");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_mr");
+
+                    b.Property<string>("Pin")
+                        .HasColumnType("character(6)")
+                        .HasColumnName("pin");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TalukaCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("taluka_code");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("TalukaCode");
+
+                    b.ToTable("lgd_villages", "public");
+                });
+
             modelBuilder.Entity("User.Domain.Identity.User", b =>
                 {
                     b.OwnsOne("User.Domain.Identity.PhoneNumber", "Phone", b1 =>
@@ -353,6 +497,24 @@ namespace User.Infrastructure.Persistence.Migrations
                         .WithMany("Memberships")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("User.Infrastructure.Places.LgdTaluka", b =>
+                {
+                    b.HasOne("User.Infrastructure.Places.LgdDistrict", null)
+                        .WithMany()
+                        .HasForeignKey("DistrictCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("User.Infrastructure.Places.LgdVillage", b =>
+                {
+                    b.HasOne("User.Infrastructure.Places.LgdTaluka", null)
+                        .WithMany()
+                        .HasForeignKey("TalukaCode")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

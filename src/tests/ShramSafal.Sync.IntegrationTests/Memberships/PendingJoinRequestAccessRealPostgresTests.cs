@@ -669,6 +669,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms. It creates and
         // alters no policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S2) - Up() and Down() read in full: a User-context migration (public schema; the ShramSafal
+        // migrator never reverts or re-applies it, it only shares the scratch database's history table). Up() creates the four public.lgd_* reference tables (the
+        // government village list) with one read-all policy each; no p_user_select_* policy, no farm_memberships or farm_join_requests object, no ssf.farms policy, no
+        // seat. Down() drops exactly those four tables.
+        "20261127040000_AddLgdPlaceList",
     ];
 
     /// <summary>
