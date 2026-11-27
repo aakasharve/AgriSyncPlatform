@@ -38,7 +38,9 @@ public sealed class PullSyncChangesHandler(
     IOwnerVoiceStore ownerVoiceStore,
     // spec: plr-d10 repair D-9 - each farm's setup (water sources, motors, power times, machines, plot water), for a phone that asks; and (repair D-177)
     // which farms have the owner's own-bill switch on.
-    IFarmSetupStore farmSetupStore)
+    IFarmSetupStore farmSetupStore,
+    // spec: plr-d10 pilot lane IDENT (S3) - the Active seats of his farms: whose face he may see (the picture rule).
+    IFarmMateSeatReader farmMateSeats)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
     // DegradedComponent.ComponentName. Frontend keys on these.
@@ -436,7 +438,7 @@ public sealed class PullSyncChangesHandler(
         // DTO), decided here from the seats he holds (his read scopes above), never by the phone. A failed picture read fails the pull like any other
         // phase-1 read; the phone retries.
         var scheduleTemplates = await SchedulePictureAttacher.AttachAsync(
-            repository, pictureStore, query.UserId, scopes.Values, templatesResult.Value ?? [], ct);
+            repository, pictureStore, farmMateSeats, query.UserId, scopes.Values, templatesResult.Value ?? [], ct);
         // spec: plr-d10 lane L8b-3 (R6, D-76) - the मुख्य schedule of every plot-season he may see, from the SAME rows and the SAME
         // library listing this pull already holds (so a row he may not see is never named, and no query path skips the reader's filter).
         var mainFacts = MainScheduleFactsReader.FromListing(scheduleTemplates);
@@ -512,6 +514,10 @@ public sealed class PullSyncChangesHandler(
         var operatorNames = operators
             .GroupBy(o => o.UserId)
             .ToDictionary(g => g.Key, g => g.First().DisplayName);
+        // spec: plr-d10 pilot lane IDENT (S3; P11) - the people rows a phone that ASKS (people=1) receives: each person's name in the other
+        // script (only what he confirmed) and the pointer to his face when this reader may see it. Any other phone gets exactly today's rows.
+        var operatorRows = await PeopleOnThePull.RowsAsync(
+            query.PeopleFormat is > 0, operators, repository, pictureStore, farmMateSeats, query.UserId, scopes.Values, ct);
 
         // spec: plr-d10 lane BILL-1b (founder D-105 (b)) — each approved bill whose price the main owner changed after its
         // approval goes with the day of his latest change, so the mark "मालकाने बदलला" reaches everyone who receives the
@@ -940,7 +946,7 @@ public sealed class PullSyncChangesHandler(
             priceConfigs.Select(c => c.ToDto()).ToList(),
             plannedActivities.Select(a => a.ToDto()).ToList(),
             auditEvents.Select(a => a.ToDto()).ToList(),
-            operators.ToList(),
+            operatorRows,
             scheduleTemplates,
             cropTypes,
             ReferenceDataCatalog.ActivityCategories,

@@ -22,7 +22,9 @@ public sealed class GetPictureFileHandler(
     IShramSafalRepository repository,
     IPictureStore store,
     IAttachmentStorageService storage,
-    IClock clock)
+    IClock clock,
+    // spec: plr-d10 pilot lane IDENT (S3) - the Active seats of his farms: a farm-mate's face is his to see.
+    IFarmMateSeatReader mates)
 {
     public async Task<Result<GetPictureFileResult>> HandleAsync(GetPictureFileQuery query, CancellationToken ct = default)
     {
@@ -41,7 +43,7 @@ public sealed class GetPictureFileHandler(
         IReadOnlyList<FarmReadScope> scopes = picture.Kind == PictureKind.Institution
             ? []
             : await PictureViewer.ScopesOfAsync(repository, query.RequestedByUserId, clock.UtcNow, ct);
-        var viewer = await PictureViewer.CreateAsync(repository, query.RequestedByUserId, scopes, ct);
+        var viewer = await PictureViewer.CreateAsync(repository, mates, query.RequestedByUserId, scopes, ct);
         if (!await viewer.MaySeeAsync(picture, ct))
         {
             return Result.Failure<GetPictureFileResult>(ShramSafalErrors.PictureNotFound);

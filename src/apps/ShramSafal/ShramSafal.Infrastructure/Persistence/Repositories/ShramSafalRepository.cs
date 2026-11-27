@@ -1647,6 +1647,9 @@ internal sealed class ShramSafalRepository(
         // here (unlike the old per-id query): `IX_memberships_user_id_app_id`
         // is a UNIQUE index on (user_id, app_id) WHERE is_revoked = false, so
         // the join can never produce more than one membership row per user.
+        // spec: plr-d10 pilot lane IDENT (S3) - and the two names of his own identity card (public.user_identity_profiles). ONLY name_mr and
+        // name_en: his Farmer ID, village, taluka, district and PIN are his alone (CTO ruling on founder question 1 = A), and an architecture
+        // test pins that this reader selects nothing else of that table. A person who never saved a card has no row: both stay null.
         var rows = await db.Database
             .SqlQueryRaw<OperatorDirectoryRow>(
                 """
@@ -1658,19 +1661,23 @@ internal sealed class ShramSafalRepository(
                         when 'secondaryowner' then 'SECONDARY_OWNER'
                         when 'mukadam' then 'MUKADAM'
                         else 'WORKER'
-                    end as "Role"
+                    end as "Role",
+                    idp.name_mr as "NameMr",
+                    idp.name_en as "NameEn"
                 from public.users u
                 left join public.memberships m
                     on m.user_id = u."Id"
                     and m.app_id = 'shramsafal'
                     and m.is_revoked = false
+                left join public.user_identity_profiles idp
+                    on idp.user_id = u."Id"
                 where u."Id" = ANY(@ids)
                 """,
                 new Npgsql.NpgsqlParameter("ids", ids.ToArray()))
             .ToListAsync(ct);
 
         return rows
-            .Select(row => new SyncOperatorDto(row.UserId, row.DisplayName, row.Role))
+            .Select(row => new SyncOperatorDto(row.UserId, row.DisplayName, row.Role, row.NameMr, row.NameEn))
             .OrderBy(op => op.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -4312,5 +4319,9 @@ internal sealed class ShramSafalRepository(
         public Guid UserId { get; set; }
         public string DisplayName { get; set; } = string.Empty;
         public string Role { get; set; } = "WORKER";
+
+        // spec: plr-d10 pilot lane IDENT (S3) - the two names of his own identity card; nothing else of it.
+        public string? NameMr { get; set; }
+        public string? NameEn { get; set; }
     }
 }
