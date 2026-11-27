@@ -40,9 +40,9 @@ import {
     buildContextDisplay,
 } from './app/helpers/appContentContextDisplay';
 // spec: owner-oversight-loop (Ruling 12) — the narrow slice of
-// AppFeatureProviders-scoped state AppHeader's oversight strip needs. See
-// that file's header for what it does and does NOT solve (multi-farm data
-// isolation is a pre-existing, separate gap, not introduced here).
+// AppFeatureProviders-scoped state AppHeader's oversight strip needs. Its
+// inputs are the OPEN farm's lists (repair FIX-2: `useAppData` reads them
+// through `app/helpers/openFarmView.ts`); see that file's header.
 import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
 import { getSessionUserId } from './infrastructure/storage/AuthTokenStore';
 // spec: owner-oversight-loop (§P-I) — the ONE definition of "a view change

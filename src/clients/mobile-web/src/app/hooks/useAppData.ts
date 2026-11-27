@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
     CropProfile, FarmerProfile, DailyLog, PlannedTask, LedgerDefaults,
-    ResourceItem, Person, VerificationStatus, OperatorCapability
+    ResourceItem, Person, VerificationStatus, OperatorCapability, FarmOperator
 } from '../../types';
 import { useDataSource } from '../providers/DataSourceProvider';
 import { HarvestSession } from '../../features/logs/harvest.types';
@@ -14,18 +14,33 @@ import { useFarmerSetupPersistence } from './useFarmerSetupPersistence';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOneTaskList } from '../../features/plannedWork/data/useOneTaskList';
 import { useLegacyTodoUpload } from '../../features/plannedWork/data/useLegacyTodoUpload';
+import { NO_PLOT_FARMS, readPlotFarmIndex, type PlotFarmIndex } from '../../features/sync/plots/plotFarmIndex';
+import { cropsOnFarm, logsOnFarm, openFarmOf, peopleOnFarm } from '../helpers/openFarmView';
+import { mergeFarmSave } from '../helpers/farmCropsMerge';
 
 export interface UseAppDataResult {
     // State
     isDemoMode: boolean;
     setIsDemoMode: (val: boolean) => void;
+    /**
+     * Repair FIX-2 - the OPEN farm's crops, each with only the open farm's plots (`app/helpers/openFarmView.ts`): what every
+     * screen reads. A one-farm person gets the stored list itself. Re-read on a farm switch (FarmContext's open farm).
+     */
     crops: CropProfile[];
+    /** Sets the WHOLE stored list in memory (every farm's). A screen's save goes through `handleUpdateCrops`. */
     setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
     farmerProfile: FarmerProfile;
     setFarmerProfile: React.Dispatch<React.SetStateAction<FarmerProfile>>;
+    /**
+     * Repair FIX-2 - the open farm's people, from `farmerProfile.operators` (which holds every farm's, with no farm on them):
+     * for the people LISTS (माझी टीम's view-only list). Name look-ups keep reading `farmerProfile.operators`. On one farm: that list.
+     */
+    farmPeople: FarmOperator[];
 
     // Abstracted History (Replacing mockHistory/realHistory)
+    /** Repair FIX-2 - the open farm's records (every alias below is this list). */
     history: DailyLog[];
+    /** Sets the WHOLE record list in memory (every farm's); every caller passes an updater or the full stored list. */
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
     /**
@@ -169,13 +184,17 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
     // --- LOCAL STATE (Mirrors DataSource) ---
     // Start with empty crops - will be populated based on demo mode
-    const [crops, setCrops] = useState<CropProfile[]>([]);
+    // Repair FIX-2: this is the WHOLE stored list (every farm's); screens read `crops`, the open farm's view of it (below).
+    const [allCrops, setCrops] = useState<CropProfile[]>([]);
     // Separate state for user's real crops (persisted). Written by the hydrate
     // effect; nothing reads it, so the value binding is elided rather than
     // named — the setter call stays exactly as it was.
     const [, setRealCrops] = useState<CropProfile[]>([]);
     const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(createInitialFarmerProfile);
-    const [history, setHistory] = useState<DailyLog[]>([]);
+    // Repair FIX-2: every farm's records; screens read `history`, the open farm's.
+    const [allHistory, setHistory] = useState<DailyLog[]>([]);
+    // Repair FIX-2: which farm each plot is on, read with the crop list (`plotFarmIndex.ts`).
+    const [plotFarms, setPlotFarms] = useState<PlotFarmIndex>(NO_PLOT_FARMS);
 
     // --- AUXILIARY STATE ---
     const [ledgerDefaults, setLedgerDefaults] = useState<LedgerDefaults>({
@@ -224,9 +243,12 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         let mounted = true;
 
         const hydrateRealData = async () => {
-            const loadedCrops = await dataSource.crops.getAll();
+            // Repair FIX-2: the plots' farms are read with the crops, so the open farm's view never shows a list whose farms
+            // are not known yet. A failed read keeps the last one (`readPlotFarmIndex` says why).
+            const [loadedCrops, index] = await Promise.all([dataSource.crops.getAll(), readPlotFarmIndex()]);
             if (!mounted) return;
 
+            if (index) setPlotFarms(index);
             setCrops(loadedCrops.length > 0 ? loadedCrops : []);
             setRealCrops(loadedCrops);
 
@@ -306,11 +328,50 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         };
     }, [dataSource, isDemoMode, isAuthenticated, noteStoredProfile]);
 
+    // --- THE OPEN FARM (repair FIX-2) ---
+    // The farm in the header: FarmContext's, the ONE source since FIX-1 (the task list below reads the same). Demo mode is one
+    // sandbox farm: its lists go as they are.
+    const farmCtx = useOptionalFarmContext();
+    const farmId = farmCtx?.currentFarmId ?? null;
+    const seatKey = (farmCtx?.farms ?? []).map(f => f.farmId).join('|');
+    const openFarm = useMemo(
+        () => openFarmOf(isDemoMode ? null : farmId, plotFarms, seatKey ? seatKey.split('|') : []),
+        [isDemoMode, farmId, plotFarms, seatKey],
+    );
+    const crops = useMemo(() => cropsOnFarm(allCrops, openFarm, plotFarms), [allCrops, openFarm, plotFarms]);
+    const history = useMemo(() => logsOnFarm(allHistory, openFarm, plotFarms), [allHistory, openFarm, plotFarms]);
+    const sessionUserId = session?.userId ?? null;
+    const activeOperatorId = farmerProfile.activeOperatorId ?? null;
+    const farmPeople = useMemo(
+        () => peopleOnFarm(
+            farmerProfile.operators, openFarm, allHistory, plotFarms,
+            new Set([activeOperatorId, sessionUserId].filter((id): id is string => !!id)),
+        ),
+        [farmerProfile.operators, openFarm, allHistory, plotFarms, activeOperatorId, sessionUserId],
+    );
+    // What the screens were last shown: a save removes only what is in it and no longer in the screen's list.
+    const shownCropsRef = useRef<CropProfile[]>(crops);
+    shownCropsRef.current = crops;
+
     // --- HANDLERS ---
 
+    // Repair FIX-2: a screen hands back the open farm's list it was shown, edited. It is MERGED into the stored list
+    // (`farmCropsMerge.ts`), never written over it, so a save on one farm keeps every other farm's crops and plots. Demo mode
+    // keeps its old whole-list write.
     const handleUpdateCrops = async (newCrops: CropProfile[]) => {
-        setCrops(newCrops);
-        await dataSource.crops.save(newCrops);
+        if (isDemoMode) {
+            setCrops(newCrops);
+            await dataSource.crops.save(newCrops);
+            return;
+        }
+        const seen = shownCropsRef.current;
+        const merge = (stored: CropProfile[]) => mergeFarmSave(stored, newCrops, seen, openFarm.farmId);
+        setCrops(prev => merge(prev));
+        if (dataSource.crops.saveMerged) {
+            await dataSource.crops.saveMerged(merge);
+        } else {
+            await dataSource.crops.save(merge(await dataSource.crops.getAll()));
+        }
     };
 
     const handleAddPerson = (person: Person) => {
@@ -338,8 +399,8 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     };
 
     // Lane L8c-4: ONE task list. Real app: what the server keeps, and every change a queued command; demo: the old list, as it was.
-    const farmId = useOptionalFarmContext()?.currentFarmId ?? null;
-    const userId = session?.userId ?? null;
+    // (`farmId` is the open farm read above.)
+    const userId = sessionUserId;
     const knownPlotIds = useMemo(() => new Set(crops.flatMap(c => (c.plots ?? []).map(p => p.id))), [crops]);
     const demo = useMemo(() => ({
         tasks: demoTasks,
@@ -360,6 +421,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         }, // Adapts provider to hook interface
         crops, setCrops,
         farmerProfile, setFarmerProfile,
+        farmPeople,
 
         // Aliases for compatibility
         mockHistory: history,
