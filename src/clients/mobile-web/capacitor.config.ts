@@ -32,7 +32,13 @@ const config: CapacitorConfig & {
       style: 'DARK',
       hidden: false
     },
-    Keyboard: { resize: 'body', resizeOnFullScreen: true },
+    // resizeOnFullScreen is OFF (28 Nov 2026, founder's phone: the bottom half of every screen stayed white). That
+    // option shrinks the app's whole content area while the keyboard is open and grows it back only inside the
+    // keyboard's close ANIMATION; when the close skips that animation (the password screen handing over to the app,
+    // a password-manager sheet) the app stays shrunk on every screen until restarted. The app is lifted above the
+    // keyboard by the window insets instead, which fire on every open AND close: Capacitor's SystemBars on
+    // Android 15+, MainActivity's own listener below that. `resize` is iOS-only (ignored on Android).
+    Keyboard: { resize: 'body', resizeOnFullScreen: false },
     SpeechRecognition: {}
   }
 };

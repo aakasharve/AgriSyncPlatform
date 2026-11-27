@@ -89,10 +89,19 @@ public class MainActivity extends BridgeActivity {
             Insets bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             // Same rule as Capacitor's SystemBars: while the keyboard is up the bottom bar is
-            // not the page's concern (the keyboard plugin resizes the body).
-            int bottom = insets.isVisible(WindowInsetsCompat.Type.ime()) ? 0 : bars.bottom;
+            // not the page's concern (the page is lifted above the keyboard just below).
+            boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime());
+            int bottom = keyboardUp ? 0 : bars.bottom;
             legacySafeArea = Insets.of(bars.left, bars.top, bars.right, bottom);
             publishLegacySafeArea(webView);
+            // 28 Nov 2026: lift the page above the keyboard here, the way Capacitor's SystemBars does on
+            // Android 15+ (this listener replaces SystemBars' on the same view below 15). Insets arrive on
+            // every keyboard open AND close, so the page always gets its full height back; the keyboard
+            // plugin's resizeOnFullScreen (restored only by a close animation, which can be skipped) is off.
+            int imeBottom = keyboardUp ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0;
+            if (v.getPaddingBottom() != imeBottom) {
+                v.setPadding(0, 0, 0, imeBottom);
+            }
             return insets;
         });
 
