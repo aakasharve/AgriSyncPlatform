@@ -89,7 +89,8 @@ import { buildDayCardCore, buildPlotDayCard, placeDayLogs, withNextHint } from '
 import { usePlotUnderstanding } from './overview/usePlotUnderstanding';
 import { ownNameOf } from '../../shared/utils/ownName';
 import { PlotDayCards } from './overview/PlotDayCards';
-import { atNoon, dateLabel, relLabel, weekdayOf } from './overview/reflectDates';
+import { atNoon, dateLabel, fromDateKey, relLabel, weekdayOf } from './overview/reflectDates';
+import { clearReflectDay, peekReflectDay } from './reflectOpening';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
 import { buildTodoList, mergeTasks, newTodoTask, tickableIds, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
 import { spokenTaskId } from '../plannedWork/data/plannedWorkIds';
@@ -137,8 +138,11 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // ── page state ──────────────────────────────────────────────────────────────────────────────
     const [sel, setSel] = useState<ReflectSelection | null>(null); // null = every crop, every plot
-    const [date, setDate] = useState<Date>(() => atNoon(new Date()));
-    const [calView, setCalView] = useState<Date>(() => atNoon(new Date()));
+    // Repair R1-g Part 2 - Home's day-3 card opens this page on THAT day (a one-shot note, read once when the page mounts).
+    const [openOn] = useState<Date>(() => { const key = peekReflectDay(); return atNoon(key ? fromDateKey(key) : new Date()); });
+    useEffect(() => { clearReflectDay(); }, []);
+    const [date, setDate] = useState<Date>(openOn);
+    const [calView, setCalView] = useState<Date>(openOn);
     const [calMode, setCalMode] = useState<CalendarMode>('week');
     // Lane RF2 — the open day view (a plot card's, or the whole farm's), the recording it opens on (a note's), and the
     // logs just told through the ONE mic from it (highlighted on landing).
