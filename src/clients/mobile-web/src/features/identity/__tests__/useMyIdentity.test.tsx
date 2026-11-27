@@ -36,8 +36,8 @@ const api = (get: IdentityCallResult[], put: IdentityCallResult[]): IdentityApi 
     const puts: unknown[] = [];
     return {
         puts,
-        get: vi.fn(async () => get.shift() ?? { kind: 'offline' }),
-        put: vi.fn(async (body: unknown) => { puts.push(body); return put.shift() ?? { kind: 'offline' }; }),
+        get: vi.fn(async (): Promise<IdentityCallResult> => get.shift() ?? { kind: 'offline' }),
+        put: vi.fn(async (body: unknown): Promise<IdentityCallResult> => { puts.push(body); return put.shift() ?? { kind: 'offline' }; }),
     };
 };
 

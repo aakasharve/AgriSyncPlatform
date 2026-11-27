@@ -41,6 +41,8 @@ export interface MyIdentityState {
     pending: PendingSave | null;
     saveState: SaveState;
     refusedCode: string | null;
+    /** The form of a save another phone overtook (409): still shown to him beside the server's newer card, never thrown away silently. */
+    unsentForm: IdentityForm | null;
     save(form: IdentityForm): Promise<void>;
     reload(): Promise<void>;
 }
@@ -56,6 +58,7 @@ export function useMyIdentity(userId: string | null | undefined, api: IdentityAp
     const [asked, setAsked] = useState(false);
     const [saveState, setSaveState] = useState<SaveState>('idle');
     const [refusedCode, setRefusedCode] = useState<string | null>(null);
+    const [unsentForm, setUnsentForm] = useState<IdentityForm | null>(null);
     const sending = useRef(false);
     const alive = useRef(true);
     useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -68,6 +71,7 @@ export function useMyIdentity(userId: string | null | undefined, api: IdentityAp
         setAsked(false);
         setSaveState('idle');
         setRefusedCode(null);
+        setUnsentForm(null);
     }
 
     // The copy is kept per person (its key names him), so it is his.
@@ -95,6 +99,7 @@ export function useMyIdentity(userId: string | null | undefined, api: IdentityAp
         sending.current = true;
         setSaveState('saving');
         setRefusedCode(null);
+        setUnsentForm(null);
         try {
             const r = await api.put(body);
             if (!alive.current) return;
@@ -104,6 +109,7 @@ export function useMyIdentity(userId: string | null | undefined, api: IdentityAp
                 setSaveState('saved');
             } else if (r.kind === 'stale') {
                 setPending(null);
+                setUnsentForm(form);
                 setSaveState('stale');
                 const again = await api.get();
                 if (again.kind === 'ok') keep(again.card);
@@ -148,6 +154,7 @@ export function useMyIdentity(userId: string | null | undefined, api: IdentityAp
         pending: pending && userId ? pending : null,
         saveState,
         refusedCode,
+        unsentForm,
         save,
         reload,
     };
