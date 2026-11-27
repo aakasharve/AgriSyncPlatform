@@ -608,8 +608,8 @@ public sealed class AiEndpointsTests
         Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("resolvedVoiceProvider").GetString());
         Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiModelId").GetString());
         Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
-        Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiOcrModelId").GetString());
-        Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiVoiceFallbackModelId").GetString());
+        Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiOcrModelId").GetString());
+        Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiVoiceFallbackModelId").GetString());
 
         var updateResponse = await harness.Client.PutAsJsonAsync("/shramsafal/ai/config", new
         {

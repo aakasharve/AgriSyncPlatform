@@ -4,8 +4,8 @@ public sealed class GeminiOptions
 {
     public const string SectionName = "Gemini";
     public const string DefaultStructurerModelId = "gemini-3.1-flash-lite";
-    public const string DefaultOcrModelId = "gemini-2.5-flash";
-    public const string DefaultVoiceFallbackModelId = "gemini-2.5-flash";
+    public const string DefaultOcrModelId = "gemini-3.5-flash-lite";
+    public const string DefaultVoiceFallbackModelId = "gemini-3.5-flash-lite";
     public const string DefaultModelId = DefaultVoiceFallbackModelId;
 
     public string ApiKey { get; set; } = string.Empty;
