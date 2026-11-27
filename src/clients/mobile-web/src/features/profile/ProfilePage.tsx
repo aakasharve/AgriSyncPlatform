@@ -59,6 +59,7 @@ import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmSetup } from './farmSetup/useFarmSetup';
 import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
 import { MoveCard } from './farmSetup/MoveCard';
+import { OwnBillApprovalSwitch } from '../finance/OwnBillApprovalSwitch';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -566,6 +567,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                     {plannedWorkWords(language).reminders.settingsEntry}
                                 </Tap>
                             )}
+                            {/* repair D-177 - the farm's own-bill switch: the primary owner's alone. */}
+                            {teamFarmId && <OwnBillApprovalSwitch farmId={teamFarmId} isPrimaryOwner={callerIsPrimary} />}
                             <TeamPage
                                 farmId={teamFarmId}
                                 farmCode={teamFarmCode}

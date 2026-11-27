@@ -51,7 +51,7 @@ export function mayApproveBills(farm: Pick<MeFarm, 'role' | 'authorities'> | nul
  */
 export function mayApproveThisBill(
     farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
-    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds'> | null | undefined,
+    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds' | 'reviewerMayApproveOwnBill'> | null | undefined,
     bill: Pick<MoneyEvent, 'plotId' | 'createdByUserId'>,
     myUserId: string | null | undefined,
 ): boolean {
@@ -61,7 +61,10 @@ export function mayApproveThisBill(
 /**
  * spec: plr-d10-founder-answers-2026-11-23 — founder C3 = C: "For now it works like A: nobody approves his own bill, the owner may. A
  * switch per farm comes after 3 December." The server's ONE named check (`BillApprovalRules.ReviewerMayApproveOwnBill`), mirrored so
- * the phone never draws a button the server can only refuse (P5). The per-farm switch is not built.
+ * the phone never draws a button the server can only refuse (P5).
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177, founder 27 Nov B1.4) - the switch is now PER FARM: this constant is the DEFAULT
+ * (off) when the farm says nothing; the farm's own value comes on the pull (`accessScopes[].reviewerMayApproveOwnBill`, only when on) and decides.
  */
 export const REVIEWER_MAY_APPROVE_OWN_BILL = false;
 
@@ -78,13 +81,15 @@ export type BillApprovalSeat = 'may' | 'ownBill' | 'no';
  */
 export function billApprovalSeat(
     farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
-    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds'> | null | undefined,
+    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds' | 'reviewerMayApproveOwnBill'> | null | undefined,
     bill: Pick<MoneyEvent, 'plotId' | 'createdByUserId'>,
     myUserId: string | null | undefined,
 ): BillApprovalSeat {
     if (!mayApproveBills(farm)) return 'no';
     if (scope?.plotScope === 'ChosenPlots' && Array.isArray(scope.plotIds) && bill.plotId && !scope.plotIds.includes(bill.plotId)) return 'no';
-    if (isPrimaryAccountHolderRole(farm?.role) || REVIEWER_MAY_APPROVE_OWN_BILL) return 'may';
+    // repair D-177: the farm's own switch (only when the server says it is on), else the default - off
+    const farmAllows = scope?.reviewerMayApproveOwnBill === true || REVIEWER_MAY_APPROVE_OWN_BILL;
+    if (isPrimaryAccountHolderRole(farm?.role) || farmAllows) return 'may';
     if (!myUserId) return 'no';
     return bill.createdByUserId === myUserId ? 'ownBill' : 'may';
 }

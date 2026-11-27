@@ -44,4 +44,9 @@ export interface FarmAccessScopeDto {
      * `plotIds` it is all the phone needs to mirror which tasks he may see (for removal only).
      */
     seeAllTasks?: boolean | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - the farm's switch: a money checker may approve a bill he made himself. Written by
+     * the server ONLY when the primary owner turned it on; absent = off (and an older server never sends it: the stricter rule stays).
+     */
+    reviewerMayApproveOwnBill?: boolean | null;
 }
