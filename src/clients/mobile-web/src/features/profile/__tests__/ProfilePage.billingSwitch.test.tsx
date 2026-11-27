@@ -72,6 +72,9 @@ vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: (
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => (await import('../../identity/__tests__/identityApiStub')).identityApiStub());
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type FarmerProfile } from '../../../domain/types/farm.types';
@@ -101,8 +104,9 @@ describe('सेट-अप केंद्र — billing hidden unless the swit
         expect(screen.getByTestId('hub-settings-consent')).toBeInTheDocument();
         expect(screen.queryByTestId('hub-settings-billing')).toBeNull();
         expect(screen.getByTestId('setup-hub').textContent).not.toMatch(/बिलिंग|तुमचा प्लॅन/);
-        fireEvent.click(screen.getByTestId('hub-open-identity'));
-        expect(await screen.findByTestId('page-title')).toHaveTextContent('माझी ओळख');
+        // pilot lane IDENT (S7): the entitlement banner lives on the farm's own page now.
+        fireEvent.click(screen.getByTestId('hub-farm-card-open'));
+        expect(await screen.findByTestId('page-title')).toHaveTextContent('शेताची ओळख');
         expect(document.body.textContent).not.toMatch(/Trial active|ट्रायल चालू|days left on your trial/);
     });
 
@@ -112,7 +116,7 @@ describe('सेट-अप केंद्र — billing hidden unless the swit
         const row = await screen.findByTestId('hub-settings-billing');
         expect(row).toHaveTextContent('बिलिंग');
         expect(row).toHaveTextContent('तुमचा प्लॅन');
-        fireEvent.click(screen.getByTestId('hub-open-identity'));
+        fireEvent.click(screen.getByTestId('hub-farm-card-open'));
         expect(await screen.findByText('Trial active · ट्रायल चालू')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('page-back'));
         fireEvent.click(await screen.findByTestId('hub-settings-billing'));

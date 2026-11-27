@@ -68,6 +68,9 @@ vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: (
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => (await import('../../identity/__tests__/identityApiStub')).identityApiStub());
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type CropProfile, type FarmerProfile } from '../../../domain/types/farm.types';
@@ -101,22 +104,23 @@ describe('सेट-अप केंद्र — the farm open in the app', () 
         h.currentFarmId = 'farm-1';
         mount();
         expect(await screen.findByTestId('hub-farm-code')).toHaveTextContent('K7M2QP');
-        expect(within(screen.getByTestId('hub-me')).getByText('Arve Farm')).toBeInTheDocument();
+        // pilot lane IDENT (V2-A): the farm is the "शेताची ओळख" card's
+        expect(within(screen.getByTestId('hub-farm-card')).getByText('Arve Farm')).toBeInTheDocument();
 
         act(() => { h.switchFarm('farm-2'); });
 
         expect(await screen.findByText('P4W2R9')).toBeInTheDocument();
-        const me = screen.getByTestId('hub-me');
-        expect(within(me).getByText('Pawar Mala')).toBeInTheDocument();
-        expect(me).not.toHaveTextContent('Arve Farm');
-        expect(me).not.toHaveTextContent('K7M2QP');
+        const farm = screen.getByTestId('hub-farm-card');
+        expect(within(farm).getByText('Pawar Mala')).toBeInTheDocument();
+        expect(farm).not.toHaveTextContent('Arve Farm');
+        expect(farm).not.toHaveTextContent('K7M2QP');
     });
 
     it('opened on a farm where I am not an owner: that farm, and no owner doors', async () => {
         h.currentFarmId = 'farm-2';
         mount();
         expect(await screen.findByText('P4W2R9')).toBeInTheDocument();
-        expect(within(screen.getByTestId('hub-me')).getByText('Pawar Mala')).toBeInTheDocument();
+        expect(within(screen.getByTestId('hub-farm-card')).getByText('Pawar Mala')).toBeInTheDocument();
         // the मुकादम's team row only LOOKS at his crew; the owner-only roster is never asked
         const row = await screen.findByTestId('hub-team');
         expect(row).toHaveTextContent('माझ्या टोळीतले लोक');

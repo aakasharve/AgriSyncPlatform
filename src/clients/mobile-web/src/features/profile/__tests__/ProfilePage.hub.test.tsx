@@ -50,7 +50,10 @@ vi.mock('../../../features/admin/billing/EntitlementBanner', () => ({ default: (
 vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: () => null }));
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => (await import('../../identity/__tests__/identityApiStub')).identityApiStub());
 import ProfilePage from '../ProfilePage';
 import { resetWaitingVoiceNotesForTests } from '../../voiceDiary/waiting/useWaitingVoiceNotes';
 import { TestProviders } from '../../../shared/test/TestProviders';
@@ -101,9 +104,10 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(screen.getByTestId('hub-verified')).toHaveTextContent('ओळख पडताळलेली');
     });
 
-    it('counts only the steps that can be done (6) and "पुढचं" opens the next one; back returns to the hub', () => {
+    it('counts only the steps that can be done (6) and "पुढचं" opens the next one; back returns to the hub', async () => {
         mount();
-        expect(screen.getByTestId('hub-progress')).toHaveTextContent('6 पैकी 1 पूर्ण');
+        // pilot lane IDENT: माझी ओळख counts once the server's card (complete) has answered.
+        await waitFor(() => expect(screen.getByTestId('hub-progress')).toHaveTextContent('6 पैकी 1 पूर्ण'));
         // repair FIX-1 item 3: infrastructure before crop and plot — the next step is the water source
         expect(screen.getByTestId('hub-next')).toHaveTextContent('पुढचं: पाण्याचे स्रोत');
         fireEvent.click(screen.getByTestId('hub-next'));
@@ -258,10 +262,14 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(hs.onUpdateProfile).not.toHaveBeenCalled();
     });
 
-    it('the identity page is still reachable under the new title bar', () => {
+    it('pilot lane IDENT (V2-A): "माझी ओळख" is the card on the hub itself (its row keeps the hub); the farm\'s page opens from the farm card', async () => {
         mount();
+        expect(await screen.findByTestId('my-identity-name')).toHaveTextContent('Purvesh Arve');
         fireEvent.click(screen.getByTestId('hub-open-identity'));
-        expect(screen.getByTestId('page-title')).toHaveTextContent('माझी ओळख');
-        expect(screen.getByTestId('hub-page-identity')).toHaveTextContent('Purvesh Arve');
+        expect(screen.getByTestId('page-title')).toHaveTextContent('सेट-अप केंद्र');
+        expect(screen.getByTestId('hub-my-identity')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('hub-farm-card-open'));
+        expect(screen.getByTestId('page-title')).toHaveTextContent('शेताची ओळख');
+        expect(screen.getByTestId('hub-page-farm')).toBeInTheDocument();
     });
 });

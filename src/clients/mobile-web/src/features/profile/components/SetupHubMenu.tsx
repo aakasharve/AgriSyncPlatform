@@ -5,16 +5,17 @@
  * SetupHubMenu — "सेट-अप केंद्र", the hub reached from the header's Setup Hub button.
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). The founder-approved look (PLR-D9
- * preview `SetupHubPage`): one title, one back, me, "शेत तयार करणं — X पैकी Y पूर्ण" with the next
+ * preview `SetupHubPage`): one title, one back, the two top cards (pilot lane IDENT, V2-A: "शेताची ओळख" and
+ * "माझी ओळख", passed in as `topCards`), "शेत तयार करणं — X पैकी Y पूर्ण" with the next
  * step, then plain groups. Every real row is kept: the setup sections (each with its status and the
  * "?" guide), the farms list, "तुमच्या शेती" (switch / create / join — the SAME `FarmSwitcherSheet`,
  * unchanged), कामगार व हजेरी, पैसे व हिशोब, every settings row (testid `hub-settings-<id>`) and
- * बाहेर पडा. No English doubling. It claims "ओळख पडताळलेली" only when told `verified`.
+ * बाहेर पडा. No English doubling. The person's card ("माझी ओळख") claims "ओळख पडताळलेली" only when told so.
  * plr-d10 (I17, PLR-D9 O4 / §6 line 100): रेफरल्स is out of the farmer's view — it opened a blank,
  * English page with no back (its route still answers a direct link, now with a मागे).
  */
 import React, { useState } from 'react';
-import { BarChart3, CheckCircle2, LogOut, MapPin, ShieldCheck, Sprout, UserPlus, Users } from 'lucide-react';
+import { BarChart3, CheckCircle2, LogOut, Sprout, UserPlus, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { HubStepId } from '../hubSteps';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
@@ -65,9 +66,11 @@ export interface SetupProgressData {
 }
 
 interface SetupHubMenuProps {
-    farmerName: string;
-    verified: boolean;
-    farmName?: string;
+    /**
+     * pilot lane IDENT (V2-A) — the two cards at the top: "शेताची ओळख" (the open farm) and "माझी ओळख" (the signed-in person, every
+     * field open). They replace the old one-line person card, which named the farm's primary owner to everyone.
+     */
+    topCards?: React.ReactNode;
     farms?: MyFarmDto[];
     familyName?: string;
     onOpenFarm?: (farmId: string) => void;
@@ -88,12 +91,6 @@ interface SetupHubMenuProps {
     onExit?: () => void;
     onOpenFinance?: () => void;
     onOpenLabour?: () => void;
-    /**
-     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11) — the current farm's permanent code, shown
-     * on the top card (as the approved preview does). Absent / null = no code from the server: nothing
-     * is shown rather than an invented one.
-     */
-    farmCode?: string | null;
     /**
      * Opens "माझी टीम": owner tier (to manage) and a मुकादम (to look at his crew); never a worker.
      * The row is drawn where the `team` step sits in `items` (repair FIX-1 item 3: inside the sequence).
@@ -171,10 +168,10 @@ const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => v
 };
 
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
-    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm,
+    topCards, farms, familyName, onOpenFarm, onAddFarm,
     currentFarmId, onSwitchFarm, onCreateFarm, onJoinViaQr,
     language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour,
-    farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, onInviteLabel, onTeamSolo, settingsItems, onSelectExtra, logout,
+    onOpenTeam, teamViewOnly, teamRequestCount = 0, onInviteLabel, onTeamSolo, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
     // Repair FIX-1 round 1 (Bug 5): every word of the menu in the app's language (Marathi exactly as before).
@@ -192,22 +189,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
         <div style={{ fontFamily: SANS }} data-testid="setup-hub">
             <PageBar title={w.title} onBack={onExit} backLabel={w.back} />
             <div className="space-y-3 pb-4">
-                <GlassCard testId="hub-me">
-                    <div className="flex items-center gap-3">
-                        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 text-[28px] shadow" aria-hidden="true">👨‍🌾</span>
-                        <div className="min-w-0 flex-1">
-                            <p className="m-0 text-[19px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{farmerName || '—'}</p>
-                            {farmName && <p className="m-0 flex items-center gap-1 text-[14px] font-semibold text-stone-600"><MapPin size={15} aria-hidden="true" />{farmName}</p>}
-                            {verified && <p className="m-0 mt-0.5 flex items-center gap-1 text-[13px] font-extrabold text-emerald-800" data-testid="hub-verified"><ShieldCheck size={15} aria-hidden="true" />{w.verified}</p>}
-                        </div>
-                        {/* spec: plr-d7-m1 step 2 (MU-11) — the farm's permanent code, as on the approved hub card. */}
-                        {farmCode && (
-                            <span className="shrink-0 rounded-xl bg-stone-100 px-2.5 py-1.5 text-center text-[11px] font-bold leading-tight text-stone-600" data-testid="hub-farm-code">
-                                {w.farmCode}<br /><b className="text-[13px] tracking-wider text-stone-900">{farmCode}</b>
-                            </span>
-                        )}
-                    </div>
-                </GlassCard>
+                {topCards}
 
                 {setupProgress && <ProgressCard p={setupProgress} w={w} onNext={() => {
                     const next = items.find(it => it.id === setupProgress.nextId);
@@ -218,7 +200,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     single-farm primary owner with nothing waiting (Scenario A). */}
                 <MyResponsibilities />
 
-                {/* your farms — each a 7/12 holding; tap to open its own page (FarmsSection, unchanged) */}
+                {/* your farms — tap one to open its own "शेताची ओळख" page (FarmsSection, unchanged). One farm can be several 7/12 extracts (A8.3). */}
                 {farms && farms.length > 0 && onOpenFarm && (
                     <FarmsSection farms={farms} familyName={familyName} onOpenFarm={onOpenFarm} onAddFarm={onAddFarm} language={language ?? 'mr'} />
                 )}
