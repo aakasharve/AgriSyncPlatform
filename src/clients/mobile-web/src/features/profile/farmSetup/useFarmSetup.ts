@@ -12,22 +12,31 @@ import { useEffect, useState } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { getLocalFarmSetup, type LocalFarmSetup } from './farmSetupLocal';
 
+const notReceived = (farmId: string): LocalFarmSetup => ({
+    farmId, received: false, waterSources: [], machines: [], powerTimes: null, plotWater: new Map(), waitingCount: 0, refused: [],
+});
+
+/** No IndexedDB on this platform (never on a phone; a test runner without one): nothing can have been received - said at once, never "still reading". */
+const noStore = (): boolean => typeof indexedDB === 'undefined';
+const firstValue = (farmId: string | null): LocalFarmSetup | null => (farmId && noStore() ? notReceived(farmId) : null);
+
 export function useFarmSetup(farmId: string | null | undefined): LocalFarmSetup | null {
-    const [state, setState] = useState<{ farmId: string | null; value: LocalFarmSetup | null }>({ farmId: farmId ?? null, value: null });
-    if (state.farmId !== (farmId ?? null)) setState({ farmId: farmId ?? null, value: null });
+    const [state, setState] = useState<{ farmId: string | null; value: LocalFarmSetup | null }>(() => ({ farmId: farmId ?? null, value: firstValue(farmId ?? null) }));
+    if (state.farmId !== (farmId ?? null)) setState({ farmId: farmId ?? null, value: firstValue(farmId ?? null) });
 
     useEffect(() => {
-        if (!farmId) return;
+        if (!farmId || noStore()) return;
         let alive = true;
         let unsubscribe: (() => void) | undefined;
         try {
             const sub = liveQuery(() => getLocalFarmSetup(getDatabase(), farmId)).subscribe({
                 next: value => { if (alive) setState({ farmId, value }); },
-                error: () => { if (alive) setState({ farmId, value: null }); },
+                // the phone's store cannot be read: "not received" - the phone-only page as before, never a blank page
+                error: () => { if (alive) setState({ farmId, value: notReceived(farmId) }); },
             });
             unsubscribe = () => sub.unsubscribe();
         } catch {
-            setState({ farmId, value: null });
+            setState({ farmId, value: notReceived(farmId) });
         }
         return () => { alive = false; unsubscribe?.(); };
     }, [farmId]);

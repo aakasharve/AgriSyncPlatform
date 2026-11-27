@@ -23,6 +23,7 @@ import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { validatePayload } from '../../../infrastructure/sync/PayloadValidator';
 import { SyncMutationName, type SyncMutationType } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
+import { hasAtMostTwoDecimals } from './numbers';
 import type {
     FarmMachineOwnership, FarmMachineType, FarmMotorPowerSource, FarmSetupTimetable, FarmWaterSourceType, PlotWaterMethod,
 } from '../../../domain/types/farmSetup.types';
@@ -178,16 +179,6 @@ async function queueRemove(remove: SyncMutationType, save: SyncMutationType, fam
 
 // ── the shape on the wire ───────────────────────────────────────────────────────────────────────────────
 
-/** Two decimals at most (the server's columns); more is refused, never rounded. */
-export function hasAtMostTwoDecimals(n: number): boolean {
-    return Number.isFinite(n) && Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;
-}
-
-/** A form's number box as he types: anything past two decimals is not taken, so what he sees is what is sent. */
-export function twoDecimalsInput(raw: string): string {
-    const match = /^(\d*)([.,]?)(\d{0,2})/.exec(raw.trim());
-    return match ? `${match[1]}${match[2] ? '.' : ''}${match[3]}` : '';
-}
 
 const text = (v: string | null | undefined): string | undefined => {
     const t = v?.trim();
@@ -254,6 +245,8 @@ export async function setPlotWater(input: PlotWaterInput): Promise<QueuedFarmSet
     };
     return queueWrite(SyncMutationName.FarmsetupPlotWaterSet, PLOT, input.farmId, input.plotId, body);
 }
+
+export { hasAtMostTwoDecimals, twoDecimalsInput } from './numbers';
 
 /**
  * "माझा बदल पुन्हा करा" / "नवीन माहिती पहा": a refused change (parked) is closed by him - soft-dropped (kept for audit). The form then opens with his

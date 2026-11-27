@@ -56,6 +56,7 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
 import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
+import { useFarmSetup } from './farmSetup/useFarmSetup';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -155,6 +156,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Repair FIX-1 item 2 (R2-A 03 + 20): the hub follows the farm OPEN in the app — the one the header
     // and the switcher show — never "the first farm I own".
     const farmAdmin = useFarmAdminState(appFarm?.farmId ?? profileFarmId ?? null);
+    // repair D-9 - the OPEN farm's water, motors, power times and machines as the server holds them (undefined: no farm open, the phone-only pages).
+    const openFarmId = appFarm?.farmId ?? profileFarmId ?? null;
+    const openFarmSetup = useFarmSetup(openFarmId);
+    const farmSetup = openFarmId ? openFarmSetup : undefined;
 
     // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
     // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
@@ -226,6 +231,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+    const plotNames = React.useMemo(() => crops.flatMap(c => c.plots.map(p => ({ id: p.id, name: p.name }))), [crops]);
     // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
     const scheduleChoices = usePlotScheduleChoices();
     const todayKey = getDateKey();
@@ -395,7 +401,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             />
                         ),
                     },
-                    { id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    {
+                        id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />,
+                        body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetup} plots={plotNames} />,
+                    },
                     { id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
                     { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];

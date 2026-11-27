@@ -9,6 +9,10 @@
  * ठिबक (pipe size, filter, flow) — up to 4, any number on a शेततळं; a motor without a name or HP is
  * left out. New: it can also open pre-filled (`initial`) to CHANGE a source and its motors — the ids
  * and every stored field the form does not show are kept. Saving hands the result to `onSave`.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, P4) - `serverIds`: the source is saved to the FARM on the server, so a new source and a new
+ * motor get bare GUID ids (the sync contract's) and no made-up motor timetable (it was read nowhere: contract §1.1). The numbers keep at most two decimals
+ * as he types (the server keeps two and refuses more).
  */
 import React, { useState } from 'react';
 import { Droplets, Plus, Trash2 } from 'lucide-react';
@@ -17,6 +21,7 @@ import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { ChoiceChips, GlassCard, Tap, TextField } from '../../../shared/components/ui/placeUi';
 import { PIPE_SIZES, POWER_SOURCES, SOURCE_TYPES, setupWords, type SetupWords } from './setupLabels';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { twoDecimalsInput } from '../farmSetup/numbers';
 
 /**
  * Repair FIX-1 round 1 (Bug 5, CTO ruling: English mode is English only on the पाणी आणि वीज page, this form included) —
@@ -49,6 +54,8 @@ interface WaterSourceWizardProps {
     initial?: { source: WaterResource; motors: FarmMotor[] };
     onSave: (source: WaterResource, motors: FarmMotor[]) => void;
     onCancel: () => void;
+    /** repair D-9: saved to the farm on the server - bare GUID ids, no made-up motor timetable. Absent: the phone-only ids as before. */
+    serverIds?: boolean;
 }
 
 interface MotorDraft {
@@ -87,7 +94,7 @@ const MotorEditor: React.FC<{ m: MotorDraft; n: number; onChange: (m: MotorDraft
         <input value={m.name} onChange={e => onChange({ ...m, name: e.target.value })} placeholder={words.motorName} data-testid={`motor-name-${n}`}
             className="min-h-[50px] w-full rounded-xl bg-white px-3 text-[16px] font-bold text-stone-900 outline-none ring-1 ring-stone-300 focus:ring-2 focus:ring-blue-500" />
         <label className="flex items-center gap-2 text-[14px] font-extrabold text-stone-700">HP
-            <input type="number" inputMode="decimal" value={m.hp} onChange={e => onChange({ ...m, hp: parseFloat(e.target.value) || 0 })} data-testid={`motor-hp-${n}`}
+            <input type="number" inputMode="decimal" value={m.hp} onChange={e => onChange({ ...m, hp: parseFloat(twoDecimalsInput(e.target.value)) || 0 })} data-testid={`motor-hp-${n}`}
                 className="min-h-[46px] w-24 rounded-xl bg-white px-3 text-[17px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300" />
         </label>
         <p className="m-0 text-[13px] font-extrabold text-stone-600">{words.phase}</p>
@@ -105,7 +112,7 @@ const MotorEditor: React.FC<{ m: MotorDraft; n: number; onChange: (m: MotorDraft
                 <ChoiceChips testId={`motor-filter-${n}`} value={m.dripHasFilter ? 'yes' : 'no'} onPick={v => onChange({ ...m, dripHasFilter: v === 'yes' })}
                     items={[['yes', words.hasFilter], ['no', words.noFilter]] as const} />
                 <label className="flex items-center gap-2 text-[13.5px] font-extrabold text-stone-700">{words.flow}
-                    <input type="number" inputMode="numeric" value={m.dripFlow} placeholder={words.flowPlaceholder} onChange={e => onChange({ ...m, dripFlow: e.target.value })} data-testid={`motor-flow-${n}`}
+                    <input type="number" inputMode="numeric" value={m.dripFlow} placeholder={words.flowPlaceholder} onChange={e => onChange({ ...m, dripFlow: twoDecimalsInput(e.target.value) })} data-testid={`motor-flow-${n}`}
                         className="min-h-[44px] w-28 rounded-xl bg-stone-50 px-2 text-[16px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300" />
                 </label>
             </div>
@@ -113,7 +120,7 @@ const MotorEditor: React.FC<{ m: MotorDraft; n: number; onChange: (m: MotorDraft
     </div>
 );
 
-const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ initial, onSave, onCancel }) => {
+const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ initial, onSave, onCancel, serverIds = false }) => {
     const language = useOptionalLanguage()?.language;
     const words = language === 'en' ? FORM_WORDS.en : FORM_WORDS.mr;
     const labels = setupWords(language);
@@ -136,14 +143,14 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ initial, onSave, 
     };
 
     const handleSave = () => {
-        const sourceId = initial?.source.id ?? `w_${idGenerator.generate()}`;
+        const sourceId = initial?.source.id ?? (serverIds ? idGenerator.generate() : `w_${idGenerator.generate()}`);
         const source: WaterResource = { isAvailable: true, ...initial?.source, id: sourceId, name: sourceName.trim(), type: sourceType };
         const validMotors = motors
             .filter(m => m.name.trim() && m.hp > 0)
             .map((m): FarmMotor => ({
                 ...m.base,
-                schedule: m.base ? m.base.schedule : { ...NEW_MOTOR_SCHEDULE, days: [...NEW_MOTOR_SCHEDULE.days] },
-                id: m.base?.id ?? `m_${idGenerator.generate()}`,
+                ...(serverIds ? {} : { schedule: m.base ? m.base.schedule : { ...NEW_MOTOR_SCHEDULE, days: [...NEW_MOTOR_SCHEDULE.days] } }),
+                id: m.base?.id ?? (serverIds ? idGenerator.generate() : `m_${idGenerator.generate()}`),
                 name: m.name.trim(),
                 hp: m.hp,
                 phase: m.phase,
