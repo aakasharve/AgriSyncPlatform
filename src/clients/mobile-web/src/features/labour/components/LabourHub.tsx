@@ -32,7 +32,7 @@ import { plotScopeCopy } from '../../profile/team/plotScopeCopy';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
-import { ATTENDANCE_COPY } from '../attendanceCopy';
+import { ATTENDANCE_COPY, THROUGH_COPY } from '../attendanceCopy';
 import { canTakeManualAttendance } from '../attendanceDoor';
 import { findMarkedAboveStated, resolveStatedHeadcount } from '../attendanceDisagreement';
 import { presentTodayFromLedger } from '../attendanceManual';
@@ -190,9 +190,17 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
  * the shared function keeps this screen consistent with reflect, which
  * is the point of routing both through the SAME `generateDayWorkSummary`.
  */
-const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }> = ({ logs, defaults }) => {
+const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults; people?: ReadonlyArray<{ id: string; displayName: string }> }> = ({ logs, defaults, people }) => {
+    const language = useOptionalLanguage()?.language;
     const rows = logs
-        .map((log) => ({ id: log.id, labour: generateDayWorkSummary(log, defaults).labour }))
+        .map((log) => ({
+            id: log.id,
+            labour: generateDayWorkSummary(log, defaults).labour,
+            // repair D-9 §8b (a): "कोणामार्फत?" as the pull keeps it on the labour line - shown only for a person the farm's list names (never invented)
+            through: [...new Set((log.labour ?? []).map((e) => e.engagedThroughFieldOperatorId).filter((id): id is string => !!id))]
+                .map((id) => people?.find((p) => p.id === id)?.displayName)
+                .filter((name): name is string => !!name),
+        }))
         .filter((row) => !row.labour.isEmpty);
 
     if (rows.length === 0) return null;
@@ -201,7 +209,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
         <>
             <GroupLabel>आजच्या नोंदी</GroupLabel>
             <div className="flex flex-col gap-2">
-                {rows.map(({ id, labour }) => (
+                {rows.map(({ id, labour, through }) => (
                     <div key={id} data-testid="labour-just-logged-card" className="rounded-[20px] border-2 border-orange-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3">
@@ -265,6 +273,11 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                             record, not a gap (P9) — and is never a headcount:
                             two names beside four मजूर means four came, two of
                             whom he named. */}
+                        {through.length > 0 && (
+                            <p data-testid="labour-just-logged-through" className="m-0 mt-2 pl-[56px] text-[15px] font-bold text-stone-700">
+                                {through.map((name) => THROUGH_COPY[language === 'en' ? 'en' : 'mr'].chosen(name)).join(' · ')}
+                            </p>
+                        )}
                         {(() => {
                             const spokenNames = labour.events.flatMap((event) => event.workerNames ?? []);
                             if (spokenNames.length === 0) return null;
@@ -604,7 +617,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         </HubSection>
 
         {ledgerDefaults && justLoggedLogs.length > 0 && (
-            <LabourJustLogged logs={justLoggedLogs} defaults={ledgerDefaults} />
+            <LabourJustLogged logs={justLoggedLogs} defaults={ledgerDefaults} people={rosterPeople} />
         )}
 
         {/*

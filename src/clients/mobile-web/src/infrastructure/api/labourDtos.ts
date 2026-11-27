@@ -112,6 +112,11 @@ export interface LabourEngagementDto {
     wageWithheld?: boolean | null;
     /** lane MU-3 fix 1 (F10) — a stated crew total withheld from this reader by rule (never "not stated"). */
     totalCostWithheld?: boolean | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9 §8b (a)) - "कोणामार्फत?": the field operator of this farm THROUGH WHOM the crew came.
+     * Written by the server ONLY when set (an older server never sends it; a line without one has no such key).
+     */
+    engagedThroughFieldOperatorId?: string | null;
 }
 
 
