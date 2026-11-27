@@ -39,7 +39,9 @@ export type RefusedReason =
     // lane PRV (D-26) — the record's audience no longer includes him: his change is kept here, the rule says why.
     | 'recordClosed'
     // lane MU-4 — the change names a plot outside his plots (or acts on a record there): kept here, the rule says why.
-    | 'plotClosed';
+    | 'plotClosed'
+    // pilot lane PERM — it holds a kind of work he may not record on that farm (a limit this phone had not heard of yet).
+    | 'kindClosed';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -79,6 +81,8 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'recordClosed';
         case 'ShramSafal.PlotScope.Forbidden':
             return 'plotClosed';
+        case 'ShramSafal.WorkKind.Forbidden':
+            return 'kindClosed';
         default:
             return 'other';
     }
@@ -93,7 +97,7 @@ export function refusalLines(refused: RefusedChange, language: string | null | u
     const words = correctionWords(language);
     // A content change keeps its screen words; a price change refused (lane OF-M fix pass 3) also says who may.
     if (refused.kind === 'revision') {
-        return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed' || refused.reason === 'plotClosed'
+        return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed' || refused.reason === 'plotClosed' || refused.reason === 'kindClosed'
             ? [words.serverRefused, words.refusedReason[refused.reason]]
             : [words.serverRefused];
     }
@@ -114,6 +118,8 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     // lane MU-4 — a change naming a plot outside his plots: the rule's words alone, parked with only "discard" (it
     // cannot succeed as it is; P10: kept on the phone until he discards it).
     if (reason === 'plotClosed') return correctionWords(language).refusedReason.plotClosed;
+    // pilot lane PERM (S4.4) — a kind of work he may not record: the rule's words alone, parked (P10: kept until he discards it).
+    if (reason === 'kindClosed') return correctionWords(language).refusedReason.kindClosed;
     const kind = KIND_OF[mutationType];
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;

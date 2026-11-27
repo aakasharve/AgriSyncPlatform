@@ -170,6 +170,7 @@ const mr: RelationshipCopy = {
         reasons: {
             'ShramSafal.Forbidden': 'या कामाची जबाबदारी त्यांच्याकडे नव्हती', // PROPOSED (Marathi)
             'ShramSafal.PlotScope.Forbidden': 'हा प्लॉट त्यांच्याकडे नाही',
+            'ShramSafal.WorkKind.Forbidden': 'हे काम नोंदवण्याची परवानगी त्यांच्याकडे नव्हती', // PROPOSED (Marathi) - pilot lane PERM
             'ShramSafal.JobCardRoleNotAllowed': 'हे काम सांगण्याची जबाबदारी नव्हती',
             'ShramSafal.TestRoleNotAllowed': 'चाचणीची जबाबदारी नव्हती',
             'ShramSafal.ComplianceSignalRoleNotAllowed': 'या सूचनेची जबाबदारी नव्हती',
@@ -182,6 +183,7 @@ const mr: RelationshipCopy = {
             PlanWork: 'कामाचं नियोजन',
             ReviewMoney: 'पैशांच्या नोंदी तपासणे',
             EditFarmSetup: 'शेताची रचना',
+            WorkKinds: 'काय नोंदवू शकतात', // PROPOSED (Marathi) - pilot lane PERM: the team card's row name
         },
         authorityOther: 'एक जबाबदारी', // PROPOSED (Marathi)
         keptNote: 'कामाचा तपशील तुम्हाला इथे दाखवला जात नाही.', // PROPOSED (Marathi)
@@ -259,6 +261,7 @@ const en: RelationshipCopy = {
         reasons: {
             'ShramSafal.Forbidden': 'they did not hold the responsibility for this work',
             'ShramSafal.PlotScope.Forbidden': 'this plot is not theirs',
+            'ShramSafal.WorkKind.Forbidden': 'they were not allowed to record this kind of work', // PROPOSED (English) - pilot lane PERM
             'ShramSafal.JobCardRoleNotAllowed': 'they did not hold the responsibility to assign this work',
             'ShramSafal.TestRoleNotAllowed': 'they did not hold the responsibility for tests',
             'ShramSafal.ComplianceSignalRoleNotAllowed': 'they did not hold the responsibility for this warning',
@@ -271,6 +274,7 @@ const en: RelationshipCopy = {
             PlanWork: 'plan the work',
             ReviewMoney: 'check money entries',
             EditFarmSetup: 'farm setup',
+            WorkKinds: 'kinds of work they may record', // PROPOSED (English) - pilot lane PERM
         },
         authorityOther: 'a responsibility',
         keptNote: 'The details of the work are not shown to you here.',
