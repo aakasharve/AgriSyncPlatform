@@ -42,6 +42,9 @@ public static class DependencyInjection
         services.AddScoped<RevokeAllDeviceSessionsHandler>();
         // spec: plr-d10 lane NP-1 — the answer to the one-time new-phone question.
         services.AddScoped<AnswerDeviceCheckHandler>();
+        // spec: plr-d10 pilot lane IDENT (S1) — a person's own identity card (GET / PUT /user/auth/me/identity).
+        services.AddScoped<User.Application.UseCases.Users.Identity.GetMyIdentityHandler>();
+        services.AddScoped<User.Application.UseCases.Users.Identity.SetMyIdentityHandler>();
 
         return services;
     }

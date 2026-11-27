@@ -114,6 +114,128 @@ namespace User.Infrastructure.Persistence.Migrations
                     b.ToTable("users", "public");
                 });
 
+            modelBuilder.Entity("User.Domain.Identity.UserIdentityProfile", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<short?>("DistrictBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("district_basis");
+
+                    b.Property<int?>("DistrictLgdCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("district_lgd_code");
+
+                    b.Property<string>("DistrictNameEn")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("district_name_en");
+
+                    b.Property<string>("DistrictNameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("district_name_mr");
+
+                    b.Property<string>("FarmerId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("farmer_id");
+
+                    b.Property<short>("FarmerIdStatus")
+                        .HasColumnType("smallint")
+                        .HasColumnName("farmer_id_status");
+
+                    b.Property<string>("NameEn")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<short?>("NameEnBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("name_en_basis");
+
+                    b.Property<string>("NameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_mr");
+
+                    b.Property<short?>("NameMrBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("name_mr_basis");
+
+                    b.Property<short?>("PinBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("pin_basis");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("character(6)")
+                        .HasColumnName("pin_code");
+
+                    b.Property<string>("PlaceListVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("place_list_version");
+
+                    b.Property<short?>("TalukaBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("taluka_basis");
+
+                    b.Property<int?>("TalukaLgdCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("taluka_lgd_code");
+
+                    b.Property<string>("TalukaNameEn")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("taluka_name_en");
+
+                    b.Property<string>("TalukaNameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("taluka_name_mr");
+
+                    b.Property<string>("UpdatedAppVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("updated_app_version");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<short?>("VillageBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("village_basis");
+
+                    b.Property<int?>("VillageLgdCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("village_lgd_code");
+
+                    b.Property<string>("VillageNameEn")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("village_name_en");
+
+                    b.Property<string>("VillageNameMr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("village_name_mr");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("VillageLgdCode")
+                        .HasDatabaseName("ix_user_identity_profiles_village_lgd_code");
+
+                    b.ToTable("user_identity_profiles", "public");
+                });
+
             modelBuilder.Entity("User.Domain.Membership.AppMembership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -488,6 +610,15 @@ namespace User.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Phone")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("User.Domain.Identity.UserIdentityProfile", b =>
+                {
+                    b.HasOne("User.Domain.Identity.User", null)
+                        .WithOne()
+                        .HasForeignKey("User.Domain.Identity.UserIdentityProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

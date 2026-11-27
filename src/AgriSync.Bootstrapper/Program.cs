@@ -357,6 +357,9 @@ try
     // spec: plr-d10 lane MU-2 — the waiting personal invitations /me/context lists (ShramSafal's own reader).
     builder.Services.AddScoped<User.Application.Ports.IMeInvitationSnapshotReader,
         AgriSync.Bootstrapper.Adapters.MeInvitationSnapshotReader>();
+    // spec: plr-d10 pilot lane IDENT (S3) — his own face for his identity card (ShramSafal's ssf.pictures, read under his own user scope).
+    builder.Services.AddScoped<User.Application.Ports.IMePictureSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.MePictureSnapshotReader>();
 
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")

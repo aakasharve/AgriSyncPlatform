@@ -624,6 +624,14 @@
 //     existing disposition.
 //     KEEP - conscious gate-4 disposition. No scrub action.
 //
+//   - public.user_identity_profiles (plr-d10 pilot lane IDENT, the User context's table) — DELETE, an ACTION (DeleteIdentityProfileAsync). One
+//     row is a person's own identity card, typed by HIM on his own login: his name in Marathi and in English letters (with how each came to be),
+//     his Farmer ID (always Unverified), his village, taluka and district (an LGD code and the list's names, or what he typed) and his PIN.
+//     Nothing on it is another person's record, so the whole row goes (P6). DISCLOSED, existing debt this lane does not widen: the login row
+//     public.users (display_name, phone) is not scrubbed by this worker (contract U6). EXPORTED: ExportWorker writes /identity_profile.json.
+//     Proven through the WHOLE worker: ErasureWorkerPersonIdentityRealPostgresTests runs the real worker and proves the request Completes,
+//     his card is gone, another person's card stays and the audit row names the table.
+//
 //   - ssf.pictures (plr-d10 lane SCH-ID-S, founder D-146) — DELETE, an ACTION (DeletePicturesOfUserAsync), not a disposition. One row is the
 //     current picture of a PERSON (his own face or chosen image; subject = his user id), of ONE schedule (SCHEDULE; set_by = the owner who chose
 //     it) or of an outside schedule's institution (INSTITUTION). The erased person's PERSON row and every SCHEDULE row he set are DELETED with
@@ -1107,6 +1115,10 @@ public sealed class ErasureWorker(
             : await PersonalInvitationPeople.ForgetNumbersAsync(admin, [hisNumber], [], ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["farm_personal_invitations"];
 
+        // spec: plr-d10 pilot lane IDENT (S1; P6) - HIS own identity card (public.user_identity_profiles, the User context): DELETEd outright.
+        perTableCounts["user_identity_profiles"] = await DeleteIdentityProfileAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["user_identity_profiles"];
+
         // (e) Retained voice S3 — via port.
         //
         // ── EVERY exception is caught here, and that is the whole point ──
@@ -1392,6 +1404,15 @@ public sealed class ErasureWorker(
     /// carrying the sentinel is skipped, so a second run changes 0 rows. <c>schedule_checks</c> is not under row-level
     /// security (platform data), so no filtering can hide a row.
     /// </summary>
+    /// <summary>
+    /// spec: plr-d10 pilot lane IDENT (S1; P6) - deletes the person's own identity card (<c>public.user_identity_profiles</c>): his names in both
+    /// scripts, his Farmer ID, village, taluka, district and PIN. Everything on it is what HE typed about HIMSELF, so nothing of it is anyone
+    /// else's record. Raw SQL on the migration-role context (the table is the User context's; this worker already reads <c>public.users</c> the
+    /// same way). Idempotent: a second run deletes 0 rows.
+    /// </summary>
+    internal static Task<int> DeleteIdentityProfileAsync(ShramSafalDbContext db, Guid userId, CancellationToken ct) =>
+        db.Database.ExecuteSqlRawAsync("DELETE FROM public.user_identity_profiles WHERE user_id = {0}", [userId], ct);
+
     internal static async Task<int> ScrubScheduleCheckerNamesAsync(ShramSafalDbContext db, Guid userId, CancellationToken ct)
     {
         return await db.Database.ExecuteSqlRawAsync(
@@ -2027,6 +2048,8 @@ UPDATE ssf.labour_corrections
         "raw_blob_subjects" => new[] { "deleted" },
         // plr-d10 lane SCH-ID-S - the person's picture rows (and files) are DELETEd, as the voice-spine rows above.
         "pictures" => new[] { "deleted" },
+        // plr-d10 pilot lane IDENT - the person's own identity card is DELETEd whole.
+        "user_identity_profiles" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
 

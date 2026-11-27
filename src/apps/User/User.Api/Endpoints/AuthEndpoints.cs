@@ -16,6 +16,7 @@ using User.Application.UseCases.Auth.Session;
 using User.Application.UseCases.Auth.StartOtp;
 using User.Application.UseCases.Auth.VerifyOtp;
 using User.Application.UseCases.Users.GetMeContext;
+using User.Application.UseCases.Users.Identity;
 using AgriSync.SharedKernel.Contracts.Ids;
 
 namespace User.Api.Endpoints;
@@ -415,6 +416,82 @@ public static class AuthEndpoints
                 : Results.NotFound(new { error = result.Error.Code, message = result.Error.Description });
         })
         .WithName("GetMeContext")
+        .RequireAuthorization();
+
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S1) — his own identity card ("माझी ओळख"). The person is ALWAYS the
+        // token's subject: no route or body names another user (a userId in the body is ignored). Not sync: the card belongs to the login, not to
+        // a farm. Under /user/auth, so admin-elevated like /me/context (TenantTransactionMiddleware's skip-list); the tables it writes carry no
+        // row security, and the held-phone gate refuses a phone that has not confirmed the account (auth.device_unconfirmed) like every other route.
+        group.MapGet("/me/identity", async (
+            ClaimsPrincipal user,
+            GetMyIdentityHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new UserId(userId), ct);
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : Results.NotFound(new { error = result.Error.Code, message = result.Error.Description });
+        })
+        .WithName("GetMyIdentity")
+        .RequireAuthorization();
+
+        // A WHOLE replace of his card. 200 = the card as stored (with `downgraded`); 400 = a rule broken (identity.*, with its words); 409
+        // identity.stale = another phone saved first (with `currentVersion`; nothing changed); 404 = no login row. X-App-Version is recorded on
+        // the row as telemetry (E9), never read as permission.
+        group.MapPut("/me/identity", async (
+            HttpContext context,
+            ClaimsPrincipal user,
+            SetMyIdentityHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            SetMyIdentityRequest? request;
+            try
+            {
+                using var document = await System.Text.Json.JsonDocument.ParseAsync(context.Request.Body, cancellationToken: ct);
+                request = SetMyIdentityRequest.Parse(document.RootElement);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                request = null;
+            }
+
+            if (request is null)
+            {
+                return Results.BadRequest(new
+                {
+                    error = User.Domain.Common.UserIdentityErrors.BodyInvalid.Code,
+                    message = User.Domain.Common.UserIdentityErrors.BodyInvalid.Description,
+                });
+            }
+
+            var outcome = await handler.HandleAsync(
+                new UserId(userId), request, context.Request.Headers["X-App-Version"].FirstOrDefault(), ct);
+            if (outcome.IsSuccess)
+            {
+                return Results.Ok(outcome.Saved);
+            }
+
+            var error = outcome.Error!;
+            return error.Kind switch
+            {
+                ErrorKind.Conflict => Results.Json(
+                    new { error = error.Code, message = error.Description, currentVersion = outcome.CurrentVersion },
+                    statusCode: StatusCodes.Status409Conflict),
+                ErrorKind.NotFound => Results.NotFound(new { error = error.Code, message = error.Description }),
+                _ => Results.BadRequest(new { error = error.Code, message = error.Description }),
+            };
+        })
+        .WithName("SetMyIdentity")
         .RequireAuthorization();
 
         return endpoints;

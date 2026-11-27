@@ -183,6 +183,8 @@ public sealed class LgdPlaceListRealPostgresTests(TrialSafetyDatabase db) : ICla
         }
 
         (await CountAsync("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'lgd\\_%'")).Should().Be(0);
+        (await CountAsync("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_identity_profiles'"))
+            .Should().Be(0, "the identity card table's Down() drops it when no card exists");
         (await CountAsync("SELECT count(*) FROM public.users")).Should().BeGreaterThanOrEqualTo(0, "the login tables are untouched");
 
         await using (var context = new UserDbContext(PurveshDemoReseedHarness.UserOptions(db.SuperuserConn)))
@@ -193,6 +195,8 @@ public sealed class LgdPlaceListRealPostgresTests(TrialSafetyDatabase db) : ICla
         await PurveshDemoReseedHarness.GrantAppRoleAsync(db.SuperuserConn);
         (await CountAsync($"SELECT count(*) FROM public.lgd_villages WHERE list_version = '{Version}'")).Should().Be(44930);
         (await CountAsync($"SELECT count(*) FROM public.lgd_list_versions WHERE version = '{Version}'")).Should().Be(1);
+        (await CountAsync("SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.user_identity_profiles'::regclass AND contype = 'c'"))
+            .Should().Be(8, "Up() again makes the card table with its eight checks");
     }
 
     // ── harness ───────────────────────────────────────────────────────────────────────────────────

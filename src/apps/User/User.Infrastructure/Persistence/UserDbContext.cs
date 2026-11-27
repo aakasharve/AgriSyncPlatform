@@ -12,6 +12,9 @@ public sealed class UserDbContext(DbContextOptions<UserDbContext> options) : DbC
     public DbSet<AppMembership> Memberships => Set<AppMembership>();
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
 
+    // spec: plr-d10 pilot lane IDENT (S1) - a person's own identity card ("माझी ओळख"), one row per login.
+    public DbSet<Domain.Identity.UserIdentityProfile> UserIdentityProfiles => Set<Domain.Identity.UserIdentityProfile>();
+
     // spec: plr-d10 pilot lane IDENT (S2) - the government village list (LGD), reference data read by code.
     public DbSet<Places.LgdDistrict> LgdDistricts => Set<Places.LgdDistrict>();
     public DbSet<Places.LgdTaluka> LgdTalukas => Set<Places.LgdTaluka>();

@@ -674,6 +674,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // government village list) with one read-all policy each; no p_user_select_* policy, no farm_memberships or farm_join_requests object, no ssf.farms policy, no
         // seat. Down() drops exactly those four tables.
         "20261127040000_AddLgdPlaceList",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S1) - Up() and Down() read in full: a User-context migration (public schema; the ShramSafal
+        // migrator never reverts or re-applies it). Up() creates public.user_identity_profiles with its checks and a grant; no policy at all, no farm_memberships or
+        // farm_join_requests object, no ssf.farms policy, no seat. Down() refuses while any card exists and otherwise drops the table.
+        "20261127041000_AddPersonIdentityProfile",
     ];
 
     /// <summary>
