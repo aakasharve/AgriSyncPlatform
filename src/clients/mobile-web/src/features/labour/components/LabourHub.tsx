@@ -29,6 +29,7 @@ import { statedLabourMoney } from '../../../domain/logs/labourMoney';
 import { GroupLabel, PersonRow, HelpNote, EmptyState, Avatar } from './LabourUiKit';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { plotScopeCopy } from '../../profile/team/plotScopeCopy';
+import { workKindWords } from '../../workKinds/workKindWords';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
@@ -56,6 +57,11 @@ interface Props {
     onReview: () => void;
     /** Voice input lives only on the canonical log page — the voice card navigates there. */
     onGoToLog: () => void;
+    /**
+     * Pilot lane PERM (S4.3) — the server says this person may not record मजूर on this farm: the voice labour log is not offered (one line
+     * says why, P5). The manual हजेरी marks follow TakeAttendance as before. Absent = he may (every seat today).
+     */
+    labourKindClosed?: boolean;
     /**
      * Labour V2 R1 Task 3.1 — the labour mic anchor. `no-anchor` hides the
      * hero (founder rule 2026-10-25 — it used to be drawn grey and disabled)
@@ -357,7 +363,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults; p
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast, ownAttendanceComingSoon }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, labourKindClosed = false, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast, ownAttendanceComingSoon }) => {
     // lane MU-4 fix pass 2 (M1 label; D-26, §11.6) — on a seat with chosen plots these money cards are his plots' only.
     const plotsLanguage = useOptionalLanguage()?.language;
     const plotsOnly = data.scopedToPlots === true ? plotScopeCopy(plotsLanguage).totalsLabel : null;
@@ -431,7 +437,12 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           */}
         {mayRecord && (
         <HubSection testId="hub-take" tone="em" icon={<Mic size={26} strokeWidth={2.4} />} title="हजेरी घ्या" sub="बोलून — आज कोण आलं ते सांगा">
-        {!heroInactive && <button type="button" onClick={onGoToLog}
+        {labourKindClosed && (
+            <p data-testid="hub-labour-kind-closed" className="m-0 rounded-[20px] border border-amber-300 bg-amber-50 p-4 text-[16px] font-extrabold leading-snug text-amber-950">
+                {workKindWords(plotsLanguage).notAllowedLine(['labour'])}
+            </p>
+        )}
+        {!heroInactive && !labourKindClosed && <button type="button" onClick={onGoToLog}
             className="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
             <span className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
                 <Mic size={32} strokeWidth={2.4} />

@@ -71,6 +71,7 @@ import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
 import { canTakeManualAttendance } from '../attendanceDoor';
 import { clearLabourOpening, dayOpening, peekLabourOpening } from '../labourOpening';
 import HajeriDayEdit from './HajeriDayEdit';
+import { useMayRecordOnOpenFarm } from '../../../core/session/workKinds';
 
 /**
  * Labour V2 R1 Task 3.5c — the honest offline vocabulary for a queued mark,
@@ -346,6 +347,8 @@ export const LabourFeature: React.FC<{
     );
     // The route re-checks the anchor from THIS device's history; tell it when
     // the day is anchored by the server's read-out instead (journey fix D4).
+    // Pilot lane PERM (S4.3) — the open farm's kinds of work: a seat that may not record मजूर is not offered the voice labour log.
+    const mayRecordKind = useMayRecordOnOpenFarm();
     const goToLog = onGoToLog
         ? () => onGoToLog({ anchoredByServer: anchor?.state === 'anchored' && anchor.source === 'server' })
         : goToLogFallback;
@@ -581,6 +584,7 @@ export const LabourFeature: React.FC<{
                                 onLedger={openLedger}
                                 onReview={() => openApprovalReview()}
                                 onGoToLog={goToLog}
+                                labourKindClosed={!mayRecordKind('labour')}
                                 onInviteWorker={farm ? () => setInviteOpen(true) : undefined}
                                 anchor={anchor}
                                 history={history}

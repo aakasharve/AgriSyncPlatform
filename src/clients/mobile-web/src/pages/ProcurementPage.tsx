@@ -33,6 +33,9 @@ import { billMoneyLines } from '../features/procurement/billMoney';
 import { FinanceFilters } from '../features/finance/finance.types';
 import { BuyPlacePicker } from '../features/procurement/components/BillPlacePickers';
 import { BigButton, Chip, PageBar, RowLink, SANS, SectionHead } from '../shared/components/ui/placeUi';
+import { useMayRecordOnOpenFarm } from '../core/session/workKinds';
+import { workKindWords } from '../features/workKinds/workKindWords';
+import { useOptionalLanguage } from '../i18n/LanguageContext';
 
 interface Props {
     crops: CropProfile[];
@@ -69,6 +72,8 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
     const shown = inView.filter(e => matchesSearch(e, searchQuery));
     const searching = searchQuery.trim().length > 0;
     const evidence = useMoneyEvidence();
+    const mayRecordExpense = useMayRecordOnOpenFarm()('activityExpenses');
+    const language = useOptionalLanguage()?.language;
     const photoOf = (e: ProcurementExpense) => (evidence && e.attachmentIds?.[0] ? evidence.photos.get(e.attachmentIds[0]) : undefined);
 
     return (
@@ -91,8 +96,15 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
 
                 <UnsentMoneyCard crops={crops} onSent={refreshData} />
 
-                <BigButton onClick={() => setShowCaptureSheet(true)} testId="scan-receipt-btn"><Camera size={20} aria-hidden="true" />बिलाचा फोटो काढा</BigButton>
-                {onTell && (
+                {/* pilot lane PERM (S4.3) — a खर्च this person may not record on the open farm: its doors are not drawn, one line says why (P5). */}
+                {mayRecordExpense ? (
+                    <BigButton onClick={() => setShowCaptureSheet(true)} testId="scan-receipt-btn"><Camera size={20} aria-hidden="true" />बिलाचा फोटो काढा</BigButton>
+                ) : (
+                    <p className="m-0 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-extrabold leading-snug text-amber-950" data-testid="buy-kind-closed">
+                        {workKindWords(language).notAllowedLine(['activityExpenses'])}
+                    </p>
+                )}
+                {onTell && mayRecordExpense && (
                     <>
                         <div className="grid grid-cols-2 gap-2">
                             <BigButton onClick={onTell} tone="white" testId="buy-tell"><Mic size={20} aria-hidden="true" />बोलून सांगा</BigButton>
@@ -152,7 +164,7 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
                     </p>
                 ) : (
                     <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="buy-empty">
-                        इथे अजून काही खरेदी नाही. बिलाचा फोटो काढा{onTell ? ' किंवा बोलून सांगा' : ''}.
+                        इथे अजून काही खरेदी नाही.{mayRecordExpense && <> बिलाचा फोटो काढा{onTell ? ' किंवा बोलून सांगा' : ''}.</>}
                     </p>
                 )}
 
