@@ -18,6 +18,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import type { FarmColour } from './farmColour';
 import { relationshipCopy, toRelationshipLanguage } from '../../relationships/relationshipCopy';
+import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
 
 /** How long the "आता: ‹शेत›" note stays (the design's 1.8 s). */
 export const FARM_SWITCH_NOTE_MS = 1800;
@@ -96,8 +97,9 @@ export const FarmSwitchNote: React.FC<FarmSwitchNoteProps> = ({ farmName, colour
             aria-live="polite"
             data-testid="farm-switch-note"
             className="pointer-events-none fixed left-1/2 z-[90] max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-full px-3.5 py-2 text-center text-[14px] font-bold shadow-[0_8px_20px_rgba(0,0,0,0.3)]"
+            // FOOT-1: a floating layer sits at the bottom bar's room, never behind the bar or its raised centre button.
             style={{
-                bottom: 'calc(84px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+                bottom: BOTTOM_BAR_CLEARANCE,
                 background: colour.ink,
                 color: '#FFFFFF',
                 ...fontFor(language),
