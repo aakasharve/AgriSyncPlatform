@@ -58,9 +58,9 @@ afterEach(async () => { await Dexie.delete(NAME); });
 
 describe('Dexie v32 - the day-card detail of a schedule version is kept for offline', () => {
     it('is the current version and keys scheduleDayCards by the schedule version', () => {
-        expect(DATABASE_VERSION).toBe(32);
+        expect(DATABASE_VERSION).toBeGreaterThanOrEqual(32); // repair D-9 took v33 (its own test: v33.farmSetup.test.ts)
         const db = new AgriLogDatabase(NAME);
-        expect(db.verno).toBe(32);
+        expect(db.verno).toBe(DATABASE_VERSION);
         expect(db.table('scheduleDayCards').schema.primKey.name).toBe('templateId');
         expect(db.table('plannedWork').schema.indexes.map(i => i.name)).toContain('ownItemId');
         db.close();
@@ -77,7 +77,7 @@ describe('Dexie v32 - the day-card detail of a schedule version is kept for offl
 
         const db = new AgriLogDatabase(NAME);
         await db.open();
-        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleDayCards'].sort());
+        expect(db.tables.map(t => t.name).sort()).toEqual([...before, 'scheduleDayCards', 'farmMachines', 'farmPowerTimes', 'farmWaterSources', 'plotWater'].sort()); // v33 (repair D-9) adds four more on the real chain
         expect((await db.table('appMeta').get('kept')).value).toBe(1);
         expect((await db.table('plannedWork').get('task-1')).farmId).toBe('f');
         expect(await db.table('mutationQueue').count()).toBe(1);

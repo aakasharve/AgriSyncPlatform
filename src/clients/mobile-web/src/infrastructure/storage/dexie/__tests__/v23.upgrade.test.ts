@@ -197,7 +197,7 @@ describe('DATABASE_VERSION tracks the top of the merged version chain', () => {
         // v24 stays the transcript strip; both remain declared beneath it.
         // v26 (lane IT1c) adds the `inputLibrary` store: the stored product library copy.
         // v27 (lane L8b-2) adds the `scheduleSubscriptions` store: each plot's chosen schedule.
-        expect(DATABASE_VERSION).toBe(32); // v32: schedule slice 8 (scheduleDayCards); v31: schedule slice 5 (plannedWork.ownItemId index); v28: lane L8c-1 (plannedWork); v29: lane SCH-ID-P (schedulePictures); v30: schedule slice 3 (ownScheduleItems, ownScheduleItemRevisions)
+        expect(DATABASE_VERSION).toBe(33); // v33: repair D-9 (farmWaterSources, farmMachines, farmPowerTimes, plotWater); v32: schedule slice 8 (scheduleDayCards); v31: schedule slice 5 (plannedWork.ownItemId index); v28: lane L8c-1 (plannedWork); v29: lane SCH-ID-P (schedulePictures); v30: schedule slice 3 (ownScheduleItems, ownScheduleItemRevisions)
     });
 });
 
