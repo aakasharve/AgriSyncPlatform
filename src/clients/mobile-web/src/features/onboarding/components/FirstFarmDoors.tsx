@@ -15,6 +15,13 @@
  * Round-1 review (FR-3-a / F3): the doors' "← मागे" signs out (the step before is the phone number),
  * which used to happen on one tap — and a new OTP to come back. It now asks first ("बाहेर पडायचं?"),
  * with "इथेच राहा" beside it. (F6): the waiting words follow the chosen language like the rest.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — THE WAITING SCREEN. A person whose
+ * request to join a farm is waiting for its owner sees that, for each such farm in the words the drawing gives it
+ * ("‹शेत› च्या मालकाकडे तुमची विनंती गेली आहे…", the farm's name as the server sent it), and NOT the two doors: for the
+ * first 2 days he waits; after 2 days the own-farm offer appears (`OwnFarmOffer`) and the request keeps waiting. The
+ * withdraw button and any waiting invitation stay. When the server did not say WHEN a request was made (an older
+ * server), today's screen is kept - the waiting card above the two doors - so nobody is ever left without a way on (P9).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Clock3, LogOut, QrCode, Sprout } from 'lucide-react';
@@ -24,6 +31,8 @@ import { FirstRunGlass, FirstRunHeading, FirstRunShell, Rise } from '../firstRun
 import { firstRunCopy } from '../firstRun/firstRunCopy';
 import { joinByCodeCopy } from './joinByCodeCopy';
 import PendingJoinRequests, { waitingSeatKind, type WaitingSeat } from './PendingJoinRequests';
+import OwnFarmOffer, { hasWaitedTwoDays, requestedAtMs, useMinuteClock } from '../joinStart/OwnFarmOffer';
+import { joinStartCopy } from '../joinStart/joinStartCopy';
 
 export interface FirstFarmDoorsProps {
     onStartOwnFarm: () => void;
@@ -41,7 +50,13 @@ const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin,
     const c = firstRunCopy(language);
     // The join door's own "request sent" words, in the chosen language (`joinByCodeCopy`).
     const sent = joinByCodeCopy(language);
-    const waiting = pendingSeats.some(s => waitingSeatKind(s.status) === 'request');
+    const requests = pendingSeats.filter(s => waitingSeatKind(s.status) === 'request');
+    const waiting = requests.length > 0;
+    // V1-A: the waiting screen needs the server's time of every request; without it, today's screen stays.
+    const waitingScreen = waiting && requests.every(s => requestedAtMs(s.requestedAtUtc) !== null);
+    const now = useMinuteClock();
+    const offerOwnFarm = waitingScreen && requests.some(s => hasWaitedTwoDays(s.requestedAtUtc, now));
+    const j = joinStartCopy(language);
     const [askingToLeave, setAskingToLeave] = useState(false);
     // Round-2 review A11Y-1: the question takes the focus (on "इथेच राहा", the safe answer) so a
     // screen-reader or keyboard user who pressed मागे lands on it; staying hands the focus back to मागे.
@@ -88,11 +103,24 @@ const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin,
                         <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber-100 text-amber-700">
                             <Clock3 size={26} aria-hidden="true" />
                         </span>
-                        <p className="m-0 mt-2 text-[19px] font-extrabold text-stone-900">{sent.sentTitle}</p>
-                        <p className="m-0 mt-1 text-[15px] font-bold leading-snug text-stone-700">{sent.sentLine}</p>
+                        {waitingScreen ? requests.map(s => (
+                            <p key={s.farmId} data-testid={`first-farm-waiting-${s.farmId}`}
+                                className="m-0 mt-2 text-[18px] font-extrabold leading-normal text-stone-900 [overflow-wrap:anywhere]">
+                                {j.waitingLine(s.name)}
+                            </p>
+                        )) : (
+                            <>
+                                <p className="m-0 mt-2 text-[19px] font-extrabold text-stone-900">{sent.sentTitle}</p>
+                                <p className="m-0 mt-1 text-[15px] font-bold leading-snug text-stone-700">{sent.sentLine}</p>
+                            </>
+                        )}
                     </FirstRunGlass>
                 </Rise>
             )}
+            {offerOwnFarm && (
+                <Rise d={0.1} className="mt-3"><OwnFarmOffer onStartOwnFarm={onStartOwnFarm} /></Rise>
+            )}
+            {!waitingScreen && <>
             <Rise className="mt-4"><FirstRunHeading testId="first-farm-doors-title">{c.doors.title}</FirstRunHeading></Rise>
             <Rise d={0.1}><p className="m-0 mt-1 text-center text-[14.5px] font-semibold text-stone-600">{c.doors.hint}</p></Rise>
             <div className="mt-6 space-y-3">
@@ -117,6 +145,7 @@ const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin,
                     </Tap>
                 </Rise>
             </div>
+            </>}
             {invitations && <div className="mt-6">{invitations}</div>}
             {pendingSeats.length > 0 && (
                 <div className="mt-6">

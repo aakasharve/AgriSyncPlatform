@@ -57,6 +57,11 @@ interface MinimalOnboardingProps {
     onBack?: () => void;
     /** spec: plr-d10 lane MU-2 — an invitation was answered (in at once, or a request): the caller refreshes his farms. */
     onInvitationAnswered?: () => void;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A) — he chose "नाही, मी स्वतः सुरू करतोय" before
+     * sign-in: open on making his own farm, not on the two doors (its "← मागे" still returns to the doors).
+     */
+    openOnCreate?: boolean;
 }
 
 const INPUT = 'min-h-[56px] w-full rounded-2xl bg-white px-4 text-[19px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300 placeholder:font-semibold placeholder:text-stone-400 focus:ring-2 focus:ring-emerald-500 disabled:opacity-60';
@@ -69,6 +74,7 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     onWithdrawRequest,
     onBack,
     onInvitationAnswered,
+    openOnCreate = false,
 }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const c = firstRunCopy(language);
@@ -80,16 +86,16 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
 
     const farmerNameRef = useRef<HTMLInputElement | null>(null);
 
-    // Every opening starts at the two doors with an empty form.
+    // Every opening starts at the two doors (or, V1-A, at his own farm when he chose that before sign-in) with an empty form.
     useEffect(() => {
         if (isOpen) {
-            setStep('doors');
+            setStep(openOnCreate ? 'create' : 'doors');
             setFarmerName('');
             setFarmName('');
             setError(null);
             setLoading(false);
         }
-    }, [isOpen]);
+    }, [isOpen, openOnCreate]);
 
     useEffect(() => {
         if (isOpen && step === 'create') {

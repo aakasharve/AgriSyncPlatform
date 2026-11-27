@@ -19,7 +19,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, KeyRound, PauseCircle, QrCode } from 'lucide-react';
 import { BigButton, GlassCard, PageBar, SANS } from '../../../shared/components/ui/placeUi';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
-import { joinByCode, type JoinedFarm } from '../qr/inviteApi';
+import { claimFarmJoin, isInviteApiError, joinByCode, type JoinedFarm } from '../qr/inviteApi';
+import { joinLandingCopy } from '../qr/joinLandingCopy';
+import type { HeldJoin } from '../joinStart/heldJoin';
 import {
     FARM_CODE_LENGTH,
     isCompleteFarmCode,
@@ -46,7 +48,7 @@ import {
 export { JOIN_BY_CODE_COPY } from './joinByCodeCopy';
 
 type Phase = 'enter' | 'sending' | 'done';
-type Problem = 'unknown' | 'rateLimited' | 'failed' | 'signedOut' | 'badLink' | null;
+type Problem = 'unknown' | 'rateLimited' | 'failed' | 'signedOut' | 'badLink' | 'deadQr' | null;
 
 export interface JoinByCodeScreenProps {
     isOpen: boolean;
@@ -55,7 +57,16 @@ export interface JoinByCodeScreenProps {
     onJoined?: (farm: JoinedFarm) => void;
     /** Where a pasted QR link goes. Default: open the app's QR landing page (a full page load, like a scanned QR). */
     openJoinLink?: (href: string) => void;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — the QR or code he gave BEFORE the SMS
+     * code (`heldJoin.ts`). Sent ONCE when the door opens with it, exactly as if he had just typed or scanned it here:
+     * a farm code asks to join, an invitation shows its card, the farm's QR is claimed (a request the owner approves).
+     */
+    held?: HeldJoin | null;
 }
+
+const statusOfClaim = (status: string | undefined): JoinedFarm['status'] =>
+    status === 'Active' ? 'Active' : status === 'Suspended' ? 'Suspended' : 'PendingApproval';
 
 /** Fix round 1 (L-7): what the invitation scanner hands back for a FARM's QR, so it is answered, not ignored. */
 const FARM_QR_SEEN = 'farm-qr';
@@ -68,7 +79,7 @@ const defaultOpenJoinLink = (href: string): void => {
     if (typeof window !== 'undefined') window.location.assign(href);
 };
 
-const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, onJoined, openJoinLink = defaultOpenJoinLink }) => {
+const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, onJoined, openJoinLink = defaultOpenJoinLink, held = null }) => {
     const language = useOptionalLanguage()?.language;
     const C = joinByCodeCopy(language);
     const I = invitationCopy(language);
@@ -92,6 +103,8 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
     const onJoinedRef = useRef(onJoined);
     onJoinedRef.current = onJoined;
 
+    // The held join by VALUE: a re-render handing the same QR / code again (a new object) never sends it twice.
+    const heldKey = held ? JSON.stringify(held) : '';
     useEffect(() => {
         if (!isOpen) return;
         runRef.current += 1;
@@ -106,7 +119,20 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         setScanning(false);
         setFarmQrSeen(false);
         setDigitsFarmCode(null);
-    }, [isOpen]);
+        // V1-A: the QR / code he gave before the SMS code goes out now, once per opening, exactly as if he had just typed or
+        // scanned it here. (Under React's development double-run this asks twice; every one of these calls is idempotent.)
+        const given = heldKey ? (JSON.parse(heldKey) as HeldJoin) : null;
+        if (given?.kind === 'farmCode') {
+            setRaw(given.code);
+            void send(given.code);
+        } else if (given?.kind === 'invitation') {
+            setRaw(given.code);
+            void findCard(given.code);
+        } else if (given?.kind === 'qr') {
+            void claimQr(given.token, given.farmCode);
+        }
+        // Once per opening (and per held join): send / findCard / claimQr read only refs and setters.
+    }, [isOpen, heldKey]);
 
     useBackDismiss(isOpen, onClose);
 
@@ -164,6 +190,32 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         }
     };
 
+    /** V1-A: the owner's farm QR scanned before sign-in: claimed now that his number is proven (a request, never access). */
+    async function claimQr(token: string, farmCode: string) {
+        if (inFlightRef.current) return;
+        const run = runRef.current;
+        inFlightRef.current = true;
+        lastSentRef.current = null;
+        setProblem(null);
+        setPhase('sending');
+        try {
+            const claim = await claimFarmJoin(token, farmCode);
+            const farm: JoinedFarm = { farmId: claim.farmId, farmName: claim.farmName, status: statusOfClaim(claim.status) };
+            onJoinedRef.current?.(farm);
+            if (run !== runRef.current) return;
+            setJoined(farm);
+            setPhase('done');
+        } catch (error) {
+            if (run !== runRef.current) return;
+            setPhase('enter');
+            const code = isInviteApiError(error) ? error.error : '';
+            setProblem(code === 'join.token_invalid' || code === 'join.farm_code_mismatch' ? 'deadQr'
+                : isInviteApiError(error) && error.status === 401 ? 'signedOut' : 'failed');
+        } finally {
+            if (run === runRef.current) inFlightRef.current = false;
+        }
+    }
+
     const handleChange = (value: string) => {
         setRaw(value);
         setProblem(null);
@@ -204,6 +256,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         failed: C.failed,
         signedOut: C.signedOut,
         badLink: C.badLink,
+        deadQr: `${joinLandingCopy(language).invalidTitle}. ${joinLandingCopy(language).invalidLine}`,
     }[problem];
     const canRetry = (problem === 'rateLimited' || problem === 'failed') && lastSentRef.current !== null;
 
