@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
     CHAPTER_STARTS, INTRO_MAX_MS, INTRO_MIN_MS, STORY_CHAPTERS, STORY_DURATION, STORY_LINES,
-    chapterFills, cue, formatClock, introState, lineIndexAt, parseWordStyle, skipSheetCopy, wordStateAt,
+    chapterIndexAt, cue, formatClock, formatTimeLeft, introState, lineIndexAt, parseWordStyle, skipSheetCopy, timeAtFraction,
+    wordStateAt,
 } from '../welcomeTimeline';
 import { STORY_SCENES, sceneIndexForLine } from '../welcomeScenes';
 
@@ -62,9 +63,7 @@ describe('sync helpers', () => {
         expect(wordStateAt(w, 11)).toBe('said');
     });
 
-    it('fills section bars and formats the clock', () => {
-        const fills = chapterFills([0, 10, 20], 30, 15);
-        expect(fills).toEqual([1, 0.5, 0]);
+    it('formats the clock', () => {
         // A clock counts whole seconds passed: the 138.53 s note ends on 2:18, never 2:19 (R1 04).
         expect(formatClock(83.6)).toBe('1:23');
         expect(formatClock(59.99)).toBe('0:59');
@@ -82,6 +81,39 @@ describe('sync helpers', () => {
         expect(skipSheetCopy(70, true).left).toBe('फक्त एक मिनिट उरलं आहे');
         expect(skipSheetCopy(12, true).left).toBe('फक्त काही सेकंद उरले आहेत');
         expect(skipSheetCopy(70, true).title).toBe('थोडंच राहिलं आहे');
+    });
+});
+
+// Repair R3 lane S1 (V6b-A, founder 27 Nov 2026): one drag bar with the part ticks, the time played and the time left under it,
+// and the part name in a bubble while dragging. These are the bar's sums.
+describe('the player bar (V6b-A)', () => {
+    it('the part starts are the design\'s: 0, 8.58, 33.58, 56.87, 76.66, 94.39, 112.09 s', () => {
+        expect(CHAPTER_STARTS).toEqual([0, 8.58, 33.58, 56.87, 76.66, 94.39, 112.09]);
+    });
+
+    it('names the part under any second: the last part that has started', () => {
+        expect(chapterIndexAt(CHAPTER_STARTS, -3)).toBe(0);
+        expect(chapterIndexAt(CHAPTER_STARTS, 0)).toBe(0);
+        expect(chapterIndexAt(CHAPTER_STARTS, 8.57)).toBe(0);
+        expect(chapterIndexAt(CHAPTER_STARTS, 8.58)).toBe(1);
+        expect(chapterIndexAt(CHAPTER_STARTS, 56.86)).toBe(2);
+        expect(chapterIndexAt(CHAPTER_STARTS, STORY_DURATION)).toBe(6);
+        expect(STORY_CHAPTERS[chapterIndexAt(CHAPTER_STARTS, STORY_DURATION / 2)]).toBe('कामाची खात्री');
+    });
+
+    it('turns a place on the bar into a second, never outside the note', () => {
+        expect(timeAtFraction(0.5, 100)).toBe(50);
+        expect(timeAtFraction(0, 100)).toBe(0);
+        expect(timeAtFraction(-0.2, 100)).toBe(0);
+        expect(timeAtFraction(1.4, 100)).toBe(100);
+        expect(timeAtFraction(Number.NaN, 100)).toBe(0);
+    });
+
+    it('the time left counts down to 0:00 with a minus sign, like the drawing ("−2:18")', () => {
+        expect(formatTimeLeft(0, STORY_DURATION)).toBe('−2:18');
+        expect(formatTimeLeft(60.2, STORY_DURATION)).toBe('−1:18');
+        expect(formatTimeLeft(STORY_DURATION, STORY_DURATION)).toBe('−0:00');
+        expect(formatTimeLeft(200, STORY_DURATION)).toBe('−0:00');
     });
 });
 

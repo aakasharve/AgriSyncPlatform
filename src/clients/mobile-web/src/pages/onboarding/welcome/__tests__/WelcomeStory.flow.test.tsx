@@ -10,12 +10,24 @@
  *  - the skip asks once, honestly, and promises no "listen later" place (doctrine P5);
  *  - the note is played from MEMORY. Streaming it from Capacitor's on-device server cut it off after
  *    a few seconds on the founder's phone (that server answers "from byte N" with byte 0).
+ *  - repair R3 lane S1 (V6b-A, founder 27 Nov 2026): only the part name and a small "वगळा" at the top; at the
+ *    bottom one drag bar with the part ticks, the time played and the time left, a bubble with the part name
+ *    while dragging, and ONE big play / pause button. No 10-second buttons (the founder's change).
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const lang = vi.hoisted(() => ({ value: undefined as 'mr' | 'en' | undefined }));
+vi.mock('../../../../i18n/LanguageContext', () => ({
+    useOptionalLanguage: () => (lang.value ? { language: lang.value, setLanguage: () => undefined, t: (k: string) => k } : undefined),
+}));
+
 import WelcomeStory from '../WelcomeStory';
+import { CHAPTER_STARTS, STORY_DURATION } from '../welcomeTimeline';
 
 const OWNER_LINE = 'सुव्यवस्थित शेतीचा मालक होण्याच्या वाटेवर!';
 let loadedSrcs: string[] = [];
@@ -31,7 +43,7 @@ beforeEach(() => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(['mp3'], { type: 'audio/mpeg' })) })));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); lang.value = undefined; });
 
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
@@ -138,5 +150,117 @@ describe('WelcomeStory — the welcome voice note step', () => {
         // The voice stops without a "pause" event (as when the old player was swapped out): the button follows.
         paused = true;
         await waitFor(() => expect(screen.getByRole('button', { name: 'ऐका' })).toBeInTheDocument());
+    });
+});
+
+describe('WelcomeStory — the V6b-A player', () => {
+    /** The drag bar, laid out 200 px wide from the left edge (jsdom does no layout). */
+    const theBar = () => {
+        const bar = screen.getByRole('slider', { name: 'संदेशात पुढे-मागे जा' });
+        bar.getBoundingClientRect = () => ({ left: 0, right: 200, width: 200, top: 0, bottom: 30, height: 30, x: 0, y: 0, toJSON: () => ({}) });
+        return bar;
+    };
+
+    it('top: only the part name and a small "वगळा"; the seven small part bars are gone', async () => {
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        expect(screen.getByTestId('welcome-part-name')).toHaveTextContent('स्वागत');
+        expect(screen.queryByRole('group', { name: 'संदेशाचे भाग' })).toBeNull();
+        expect(screen.queryAllByRole('button', { name: /पासून ऐका/ })).toHaveLength(0);
+        const css = readFileSync(join(__dirname, '..', 'welcomeStory.css'), 'utf8');
+        const skip = css.match(/\.ws-skip\s*\{[^}]*\}/)?.[0] ?? '';
+        expect(skip).toContain('font-size: 13px');
+    });
+
+    it('bottom: one big play / pause button, and no 10-second back or forward buttons', async () => {
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const player = screen.getByTestId('welcome-player');
+        expect(within(player).getAllByRole('button')).toHaveLength(1);
+        expect(within(player).getByRole('button', { name: 'ऐका' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /10 सेकंद/ })).toBeNull();
+        expect(within(player).queryByText('10')).toBeNull();
+    });
+
+    it('the drag bar has a tick at each part start after the first (six), then the time played and the time left', async () => {
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const bar = theBar();
+        const ticks = within(bar).getAllByTestId('welcome-track-tick');
+        expect(ticks).toHaveLength(6);
+        ticks.forEach((tick, i) => {
+            expect(parseFloat(tick.style.left)).toBeCloseTo((CHAPTER_STARTS[i + 1]! / STORY_DURATION) * 100, 3);
+        });
+        expect(bar).toHaveAttribute('aria-valuemin', '0');
+        expect(bar).toHaveAttribute('aria-valuemax', String(Math.floor(STORY_DURATION)));
+        expect(screen.getByTestId('welcome-time-now')).toHaveTextContent('0:00');
+        expect(screen.getByTestId('welcome-time-left')).toHaveTextContent('−2:18');
+        // the times sit under the bar
+        expect(bar.compareDocumentPosition(screen.getByTestId('welcome-time-now')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.queryByTestId('welcome-track-bubble')).toBeNull();
+    });
+
+    it('dragging: a bubble names the part, the voice moves there and the times follow; it plays on after if it was playing', async () => {
+        const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+        const play = vi.mocked(HTMLMediaElement.prototype.play);
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const audio = players[0]!;
+        Object.defineProperty(audio, 'paused', { configurable: true, get: () => false });
+        const bar = theBar();
+        const pausesBefore = pause.mock.calls.length;
+        const playsBefore = play.mock.calls.length;
+
+        fireEvent.pointerDown(bar, { clientX: 100, pointerId: 1 });
+        expect(pause.mock.calls.length).toBe(pausesBefore + 1);
+        expect(audio.currentTime).toBeCloseTo(STORY_DURATION / 2, 2);
+        expect(screen.getByTestId('welcome-track-bubble')).toHaveTextContent('कामाची खात्री');
+        expect(screen.getByTestId('welcome-time-now')).toHaveTextContent('1:09');
+        expect(screen.getByTestId('welcome-time-left')).toHaveTextContent('−1:09');
+
+        fireEvent.pointerMove(bar, { clientX: 20, pointerId: 1 });
+        expect(audio.currentTime).toBeCloseTo(STORY_DURATION / 10, 2);
+        expect(screen.getByTestId('welcome-track-bubble')).toHaveTextContent('एक विचार करा');
+        expect(screen.getByTestId('welcome-time-now')).toHaveTextContent('0:13');
+
+        fireEvent.pointerUp(bar, { clientX: 20, pointerId: 1 });
+        expect(screen.queryByTestId('welcome-track-bubble')).toBeNull();
+        expect(play.mock.calls.length).toBe(playsBefore + 1);
+    });
+
+    it('a drag while paused stays paused after', async () => {
+        const play = vi.mocked(HTMLMediaElement.prototype.play);
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const audio = players[0]!;
+        Object.defineProperty(audio, 'paused', { configurable: true, get: () => true });
+        const bar = theBar();
+        const playsBefore = play.mock.calls.length;
+        fireEvent.pointerDown(bar, { clientX: 180, pointerId: 1 });
+        fireEvent.pointerUp(bar, { clientX: 180, pointerId: 1 });
+        expect(audio.currentTime).toBeCloseTo(STORY_DURATION * 0.9, 2);
+        expect(play.mock.calls.length).toBe(playsBefore);
+    });
+
+    it('a drag past the ends stops at the start and the end of the note', async () => {
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const audio = players[0]!;
+        Object.defineProperty(audio, 'paused', { configurable: true, get: () => true });
+        const bar = theBar();
+        fireEvent.pointerDown(bar, { clientX: -50, pointerId: 1 });
+        expect(audio.currentTime).toBe(0);
+        fireEvent.pointerMove(bar, { clientX: 400, pointerId: 1 });
+        expect(screen.getByTestId('welcome-track-bubble')).toHaveTextContent('चला, सुरुवात करूया');
+        fireEvent.pointerUp(bar, { clientX: 400, pointerId: 1 });
+        expect(audio.currentTime).toBeLessThanOrEqual(STORY_DURATION);
+        expect(audio.currentTime).toBeGreaterThan(STORY_DURATION - 0.5);
+    });
+
+    it('the drag bar\'s spoken name has its English twin in English mode', async () => {
+        lang.value = 'en';
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        expect(screen.getByRole('slider', { name: 'Move through the message' })).toBeInTheDocument();
     });
 });

@@ -13,7 +13,12 @@
  *    lit, which picture has popped, section bars, the clock) is class toggles
  *    on refs, so a low-end Android phone is not re-rendering 60 times a second.
  *  - Interaction is optional and never blocks the voice: tap the phrase to hear
- *    it again, tap a picture for a small bounce, ±10s, pause, skip.
+ *    it again, tap a picture for a small bounce, drag the bar, pause, skip.
+ *  - The player is the approved V6b-A (repair R3 lane S1, founder 27 Nov 2026):
+ *    at the top only the part name and a small "वगळा"; at the bottom one drag
+ *    bar with a tick at each part start, the time played and the time left
+ *    under it, a bubble with the part name while dragging, and ONE big play /
+ *    pause button. No 10-second back / forward buttons (the founder's change).
  *  - Nobody has to find a play button. A short live intro (WelcomeIntro) runs
  *    while the file loads, then the voice starts by itself (Capacitor turns off
  *    Android's "sound needs a tap" rule). If a browser still refuses, one big
@@ -22,8 +27,8 @@
  *    Capacitor's on-device server answers a ranged media request ("from byte N")
  *    with the file from byte 0 under a header claiming byte N. The player asks
  *    for ranges while it buffers and on every jump, so a streamed note stopped
- *    after a few seconds on the phone and ±10s / section bars / tap-to-replay
- *    landed on the wrong audio. One plain fetch of the whole 1.1 MB file (which
+ *    after a few seconds on the phone, and every jump (the drag bar today) and
+ *    tap-to-replay landed on the wrong audio. One plain fetch of the whole 1.1 MB file (which
  *    that server serves correctly) into a blob: URL lets the WebView serve every
  *    range itself.
  *
@@ -31,15 +36,16 @@
  * move on from the skip sheet.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { RotateCcw, RotateCw, Play, Pause } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import welcomeNoteUrl from './assets/welcome-note.mp3';
 import {
     CHAPTER_STARTS, STORY_CHAPTERS, STORY_DURATION, STORY_LINES,
-    chapterFills, formatClock, introState, lineIndexAt, wordStateAt,
+    chapterIndexAt, formatClock, formatTimeLeft, introState, lineIndexAt, timeAtFraction, wordStateAt,
 } from './welcomeTimeline';
 import WelcomeIntro from './WelcomeIntro';
 import { STORY_SCENES, sceneIndexForLine } from './welcomeScenes';
 import WelcomeSkipSheet from './WelcomeSkipSheet';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import './welcomeStory.css';
 
 interface WelcomeStoryProps {
@@ -47,6 +53,18 @@ interface WelcomeStoryProps {
     /** The owner-only line under "अभिनंदन!" (hidden for a worker or mukadam). */
     showOwnerLine?: boolean;
 }
+
+/** The new words of the V6b-A player (PROPOSED), with their English twins. Everything else on this screen is the Marathi note's own. */
+const PLAYER_WORDS = {
+    mr: { bar: 'संदेशात पुढे-मागे जा' },
+    en: { bar: 'Move through the message' },
+} as const;
+
+/** A drag stops just short of the end, as the old 10-second jump did: reaching the very end would end the note under his finger. */
+const LAST_SEEK = STORY_DURATION - 0.1;
+/** A keyboard arrow on the drag bar moves this many seconds (no button on screen does). */
+const KEY_STEP_SEC = 5;
+const pctOf = (t: number): number => Math.max(0, Math.min(1, t / STORY_DURATION)) * 100;
 
 const SKY: { p: number; top: number[]; mid: number[] }[] = [ // a farm day: dawn → noon → evening
     { p: 0, top: [255, 222, 186], mid: [255, 244, 230] },
@@ -80,8 +98,17 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
     const artRef = useRef<HTMLDivElement>(null);
     const textRef = useRef<HTMLDivElement>(null);
     const zoneRef = useRef<HTMLDivElement>(null);
-    const segRefs = useRef<(HTMLElement | null)[]>([]);
+    // The V6b-A drag bar: painted from refs every frame (no React render per frame), like the words.
+    const trackRef = useRef<HTMLDivElement>(null);
+    const fillRef = useRef<HTMLElement>(null);
+    const thumbRef = useRef<HTMLSpanElement>(null);
+    const bubbleRef = useRef<HTMLSpanElement>(null);
     const nowRef = useRef<HTMLSpanElement>(null);
+    const leftRef = useRef<HTMLSpanElement>(null);
+    const draggingRef = useRef(false);
+    const wasPlayingRef = useRef(false);
+    const [dragging, setDragging] = useState(false);
+    const words = PLAYER_WORDS[useOptionalLanguage()?.language === 'en' ? 'en' : 'mr'];
     const cueNodes = useRef<{ el: Element; at: number }[]>([]);
     const levelRef = useRef<() => number>(() => 0);
     const lineRef = useRef(-1);
@@ -100,6 +127,32 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
     const syncPlaying = useCallback((audio: HTMLAudioElement) => {
         const now = !audio.paused;
         if (now !== playingRef.current) { playingRef.current = now; setPlaying(now); }
+    }, []);
+
+    /** The drag bar, the bubble and the two times at second `t` (class / text / attribute writes on refs only). */
+    const paint = useCallback((t: number) => {
+        const p = pctOf(t);
+        const at = `${p}%`;
+        if (fillRef.current) fillRef.current.style.width = at;
+        if (thumbRef.current) thumbRef.current.style.left = at;
+        const bubble = bubbleRef.current;
+        if (bubble) {
+            bubble.style.left = at;
+            // Centred over the thumb in the middle, flush with the bar at either end, so the part name never runs off the phone.
+            bubble.style.transform = `translateX(-${p}%)`;
+            const part = STORY_CHAPTERS[chapterIndexAt(CHAPTER_STARTS, t)] ?? '';
+            if (bubble.textContent !== part) bubble.textContent = part;
+        }
+        const now = formatClock(t);
+        if (nowRef.current && nowRef.current.textContent !== now) nowRef.current.textContent = now;
+        const left = formatTimeLeft(t, STORY_DURATION);
+        if (leftRef.current && leftRef.current.textContent !== left) leftRef.current.textContent = left;
+        const bar = trackRef.current;
+        const sec = String(Math.floor(Math.max(0, t)));
+        if (bar && bar.getAttribute('aria-valuenow') !== sec) {
+            bar.setAttribute('aria-valuenow', sec);
+            bar.setAttribute('aria-valuetext', now);
+        }
     }, []);
 
     const sceneIdx = sceneIndexForLine(Math.max(0, lineIdx));
@@ -209,9 +262,7 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             }
             for (const n of cueNodes.current) n.el.classList.toggle('on', t >= n.at);
 
-            const fills = chapterFills(CHAPTER_STARTS, STORY_DURATION, t);
-            fills.forEach((f, k) => { const s = segRefs.current[k]; if (s) s.style.width = `${f * 100}%`; });
-            if (nowRef.current) nowRef.current.textContent = formatClock(t);
+            paint(t);
             const p = Math.min(1, t / STORY_DURATION);
             if (skyRef.current && Math.abs(p - lastSky) > 0.004) { lastSky = p; skyRef.current.style.background = skyGradient(p); }
             const level = audio.paused ? 0 : levelRef.current();
@@ -220,7 +271,12 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
-    }, [syncPlaying]);
+    }, [syncPlaying, paint]);
+
+    // The bubble mounts when a drag starts: paint it at once, not a frame later.
+    useLayoutEffect(() => {
+        if (dragging) paint(audioRef.current?.currentTime ?? 0);
+    }, [dragging, paint]);
 
     /* ---- after a scene mounts: collect its cue nodes ---- */
     useLayoutEffect(() => {
@@ -291,8 +347,40 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
         window.setTimeout(() => setPhase('story'), 550);
     }, [play]);
     const toggle = () => { const a = audioRef.current; if (!a) return; if (a.paused) play(); else a.pause(); };
-    const seekBy = (d: number) => { const a = audioRef.current; if (a) a.currentTime = Math.max(0, Math.min(STORY_DURATION - 0.1, a.currentTime + d)); };
     const seekTo = (t: number) => { const a = audioRef.current; if (a) { a.currentTime = Math.max(0, t); doneRef.current = false; } };
+
+    /* ---- the drag bar (V6b-A): the voice waits while he drags, moves with his finger, and plays on after if it was playing ---- */
+    const scrubTo = (t: number) => { const at = Math.max(0, Math.min(LAST_SEEK, t)); seekTo(at); paint(at); };
+    const timeAtX = (clientX: number): number => {
+        const r = trackRef.current?.getBoundingClientRect();
+        return timeAtFraction(r && r.width > 0 ? (clientX - r.left) / r.width : 0, STORY_DURATION);
+    };
+    const onBarDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        const a = audioRef.current;
+        if (!a) return;
+        e.preventDefault();
+        // Keep the drag when the finger slides off the thin bar (released by the browser on pointerup).
+        try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* an unknown pointer: the drag still works on the bar */ }
+        draggingRef.current = true;
+        wasPlayingRef.current = !a.paused;
+        a.pause();
+        scrubTo(timeAtX(e.clientX));
+        setDragging(true);
+    };
+    const onBarMove = (e: React.PointerEvent<HTMLDivElement>) => { if (draggingRef.current) scrubTo(timeAtX(e.clientX)); };
+    const onBarUp = () => {
+        if (!draggingRef.current) return;
+        draggingRef.current = false;
+        setDragging(false);
+        if (wasPlayingRef.current) play();
+    };
+    const onBarKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? KEY_STEP_SEC : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -KEY_STEP_SEC : 0;
+        const a = audioRef.current;
+        if (!step || !a) return;
+        e.preventDefault();
+        scrubTo(a.currentTime + step);
+    };
     const replayLine = () => {
         if (!line) return;
         setHintGone(true);
@@ -341,22 +429,8 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             </svg>
 
             <div className="ws-top">
-                <div className="ws-segs" role="group" aria-label="संदेशाचे भाग">
-                    {STORY_CHAPTERS.map((title, i) => (
-                        <button
-                            key={title}
-                            type="button"
-                            className="ws-seg"
-                            aria-label={`${title} पासून ऐका`}
-                            style={{ flex: Math.max(0.6, (CHAPTER_STARTS[i + 1] ?? STORY_DURATION) - CHAPTER_STARTS[i]) }}
-                            onClick={() => seekTo(CHAPTER_STARTS[i] + 0.01)}
-                        >
-                            <i ref={(el) => { segRefs.current[i] = el; }} />
-                        </button>
-                    ))}
-                </div>
                 <div className="ws-bar">
-                    <span className="ws-title">{STORY_CHAPTERS[line?.chapter ?? 0]}</span>
+                    <span className="ws-title" data-testid="welcome-part-name">{STORY_CHAPTERS[line?.chapter ?? 0]}</span>
                     {phase === 'story' && (
                         <button type="button" className="ws-skip" data-testid="welcome-story-skip" onClick={openSkip}>वगळा</button>
                     )}
@@ -390,18 +464,41 @@ const WelcomeStory: React.FC<WelcomeStoryProps> = ({ onDone, showOwnerLine = tru
             </div>
 
             <div className="ws-bottom">
-                <div className="ws-controls">
-                    <span ref={nowRef} className="ws-time">0:00</span>
-                    <button type="button" className="ws-ctl" aria-label="10 सेकंद मागे" onClick={() => seekBy(-10)}>
-                        <RotateCcw size={26} strokeWidth={2} /><small>10</small>
-                    </button>
-                    <button type="button" className="ws-ctl big" aria-label={playing ? 'थांबवा' : 'ऐका'} onClick={toggle}>
-                        {playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}
-                    </button>
-                    <button type="button" className="ws-ctl" aria-label="10 सेकंद पुढे" onClick={() => seekBy(10)}>
-                        <RotateCw size={26} strokeWidth={2} /><small>10</small>
-                    </button>
-                    <span className="ws-time r">{formatClock(STORY_DURATION)}</span>
+                <div className="ws-player" data-testid="welcome-player">
+                    <div
+                        ref={trackRef}
+                        className={`ws-track${dragging ? ' drag' : ''}`}
+                        role="slider"
+                        tabIndex={0}
+                        aria-label={words.bar}
+                        lang={words === PLAYER_WORDS.en ? 'en' : undefined}
+                        aria-valuemin={0}
+                        aria-valuemax={Math.floor(STORY_DURATION)}
+                        aria-valuenow={0}
+                        aria-valuetext={formatClock(0)}
+                        onPointerDown={onBarDown}
+                        onPointerMove={onBarMove}
+                        onPointerUp={onBarUp}
+                        onPointerCancel={onBarUp}
+                        onLostPointerCapture={onBarUp}
+                        onKeyDown={onBarKey}
+                    >
+                        <span className="ws-rail"><i ref={fillRef} className="ws-fill" /></span>
+                        {CHAPTER_STARTS.slice(1).map((start) => (
+                            <span key={start} className="ws-tick" data-testid="welcome-track-tick" style={{ left: `${pctOf(start)}%` }} />
+                        ))}
+                        <span ref={thumbRef} className="ws-thumb" />
+                        {dragging && <span ref={bubbleRef} className="ws-bub" data-testid="welcome-track-bubble" />}
+                    </div>
+                    <div className="ws-times">
+                        <span ref={nowRef} data-testid="welcome-time-now">0:00</span>
+                        <span ref={leftRef} data-testid="welcome-time-left">{formatTimeLeft(0, STORY_DURATION)}</span>
+                    </div>
+                    <div className="ws-btns">
+                        <button type="button" className="ws-ctl big" aria-label={playing ? 'थांबवा' : 'ऐका'} onClick={toggle}>
+                            {playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}
+                        </button>
+                    </div>
                 </div>
             </div>
 

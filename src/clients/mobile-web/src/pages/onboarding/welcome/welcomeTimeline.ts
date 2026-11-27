@@ -97,18 +97,31 @@ export function wordStateAt(word: Pick<StoryWord, 't0' | 't1'>, t: number): Word
     return 'ahead';
 }
 
-/** 0..1 fill for each section bar at second `t`. */
-export function chapterFills(starts: readonly number[], duration: number, t: number): number[] {
-    return starts.map((start, i) => {
-        const end = starts[i + 1] ?? duration;
-        return Math.max(0, Math.min(1, (t - start) / (end - start)));
-    });
+/**
+ * The part (section) on at second `t`: the last one that has started; the first part before its start. The player's bubble and
+ * its part ticks read it (repair R3 lane S1, V6b-A: one drag bar in place of the seven small part bars).
+ */
+export function chapterIndexAt(starts: readonly number[], t: number): number {
+    let at = 0;
+    starts.forEach((start, i) => { if (t >= start) at = i; });
+    return at;
+}
+
+/** A place on the drag bar (0 = left end, 1 = right end) as a second of the note, never outside it. */
+export function timeAtFraction(fraction: number, duration: number): number {
+    if (!Number.isFinite(fraction)) return 0;
+    return Math.max(0, Math.min(1, fraction)) * duration;
 }
 
 /** 83.6 → "1:23": whole seconds passed, like any player, so the 138.53 s note ends on 2:18 (not 2:19). */
 export function formatClock(sec: number): string {
     const s = Math.max(0, Math.floor(sec));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** The time left under the drag bar, as drawn: "−2:18" at the start, "−0:00" at the end (a true minus sign). */
+export function formatTimeLeft(sec: number, duration: number): string {
+    return `−${formatClock(duration - sec)}`;
 }
 
 /** Start second of word `w` in phrase `line` — the cue clock for visuals. */

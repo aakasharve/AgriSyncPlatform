@@ -15,7 +15,7 @@
     --muted: #8b978f;
     position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; overflow: hidden;
     background: #f4fcf8; color: var(--ink);
-    font-family: "Noto Sans Devanagari", "DM Sans", system-ui, sans-serif;
+    font-family: "Noto Sans Devanagari", "DM Sans", sans-serif;
     padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
     padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
     user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
@@ -26,15 +26,13 @@
 .ws-sky { position: absolute; inset: 0; transition: background 0.8s linear; }
 .ws-hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 22%; pointer-events: none; }
 
-/* ---------- top bar ---------- */
-.ws-top { position: relative; z-index: 5; padding: 14px 20px 0; }
-.ws-segs { display: flex; gap: 5px; }
-.ws-seg { flex: 1; height: 5px; border-radius: 3px; background: rgba(11, 26, 17, 0.13); position: relative; overflow: hidden; }
-.ws-seg::before { content: ""; position: absolute; inset: -12px 0; }
-.ws-seg > i { position: absolute; inset: 0; width: 0; background: var(--leaf); border-radius: 3px; }
-.ws-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+/* ---------- top bar: only the part name and a small "वगळा" (V6b-A; the seven small part bars are gone) ---------- */
+.ws-top { position: relative; z-index: 5; padding: 12px 18px 0; }
+.ws-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ws-title { font-size: 14px; font-weight: 900; color: var(--leaf); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.ws-skip { flex: none; font-size: 14px; font-weight: 800; color: var(--ink-soft); padding: 7px 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1px rgba(11, 26, 17, 0.1); }
+.ws-skip { position: relative; flex: none; font-size: 13px; font-weight: 800; color: var(--ink-soft); padding: 5px 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.78); box-shadow: inset 0 0 0 1px rgba(11, 26, 17, 0.12); }
+/* drawn small, but a thumb still hits it: about 44 px of touch */
+.ws-skip::before { content: ""; position: absolute; inset: -8px; }
 
 /* ---------- stage ---------- */
 .ws-stagebox { position: relative; z-index: 4; flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -84,13 +82,20 @@
 .ws-w.t-gold.hit.fx-stamp { box-shadow: inset 0 0 0 0.07em #b8730f; }
 .ws-hint { font-size: 13px; font-weight: 800; color: var(--ink-soft); background: rgba(255, 255, 255, 0.8); padding: 5px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(11, 26, 17, 0.08); animation: ws-line-in 0.5s both; }
 
-/* ---------- controls ---------- */
-.ws-bottom { position: relative; z-index: 5; padding: 0 20px 18px; }
-.ws-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: rgba(255, 255, 255, 0.85); box-shadow: inset 0 0 0 1px rgba(11, 26, 17, 0.07); border-radius: 22px; padding: 10px 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.ws-time { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; width: 42px; }
-.ws-time.r { text-align: right; }
+/* ---------- the player card (V6b-A): the drag bar, the two times, one big play / pause ---------- */
+.ws-bottom { position: relative; z-index: 5; padding: 0 16px 16px; }
+.ws-player { background: rgba(255, 255, 255, 0.9); box-shadow: inset 0 0 0 1px rgba(11, 26, 17, 0.07); border-radius: 22px; padding: 10px 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.ws-track { position: relative; height: 30px; touch-action: none; cursor: pointer; border-radius: 6px; }
+.ws-track:focus-visible { outline: 3px solid var(--leaf-bright); outline-offset: 3px; }
+.ws-rail { position: absolute; left: 0; right: 0; top: 12px; height: 6px; border-radius: 3px; background: rgba(11, 26, 17, 0.14); overflow: hidden; }
+.ws-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--leaf); }
+.ws-tick { position: absolute; top: 10px; width: 3px; height: 10px; margin-left: -1.5px; border-radius: 1px; background: #f4fcf8; pointer-events: none; }
+.ws-thumb { position: absolute; top: 6px; left: 0; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px var(--leaf), 0 2px 6px rgba(0, 0, 0, 0.25); pointer-events: none; transition: transform 0.12s ease; }
+.ws-track.drag .ws-thumb { transform: scale(1.25); }
+.ws-bub { position: absolute; bottom: 32px; left: 0; white-space: nowrap; border-radius: 10px; background: var(--ink); color: #fff; padding: 5px 10px; font-family: "Noto Sans Devanagari", sans-serif; font-size: 12.5px; font-weight: 800; pointer-events: none; }
+.ws-times { display: flex; justify-content: space-between; margin: 0 2px 6px; font-family: "DM Sans", sans-serif; font-size: 13px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.ws-btns { display: flex; align-items: center; justify-content: center; }
 .ws-ctl { position: relative; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); }
-.ws-ctl small { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 1px; font-family: "DM Sans", system-ui, sans-serif; font-size: 9px; font-weight: 700; }
 .ws-ctl.big { width: 64px; height: 64px; background: var(--leaf); color: #fff; box-shadow: 0 10px 24px -8px rgba(4, 120, 87, 0.7), 0 0 0 calc(var(--lvl, 0) * 12px) rgba(16, 185, 129, 0.22); transition: box-shadow 0.09s linear; }
 .ws-tapgate { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(244, 252, 248, 0.6); backdrop-filter: blur(2px); }
 .ws-tapgate span { display: flex; align-items: center; gap: 10px; background: var(--leaf); color: #fff; font-size: 19px; font-weight: 900; padding: 16px 26px; border-radius: 999px; box-shadow: 0 16px 36px -10px rgba(4, 120, 87, 0.7); }
