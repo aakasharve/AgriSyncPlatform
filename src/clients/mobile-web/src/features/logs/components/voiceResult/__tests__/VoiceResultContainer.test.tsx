@@ -736,3 +736,18 @@ describe('lane PRV — the picker is the primary account holder\'s alone', () =>
         expect((await screen.findByTestId('vr-audience-choice-OnlyMe')).textContent).toContain('फक्त मी व नोंद करणारा');
     });
 });
+
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, slice S4.2; CTO ruling Q3 A) — a part he may not record was taken out
+// before the save: the saved screen says which, that the rest was saved, and that his voice is kept with the record.
+describe('lane PERM — a part he may not record', () => {
+    it('says "‹kind› नोंदवण्याची परवानगी नाही — मालकाला सांगा" on the saved screen, and nothing when nothing was taken out', async () => {
+        const trimmed = HISTORY.map(l => (l.id === NOW ? { ...l, meta: { ...l.meta, kindsNotSaved: ['cropActivities', 'labour'] } } as unknown as DailyLog : l));
+        mount(props({ history: trimmed }));
+        const note = await screen.findByTestId('vr-kinds-not-saved');
+        expect(screen.getByTestId('vr-kinds-not-saved-line').textContent).toBe('पीक काम, मजूर नोंदवण्याची परवानगी नाही — मालकाला सांगा');
+        expect(note.textContent).toContain('बाकी काम जतन झालं. तुमचा आवाज नोंदीसोबत आहे.');
+        cleanup();
+        mount(props());
+        expect(screen.queryByTestId('vr-kinds-not-saved')).toBeNull();
+    });
+});

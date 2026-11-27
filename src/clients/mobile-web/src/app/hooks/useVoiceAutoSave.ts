@@ -46,6 +46,8 @@ import { isAutoSavableVoiceDraft, primaryLogOf } from '../helpers/autoSavedVoice
 import { bindDraftDecline, draftDay, draftDecline } from '../../features/voice/draftFacts';
 import type { UseLogCommandsResult } from './useLogCommands.types';
 import type { LogIntent } from './useAppNavigation';
+import { readAllowedWorkKinds } from '../../core/session/workKinds';
+import { onlyClosedKinds } from '../../features/workKinds/closedKinds';
 
 /** What the result screen needs about the recording he just made. */
 export interface VoiceResultState {
@@ -145,6 +147,12 @@ export function useVoiceAutoSave({
         // R1-g 1d — the farm's FIRST record waits for his "बरोबर" on "तपासा आणि जतन करा" (nothing written, nothing queued).
         if (isFirstRecord && await isFirstRecord(farmId).catch(() => false)) { bindDraftDecline(draft, 'firstRecord', recording); return false; }
         handled.current.set(key, 'saving');
+        // Pilot lane PERM (CTO ruling Q3 A) — a recording of ONLY kinds he may not record on this farm writes no empty record: handed back with
+        // the kinds (the check screen says which, with no save), his clip left unlinked (आवाज नोंदी). A part he may record is saved as today and
+        // the save path takes the closed part out (`takeOutClosedKinds`). Not known = every kind (the server decides). Read AFTER the recording
+        // is marked as being saved, so a second hand-over of the same recording never starts a second save meanwhile.
+        const closedOnly = onlyClosedKinds(draft as unknown as Record<string, unknown>, await readAllowedWorkKinds(farmId));
+        if (closedOnly) { handled.current.delete(key); bindDraftDecline(draft, 'kindsClosed', recording, closedOnly); return false; }
         // L6b — typed to Sathi: no recording exists, so none is named, looked for or linked.
         const typed = recording.typed === true;
         try {

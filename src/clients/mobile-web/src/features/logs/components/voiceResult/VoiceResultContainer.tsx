@@ -52,6 +52,8 @@ import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/mone
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { AudienceRow } from '../../../recordAudience/AudienceRow';
+import { kindsNotSavedOf } from '../../../workKinds/closedKinds';
+import { KindsNotSavedNote } from '../../../workKinds/KindsNotSavedNote';
 import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
 import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
 import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
@@ -227,6 +229,9 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
         </div>
     ) : null;
+    // Pilot lane PERM (CTO ruling Q3 A) — a part he may not record was taken out before the save: which, and that the rest is saved.
+    const notSaved = kindsNotSavedOf(current);
+    const kindsBanner = notSaved.length > 0 ? <div className="mx-3 mt-2"><KindsNotSavedNote kinds={notSaved} testId="vr-kinds-not-saved" /></div> : null;
     const moneyBanner = moneyNotFollowed.length > 0 ? (
         <div className="mx-3 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold text-amber-950" data-testid="vr-money-not-followed" role="status">
             {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
@@ -234,8 +239,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     ) : null;
     // The old screen keeps its order (refusal, the audience row, money). The v2 saved screen draws the audience row where the
     // approved design has it: under "बदला", above the earlier recordings (F6).
-    const banners = <>{refusedBanner}{audienceRow}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
-    const bannersV2 = <>{refusedBanner}{moneyBanner}</>;
+    const banners = <>{refusedBanner}{kindsBanner}{audienceRow}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
+    const bannersV2 = <>{refusedBanner}{kindsBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
             value={primary.date}
@@ -259,7 +264,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         // H2 / P10: it closes itself only when nothing on it still needs him or says something is wrong. R1-g 1b: nor while the
         // first record's setup-hub line shows (ruling 3).
         const autoCloseOff = current.some(l => syncQueuedById.get(l.id) !== true) ? 'not_queued'
-            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed'
+            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : notSaved.length > 0 ? 'kinds_not_saved' : moneyNotFollowed.length > 0 ? 'money_not_followed'
             : firstRecordOffer ? 'first_record_offer' : null;
         return (
             <>

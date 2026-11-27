@@ -22,6 +22,8 @@ import type { BlockerEntry, PartEntry } from '../voiceResult/resultModel';
 import { checkSaveWords } from './checkSaveWords';
 import type { CheckCase } from './checkSaveModel';
 import { attendanceCardCopy } from '../../../labour/attendanceCopy';
+import { workKindWords } from '../../../workKinds/workKindWords';
+import { isLimitableWorkKind } from '../../../../core/session/workKinds';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -46,6 +48,8 @@ export interface CheckSaveScreenProps {
     needsDay?: boolean;
     /** The recording is on the phone (not typed): the "kept" line is true. */
     kept: boolean;
+    /** Pilot lane PERM — `kindsClosed`: the kinds he may not record that this recording held. */
+    closedKinds?: readonly string[];
     onSayAgain: () => void;
     onType: () => void;
     onPickPlace: () => void;
@@ -56,14 +60,17 @@ export interface CheckSaveScreenProps {
 export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const w = checkSaveWords(language);
-    const unclear = p.kind === 'unclear';
+    // Pilot lane PERM (CTO ruling Q3 A) — only kinds he may not record: like "nothing understood", there is nothing to save (P5).
+    const closed = p.kind === 'kindsClosed';
+    const unclear = p.kind === 'unclear' || closed;
+    const kw = workKindWords(language);
     // R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर") — the farm's FIRST record: "बरोबर" saves it, "बदल करा" corrects it.
     const first = p.kind === 'firstRecord';
     const card = attendanceCardCopy(language);
     const needsPlace = p.kind === 'otherPlot' && !p.placeLabel;
     return (
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="check-save" data-kind={p.kind}>
-            <h2 className="m-0 text-[20px] font-extrabold text-stone-900" data-testid="check-title">{unclear ? w.titleUnclear : w.titleCheck}</h2>
+            <h2 className="m-0 text-[20px] font-extrabold text-stone-900" data-testid="check-title">{closed ? kw.nothingSavedTitle : unclear ? w.titleUnclear : w.titleCheck}</h2>
 
             {p.kind === 'notWritten' && (
                 <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-3 text-[15px] font-bold leading-snug text-red-900" data-testid="check-not-written">
@@ -100,10 +107,16 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
 
             {unclear ? (
                 <>
-                    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-[15px] font-bold leading-snug text-amber-950" data-testid="check-unclear">
-                        <p className="m-0 flex items-center gap-1.5 font-extrabold"><HelpCircle size={18} aria-hidden="true" />{w.unclearTitle}</p>
-                        <p className="m-0 mt-0.5">{w.unclearBody}</p>
-                    </div>
+                    {closed ? (
+                        <p className="m-0 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-[15px] font-extrabold leading-snug text-amber-950" data-testid="check-kinds-closed">
+                            {kw.notAllowedLine((p.closedKinds ?? []).filter(isLimitableWorkKind))}
+                        </p>
+                    ) : (
+                        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-[15px] font-bold leading-snug text-amber-950" data-testid="check-unclear">
+                            <p className="m-0 flex items-center gap-1.5 font-extrabold"><HelpCircle size={18} aria-hidden="true" />{w.unclearTitle}</p>
+                            <p className="m-0 mt-0.5">{w.unclearBody}</p>
+                        </div>
+                    )}
                     <div className="pt-1 text-center">
                         <button type="button" onClick={p.onSayAgain} aria-label={w.sayAgain} data-testid="check-say-again"
                             className="mx-auto grid h-[104px] w-[104px] place-items-center rounded-full bg-emerald-700 text-white shadow-[0_8px_24px_rgba(4,120,87,0.35)] active:scale-95">

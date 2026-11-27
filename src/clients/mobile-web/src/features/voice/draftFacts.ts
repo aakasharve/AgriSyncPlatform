@@ -19,12 +19,14 @@ import type { VoiceRecordingRef } from './useVoiceRecorder.types';
 /**
  * Why the voice auto-save handed a parse back instead of saving it. Repair R1-g 1d (founder Q-A, 27 Nov: "Save after बरोबर"):
  * `firstRecord` — the farm's FIRST record on this phone is saved only on his "बरोबर".
+ * Pilot lane PERM (CTO ruling Q3 A): `kindsClosed` — the recording holds ONLY kinds of work he may not record on the farm (`kinds`): no empty
+ * record is written and his recording stays in आवाज नोंदी.
  */
-export type DeclineReason = 'unclear' | 'otherPlot' | 'notWritten' | 'firstRecord';
+export type DeclineReason = 'unclear' | 'otherPlot' | 'notWritten' | 'firstRecord' | 'kindsClosed';
 
 interface DraftFacts {
     day?: string;
-    decline?: { reason: DeclineReason; recording?: VoiceRecordingRef };
+    decline?: { reason: DeclineReason; recording?: VoiceRecordingRef; kinds?: readonly string[] };
     /** Lane OF fix 2 (carried) — who must hear when this draft is saved LATER, on "तपासा आणि जतन करा". */
     afterSave?: (logIds: string[]) => void;
 }
@@ -47,8 +49,8 @@ export function draftDay(draft: object | null | undefined): string | undefined {
 }
 
 /** Record why the auto-save handed this draft back (and the recording it came from). */
-export function bindDraftDecline<T extends object>(draft: T, reason: DeclineReason, recording?: VoiceRecordingRef): T {
-    update(draft, { decline: { reason, recording } });
+export function bindDraftDecline<T extends object>(draft: T, reason: DeclineReason, recording?: VoiceRecordingRef, kinds?: readonly string[]): T {
+    update(draft, { decline: { reason, recording, ...(kinds && kinds.length > 0 && { kinds }) } });
     return draft;
 }
 

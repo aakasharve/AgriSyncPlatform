@@ -23,6 +23,7 @@ import {
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { assertFarmsInScope } from '../../infrastructure/storage/accessScopeStore';
 import { resolveLogFarmId } from '../../features/logs/services/logSyncMutationService';
+import { takeOutClosedKinds } from '../../features/workKinds/closedKinds';
 // Labour Phase 2 / T2 — the use case's own response type, so the additive
 // `persistedLabourCorrections` evidence survives this pass-through instead of
 // being erased by a narrower inline structural type.
@@ -240,6 +241,11 @@ export class LogCommandServiceImpl implements LogCommandService {
         //     with words he can read (FarmOutOfScopeError). Unknown is never refused (an older server, a
         //     farm made offline): only the server's own last answer is.
         await assertFarmsInScope(logs.map(log => log.meta?.farmId));
+
+        // 2c. pilot lane PERM (CTO ruling Q3 A) — a kind of work the server says this person may not record on the log's farm is
+        //     taken out HERE, before the write and the enqueue, so the phone's copy is what the server receives (P10). His words stay;
+        //     the log's meta says which kinds were not saved. Only closed kinds: refused before anything is written (WorkKindsClosedError).
+        await takeOutClosedKinds(logs);
 
         // 3. Update UI State (Optimistic or Confirmed)
         if (updateState) {
