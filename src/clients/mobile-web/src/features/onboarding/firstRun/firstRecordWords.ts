@@ -10,6 +10,8 @@ import type { Language } from '../../../i18n/language';
 
 export interface FirstRecordWords {
     card: { title: string; line: string; start: string; later: string };
+    /** Task 1b — the first record's saved screen: his line, the setup hub, and "later". */
+    offer: { line: string; fill: string; later: string };
 }
 
 const MR: FirstRecordWords = {
@@ -19,6 +21,11 @@ const MR: FirstRecordWords = {
         start: 'बोलायला सुरुवात करा', // FOUNDER
         later: 'नंतर सांगेन', // FOUNDER
     },
+    offer: {
+        line: 'तुमच्या शेताची माहिती पूर्ण करा. म्हणजे पुढील कामांच्या नोंदी अधिक अचूक होतील.', // FOUNDER
+        fill: 'शेताची माहिती भरा', // PROPOSED (Marathi) — the CTO ruling's button, not yet his
+        later: 'नंतर', // PROPOSED (Marathi)
+    },
 };
 
 const EN: FirstRecordWords = {
@@ -27,6 +34,11 @@ const EN: FirstRecordWords = {
         line: 'Tell it as you remember it. We will do the rest.', // PROPOSED (English)
         start: 'Start speaking', // PROPOSED (English)
         later: 'I will tell later', // PROPOSED (English)
+    },
+    offer: {
+        line: "Complete your farm's details, so the records of the work ahead are more accurate.", // PROPOSED (English)
+        fill: 'Fill in the farm details', // PROPOSED (English)
+        later: 'Later', // PROPOSED (English)
     },
 };
 

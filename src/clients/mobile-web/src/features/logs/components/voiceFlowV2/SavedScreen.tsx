@@ -85,6 +85,8 @@ export interface SavedScreenProps {
     audience?: React.ReactNode;
     answerKit?: ProductAnswerKit;
     mixRules?: readonly MixRule[];
+    /** Repair R1-g 1b — the FIRST record's setup-hub offer, drawn right under the saved card; absent = not offered. */
+    firstRecordOffer?: React.ReactNode;
     /** Why this screen must NOT close itself (the container's honesty rules); null = it closes after 30 s untouched. */
     autoCloseOff: string | null;
     onOpenDetail: () => void;
@@ -215,6 +217,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                         missing={day.missing} />
                 )}
             </section>
+            {p.firstRecordOffer}
             {speakerDone && (
                 <p className="m-0 rounded-[14px] border border-[#DDE3DA] bg-white px-3 py-[9px] text-[14px] font-bold text-[#44403C]" data-testid="vr2-speaker-done">{copy.speakerDone}</p>
             )}

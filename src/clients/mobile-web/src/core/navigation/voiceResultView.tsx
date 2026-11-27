@@ -150,6 +150,13 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     onMoveDay={ctx.moveSavedDay}
                     onBack={ctx.handleReset}
                     onAutoClose={FEATURE_FLAGS.voiceFlowV2 ? () => { ctx.handleReset(); ctx.setLogScope(WORK_HOME_SCOPE); } : undefined}
+                    // Repair R1-g 1b (ruling 3) — "शेताची माहिती भरा" on the farm's first record: the सेट-अप केंद्र place, with the
+                    // log tab put back on its work home behind it (the self-close's own reset), so its मागे lands Home.
+                    onOpenSetupHub={() => {
+                        ctx.handleReset();
+                        ctx.setLogScope(WORK_HOME_SCOPE);
+                        if (ctx.openPlace) ctx.openPlace('profile'); else ctx.setCurrentRoute('profile');
+                    }}
                     onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
                     onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}
                     questionPanel={savedLog ? (

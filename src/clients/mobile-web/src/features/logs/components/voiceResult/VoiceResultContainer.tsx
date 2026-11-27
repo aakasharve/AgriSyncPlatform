@@ -53,6 +53,8 @@ import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { AudienceRow } from '../../../recordAudience/AudienceRow';
 import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
+import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
+import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
 import { holdDetailBack } from '../voiceFlowV2/detailBack';
 
 /** The holder's own name from the session profile; the app's placeholder for "no name yet" is not a name. */
@@ -92,11 +94,16 @@ export interface VoiceResultContainerProps {
     mixRules?: readonly MixRule[];
     /** spec voice-flow-v2-2026-11-23 — where the saved screen goes when it closes itself (the work home). Absent = `onBack`. */
     onAutoClose?: () => void;
+    /**
+     * Repair R1-g 1b (CTO ruling 3) — "शेताची माहिती भरा" on the FIRST record's saved screen: the setup hub. Absent = the offer
+     * is never drawn (and nothing about it is read or written).
+     */
+    onOpenSetupHub?: () => void;
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, crops, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules, onAutoClose,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules, onAutoClose, onOpenSetupHub,
 }) => {
     const [pickingDay, setPickingDay] = useState(false);
     // spec voice-flow-v2 (M5): the recording whose detail page is open (null = the saved screen). Keyed by the recording, so a new
@@ -154,6 +161,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const canSeeMoney = mayShowFarmMoney(farmRole, seeMoneyDoor(storedScopes, farmId, currentFarm));
     const ownName = deps.ownName;
     const scheduleChoices = usePlotScheduleChoices();
+    // Repair R1-g 1b — the farm's FIRST record offers the setup hub, once (owner seat, a phone that had the first-record card).
+    const firstRecord = useFirstRecordOffer({ farmId, farmRole, recordingKey: result.key, logIds: result.logIds, history, enabled: !!onOpenSetupHub });
     const answerKit: ProductAnswerKit = useMemo(() => {
         const logById = new Map<string, DailyLog>([...dayLogs, ...current].map(l => [l.id, l] as const));
         const farmOf = (logId: string): string | null => logById.get(logId)?.meta?.farmId ?? farmId;
@@ -194,6 +203,10 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     // D-44: "whether they listened to the original voice or reviewed the text" — his clip played on this screen, or not.
     const basis: 'heard' | 'read' = playback.heard.has(primary.id) ? 'heard' : 'read';
     const leave = (then: () => void) => () => { playback.stop(); then(); };
+    // R1-g 1b (ruling 3): his line under "जतन झालं", never a block; answered either way, it is never offered again on this farm.
+    const firstRecordOffer = firstRecord.show && onOpenSetupHub ? (
+        <FirstRecordOffer onFill={leave(() => { firstRecord.close(); onOpenSetupHub(); })} onLater={firstRecord.close} />
+    ) : null;
 
     // A हजेरी-door record is changed in the हजेरी वही, never moved from here (none reaches this screen today: its save
     // goes to the saved card — this keeps it so).
@@ -221,7 +234,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     ) : null;
     // The old screen keeps its order (refusal, the audience row, money). The v2 saved screen draws the audience row where the
     // approved design has it: under "बदला", above the earlier recordings (F6).
-    const banners = <>{refusedBanner}{audienceRow}{moneyBanner}</>;
+    const banners = <>{refusedBanner}{audienceRow}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
     const bannersV2 = <>{refusedBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
@@ -243,9 +256,11 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const onTellPart = (part: PartKey) => leave(() => (onTellMore ? onTellMore(part) : onAddAnother()))();
 
     if (FEATURE_FLAGS.voiceFlowV2 && !detail) {
-        // H2 / P10: it closes itself only when nothing on it still needs him or says something is wrong.
+        // H2 / P10: it closes itself only when nothing on it still needs him or says something is wrong. R1-g 1b: nor while the
+        // first record's setup-hub line shows (ruling 3).
         const autoCloseOff = current.some(l => syncQueuedById.get(l.id) !== true) ? 'not_queued'
-            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed' : null;
+            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed'
+            : firstRecordOffer ? 'first_record_offer' : null;
         return (
             <>
             {bannersV2}
@@ -274,6 +289,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                 extras={extras}
                 answerKit={answerKit}
                 mixRules={mixRules}
+                firstRecordOffer={firstRecordOffer}
                 autoCloseOff={autoCloseOff}
                 onOpenDetail={() => {
                     logger.info('voice_v2.saved.detail_opened', { component: 'SavedScreen', action: 'detail_opened', logCount: current.length });

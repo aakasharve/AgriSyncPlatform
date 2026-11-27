@@ -21,3 +21,30 @@ export function mayOfferFirstRecord(role: string | null | undefined): boolean {
     const kind = toWelcomeRole(role);
     return kind === 'owner' || kind === 'coOwner';
 }
+
+/**
+ * Task 1b (ruling 3) — after the FIRST record of a farm is saved, its saved screen offers the setup hub, once. A per-farm
+ * mark on the phone: empty = not decided yet; the recording key of the farm's first record while its screen shows the
+ * offer; `FIRST_RECORD_OFFER_DONE` once it was answered, or once a record that is not the farm's first was seen.
+ */
+export const firstRecordOfferKey = (farmId: string | null | undefined): string => `shramsafal_first_record_offer_v1:${farmId ?? 'none'}`;
+export const FIRST_RECORD_OFFER_DONE = 'done';
+
+export type FirstRecordVerdict = 'first' | 'notFirst' | 'unknown';
+
+/**
+ * Is this recording (its records, one per plot) the farm's FIRST record on this phone? Every other record the phone holds
+ * must be KNOWN to be another farm's; one with no farm on it counts as this farm's (fails closed: no offer). Not decided
+ * while the recording's own records are not on the phone's list yet, or with no farm.
+ */
+export function firstRecordVerdict(
+    logIds: readonly string[],
+    history: readonly { id: string; meta?: { farmId?: string | null } }[],
+    farmId: string | null | undefined,
+): FirstRecordVerdict {
+    if (!farmId || logIds.length === 0) return 'unknown';
+    const mine = new Set(logIds);
+    if (!history.some(l => mine.has(l.id))) return 'unknown';
+    const another = history.some(l => !mine.has(l.id) && (!l.meta?.farmId || l.meta.farmId === farmId));
+    return another ? 'notFirst' : 'first';
+}
