@@ -18,6 +18,7 @@ import { getNextUnusedColor } from '../helpers/cropPalette';
 import { registerNewPlotOnServer } from '../../sync/plots/registerNewPlotOnServer';
 import { setPlotWater, type PlotWaterInput } from '../farmSetup/farmSetupCommands';
 import type { NewPlotStart } from '../plotStart/plotStartChoice';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 
 export interface UseCropPlotStateInput {
     crops: CropProfile[];
@@ -53,6 +54,9 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
     const [cropNameError, setCropNameError] = React.useState<string>('');
     const [wizardCropId, setWizardCropId] = React.useState<string | null>(null);
     const [mappingPlotId, setMappingPlotId] = React.useState<{ cropId: string; plotId: string } | null>(null);
+    // Repair FIX-2 - the farm in the header (FarmContext, the one source since FIX-1). A new plot is sent to the server on THIS
+    // farm, the same farm the crop list marks it with (`useAppData`'s merge-safe save), so the screen and the server agree.
+    const openFarmId = useOptionalFarmContext()?.currentFarmId ?? null;
 
     const normalizedNewCropName = normalizeCropName(newCropData.name || '');
     const isDuplicateCropName = normalizedNewCropName.length > 0
@@ -103,6 +107,7 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
                 plot,
                 cropName,
                 schedule: start?.scheduleTemplateId ? { templateId: start.scheduleTemplateId, referenceDate: start.referenceDate } : null,
+                ...(openFarmId ? { farmId: openFarmId } : {}),
             });
             // repair D-9 (P7) - the plot's water goes AFTER the plot (`create_plot` first, then `farmsetup.plot_water.set`; refused PlotNotFound while the
             // plot is still on its way, it waits for it). Only when the plot itself was queued: a water answer for a plot that never goes up would wait for
