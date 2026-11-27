@@ -20,7 +20,9 @@ import { FarmContextProvider } from './core/session/FarmContext';
 import { OfflineBanner } from './features/sync';
 import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/AiTestModeStore';
 import AppShell from './app/components/AppShell';
-import LoginPage from './pages/LoginPage';
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V1-A) — after स्वागत the first questions come
+// before sign-in ("तुम्ही कोण?", "were you invited?", scan or code), then the number and the SMS code (LoginPage).
+import PreSignInFlow from './features/onboarding/joinStart/PreSignInFlow';
 // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A) — the permissions page's two switches, written
 // after sign-in and never over an earlier choice (a silent background reconciliation, like the consent link below).
 import { useHeldSwitchChoices } from './features/consent/permissionsPage/useHeldSwitchChoices';
@@ -144,7 +146,7 @@ const AppFrame: React.FC<{
                         {session?.userId && <NoticeChangeSheet userId={session.userId} />}
                     </>
                 )
-                : <LoginPage onBack={() => setShowWelcome(true)} />}
+                : <PreSignInFlow onBack={() => setShowWelcome(true)} />}
         </AppShell>
     );
 };

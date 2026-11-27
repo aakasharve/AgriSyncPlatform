@@ -202,6 +202,8 @@ describe('statements that were measured against the code and found untrue stay o
             'features/voice/components/recorder/NothingUnderstood.tsx': 'GATED: its SavedClip reads usePlaybackSwitch() (OFF = no play button, the D-31 words); the screen also stops a clip that is playing when the switch turns OFF',
             'features/scheduler/ownerVoice/OwnerClipPlay.tsx': 'NOT HIS RECORDING: the schedule owner\'s message (its own clip store, slice 12b), never a farmer\'s clip; the switch is about his own recordings',
             'features/labour/identity/CardScanner.tsx': 'NOT A RECORDING: camera video preview',
+            // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V1-A): the scanner before sign-in.
+            'features/onboarding/joinStart/useQrCamera.ts': 'NOT A RECORDING: camera video preview (the QR scanner before sign-in; video only, audio: false)',
             'features/logs/components/shramsathi/understandingRing/cinematicEngine.ts': 'NOT A RECORDING: animation timing',
             'features/logs/components/shramsathi/understandingRing/understandingEngine.ts': 'NOT A RECORDING: animation timing',
             'features/voice/hooks/useMicLevel.ts': 'NOT PLAYBACK: reads the microphone level while recording',
