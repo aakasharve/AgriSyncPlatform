@@ -60,6 +60,8 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
         <div className="animate-in fade-in slide-in-from-left-4 duration-300">
             <ProfilePage
                 profile={ctx.farmerProfile}
+                // Repair FIX-2 - the open farm's people for माझी टीम's list (name look-ups keep the whole `profile.operators`).
+                farmPeople={ctx.farmPeople}
                 crops={ctx.crops}
                 onUpdateProfile={ctx.setFarmerProfile}
                 onUpdateCrops={ctx.handleUpdateCrops}

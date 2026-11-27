@@ -165,6 +165,8 @@ export interface AppRouterContext {
     setIsDemoMode: DataState['setIsDemoMode'];
     farmerProfile: DataState['farmerProfile'];
     setFarmerProfile: DataState['setFarmerProfile'];
+    /** Repair FIX-2 - the open farm's people (`useAppData().farmPeople`), for the people lists. Absent (a preview): `farmerProfile.operators`. */
+    farmPeople?: DataState['farmPeople'];
     crops: DataState['crops'];
     handleUpdateCrops: DataState['handleUpdateCrops'];
     handleAddPerson: DataState['handleAddPerson'];
