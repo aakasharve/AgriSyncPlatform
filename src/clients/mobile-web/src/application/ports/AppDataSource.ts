@@ -4,7 +4,13 @@ import { CropProfile, FarmerProfile } from '../../types';
 // Define auxiliary repositories here for now, or move to separate files
 export interface CropRepository {
     getAll(): Promise<CropProfile[]>;
+    /** Replace-all: the download's own write. */
     save(crops: CropProfile[]): Promise<void>;
+    /**
+     * Repair FIX-2 - a screen's save: `merge` is handed the list as stored now and its answer is written, in one transaction.
+     * Optional: a store without it is merged by its caller from `getAll()` (the same merge, not in one transaction).
+     */
+    saveMerged?(merge: (stored: CropProfile[]) => CropProfile[]): Promise<CropProfile[]>;
 }
 
 export interface ProfileRepository {

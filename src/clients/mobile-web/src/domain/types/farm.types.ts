@@ -114,6 +114,12 @@ export interface Plot {
      * into this record by hand). Absent or null = no group. Display only: it is never an access list.
      */
     groupName?: string | null;
+    /**
+     * Repair FIX-2 (founder 27 Nov) - the farm this plot was ADDED on, written by this phone when the plot is made here (the farm open
+     * in the header at that moment). Never written onto a downloaded plot (the downloaded plots table holds its farm). Read only by
+     * the open-farm read layer (`app/helpers/openFarmView.ts`), after the downloaded table and the plot's waiting `create_plot`.
+     */
+    farmId?: string;
     landPrep?: LandPrepInfo;
     baseline: PlotBaseline;
 
@@ -175,6 +181,11 @@ export interface CropProfile {
     workflow: WorkflowStep[];
     contractUnitDefault?: 'Tree' | 'Acre' | 'Row';
     createdAt?: string;
+    /**
+     * Repair FIX-2 (founder 27 Nov) - the farm a crop MADE ON THIS PHONE was added on (the farm open in the header then). A crop the
+     * download made (`crop_<name>`) carries none: it is shown on a farm by its plots. Read only by `app/helpers/openFarmView.ts`.
+     */
+    farmId?: string;
 }
 
 // =============================================================================

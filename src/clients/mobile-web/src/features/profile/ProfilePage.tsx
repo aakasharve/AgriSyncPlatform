@@ -61,7 +61,7 @@ import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
 import { MoveCard } from './farmSetup/MoveCard';
 import { OwnBillApprovalSwitch } from '../finance/OwnBillApprovalSwitch';
 
-import type { CropProfile, FarmerProfile } from '../../types';
+import type { CropProfile, FarmOperator, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
 
 /**
@@ -102,6 +102,11 @@ type HubSection = { id: ProfileTab; label: string; icon: React.ReactNode; body: 
 
 interface ProfilePageProps {
     profile: FarmerProfile;
+    /**
+     * Repair FIX-2 - the OPEN farm's people (`useAppData().farmPeople`): माझी टीम's view-only list names only them. Absent: the
+     * people the phone knows (`profile.operators`, every farm's), as before.
+     */
+    farmPeople?: FarmOperator[];
     crops: CropProfile[];
     onUpdateProfile: (p: FarmerProfile) => void;
     onUpdateCrops: (c: CropProfile[]) => void;
@@ -140,7 +145,7 @@ interface ProfilePageProps {
 const coversWholeFarm = (f: { plotScope?: string | null } | null): boolean => !f || !f.plotScope || f.plotScope === 'AllPlots';
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
-    profile, crops, onUpdateProfile, onUpdateCrops,
+    profile, farmPeople, crops, onUpdateProfile, onUpdateCrops,
     onOpenScheduleLibrary, onOpenSchedule, onOpenFinanceManager, onOpenLabour,
     onOpenConsent, onOpenAiDrafts, onOpenSettings, onOpenVoiceDiary,
     onExit,
@@ -574,7 +579,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 farmCode={teamFarmCode}
                                 callerRole={farmAdmin.myFarm?.role ?? null}
                                 callerUserId={authSession?.userId ?? null}
-                                operators={profile.operators}
+                                operators={farmPeople ?? profile.operators}
                                 roster={teamRoster}
                                 onShowQr={() => { void farmAdmin.handleOpenInviteQr(); }}
                             />

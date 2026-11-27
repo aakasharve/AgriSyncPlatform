@@ -22,22 +22,18 @@
  * second `useAppData()` instance, never `AppHeader` moved inside the provider
  * tree (both explicitly forbidden by the ruling).
  *
- * WHAT THIS DOES **NOT** SOLVE (state precisely, do not paper over — P3/P-F)
+ * THE OPEN FARM ONLY (repair FIX-2, 27 Nov 2026 - this note used to record the gap)
  * ----------------------------------------------------------------------------
- * `history`/`crops` come from `dataSource.{logs,crops}.getAll()`
- * (`useAppData.ts`), which return every record for the SIGNED-IN USER's
- * Dexie database (`activateDatabaseForUser(session.userId)`,
- * `DataSourceProvider.tsx`) — there is no `farmId` on `CropProfile`/`Plot`,
- * and `dataSource.{crops,logs}.getAll()` take no farm argument, so this data
- * is NOT scoped to `currentFarmId` for an account with more than one farm.
- * This is not a gap introduced here — every other consumer of
- * `data.history`/`data.crops` in this app (`getTodayCounts`,
- * `getTodayPlotData`, `ReflectPage`, `ComparePage` via `mainView.tsx`) has
- * the exact same characteristic today. Fixing true per-farm data isolation on
- * the frontend is a separate, larger change (a `farmId` field enforced at the
- * repository/query layer) that this task does not attempt. For the seeded
- * preview user (one farm), this is invisible; it becomes visible the moment
- * an account with 2+ farms exists.
+ * `dataSource.{logs,crops}.getAll()` still return every record of the
+ * SIGNED-IN USER's Dexie database (every farm he can see). What reaches this
+ * helper is not that: `useAppData`'s `history`/`crops` are the OPEN farm's
+ * (the farm in the header, FarmContext), through the one read layer
+ * `openFarmView.ts` - a plot's farm from the downloaded plots table, else its
+ * waiting `create_plot`, else the phone's own mark; a record's from its own
+ * `meta.farmId`, else its plot's. So `plotCount` and yesterday's state are
+ * the open farm's, as is every other consumer of `data.history`/`data.crops`
+ * (`getTodayCounts`, `getTodayPlotData`, `ReflectPage`, `ComparePage`).
+ * `operatorNameById` stays a name look-up over every person the phone knows.
  */
 import type { CropProfile, DailyLog, FarmOperator, PlannedTask } from '../../types';
 import { computeDayState } from '../../shared/utils/dayState';

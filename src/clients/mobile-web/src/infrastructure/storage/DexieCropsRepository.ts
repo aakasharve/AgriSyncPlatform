@@ -43,4 +43,25 @@ export class DexieCropsRepository implements CropRepository {
             );
         });
     }
+
+    /**
+     * Repair FIX-2 - a SCREEN's save. `merge` is handed the list as stored now and its answer is written, in ONE transaction, so
+     * a save from one farm's screen is merged into the newest stored list (never into a copy held from before a download) and
+     * cannot drop another farm's plots (`app/helpers/farmCropsMerge.ts`). `merge` must be synchronous (it runs inside the
+     * transaction); when it throws, nothing is written. Never clears the table: only the crops the merge dropped are deleted.
+     * Returns what was written.
+     */
+    async saveMerged(merge: (stored: CropProfile[]) => CropProfile[]): Promise<CropProfile[]> {
+        const db = getDatabase();
+        return db.transaction('rw', db.crops, async () => {
+            const rows = await db.crops.toArray();
+            const stored = normalizeMojibakeDeep(rows.map(r => r.data as CropProfile)).value as CropProfile[];
+            const merged = normalizeMojibakeDeep(merge(stored)).value as CropProfile[];
+            const kept = new Set(merged.map(c => c.id));
+            const now = Date.now();
+            await db.crops.bulkDelete(rows.filter(r => !kept.has(r.id)).map(r => r.id));
+            await db.crops.bulkPut(merged.map(c => ({ id: c.id, data: c, updatedAtMs: now })));
+            return merged;
+        });
+    }
 }

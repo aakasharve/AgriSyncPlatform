@@ -144,7 +144,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
-        farmerProfile, setFarmerProfile,
+        farmerProfile, setFarmerProfile, farmPeople,
         crops, mockHistory, realHistory,
         handleUpdateCrops, handleAddPerson, handleDeletePerson,
         setLedgerDefaults, ledgerDefaults,
@@ -355,7 +355,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,
-        farmerProfile, setFarmerProfile,
+        farmerProfile, setFarmerProfile, farmPeople,
         crops, handleUpdateCrops, handleAddPerson, handleDeletePerson,
         setLedgerDefaults, ledgerDefaults,
         userResources, setUserResources,
