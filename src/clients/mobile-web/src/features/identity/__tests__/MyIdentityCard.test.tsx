@@ -265,12 +265,12 @@ describe('माझी ओळख — the 8-day ask (Q5 = A)', () => {
 });
 
 describe('माझी ओळख — one language', () => {
-    it('Marathi mode: no English word (his name, place names and the drawn "Farmer ID" are data)', async () => {
+    it('Marathi mode: no English word (his name and place names are data)', async () => {
         const user = userEvent.setup();
         mount(state({ card: card({ fullName: 'गणेश पवार', fullNameScript: 'deva', nameEn: { value: 'Ganesh Pawar', basis: 'Typed' } }) }), { role: 'Mukadam' });
         await user.type(screen.getByTestId('id-village-input'), 'पंढ');
         await screen.findAllByTestId('id-village-row');
-        const text = (screen.getByTestId('hub-my-identity').textContent ?? '').replace(/Ganesh Pawar|Farmer ID|\+91 \d{5} \d{5}/g, ' ');
+        const text = (screen.getByTestId('hub-my-identity').textContent ?? '').replace(/Ganesh Pawar|\+91 \d{5} \d{5}/g, ' ');
         expect(text).not.toMatch(/[A-Za-z]{3,}/);
     });
 

@@ -107,7 +107,7 @@ const MR: IdentityWords = {
     suggested: 'सुचवलेलं', // PROPOSED (Marathi)
     phone: 'मोबाईल क्रमांक', // DRAWN
     phoneVerified: 'सत्यापित', // DRAWN
-    farmerId: 'Farmer ID — शेतकरी ओळख क्रमांक', // DRAWN (the drawing keeps the scheme's own name "Farmer ID")
+    farmerId: 'शेतकरी ओळख क्रमांक (फार्मर आयडी)', // DRAWN words; CTO 27 Nov: the scheme's name in Marathi letters (Marathi mode = Marathi only)
     notVerified: 'पडताळलेला नाही', // DRAWN
     village: 'गाव', // DRAWN
     taluka: 'तालुका', // DRAWN
