@@ -46,7 +46,7 @@ import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
-import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
+import { HUB_STEP_ORDER, HUB_STEP_TAB, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
 import { hubWords } from './hubWords';
 import { useSentInvitations } from './components/TeamFirstStepCard';
 import { useFarmPlots } from './team/useFarmPlots';
@@ -57,6 +57,7 @@ import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
 import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmSetup } from './farmSetup/useFarmSetup';
+import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -217,18 +218,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Guided-setup progress: a step counts as "done" once its core data is really saved.
     // Identity = name + village; water / motor / power = a source / a motor / power times the farmer
     // saved (repair FIX-1 item 3: three steps, one page); Crops = at least one crop.
+    // Repair D-9 (P8): with the open farm's set, water / motor / power / machines are the FARM's (`hubSetupFacts`); without it, the phone profile's.
+    const setupFacts = React.useMemo(() => hubSetupFacts(farmSetup, profile), [farmSetup, profile]);
     const doneIds = React.useMemo(() => {
         const s = new Set<HubStepId>();
         if (profile.name && profile.village) s.add('identity');
-        if ((profile.waterResources?.length ?? 0) > 0) s.add('water');
-        if ((profile.motors?.length ?? 0) > 0) s.add('motor');
-        if (powerTimesSaved(profile.electricityTiming)) s.add('power');
+        if (setupFacts.waterCount > 0) s.add('water');
+        if (setupFacts.motorCount > 0) s.add('motor');
+        if (setupFacts.powerSaved) s.add('power');
         if (crops.length > 0) s.add('structure');
-        if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
+        if (setupFacts.machineCount > 0) s.add('machines');
         // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
         // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
-    }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
+    }, [profile.name, profile.village, setupFacts, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
     // repair D-9 - "आधी पाण्याचा स्रोत जोडा": the add-plot form closes (the plot is not saved half) and पाणी आणि वीज opens.
@@ -237,7 +240,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
     const scheduleChoices = usePlotScheduleChoices();
     const todayKey = getDateKey();
-    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey).length, [crops, scheduleChoices, todayKey]);
+    const waterRule = React.useMemo(() => plotWaterPendingFor(farmSetup), [farmSetup]);
+    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey, waterRule).length, [crops, scheduleChoices, todayKey, waterRule]);
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner-only team roster, read ONCE here:
     // the hub's "माझी टीम" row shows how many people wait for an answer, the team page lists them.
@@ -419,9 +423,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 ];
 
                 // One plain line per row, from the farmer's REAL data (no sample values).
-                const waterCount = profile.waterResources?.length ?? 0;
-                const motorCount = profile.motors?.length ?? 0;
-                const machineCount = profile.machineries?.length ?? 0;
+                const { waterCount, motorCount, machineCount } = setupFacts;
                 const subtitleFor = (id: HubStepId): string => {
                     if (id === 'identity') return hw.line.identity(doneIds.has('identity'));
                     if (id === 'water') return hw.line.water(waterCount);

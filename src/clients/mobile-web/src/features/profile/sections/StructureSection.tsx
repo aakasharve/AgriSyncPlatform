@@ -43,6 +43,7 @@ import { cropNameIn } from '../../../shared/names/namesIn';
 import { PLOT_PENDING_WORDS, pendingPlots, type PlotPendingReason } from './plotPending';
 import type { LocalFarmSetup } from '../farmSetup/farmSetupLocal';
 import { PlotWaterCard } from '../farmSetup/PlotWaterCard';
+import { plotWaterPendingFor } from '../farmSetup/hubFacts';
 
 /**
  * Repair FIX-1 item 5 (founder's word: RED) - the small red mark on a plot that still misses a link: the app's danger colour
@@ -158,7 +159,9 @@ const StructureSection: React.FC<StructureSectionProps> = ({
     const chosenName = picked ? cropLabel(picked, language) : (newCropData.name ?? '').trim();
 
     // Repair FIX-1 item 5 - the plots still missing a link (the hub's line counts the same list).
-    const pending = useMemo(() => pendingPlots(crops, scheduleChoices, todayKey), [crops, scheduleChoices, todayKey]);
+    // repair D-9 (P8): the plot's water is one more link, from the farm's set (no water reason before the set has come).
+    const waterRule = useMemo(() => plotWaterPendingFor(farmSet), [farmSet]);
+    const pending = useMemo(() => pendingPlots(crops, scheduleChoices, todayKey, waterRule), [crops, scheduleChoices, todayKey, waterRule]);
     const pendingById = useMemo(() => new Map(pending.map(x => [x.plotId, x.reasons])), [pending]);
     const pendingWords = PLOT_PENDING_WORDS[lineLanguage];
     const reasonsLine = (reasons: readonly PlotPendingReason[]) => reasons.map(r => pendingWords.reason[r]).join(' · ');

@@ -11,6 +11,10 @@
  *
  * Today's links: the plot's boundary is drawn; the plot follows a schedule (the schedule tab's own rule, the same one behind
  * "N पैकी M प्लॉटवर शेड्यूल"). Pure: no React, no storage, no clock (the caller passes today).
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-9, P8) - the plot's WATER is the third link: missing when the farm's set says this plot of
+ * the farm has no water answer, or a method with no live link ("पाण्याची सोय नाही" is an answer, not बाकी). The caller passes the rule
+ * (`farmSetup/hubFacts.plotWaterPendingFor`); without the farm's set it passes nothing and there is no water reason, as before.
  */
 import type { CropProfile, Plot } from '../../../domain/types/farm.types';
 import { digitsFor } from '../../../shared/utils/marathiDigits';
@@ -19,29 +23,36 @@ import { resolvePlotSchedule } from '../../scheduler/schedulePage/resolveSchedul
 import { plotFollowsSchedule } from '../../scheduler/schedulePage/scheduleMapModel';
 import type { PlotScheduleChoices } from '../../scheduler/schedulePage/usePlotScheduleChoices';
 
-export type PlotPendingReason = 'boundary' | 'schedule';
+export type PlotPendingReason = 'boundary' | 'schedule' | 'water';
 
 interface PlotFacts {
     plot: Plot;
     followsSchedule: boolean;
+    /** repair D-9 - the farm's set says this plot's water is not answered (false when the set has not come). */
+    waterPending: boolean;
 }
+
+/** repair D-9 - is this plot's water बाकी (from the farm's set); absent = the set has not come, no water reason. */
+export type PlotWaterPendingRule = ((plotId: string) => boolean) | undefined;
 
 /** Each link a plot needs, in the order its reasons are said. */
 const PLOT_LINKS: readonly { reason: PlotPendingReason; missing: (facts: PlotFacts) => boolean }[] = [
     { reason: 'boundary', missing: ({ plot }) => !plot.geoData },
     { reason: 'schedule', missing: ({ followsSchedule }) => !followsSchedule },
+    { reason: 'water', missing: ({ waterPending }) => waterPending },
 ];
 
-// Marathi first, English twin. "शेड्यूल नाही" and "बाकी" are the app's own words; "हद्द आखायची बाकी" and "प्लॉट बाकी" are new (report).
+// Marathi first, English twin. "शेड्यूल नाही" and "बाकी" are the app's own words; "हद्द आखायची बाकी" and "प्लॉट बाकी" are new (report);
+// repair D-9: "पाण्याची सोय बाकी" / "Water not set" (PROPOSED, the brief's words).
 export const PLOT_PENDING_WORDS = {
     mr: {
         title: 'बाकी',
-        reason: { boundary: 'हद्द आखायची बाकी', schedule: 'शेड्यूल नाही' } as Record<PlotPendingReason, string>,
+        reason: { boundary: 'हद्द आखायची बाकी', schedule: 'शेड्यूल नाही', water: 'पाण्याची सोय बाकी' } as Record<PlotPendingReason, string>,
         hubCount: (n: number) => `${digitsFor(n, 'mr')} प्लॉट बाकी`,
     },
     en: {
         title: 'Pending',
-        reason: { boundary: 'Boundary not drawn', schedule: 'No schedule' } as Record<PlotPendingReason, string>,
+        reason: { boundary: 'Boundary not drawn', schedule: 'No schedule', water: 'Water not set' } as Record<PlotPendingReason, string>,
         hubCount: (n: number) => `${n} ${n === 1 ? 'plot' : 'plots'} pending`,
     },
 } as const;
@@ -54,20 +65,21 @@ export interface PendingPlot {
 }
 
 /** What this plot still misses (empty = nothing). */
-export function plotPendingReasons(crop: CropProfile, plot: Plot, choices: PlotScheduleChoices, todayKey: string): PlotPendingReason[] {
+export function plotPendingReasons(crop: CropProfile, plot: Plot, choices: PlotScheduleChoices, todayKey: string, water?: PlotWaterPendingRule): PlotPendingReason[] {
     const facts: PlotFacts = {
         plot,
         followsSchedule: plotFollowsSchedule(resolvePlotSchedule(crop, plot, todayKey, choices.get(plot.id))),
+        waterPending: water ? water(plot.id) : false,
     };
     return PLOT_LINKS.filter(link => link.missing(facts)).map(link => link.reason);
 }
 
 /** Every plot of the farm that still misses a link: crop by crop, plots in natural number order (G2 before G10). */
-export function pendingPlots(crops: readonly CropProfile[], choices: PlotScheduleChoices, todayKey: string): PendingPlot[] {
+export function pendingPlots(crops: readonly CropProfile[], choices: PlotScheduleChoices, todayKey: string, water?: PlotWaterPendingRule): PendingPlot[] {
     const out: PendingPlot[] = [];
     for (const crop of crops) {
         for (const plot of sortedNaturally(crop.plots, p => p.name)) {
-            const reasons = plotPendingReasons(crop, plot, choices, todayKey);
+            const reasons = plotPendingReasons(crop, plot, choices, todayKey, water);
             if (reasons.length > 0) out.push({ cropId: crop.id, plotId: plot.id, plotName: plot.name, reasons });
         }
     }
