@@ -85,6 +85,8 @@ interface StructureSectionProps {
     farmSetup?: LocalFarmSetup | null;
     /** repair D-9 - "आधी पाण्याचा स्रोत जोडा": the door to पाणी आणि वीज. */
     onOpenWaterPage?: () => void;
+    /** repair D-9 - may change a plot's water (the farm-setup authority on a seat that covers every plot). Absent = `canAddPlot`. */
+    canEditWater?: boolean;
 }
 
 /** The hook's error strings are English; the farmer reads one of these two instead. */
@@ -127,7 +129,7 @@ const CropScheduleLine: React.FC<{ crop: CropProfile; following: number; languag
 const StructureSection: React.FC<StructureSectionProps> = ({
     crops, isAddingCrop, setIsAddingCrop, newCropData, setNewCropData, cropNameError, setCropNameError,
     normalizedNewCropName, isDuplicateCropName, handleAddCrop,
-    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, onOpenSchedule, canAddPlot = true, farmSetup, onOpenWaterPage,
+    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, onOpenSchedule, canAddPlot = true, farmSetup, onOpenWaterPage, canEditWater,
 }) => {
     const farmSet = farmSetup?.received ? farmSetup : null;
     const [confirmPlot, setConfirmPlot] = useState<string | null>(null);
@@ -188,7 +190,7 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                     </p>
                 </div>
                 {/* only a plot the phone knows is this farm's (FIX-2 is not this lane: another farm's plot gets no water door) */}
-                {farmSet?.farmPlotIds.has(p.id) && <PlotWaterCard plotId={p.id} farmSetup={farmSet} canEdit={canAddPlot} language={lineLanguage} onOpenWaterPage={onOpenWaterPage} />}
+                {farmSet?.farmPlotIds.has(p.id) && <PlotWaterCard plotId={p.id} farmSetup={farmSet} canEdit={canEditWater ?? canAddPlot} language={lineLanguage} onOpenWaterPage={onOpenWaterPage} />}
                 {confirming ? (
                     <div className="rounded-xl bg-rose-50 p-2.5 ring-1 ring-rose-200" data-testid={`plot-remove-confirm-${p.id}`}>
                         <p className="m-0 text-[14px] font-extrabold text-rose-900">हा प्लॉट यादीतून काढायचा?</p>

@@ -58,6 +58,7 @@ import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotSchedul
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmSetup } from './farmSetup/useFarmSetup';
 import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
+import { MoveCard } from './farmSetup/MoveCard';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -130,6 +131,12 @@ interface ProfilePageProps {
      */
     initialTab?: ProfileTab;
 }
+
+/**
+ * repair D-9 - the server lets a seat change the farm's water, motors, power and machines only when it covers EVERY plot (SERVER-REPORT §3: a
+ * chosen-plots or own-work seat holding the authority is refused). An older server sends no plot scope: every plot.
+ */
+const coversWholeFarm = (f: { plotScope?: string | null } | null): boolean => !f || !f.plotScope || f.plotScope === 'AllPlots';
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
@@ -261,6 +268,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const canEditFarmSetup = setupFarm
         ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
         : callerIsPrimary;
+    // repair D-9 - water, motors, power and machines: the server also needs the seat to cover EVERY plot (a chosen-plots or own-work seat holding the
+    // authority is refused, SERVER-REPORT §3), so those pages and the move ask for both. The server decides again whatever the phone shows.
+    const canEditFarmSetupWhole = canEditFarmSetup && coversWholeFarm(setupFarm);
+    const moveFarms = React.useMemo(() => meFarms
+        .filter(f => holdsAuthority(f, AUTHORITY.editFarmSetup) && coversWholeFarm(f))
+        .map(f => ({ farmId: f.farmId, name: f.name })), [meFarms]);
+    const moveCard = <MoveCard profile={profile} userId={authSession?.userId} editableFarms={moveFarms} />;
     // Repair FIX-1 item 10 (R2-B 15, founder 27 Nov) — the माझी टीम step: a MUST for the primary owner (red बाकी, counted by
     // "पुढचं", never a block), done once someone else is on the list, an invitation stands, or he says he runs this farm alone
     // for now — that mark is kept on this phone per farm (`teamSoloKey`; phone-only until the farm setup moves to the server).
@@ -407,17 +421,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 onOpenScheduleLibrary={onOpenScheduleLibrary}
                                 onOpenSchedule={onOpenSchedule}
                                 farmSetup={farmSetup}
+                                canEditWater={canEditFarmSetupWhole}
                                 onOpenWaterPage={openWaterPage}
                             />
                         ),
                     },
                     {
                         id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />,
-                        body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetup} plots={plotNames} />,
+                        body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetupWhole} plots={plotNames} moveCard={moveCard} />,
                     },
                     {
                         id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />,
-                        body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetup} />,
+                        body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} farmSetup={farmSetup} canEdit={canEditFarmSetupWhole} moveCard={moveCard} />,
                     },
                     { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
