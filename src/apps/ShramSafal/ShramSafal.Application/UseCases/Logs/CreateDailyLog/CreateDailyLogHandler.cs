@@ -452,6 +452,48 @@ public sealed class CreateDailyLogHandler(
             provenance = Provenance.Manual(stampedAppVersion);
         }
 
+        // ── spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record"; CTO ruling Q3 = A) — a seat the farm's registrant limited to
+        // some kinds of work is refused a record carrying any other kind, by name, BEFORE anything is staged (P1): his content's buckets, his labour,
+        // an older phone's draft, or (with neither) the linked parse. Placed AFTER the replay answer above, so a record accepted before the limit is
+        // still answered as saved, and after the parse's ownership is proven. Work captured offline before the owner narrowed his kinds is accepted
+        // inside the late window and flagged for the owner (below). Every seat without a limit is answered at once (no read beyond his standing).
+        var kindsDecision = Services.WorkKindDecision.Allowed;
+        if (await Services.WorkKindGate.LimitedAccessAsync(repository, command.FarmId, command.OperatorUserId, ct) is { } limited)
+        {
+            DateTime? capturedAtUtc = null;
+            if (!string.IsNullOrWhiteSpace(command.ContentJson))
+            {
+                try
+                {
+                    using var stated = JsonDocument.Parse(command.ContentJson);
+                    capturedAtUtc = LogContentDocument.CapturedAtUtc(stated.RootElement);
+                }
+                catch (JsonException)
+                {
+                    // Refused above as LogContentInvalid; never reached with an unreadable document. No time = no late window (said, never silent).
+                    System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("work_kinds.captured_at_unreadable"));
+                    capturedAtUtc = null;
+                }
+            }
+
+            kindsDecision = await Services.WorkKindGate.DecideForAsync(
+                repository,
+                command.FarmId,
+                command.OperatorUserId,
+                limited,
+                Services.WorkKindGate.KindsOfCreate(command, sourceJobForEvidence?.NormalizedResultJson),
+                clock.UtcNow,
+                capturedAtUtc,
+                ct);
+            if (kindsDecision.Refusal is { } kindClosed)
+            {
+                logger.LogInformation(
+                    "CreateDailyLog refused for farm {FarmId}: operator {OperatorUserId} may not record {Kinds}.",
+                    command.FarmId, command.OperatorUserId, string.Join(",", kindsDecision.RefusedKinds));
+                return Result.Failure<DailyLogDto>(kindClosed);
+            }
+        }
+
         // LABOUR_PHASE2 P2.2 — pick the factory that matches what the farmer
         // asserted. P2.1 deliberately gave each scope its OWN factory rather than
         // one Create() taking a scope: CreateForFarm has no plot or cycle
@@ -544,6 +586,14 @@ public sealed class CreateDailyLogHandler(
         // B002 — the हजेरी door offers no day declaration, so a labour-scoped record
         // stamps none: NULL is the honest "he did not say" (P4).
         log.SetDayOutcome(labourOnly ? null : command.ManualDraft?.DayOutcome);
+
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-ups 1 and 2) — "पैशांच्या नोंदी फक्त मला दिसू दे", decided NOW, when the record ARRIVES:
+        // while the farm's switch is on, the money this record states is kept for the registrant and its maker. Stamped on the record before its
+        // PRIMARY save (P1, never a side-car), and never moved by a later change of the switch. The work itself stays visible as its audience says.
+        if (farm.MoneyPrivateToHolder)
+        {
+            log.MarkMoneyPrivateAtCreation();
+        }
 
         // spec: plr-d10 (I27) — the recording this log was saved from, as the phone stated
         // it. Canonical (it is how a reviewer reaches the speaker's own words, D-31), so it
@@ -836,6 +886,8 @@ public sealed class CreateDailyLogHandler(
                     contentOrigin = storedContentOrigin,
                     // Review N12 — the हजेरी door, kept on the log so its details cannot be revised.
                     captureScope = log.CaptureScope,
+                    // pilot lane PERM (P8) — its money was made private by the farm's switch when it arrived (absent = its normal readers).
+                    moneyAudience = log.MoneyAudience?.ToString(),
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientRequestId,
@@ -930,6 +982,11 @@ public sealed class CreateDailyLogHandler(
                 ct);
         }
 
+        // pilot lane PERM — work he captured before the owner narrowed his kinds, accepted inside the late window: flagged for the owner, in this save.
+        await Services.WorkKindGate.FlagIfLateAsync(
+            repository, kindsDecision, "DailyLog", log.Id, command.FarmId, command.OperatorUserId, command.ActorRole, clock.UtcNow,
+            command.ClientRequestId, stampedAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
+
         // ── Fix F1: TWO-PHASE persistence ────────────────────────────────────
         // PHASE 1 — commit the farmer's DailyLog + its audit row on their OWN
         // SaveChanges, so the log is durable INDEPENDENTLY of the non-blocking
@@ -944,7 +1001,7 @@ public sealed class CreateDailyLogHandler(
 
         // PHASE 2 — the side-car, best-effort and isolated. A weather-stamp or
         // derivation failure here must NEVER discard the (already-committed) log.
-        await PersistSideCarAsync(log, command, sourceJobForEvidence, ct);
+        await PersistSideCarAsync(log, command, sourceJobForEvidence, kindsDecision.ClosedKinds, ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),
@@ -1002,6 +1059,7 @@ public sealed class CreateDailyLogHandler(
         Domain.Logs.DailyLog log,
         CreateDailyLogCommand command,
         Domain.AI.AiJob? sourceJobForEvidence,
+        IReadOnlySet<string> closedKinds,
         CancellationToken ct)
     {
         // Phase 2 (dfes-companion-2026-07-11): the daily richness aggregate is
@@ -1018,7 +1076,7 @@ public sealed class CreateDailyLogHandler(
             await ambientTx.CreateSavepointAsync(savepoint, ct);
             try
             {
-                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, closedKinds, ct);
             }
             catch (Exception ex)
             {
@@ -1041,7 +1099,7 @@ public sealed class CreateDailyLogHandler(
             await using var sideCarTx = await dbContext!.Database.BeginTransactionAsync(ct);
             try
             {
-                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, closedKinds, ct);
                 await sideCarTx.CommitAsync(ct);
             }
             catch (Exception ex)
@@ -1059,7 +1117,7 @@ public sealed class CreateDailyLogHandler(
         // Unit-test / non-relational path — plain isolation.
         try
         {
-            await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+            await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, closedKinds, ct);
         }
         catch (Exception ex)
         {
@@ -1207,6 +1265,7 @@ public sealed class CreateDailyLogHandler(
         Domain.Logs.DailyLog log,
         CreateDailyLogCommand command,
         Domain.AI.AiJob? sourceJobForEvidence,
+        IReadOnlySet<string> closedKinds,
         CancellationToken ct)
     {
         // Track B B2.8 — persist the client-captured weather snapshot to
@@ -1244,7 +1303,9 @@ public sealed class CreateDailyLogHandler(
                 log, sourceJobForEvidence, idGenerator, clock,
                 deriveLabour: command.Labour is not { Count: > 0 },
                 labourOnly: command.CaptureScope == DailyLogCaptureScope.Labour,
-                ct: ct);
+                ct: ct,
+                // pilot lane PERM — a kind this person may not record is never derived from his parse or draft (the part his phone left out stays out).
+                closedKinds: closedKinds);
         }
         else if (ManualDraftNormalizer.Normalize(command.ManualDraft) is { } manualWireJson)
         {
@@ -1278,7 +1339,9 @@ public sealed class CreateDailyLogHandler(
                 log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock,
                 deriveLabour: command.Labour is not { Count: > 0 },
                 labourOnly: command.CaptureScope == DailyLogCaptureScope.Labour,
-                ct: ct);
+                ct: ct,
+                // pilot lane PERM — a kind this person may not record is never derived from his parse or draft (the part his phone left out stays out).
+                closedKinds: closedKinds);
         }
 
         await repository.SaveChangesAsync(ct);

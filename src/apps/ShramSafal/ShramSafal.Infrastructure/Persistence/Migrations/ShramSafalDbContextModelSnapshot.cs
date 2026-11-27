@@ -2218,6 +2218,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
 
+                    b.Property<bool>("MoneyPrivateToHolder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("money_private_to_holder");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -2646,6 +2652,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<DateTime?>("WorkKindsChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("work_kinds_changed_at_utc");
+
+                    b.PrimitiveCollection<List<string>>("_allowedWorkKinds")
+                        .HasColumnType("text[]")
+                        .HasColumnName("allowed_work_kinds");
+
                     b.PrimitiveCollection<List<Guid>>("_scopePlotIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2674,6 +2688,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("farm_memberships", "ssf", t =>
                         {
                             t.HasCheckConstraint("ck_farm_memberships_plot_scope", "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')");
+
+                            t.HasCheckConstraint("ck_farm_memberships_work_kinds", "allowed_work_kinds IS NULL OR (cardinality(allowed_work_kinds) >= 1 AND allowed_work_kinds <@ ARRAY['cropActivities','irrigation','inputs','labour','machinery','activityExpenses']::text[])");
                         });
                 });
 
@@ -5431,6 +5447,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
 
+                    b.Property<string>("MoneyAudience")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("money_audience");
+
                     b.Property<Guid>("OperatorUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("operator_user_id");
@@ -5488,7 +5509,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FarmId", "LogDate");
 
-                    b.ToTable("daily_logs", "ssf");
+                    b.ToTable("daily_logs", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_daily_logs_money_audience", "money_audience IS NULL OR money_audience = 'OnlyMe'");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLogContent", b =>

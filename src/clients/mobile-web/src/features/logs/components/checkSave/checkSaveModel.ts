@@ -20,8 +20,11 @@ import { entryText, withoutQuotes } from '../voiceResult/partNames';
 import { placeWords } from '../../../../shared/names/placeWords';
 import { recordingOf, withoutInventedStoppage, type BlockerEntry, type PartEntry } from '../voiceResult/resultModel';
 
-/** Repair R1-g 1d — `firstRecord`: the farm's first record, saved only on "बरोबर" (founder Q-A, 27 Nov). */
-export type CheckCase = 'unclear' | 'otherPlot' | 'notWritten' | 'check' | 'firstRecord';
+/**
+ * Repair R1-g 1d — `firstRecord`: the farm's first record, saved only on "बरोबर" (founder Q-A, 27 Nov). Pilot lane PERM — `kindsClosed`: it holds
+ * only kinds of work he may not record there (nothing to save, CTO ruling Q3 A).
+ */
+export type CheckCase = 'unclear' | 'otherPlot' | 'notWritten' | 'check' | 'firstRecord' | 'kindsClosed';
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
 const NO_WHO = { youIds: new Set<string>(), nameOf: () => undefined, youLabel: '', unknownLabel: '' };

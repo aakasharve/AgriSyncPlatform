@@ -94,6 +94,17 @@ public sealed class AddLogTaskHandler(
             PaidFeature.WriteDailyLog, ct);
         if (gate is not null) return gate;
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") — an older phone sends each part of a record as its own task line:
+        // its words are read for their kind (WorkRecogniser) and refused by name when the farm's registrant did not leave him that kind. An observation
+        // or a reminder is always open; every seat without a limit is answered at once.
+        if (await Services.WorkKindGate.LimitedAccessAsync(repository, (Guid)log.FarmId, command.ActorUserId, ct) is { } limited
+            && (await Services.WorkKindGate.DecideForAsync(
+                repository, (Guid)log.FarmId, command.ActorUserId, limited,
+                Services.WorkKindGate.KindsOfTaskLine(command.ActivityType), clock.UtcNow, happenedAtUtc: null, ct)).Refusal is { } kindClosed)
+        {
+            return Result.Failure<DailyLogDto>(kindClosed);
+        }
+
         // LABOUR_PHASE2 P2.3 (reader audit) — a cycle-less log NO LONGER refuses
         // the task; it records the task with NO compliance verdict.
         //

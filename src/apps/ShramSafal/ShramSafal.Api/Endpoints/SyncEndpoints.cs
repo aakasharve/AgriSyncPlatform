@@ -91,6 +91,7 @@ public static class SyncEndpoints
             string? farms,
             string? scheduleFormat,
             string? farmSetup,
+            string? seenBy,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
             PullSyncChangesHandler handler,
@@ -140,7 +141,10 @@ public static class SyncEndpoints
             var result = await handler.HandleAsync(
                 new PullSyncChangesQuery(
                     cursor, actorUserId, heldFarmIds, PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat),
-                    PullSyncChangesQuery.ParseScheduleFormat(farmSetup)),
+                    PullSyncChangesQuery.ParseScheduleFormat(farmSetup),
+                    // pilot lane PERM - `seenBy=1`: the phone asks for each farm's name-free "who sees this". A QUERY parameter (CORS untouched), read as
+                    // leniently; a phone that does not ask is never sent the key.
+                    PullSyncChangesQuery.ParseScheduleFormat(seenBy)),
                 ct);
             if (!result.IsSuccess)
             {

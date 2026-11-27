@@ -1474,3 +1474,24 @@ describe('lane CMP-D3 - LogReasonSetPayload', () => {
         expect(payloads.LogReasonSetPayload.safeParse(noKey).success).toBe(false);
     });
 });
+
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - farm.money_private.set: the farm's "पैशांच्या नोंदी फक्त मला दिसू दे"
+// switch, the registrant's alone. A real true / false, never null read as off.
+describe('pilot lane PERM - FarmMoneyPrivateSetPayload', () => {
+    const base = { farmId: VALID_GUID_A, isPrivate: true };
+
+    it('accepts on and off', () => {
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse(base).success).toBe(true);
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ ...base, isPrivate: false }).success).toBe(true);
+    });
+
+    it('refuses a missing key, an extra key, a bad farm id and isPrivate null or a stand-in', () => {
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ farmId: VALID_GUID_A }).success).toBe(false);
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ isPrivate: true }).success).toBe(false);
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ ...base, allowed: true }).success).toBe(false);
+        expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ ...base, farmId: 'not-a-guid' }).success).toBe(false);
+        for (const isPrivate of [null, 'true', 1, 0, undefined]) {
+            expect(payloads.FarmMoneyPrivateSetPayload.safeParse({ ...base, isPrivate }).success, String(isPrivate)).toBe(false);
+        }
+    });
+});

@@ -28,7 +28,11 @@ public sealed record FarmAccess(
     string? AuthorityExpiresAtJson = null,
     DateTime? AccessChangedAtUtc = null,
     MembershipPlotScope PlotScope = MembershipPlotScope.AllPlots,
-    IReadOnlyCollection<Guid>? ScopePlotIds = null)
+    IReadOnlyCollection<Guid>? ScopePlotIds = null,
+    // spec: plr-d10 pilot lane PERM — the kinds of work this seat may RECORD (null = every kind: the registrant, a test double, every seat until the
+    // registrant limits it), and when that last changed (the late-arrival window). They decide writes only (WorkKindGate), never what he reads.
+    IReadOnlyCollection<string>? WorkKinds = null,
+    DateTime? WorkKindsChangedAtUtc = null)
 {
     /// <summary>
     /// lane MU-4 — the plots this standing covers, or <c>null</c> for every plot: the registrant and the primary owner's

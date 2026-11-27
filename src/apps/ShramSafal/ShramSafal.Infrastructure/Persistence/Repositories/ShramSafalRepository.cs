@@ -2993,6 +2993,8 @@ internal sealed class ShramSafalRepository(
                 m.AccessChangedAtUtc,
                 m.PlotScope,
                 ScopePlotIds = EF.Property<List<Guid>>(m, "_scopePlotIds"),
+                WorkKinds = EF.Property<List<string>?>(m, "_allowedWorkKinds"),
+                m.WorkKindsChangedAtUtc,
             })
             .FirstOrDefaultAsync(ct);
 
@@ -3015,7 +3017,10 @@ internal sealed class ShramSafalRepository(
                     : seat.GrantedAtUtc,
                 // spec: plr-d10 lane MU-4 — which plots the seat covers.
                 seat.PlotScope,
-                seat.ScopePlotIds);
+                seat.ScopePlotIds,
+                // pilot lane PERM — the kinds of work he may record (null = every kind) and when they last changed.
+                seat.WorkKinds,
+                seat.WorkKindsChangedAtUtc);
     }
 
     // lane MU-3 fix 1 (F12) — see the port: two queries for any number of farms (registrant farms, then
@@ -3060,6 +3065,8 @@ internal sealed class ShramSafalRepository(
                 m.AccessChangedAtUtc,
                 m.PlotScope,
                 ScopePlotIds = EF.Property<List<Guid>>(m, "_scopePlotIds"),
+                WorkKinds = EF.Property<List<string>?>(m, "_allowedWorkKinds"),
+                m.WorkKindsChangedAtUtc,
             })
             .ToListAsync(ct);
         foreach (var seat in seats)
@@ -3081,7 +3088,10 @@ internal sealed class ShramSafalRepository(
                 seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc ? changed : seat.GrantedAtUtc,
                 // spec: plr-d10 lane MU-4 — which plots the seat covers.
                 seat.PlotScope,
-                seat.ScopePlotIds);
+                seat.ScopePlotIds,
+                // pilot lane PERM — the kinds of work he may record (null = every kind) and when they last changed.
+                seat.WorkKinds,
+                seat.WorkKindsChangedAtUtc);
         }
 
         return result;
@@ -4066,6 +4076,103 @@ internal sealed class ShramSafalRepository(
             .Select(m => m.FarmId)
             .ToListAsync(ct);
         return farms.Select(f => (Guid)f).Distinct().ToList();
+    }
+
+    // spec: plr-d10 pilot lane PERM — see the port: one bounded read of the farms' switch, under the caller's scope.
+    public async Task<IReadOnlySet<Guid>> GetFarmsWithMoneyPrivateAsync(IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var typedIds = ids.Select(id => new FarmId(id)).ToList();
+        var on = await db.Farms
+            .AsNoTracking()
+            .Where(f => typedIds.Contains(f.Id) && f.MoneyPrivateToHolder)
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+        return on.Select(f => (Guid)f).ToHashSet();
+    }
+
+    // spec: plr-d10 pilot lane PERM (S3) — see the port. Under the pull's user scope a member reads only his OWN seat
+    // (p_user_select_memberships), so the farm's other seats are read inside that farm's tenant scope, opened ONLY after the reader is
+    // proved its registrant or an Active seat under his own scope (RlsIdentityScope.RunAsFarmAsync, the one sanctioned mechanism). The caller
+    // asks it as the pull's LAST read: the farm scope it opens lives until the request's transaction ends, and the reader is a member there.
+    public async Task<IReadOnlyList<FarmMembership>> GetLiveSeatsOfFarmForMemberAsync(
+        Guid farmId, Guid readerUserId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || readerUserId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        var typedReader = new UserId(readerUserId);
+        var farm = await db.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == typedFarmId)
+            .Select(f => new { f.OwnerUserId, f.OwnerAccountId })
+            .FirstOrDefaultAsync(ct);
+        if (farm is null || farm.OwnerAccountId.Value == Guid.Empty)
+        {
+            return [];
+        }
+
+        var isMember = farm.OwnerUserId == typedReader
+            || await db.FarmMemberships
+                .AsNoTracking()
+                .AnyAsync(m => m.FarmId == typedFarmId && m.UserId == typedReader && m.Status == MembershipStatus.Active, ct);
+        if (!isMember)
+        {
+            return [];
+        }
+
+        return await RlsIdentityScope.RunAsFarmAsync<IReadOnlyList<FarmMembership>>(
+            db,
+            farmId,
+            farm.OwnerAccountId.Value,
+            readerUserId,
+            async token => await db.FarmMemberships
+                .AsNoTracking()
+                .Where(m => m.FarmId == typedFarmId && m.Status == MembershipStatus.Active)
+                .OrderBy(m => m.GrantedAtUtc)
+                .ToListAsync(token),
+            ct);
+    }
+
+    // spec: plr-d10 pilot lane PERM (S1) — see the port: one bounded read of his live seat on this farm (ix_farm_memberships_farm_user_nonterminal).
+    public async Task<bool> HasWorkKindLimitAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || userId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(m => m.FarmId == typedFarmId && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited
+                && EF.Property<List<string>?>(m, "_allowedWorkKinds") != null, ct);
+    }
+
+    // spec: plr-d10 pilot lane PERM — see the port: ids only, on ix (farm_id, log_date).
+    public async Task<IReadOnlyList<Guid>> GetMoneyPrivateLogIdsForFarmDateAsync(Guid farmId, DateOnly logDate, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => l.FarmId == typedFarmId && l.LogDate == logDate && l.MoneyAudience != null)
+            .Select(l => l.Id)
+            .ToListAsync(ct);
     }
 
     // spec: plr-d10 lane MU-4 — see the port: one untracked projection.

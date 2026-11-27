@@ -197,6 +197,10 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                 const maySetPlots = decidesPeople && row.plotScope !== undefined && row.userId !== callerUserId
                                     && !row.isRegistrant && row.role !== 'PrimaryOwner'
                                     && (row.status === 'Active' || row.status === 'Suspended');
+                                // pilot lane PERM (S4.5) — the kinds of work he may record: the farm's registrant's choice, on the same people as the
+                                // plots (never the registrant, a primary owner's seat or himself; the server refuses those).
+                                const maySetKinds = decidesPeople && row.userId !== callerUserId && !row.isRegistrant && row.role !== 'PrimaryOwner'
+                                    && (row.status === 'Active' || row.status === 'Suspended');
                                 return (
                                     <TeamPersonCard key={row.userId} row={row} name={nameFor(row, operators)}
                                         isYou={row.userId === callerUserId} rights={rights} busy={busy(row.userId)}
@@ -224,6 +228,10 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                             choices: row.plotScopeChoices ?? undefined,
                                             farmPlots,
                                             onSave: choice => void decisions.setPlots(row.userId, choice),
+                                        } : undefined}
+                                        workKindsAccess={maySetKinds ? {
+                                            value: row.workKinds,
+                                            onSave: kinds => void decisions.setWorkKinds(row.userId, kinds),
                                         } : undefined}
                                         onChangePreset={preset => void decisions.changePreset(row, preset)}
                                         onSuspend={reason => void decisions.suspend(row.userId, reason)}

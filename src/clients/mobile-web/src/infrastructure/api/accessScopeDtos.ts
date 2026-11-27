@@ -49,4 +49,33 @@ export interface FarmAccessScopeDto {
      * the server ONLY when the primary owner turned it on; absent = off (and an older server never sends it: the stricter rule stays).
      */
     reviewerMayApproveOwnBill?: boolean | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - the farm's "पैशांच्या नोंदी फक्त मला दिसू दे": written by the server ONLY
+     * while its registrant has it on; absent = off (and an older server never sends it).
+     */
+    moneyPrivate?: boolean | null;
+    /**
+     * pilot lane PERM - the kinds of work THIS person may record on this farm (`sync-contract/schemas/work-kinds.json` names). Written ONLY when his
+     * seat is limited: absent = every kind (every seat until the owner limits it, and every older server). The server decides again on every write.
+     */
+    workKinds?: string[] | null;
+    /**
+     * pilot lane PERM (contract S3) - who besides the farm's registrant (implied) and this person would see a record he makes, as seat labels only
+     * (no name, no id, no count). Sent ONLY to a phone that asks (`seenBy=1`); absent = not known (the saved screen then draws no line).
+     */
+    seenBy?: SeenByDto | null;
+}
+
+/** pilot lane PERM - one kind of seat in `seenBy`: its label (else its role), and its plots when it covers chosen plots only. */
+export interface SeenByEntryDto {
+    who: string;
+    /** Absent = the seat covers every plot. */
+    plotIds?: string[] | null;
+}
+
+/** pilot lane PERM - the reader-specific, name-free "who sees this" of one farm (server `SeenByDto`). */
+export interface SeenByDto {
+    work: SeenByEntryDto[];
+    attendance: SeenByEntryDto[];
+    money: SeenByEntryDto[];
 }

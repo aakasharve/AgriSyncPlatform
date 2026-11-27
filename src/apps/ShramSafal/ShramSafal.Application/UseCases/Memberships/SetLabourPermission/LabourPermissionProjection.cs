@@ -119,6 +119,8 @@ internal static class LabourPermissionProjection
             // spec: plr-d10 lane MU-2 — the owner's chosen label (null for older seats) and, while it waits, the
             // personal invitation the request was claimed from.
             Label: membership.Label?.ToString(),
-            PersonalInvitationId: membership.Status == MembershipStatus.PendingApproval ? membership.PersonalInvitationId : null);
+            PersonalInvitationId: membership.Status == MembershipStatus.PendingApproval ? membership.PersonalInvitationId : null,
+            // pilot lane PERM — the kinds he may record (null = every kind; the primary owner always every kind).
+            WorkKinds: isPrimary ? null : membership.AllowedWorkKinds?.ToList());
     }
 }

@@ -707,6 +707,14 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms. It creates and
         // alters no policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - Up() and Down() read in full (by their author): Up() adds ONE boolean column (money_private_to_holder, NOT NULL DEFAULT false)
+        // to ssf.farms and ONE nullable column (money_audience, CHECK NULL or 'OnlyMe') to ssf.daily_logs. It creates and alters no policy, no farm_memberships or farm_join_requests object, no seat. Down() refuses
+        // while any farm has the switch on or any record is stamped (none is in this proof) and otherwise drops exactly those. Safe mid-proof.
+        "20261127030000_AddMoneyPrivateSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - Up() and Down() read in full (by their author): Up() adds TWO nullable columns (allowed_work_kinds text[] with its CHECK,
+        // work_kinds_changed_at_utc) to ssf.farm_memberships. It creates and alters no policy and changes no seat (every row reads NULL = every kind). Down() refuses while any seat is limited (none is
+        // in this proof) and otherwise drops exactly those. Safe mid-proof.
+        "20261127031000_AddMemberWorkKinds",
     ];
 
     /// <summary>

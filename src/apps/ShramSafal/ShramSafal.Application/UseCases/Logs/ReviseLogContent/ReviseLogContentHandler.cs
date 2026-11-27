@@ -152,6 +152,17 @@ public sealed class ReviseLogContentHandler(
         var actorRole = await repository.GetUserRoleForFarmAsync(farmId, command.ActorUserId, ct);
         var current = await repository.GetCurrentDailyLogContentAsync(log.Id, ct);
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") — an item the stored version does not hold is NEW work, and the
+        // editor may add only the kinds the farm's registrant left him. Editing or removing an item an old record already holds stays allowed (old
+        // records keep what they hold). Asked before anything is staged; every editor without a limit is answered at once.
+        if (await Services.WorkKindGate.LimitedAccessAsync(repository, farmId, command.ActorUserId, ct) is { } limited
+            && (await Services.WorkKindGate.DecideForAsync(
+                repository, farmId, command.ActorUserId, limited,
+                Services.WorkKindGate.NewItemKinds(current?.DocumentJson, command.ContentJson), now, happenedAtUtc: null, ct)).Refusal is { } kindClosed)
+        {
+            return Result.Failure<ReviseLogContentResultDto>(kindClosed);
+        }
+
         var documentJson = command.ContentJson;
         // lane MU-3 fix 2 (N2; P7) — was his copy trimmed of its amounts? YES when his phone says so (amountsWithheld:
         // true — the pull's projection, or the purge of a copy held from before MU-3), OR when his seat cannot see the

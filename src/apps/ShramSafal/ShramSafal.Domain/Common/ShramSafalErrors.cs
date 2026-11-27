@@ -537,6 +537,13 @@ public static class ShramSafalErrors
         "ShramSafal.PlotScope.Forbidden",
         "By ShramSafal's rules this work could not be saved on this plot. The work is kept on the phone.");
 
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, contract §3.6) — a record or a money entry carries a kind of work outside the set
+    // the farm's registrant gave this person (WorkKindGate). Its code ends in ".Forbidden", so every phone (the released one too) parks it visibly, and the
+    // sync layer keeps the work whole for the owner (an authority refusal).
+    public static readonly Error WorkKindForbidden = Error.Forbidden(
+        "ShramSafal.WorkKind.Forbidden",
+        "By ShramSafal's rules this kind of work could not be saved for this person. The work is kept on the phone.");
+
     /// <summary>
     /// spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — cancelling an erasure request. Another person's request
     /// and a made-up id get this same answer (E4). PROPOSED words.

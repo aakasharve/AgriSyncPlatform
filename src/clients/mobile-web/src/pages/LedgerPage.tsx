@@ -31,7 +31,7 @@ import {
     BUCKET_LABEL, CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, entriesCount, entryState, formatDayKey, rupees,
 } from '../features/finance/moneyLabels';
 import { Chip, ChoiceChips, GlassCard, IconDot, Tap, type Tone } from '../shared/components/ui/placeUi';
-import { AudienceLockChip, AudienceRow } from '../features/recordAudience/AudienceRow';
+import { AudienceLockChip } from '../features/recordAudience/AudienceRow';
 import { RuleNotCountedNote } from '../features/recordAudience/RuleNotCountedNote';
 import { PlotsOnlyNote } from '../features/relationships/PlotsOnlyNote';
 import { useMoneyAudiences } from '../features/recordAudience/useMoneyAudiences';
@@ -40,7 +40,10 @@ interface LedgerPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
     onBack?: () => void;
-    /** lane PRV (D-26) — the farm's primary account holder: he alone sees and sets who may see each money record. */
+    /**
+     * lane PRV (D-26) — the farm's primary account holder: he alone is told which money records are narrowed (the lock chip). Pilot lane PERM
+     * (S5.2, founder 27 Nov): no record asks who may see it any more — the farm-wide "पैशांच्या नोंदी फक्त मला दिसू दे" in माझी टीम is the one place.
+     */
     isPrimaryHolder?: boolean;
     /** His server id (never offered as a choice; his own entries keep their maker label). */
     selfUserId?: string | null;
@@ -187,13 +190,6 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                                             </Tap>
                                         )}
                                     </div>
-                                    {isPrimaryHolder && isDetailView && !item.jobCardId && (
-                                        <div className="mt-2">
-                                            <AudienceRow kind="CostEntry" recordIds={[item.id]} farmId={item.farmId} selfUserId={selfUserId}
-                                                audience={audiences.get(item.id)?.audience} chosen={audiences.get(item.id)?.people}
-                                                madeBySomeoneElse={item.createdByUserId !== selfUserId} testId={`ledger-audience-row-${item.id}`} />
-                                        </div>
-                                    )}
                                 </GlassCard>
                             );
                         })}

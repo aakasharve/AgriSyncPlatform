@@ -691,48 +691,55 @@ describe('lane OF-S fix 1 (B011) — the result screen says why a move was refus
     });
 });
 
-// spec: plr-d10 lane PRV (founder D-26; orchestrator call 11) — who may see this record.
-describe('lane PRV — the picker is the primary account holder\'s alone', () => {
-    it('shows "कोण पाहू शकतो: सर्व टीम" to the holder, and a choice queues set_record_audience for this record', async () => {
-        mount(props());
-        const row = await screen.findByTestId('vr-audience');
-        expect(row.textContent).toContain('कोण पाहू शकतो');
-        expect(row.textContent).toContain('सर्व टीम');
-        fireEvent.click(row);
-        fireEvent.click(await screen.findByTestId('vr-audience-choice-OnlyMe'));
-        await act(async () => { fireEvent.click(screen.getByTestId('vr-audience-save')); });
-        await waitFor(async () => {
-            const rows = (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === SyncMutationName.SetRecordAudience);
-            expect(rows.map(r => r.payload)).toEqual([expect.objectContaining({ recordKind: 'DailyLog', recordId: NOW, audience: 'OnlyMe', selectedUserIds: [] })]);
-        });
-    });
-
-    // Fix pass 2 - the holder is the farm's registrant (its ownerUserId), as the phone holds the farm.
+// spec: plr-d10 lane PRV (founder D-26) — AMENDED by pilot lane PERM (slice S5.2; founder 27 Nov "Every log should not be asked"): no question
+// about who sees a record on any log. The per-record "कोण पाहू शकतो" row is gone from the saved screen; the setting lives in माझी टीम.
+describe('lane PERM S5.2 — the saved screen never asks who may see the record', () => {
     beforeEach(async () => {
+        // he IS the farm's registrant (the one the old row was drawn for)
         await getDatabase().farms.put({ id: 'farm-1', payload: { id: 'farm-1', ownerUserId: ME }, updatedAt: 'T' });
     });
 
-    it('fix pass 2: a PrimaryOwner seat that is not the registrant of the farm is never offered the picker', async () => {
-        await getDatabase().farms.put({ id: 'farm-1', payload: { id: 'farm-1', ownerUserId: 'someone-else' }, updatedAt: 'T' });
+    it('the saved screen never draws an audience row, for the holder or anyone else', async () => {
         mount(props());
-        await new Promise(r => setTimeout(r, 30));
+        await waitFor(() => expect(screen.getByTestId('vr-remembered')).toBeTruthy());
+        await new Promise(r => setTimeout(r, 80));
         expect(screen.queryByTestId('vr-audience')).toBeNull();
-    });
-
-    it('is never shown to anyone else, and never before the record is on its way to the server', () => {
-        mount(props({ farmRole: 'SecondaryOwner' }));
-        expect(screen.queryByTestId('vr-audience')).toBeNull();
+        expect(screen.queryByText('कोण पाहू शकतो', { exact: false })).toBeNull();
         cleanup();
-        mount(props({ farmRole: 'Mukadam' }));
-        expect(screen.queryByTestId('vr-audience')).toBeNull();
-        cleanup();
-        mount(props({ syncQueuedById: new Map([[NOW, null]]) }));
-        expect(screen.queryByTestId('vr-audience')).toBeNull();
-    });
-
-    it('labels "only me" honestly on a record someone else made: its maker keeps it', async () => {
         mount(props({ result: { logIds: [MORNING], clipId: null, key: 'k', unclear: [] } as never, syncQueuedById: new Map([[MORNING, true]]) }));
-        fireEvent.click(await screen.findByTestId('vr-audience'));
-        expect((await screen.findByTestId('vr-audience-choice-OnlyMe')).textContent).toContain('फक्त मी व नोंद करणारा');
+        await new Promise(r => setTimeout(r, 80));
+        expect(screen.queryByTestId('vr-audience')).toBeNull();
+        const rows = (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === SyncMutationName.SetRecordAudience);
+        expect(rows).toHaveLength(0);
+    });
+
+    // pilot lane PERM S5.3 — the read-only line in its place, from the server's name-free seat summary only.
+    it('shows "हे दिसतं: तुम्ही, मुकादम" and the owner\'s सेटिंग बदला; nothing without the summary', async () => {
+        mount(props());
+        await new Promise(r => setTimeout(r, 60));
+        expect(screen.queryByTestId('vr-seen-by')).toBeNull();
+        cleanup();
+        await getDatabase().appMeta.put({ key: 'shramsafal_access_scopes_v1', updatedAt: 'x', value: { receivedAtUtc: 'x', scopes: [{
+            farmId: 'farm-1', ownRecordsOnly: false, seeMoney: true, seeWages: true, seeAttendance: true, seeTests: true, seeCompliance: true, seeFarmOverview: true,
+            seenBy: { work: [{ who: 'Mukadam' }], attendance: [], money: [] },
+        }] } });
+        mount(props());
+        await waitFor(() => expect(screen.getByTestId('vr-seen-by-line').textContent).toContain('हे दिसतं: तुम्ही, मुकादम'));
+        expect((await screen.findByTestId('vr-seen-by-change')).textContent).toContain('सेटिंग बदला');
+    });
+});
+
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, slice S4.2; CTO ruling Q3 A) — a part he may not record was taken out
+// before the save: the saved screen says which, that the rest was saved, and that his voice is kept with the record.
+describe('lane PERM — a part he may not record', () => {
+    it('says "‹kind› नोंदवण्याची परवानगी नाही — मालकाला सांगा" on the saved screen, and nothing when nothing was taken out', async () => {
+        const trimmed = HISTORY.map(l => (l.id === NOW ? { ...l, meta: { ...l.meta, kindsNotSaved: ['cropActivities', 'labour'] } } as unknown as DailyLog : l));
+        mount(props({ history: trimmed }));
+        const note = await screen.findByTestId('vr-kinds-not-saved');
+        expect(screen.getByTestId('vr-kinds-not-saved-line').textContent).toBe('पीक काम, मजूर नोंदवण्याची परवानगी नाही — मालकाला सांगा');
+        expect(note.textContent).toContain('बाकी काम जतन झालं. तुमचा आवाज नोंदीसोबत आहे.');
+        cleanup();
+        mount(props());
+        expect(screen.queryByTestId('vr-kinds-not-saved')).toBeNull();
     });
 });

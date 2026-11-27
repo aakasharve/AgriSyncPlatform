@@ -135,6 +135,7 @@ const mr: CorrectionWords = {
         recordClosed: 'श्रमसफलच्या नियमानुसार हा बदल या नोंदीवर लागू झाला नाही. तुमचा बदल या फोनवर ठेवला आहे.',
         // lane MU-4 — a write naming a plot outside his plots. PROPOSED (Marathi), in the rule's voice.
         plotClosed: 'श्रमसफलच्या नियमानुसार हे काम या प्लॉटवर नोंदवता आलं नाही. तुमचं काम या फोनवर ठेवलं आहे.',
+        kindClosed: 'ही कामं तुम्हाला नोंदवता येत नाहीत. नोंद फोनवर राखून ठेवली आहे.', // PROPOSED (Marathi) - pilot lane PERM (contract §2.7)
         other: '',
     },
     // PROPOSED (Marathi) — lane OF-M. Each says what did not change (the money's amount) and why; none asks him to do
@@ -242,6 +243,7 @@ const en: CorrectionWords = {
         recordClosed: "By ShramSafal's rules, this change could not be applied to this record. Your change is kept on this phone.",
         // lane MU-4. PROPOSED (English).
         plotClosed: "By ShramSafal's rules, this work could not be saved on this plot. Your work is kept on this phone.",
+        kindClosed: 'You may not record these kinds of work. The record is kept on this phone.', // PROPOSED (English) - pilot lane PERM
         other: '',
     },
     // PROPOSED (English) — lane OF-M.

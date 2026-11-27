@@ -112,6 +112,7 @@ export const CheckSaveHost: React.FC<{ ctx: AppRouterContext }> = ({ ctx }) => {
                 saving={saving}
                 saveFailed={failed}
                 kept={!typed}
+                closedKinds={decline?.kinds}
                 onSayAgain={() => speakAgain()}
                 onType={() => setOpen('type')}
                 onPickPlace={() => setOpen('place')}

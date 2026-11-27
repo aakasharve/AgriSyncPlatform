@@ -38,6 +38,7 @@
 import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
 import { t as translate, tf as translateFormat, type Language } from '../../i18n/translations';
 import { FarmOutOfScopeError } from '../../infrastructure/storage/accessScopeStore';
+import { WorkKindsClosedError } from '../../features/workKinds/closedKinds';
 
 /** Mirrors the caller's toast shape; kept local so this module imports no UI. */
 export interface SaveToastMessage {
@@ -273,6 +274,8 @@ export function buildEditSavedMessage(
  * other failure (the caller's own handling stands).
  */
 export function buildOutOfScopeToast(error: unknown, language: Language): SaveToastMessage | null {
+    // pilot lane PERM (CTO ruling Q3 A) — a recording of ONLY kinds he may not record: nothing written, and he is told which, in his language.
+    if (error instanceof WorkKindsClosedError) return { message: error.messageIn(language), type: 'error' };
     if (!(error instanceof FarmOutOfScopeError)) return null;
     return { message: language === 'en' ? error.messageEn : error.messageMr, type: 'error' };
 }

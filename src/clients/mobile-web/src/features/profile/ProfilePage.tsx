@@ -60,6 +60,8 @@ import { useFarmSetup } from './farmSetup/useFarmSetup';
 import { hubSetupFacts, plotWaterPendingFor } from './farmSetup/hubFacts';
 import { MoveCard } from './farmSetup/MoveCard';
 import { OwnBillApprovalSwitch } from '../finance/OwnBillApprovalSwitch';
+import { MoneyPrivateSwitch } from '../recordAudience/MoneyPrivateSwitch';
+import { takeHubOpenTab } from '../recordAudience/teamSettingLink';
 
 import type { CropProfile, FarmOperator, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -181,6 +183,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // drawer only opens after the lazily-loaded farm resolves.
     const { myFarm: adminMyFarm, setShowFarmBoundary: adminSetShowFarmBoundary } = farmAdmin;
     const pendingOpenBoundary = useRef(false);
+    // Pilot lane PERM (S5.3) — the saved screen's "सेटिंग बदला" left a once-read key: open माझी टीम (and bring the money line into view).
+    const pendingFocus = useRef<string | null>(null);
+    useEffect(() => {
+        const asked = takeHubOpenTab();
+        if (!asked) return;
+        pendingFocus.current = asked.focus ?? null;
+        setActiveTab(asked.tab);
+    }, []);
+    useEffect(() => {
+        if (activeTab !== 'team' || !pendingFocus.current) return;
+        const focus = pendingFocus.current;
+        pendingFocus.current = null;
+        window.setTimeout(() => document.querySelector(`[data-testid="${focus === 'money' ? 'money-private' : 'team-page'}"]`)?.scrollIntoView?.({ block: 'center' }), 0);
+    }, [activeTab]);
     useEffect(() => {
         if (typeof window === 'undefined') return;
         if (window.sessionStorage.getItem('open_farm_boundary')) {
@@ -574,6 +590,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             )}
                             {/* repair D-177 - the farm's own-bill switch: the primary owner's alone. */}
                             {teamFarmId && <OwnBillApprovalSwitch farmId={teamFarmId} isPrimaryOwner={callerIsPrimary} />}
+                            {/* pilot lane PERM (S5.1) — "पैशांच्या नोंदी फक्त मला दिसू दे": the farm's registrant's own line. */}
+                            {teamFarmId && <MoneyPrivateSwitch farmId={teamFarmId} selfUserId={authSession?.userId} />}
                             <TeamPage
                                 farmId={teamFarmId}
                                 farmCode={teamFarmCode}

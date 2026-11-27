@@ -42,6 +42,18 @@ public static class ReadScopeProjection
             return dto;
         }
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-ups 1 and 2) — a record made while the farm's money was private keeps its MONEY for the
+        // registrant (and its maker, above): every other reader gets it exactly as a seat without "पैसे पाहणे" does (no amount, no money words, the
+        // withheld flags), and is not even told it is stamped. One rule here, so every door that serves a record honours it.
+        if (dto.MoneyAudience is not null && scope?.IsRecordHolder != true)
+        {
+            dto = dto with { MoneyAudience = null };
+            if (scope is not null)
+            {
+                scope = RecordMoneyAccess.WithoutMoney(scope);
+            }
+        }
+
         // spec: plr-d10 lane MU-4 (§11.6) — a record that spans plots reaches a chosen-plots seat with its plot list
         // narrowed to HIS plots, and without the money it states: its amounts are the whole record's, across plots that are
         // not his (my call, the D-69 projection — the same as a record whose own money is kept from him).

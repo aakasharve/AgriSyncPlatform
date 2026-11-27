@@ -141,7 +141,10 @@ internal static class DtoMappingExtensions
             log.ContentVersion,
             content,
             // lane RF2 fix pass (review B002) — the door that saved it, verbatim (null = not the हजेरी door).
-            log.CaptureScope);
+            log.CaptureScope,
+            // pilot lane PERM — the record's money stamp (null = its normal readers). ReadScopeProjection.Record keeps it only for the farm's
+            // registrant and the record's maker, and serves everyone else the record without its money.
+            MoneyAudience: log.MoneyAudience?.ToString());
 
     /// <summary>
     /// spec: plr-d10 (lane F1) — a stored content row on the wire, the document VERBATIM. Nothing

@@ -171,6 +171,11 @@ export interface LabourPermission {
      */
     label?: string | null;
     personalInvitationId?: string | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) — ADDITIVE: the kinds of work this person may record on this farm
+     * (`sync-contract/schemas/work-kinds.json` names). Left out when he may record every kind (every seat until the registrant limits it).
+     */
+    workKinds?: string[] | null;
 }
 
 /** lane 2b — one authority on the wire: the server's name and its end (ISO UTC, null = कायम). */

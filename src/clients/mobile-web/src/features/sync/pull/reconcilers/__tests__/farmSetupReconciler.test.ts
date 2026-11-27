@@ -53,9 +53,9 @@ describe('the pull asks for the farm setup', () => {
         const get = vi.fn().mockResolvedValue({ data: {} });
         const t = { http: { get } } as unknown as HttpTransport;
         await pullSyncChanges(t, '2026-11-01T06:00:00.123Z', []);
-        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: '', scheduleFormat: 2, farmSetup: 1 } });
+        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: '', scheduleFormat: 2, farmSetup: 1, seenBy: 1 } });
         await pullSyncChanges(t);
-        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { scheduleFormat: 2, farmSetup: 1 } });
+        expect(get).toHaveBeenLastCalledWith('/sync/pull', { params: { scheduleFormat: 2, farmSetup: 1, seenBy: 1 } });
     });
 });
 

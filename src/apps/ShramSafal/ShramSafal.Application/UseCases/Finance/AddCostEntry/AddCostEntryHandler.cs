@@ -108,6 +108,21 @@ public sealed class AddCostEntryHandler(
             }
         }
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") — money is work of a kind too: the money of one of his own
+        // record's lines is that line's kind (मजूर / औषध / खत / यंत्र / खर्च), any other entry (a bill, a purchase) is a खर्च. Refused by name when the
+        // farm's registrant did not leave him that kind; placed after the plot gates and the id replay above, so an entry already saved is still
+        // answered as saved. Every seat without a limit is answered at once.
+        if (await Services.WorkKindGate.LimitedAccessAsync(repository, command.FarmId, command.CreatedByUserId, ct) is { } limited)
+        {
+            var moneyKind = await Services.WorkKindGate.KindOfMoneyAsync(
+                repository, command.FarmId, command.CreatedByUserId, command.CostEntryId, command.EntryDate, ct);
+            if ((await Services.WorkKindGate.DecideForAsync(
+                    repository, command.FarmId, command.CreatedByUserId, limited, [moneyKind], clock.UtcNow, happenedAtUtc: null, ct)).Refusal is { } kindClosed)
+            {
+                return Result.Failure<AddCostEntryResultDto>(kindClosed);
+            }
+        }
+
         // Phase 5 entitlement gate (PaidFeature.EditFinance).
         var gate = await EntitlementGate.CheckAsync<AddCostEntryResultDto>(
             entitlementPolicy, new UserId(command.CreatedByUserId), farmId,
@@ -213,6 +228,25 @@ public sealed class AddCostEntryHandler(
         // even when it arrives after the record was narrowed (its phone was offline).
         var selected = await Services.RecordMoneyAudience.InheritAsync(repository, entry, clock.UtcNow, ct);
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-ups 1 and 2) — while the farm's "पैशांच्या नोंदी फक्त मला दिसू दे" is on (decided NOW,
+        // when the entry arrives), or when it is the line money of a work record made private, the entry is born OnlyMe: the registrant and its maker
+        // see it. Stamped in this same save with its trail row (the holder's own choice), never later; a job card's payout is not covered.
+        var bornPrivate = await Services.MoneyPrivacy.StampBornPrivateAsync(
+            repository,
+            farm,
+            entry,
+            recordMoneyPrivate: !farm.MoneyPrivateToHolder && Services.MoneyPrivacy.Covers(entry)
+                && await Services.MoneyPrivacy.IsLineMoneyOfPrivateRecordAsync(repository, entry, ct),
+            selected,
+            new Services.BornPrivateStamp(
+                command.CreatedByUserId, command.ActorRole, command.ClientCommandId, stampedAppVersion, command.AuditDeviceId, command.AuditIpHash),
+            clock.UtcNow,
+            ct);
+        if (bornPrivate)
+        {
+            selected = [];
+        }
+
         await repository.AddCostEntryAsync(entry, ct);
         if (selected is { Count: > 0 })
         {
@@ -249,7 +283,10 @@ public sealed class AddCostEntryHandler(
                     // Additive key. Null here is not a gap in the audit — it is
                     // the record that this caller stated no direction, which is
                     // itself the fact a later reader needs.
-                    direction = command.Direction?.ToString()
+                    direction = command.Direction?.ToString(),
+                    // pilot lane PERM (P8) — who may see it as it was born, and why when the farm's switch made it private.
+                    audience = entry.Audience.ToString(),
+                    audienceBy = bornPrivate ? Services.MoneyPrivacy.BornPrivateBy : null,
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientCommandId,

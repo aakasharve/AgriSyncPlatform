@@ -217,7 +217,9 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Farms.FarmSetup.RemoveMachineHandler removeMachineHandler,
     ShramSafal.Application.UseCases.Farms.FarmSetup.SetPlotWaterHandler setPlotWaterHandler,
     // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch, the primary owner's alone (farm.own_bill_approval.set).
-    ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalHandler setOwnBillApprovalHandler)
+    ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalHandler setOwnBillApprovalHandler,
+    // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the farm's money-private switch, the registrant's alone (farm.money_private.set).
+    ShramSafal.Application.UseCases.Farms.SetMoneyPrivate.SetMoneyPrivateHandler setMoneyPrivateHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -629,6 +631,8 @@ public sealed class PushSyncBatchHandler(
     private static bool IsAuthorityRefusal(string? errorCode) =>
         errorCode is "ShramSafal.Forbidden"
             or "ShramSafal.PlotScope.Forbidden"
+            // pilot lane PERM — a kind of work outside his set: kept whole for the owner the same way (P10).
+            or "ShramSafal.WorkKind.Forbidden"
             or "ShramSafal.JobCardRoleNotAllowed"
             or "ShramSafal.TestRoleNotAllowed"
             or "ShramSafal.ComplianceSignalRoleNotAllowed"
@@ -1322,6 +1326,9 @@ public sealed class PushSyncBatchHandler(
             // spec: plr-d10 repair D-177 (founder 27 Nov, B1.4) - the farm's own-bill switch.
             case "farm.own_bill_approval.set":
                 return await HandleFarmOwnBillApprovalSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
+            // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the farm's money-private switch.
+            case "farm.money_private.set":
+                return await HandleFarmMoneyPrivateSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
             // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "plan.add":
@@ -3947,6 +3954,38 @@ public sealed class PushSyncBatchHandler(
         var result = await setOwnBillApprovalHandler.HandleAsync(
             new ShramSafal.Application.UseCases.Farms.SetOwnBillApproval.SetOwnBillApprovalCommand(
                 request.FarmId, request.Allowed, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    // ── spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2: "पैशांच्या नोंदी फक्त मला दिसू दे") — the farm's money-private switch. A NEW name.
+    // Only the farm's registrant may turn it (the handler's rule); a farm the sender is no Active member of is refused here with no farm GUC ever set.
+    // One line: allowlist-parity.test.ts parses it.
+    private async Task<MutationExecutionOutcome> HandleFarmMoneyPrivateSetAsync(
+        string deviceId, string clientRequestId, JsonElement payload, Guid actorUserId, string? appVersion, CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "isPrivate"))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "farm.money_private.set payload contains unsupported fields.");
+        }
+
+        // `isPrivate` must be a real true or false: a missing or null value is never read as "off".
+        if (!PayloadHasAll(payload, "farmId", "isPrivate")
+            || PayloadValue(payload, "isPrivate") is not { ValueKind: JsonValueKind.True or JsonValueKind.False }
+            || !TryDeserializeSchedulePayload<FarmMoneyPrivateSetPayload>(payload, out var request) || request is null || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for farm.money_private.set.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await setMoneyPrivateHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Farms.SetMoneyPrivate.SetMoneyPrivateCommand(
+                request.FarmId, request.IsPrivate, FarmSetupCallerOf(deviceId, clientRequestId, actorUserId, appVersion)),
             ct);
         return ToOutcome(result);
     }

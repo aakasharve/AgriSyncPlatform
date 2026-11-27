@@ -51,7 +51,9 @@ import { readRefusedChange, refusalLines, useRefusedChangeOf } from '../correcti
 import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/moneyNotFollowed';
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
-import { AudienceRow } from '../../../recordAudience/AudienceRow';
+import { kindsNotSavedOf } from '../../../workKinds/closedKinds';
+import { KindsNotSavedNote } from '../../../workKinds/KindsNotSavedNote';
+import { SeenByLine } from '../../../recordAudience/SeenByLine';
 import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
 import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
 import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
@@ -212,30 +214,26 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     // goes to the saved card — this keeps it so).
     const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
-    // lane PRV (D-26) — who may see this record: the farm's primary account holder only, once it is on its way to
-    // the server (the choice is queued after the record itself). Never asked at capture (P9).
-    const audienceRow = mayConfirmOwn && farmId && current.every(l => typeof l.contentVersion === 'number' || syncQueuedById.get(l.id) === true) ? (
-        <div className="mx-3 mt-2">
-            <AudienceRow kind="DailyLog" recordIds={current.map(l => l.id)} farmId={farmId} selfUserId={sessionUserId}
-                audience={primary.audience} chosen={primary.audienceUserIds} moneyFollows testId="vr-audience"
-                madeBySomeoneElse={!!primary.meta?.createdByOperatorId && primary.meta.createdByOperatorId !== 'owner'
-                    && primary.meta.createdByOperatorId !== sessionUserId} />
-        </div>
-    ) : null;
+    // lane PRV (D-26) AMENDED by pilot lane PERM (S5.2; founder 27 Nov "Every log should not be asked"): no record asks who may see it. The
+    // per-record row is gone; in its place ONE read-only line "हे दिसतं: …" from the server's seat summary (none stored = no line, P4), and
+    // for the farm's registrant "सेटिंग बदला", which opens माझी टीम (S5.3).
+    const seenBy = (className: string) => (farmId ? <SeenByLine farmId={farmId} logs={current} selfUserId={sessionUserId} testId="vr-seen-by" className={className} /> : null);
     const refusedBanner = refused ? (
         <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
             {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
         </div>
     ) : null;
+    // Pilot lane PERM (CTO ruling Q3 A) — a part he may not record was taken out before the save: which, and that the rest is saved.
+    const notSaved = kindsNotSavedOf(current);
+    const kindsBanner = notSaved.length > 0 ? <div className="mx-3 mt-2"><KindsNotSavedNote kinds={notSaved} testId="vr-kinds-not-saved" /></div> : null;
     const moneyBanner = moneyNotFollowed.length > 0 ? (
         <div className="mx-3 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold text-amber-950" data-testid="vr-money-not-followed" role="status">
             {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
         </div>
     ) : null;
-    // The old screen keeps its order (refusal, the audience row, money). The v2 saved screen draws the audience row where the
-    // approved design has it: under "बदला", above the earlier recordings (F6).
-    const banners = <>{refusedBanner}{audienceRow}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
-    const bannersV2 = <>{refusedBanner}{moneyBanner}</>;
+    // The old screen keeps its order (refusal, money). The v2 saved screen's audience slot (under "बदला", F6) is empty here.
+    const banners = <>{refusedBanner}{kindsBanner}{seenBy('mx-3 mt-2')}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
+    const bannersV2 = <>{refusedBanner}{kindsBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
             value={primary.date}
@@ -259,13 +257,13 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         // H2 / P10: it closes itself only when nothing on it still needs him or says something is wrong. R1-g 1b: nor while the
         // first record's setup-hub line shows (ruling 3).
         const autoCloseOff = current.some(l => syncQueuedById.get(l.id) !== true) ? 'not_queued'
-            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : moneyNotFollowed.length > 0 ? 'money_not_followed'
+            : sync === 'needsFix' ? 'needs_fix' : refused ? 'refused' : notSaved.length > 0 ? 'kinds_not_saved' : moneyNotFollowed.length > 0 ? 'money_not_followed'
             : firstRecordOffer ? 'first_record_offer' : null;
         return (
             <>
             {bannersV2}
             <SavedScreen
-                audience={audienceRow}
+                audience={seenBy('')}
                 day={day}
                 recordingKey={result.key}
                 placeLabel={placeLabel}

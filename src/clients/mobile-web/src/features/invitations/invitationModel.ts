@@ -27,14 +27,15 @@ export interface InviteGrant {
 
 /**
  * The starting set each label pre-fills (D-26; a label grants nothing — these are only where the switches start):
- *  - सहमालक = शेताची रचना, हजेरी व मंजूर, पैसे पाहणे (D-26). D-26's "दर" (rates) has no server authority yet (D-43 waits
- *    with the rate list), so it is not offered (P5: no switch the server does not enforce).
+ *  - सहमालक = EVERY switch on (pilot lane PERM S5.4; founder 27 Nov playback "मालक/सहमालक everything", CTO ruling Q4): every
+ *    responsibility the server enforces, each कायम; the owner switches off what he does not want. It was D-26's शेताची रचना,
+ *    हजेरी व मंजूर, पैसे पाहणे. People already on the farm are not changed (this is only a NEW invitation's start).
  *  - कुटुंब = हजेरी व मंजूर (D-26).
  *  - मुकादम = हजेरी (my call: "recording attendance does not mean approving it", D-26 / D-44).
  *  - कामगार = nothing, his own work (the MU-4 default, MU §11.7).
  */
 const PRESET: Record<InvitationLabel, { plotScope: PlotScopeName; authorities: string[] }> = {
-    CoOwner: { plotScope: 'AllPlots', authorities: [AUTHORITY.editFarmSetup, AUTHORITY.takeAttendance, AUTHORITY.confirmRecords, AUTHORITY.seeMoney] },
+    CoOwner: { plotScope: 'AllPlots', authorities: [...SWITCHABLE_AUTHORITIES] },
     Family: { plotScope: 'AllPlots', authorities: [AUTHORITY.takeAttendance, AUTHORITY.confirmRecords] },
     Mukadam: { plotScope: 'AllPlots', authorities: [AUTHORITY.takeAttendance] },
     Worker: { plotScope: 'OwnWork', authorities: [] },

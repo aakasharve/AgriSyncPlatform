@@ -666,6 +666,7 @@ export const useLogCommands = ({
             return 'saved';
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
+            { const refused = buildOutOfScopeToast(e, language); if (refused) setToast(refused); } // MU-3 / PERM: says why, in his language
             // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
             // rounds 2-4) — a throw here can land AFTER the durable write
             // (`wasWritten`) if a post-write step failed (sync enqueue,

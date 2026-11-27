@@ -32,7 +32,8 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
     public async Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
-        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default)
+        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default,
+        IReadOnlySet<string>? closedKinds = null)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
@@ -56,12 +57,13 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // nor softens it.
         return await DeriveCoreAsync(
             log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock,
-            deriveLabour, labourOnly, ct);
+            deriveLabour, labourOnly, ct, closedKinds);
     }
 
     public Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default)
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default,
+        IReadOnlySet<string>? closedKinds = null)
     {
         ArgumentNullException.ThrowIfNull(log);
 
@@ -91,7 +93,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // server assumption over a duration the farmer had stated outright.
         return DeriveCoreAsync(
             log, manualWireJson, provenance, log.Id, ids, clock,
-            deriveLabour, labourOnly, ct);
+            deriveLabour, labourOnly, ct, closedKinds);
     }
 
     /// <summary>
@@ -111,8 +113,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     /// </param>
     private async Task<DerivationOutcome> DeriveCoreAsync(
         DailyLog log, string? wireJson, Provenance provenance, Guid sourceId,
-        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly, CancellationToken ct)
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly, CancellationToken ct, IReadOnlySet<string>? closedKinds = null)
     {
+        // spec: plr-d10 pilot lane PERM — a kind the maker may not record is never derived (one rule with the हजेरी-door gate below).
+        bool Closed(string kind) => closedKinds is not null && closedKinds.Contains(kind);
         ArgumentNullException.ThrowIfNull(ids);
         ArgumentNullException.ThrowIfNull(clock);
 
@@ -152,7 +156,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // family added later has to choose its door explicitly.
 
         // ── inputs → FarmOperation(application) + ApplicationInputItem children ──
-        if (!labourOnly
+        if (!labourOnly && !Closed(ShramSafal.Domain.Farms.WorkKinds.Inputs)
             && root.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
         {
             var ordinal = 0;
@@ -297,7 +301,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // the RoutineMemory upsert below (WP-2d / D5).
         var irrigationRoutine = default(RoutineSeed?);
         // labourOnly also leaves `irrigationRoutine` null, so no routine is seeded either.
-        if (!labourOnly
+        if (!labourOnly && !Closed(ShramSafal.Domain.Farms.WorkKinds.Irrigation)
             && root.TryGetProperty("irrigation", out var irrigation) && irrigation.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in irrigation.EnumerateArray())
@@ -337,7 +341,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // record one real engagement twice. Note the guard is on THIS branch only:
         // every other family below (and the inputs/irrigation above) still derives,
         // so a voice confirm that also carries manual labour keeps its full ledger.
-        if (deriveLabour
+        if (deriveLabour && !Closed(ShramSafal.Domain.Farms.WorkKinds.Labour)
             && root.TryGetProperty("labour", out var labour) && labour.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in labour.EnumerateArray())
@@ -395,7 +399,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── machinery → MachineryUsage (daily_logs child) ──────────────────────
-        if (!labourOnly
+        if (!labourOnly && !Closed(ShramSafal.Domain.Farms.WorkKinds.Machinery)
             && root.TryGetProperty("machinery", out var machinery) && machinery.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in machinery.EnumerateArray())
