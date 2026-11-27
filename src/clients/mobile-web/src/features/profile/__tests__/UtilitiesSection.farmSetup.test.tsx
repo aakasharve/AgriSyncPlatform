@@ -126,6 +126,8 @@ describe('पाणी आणि वीज on the farm set (P4)', () => {
         expect(within(screen.getByTestId(`motor-${MOTOR_A1}`)).getByTestId(`motor-plots-${MOTOR_A1}`)).toHaveTextContent('G1');
         expect(screen.queryByTestId('soon')).not.toBeInTheDocument();
         await act(async () => { fireEvent.click(screen.getByTestId(`motor-remove-${MOTOR_A1}`)); });
+        // D-9 drive (27 Nov): removing a motor now asks first.
+        await act(async () => { fireEvent.click(screen.getByTestId(`motor-remove-yes-${MOTOR_A1}`)); });
         await waitFor(async () => expect(await queue()).toHaveLength(1));
         const p = (await queue())[0].payload as { baseRevision: number; motors: { motorId: string }[] };
         expect(p.baseRevision).toBe(1);

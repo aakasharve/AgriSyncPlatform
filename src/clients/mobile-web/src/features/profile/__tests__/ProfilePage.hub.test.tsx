@@ -227,6 +227,8 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'विहीर' } });
         fireEvent.click(screen.getByTestId('source-next'));
         fireEvent.change(screen.getByTestId('motor-name-1'), { target: { value: 'पंप' } });
+        // D-9 drive (27 Nov): HP starts empty now (a prefilled 5 turned a typed 5 into 55), so the farmer types it.
+        fireEvent.change(screen.getByTestId('motor-hp-1'), { target: { value: '5' } });
         fireEvent.click(screen.getByTestId('source-save'));
         expect(hs.onUpdateProfile).toHaveBeenCalledTimes(1);
         const next = hs.onUpdateProfile.mock.calls[0][0] as FarmerProfile;

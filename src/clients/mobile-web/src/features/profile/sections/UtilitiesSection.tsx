@@ -47,6 +47,7 @@ const UTIL_WORDS = {
         drip: 'ठिबक', filter: 'फिल्टर', flow: (n: number) => `${n} लि/तास`, removeMotor: 'ही मोटर काढा',
         soon: 'मोटर कोणत्या प्लॉटला पाणी देते ते जोडणं', change: 'स्रोत आणि मोटर बदला',
         removeAsk: 'हा स्रोत आणि त्यावरच्या सगळ्या मोटर काढायच्या?', no: 'नको', yesRemove: 'हो, काढा', remove: 'हा स्रोत काढा',
+        motorRemoveAsk: 'ही मोटर काढायची?', // PROPOSED (D-9 drive, 27 Nov)
         add: 'पाण्याचा स्रोत जोडा', power: 'वीज कधी असते?', powerHint: 'सिंगल फेज आणि थ्री फेज — दोन्हीची वेळ वेगळी',
     },
     en: {
@@ -56,6 +57,7 @@ const UTIL_WORDS = {
         drip: 'Drip', filter: 'Filter', flow: (n: number) => `${n} L/hour`, removeMotor: 'Remove this motor',
         soon: 'Linking a motor to the plots it waters', change: 'Change source and motors',
         removeAsk: 'Remove this source and all the motors on it?', no: 'No', yesRemove: 'Yes, remove', remove: 'Remove this source',
+        motorRemoveAsk: 'Remove this motor?',
         add: 'Add a water source', power: 'When is there power?', powerHint: 'Single phase and three phase — each has its own times',
     },
 };
@@ -96,6 +98,8 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate, 
     const [redoInitial, setRedoInitial] = useState<{ source: WaterResource; motors: FarmMotor[] } | null>(null);
     const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    // D-9 drive (27 Nov): removing a motor asks first, like removing a source.
+    const [confirmMotorId, setConfirmMotorId] = useState<string | null>(null);
     const [message, setMessage] = useState<string | null>(null);
 
     const server = farmSetup?.received === true ? farmSetup : null;
@@ -227,7 +231,8 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate, 
                                 {linkedMotors.map(m => {
                                     const watered = plotsOfMotor(m.id);
                                     return (
-                                        <div key={m.id} className="flex items-start gap-3 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`motor-${m.id}`}>
+                                        <div key={m.id} className="space-y-2">
+                                        <div className="flex items-start gap-3 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`motor-${m.id}`}>
                                             <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-800 text-white"><Settings2 size={19} aria-hidden="true" /></span>
                                             <span className="min-w-0 flex-1">
                                                 <span className="block text-[15.5px] font-extrabold text-stone-900">{m.name}</span>
@@ -244,9 +249,19 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate, 
                                                 )}
                                             </span>
                                             {mayEdit && (
-                                                <Tap onClick={() => { void deleteMotor(source.id, m.id); }} aria-label={words.removeMotor} data-testid={`motor-remove-${m.id}`}
+                                                <Tap onClick={() => setConfirmMotorId(m.id)} aria-label={words.removeMotor} data-testid={`motor-remove-${m.id}`}
                                                     className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200"><Trash2 size={18} aria-hidden="true" /></Tap>
                                             )}
+                                        </div>
+                                        {mayEdit && confirmMotorId === m.id && (
+                                            <div className="rounded-2xl bg-rose-50 p-3 ring-1 ring-rose-200" data-testid={`motor-remove-ask-${m.id}`}>
+                                                <p className="m-0 text-[14.5px] font-extrabold text-rose-900">{words.motorRemoveAsk}</p>
+                                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                                    <Tap onClick={() => setConfirmMotorId(null)} data-testid={`motor-remove-no-${m.id}`} className="min-h-[46px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">{words.no}</Tap>
+                                                    <Tap onClick={() => { setConfirmMotorId(null); void deleteMotor(source.id, m.id); }} data-testid={`motor-remove-yes-${m.id}`} className="min-h-[46px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">{words.yesRemove}</Tap>
+                                                </div>
+                                            </div>
+                                        )}
                                         </div>
                                     );
                                 })}

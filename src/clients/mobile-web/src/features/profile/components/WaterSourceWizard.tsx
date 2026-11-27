@@ -72,7 +72,8 @@ interface MotorDraft {
 }
 
 const blankMotor = (): MotorDraft => ({
-    key: idGenerator.generate(), name: '', hp: 5, phase: '3', powerSourceType: 'MSEB',
+    // D-9 drive (27 Nov): HP starts empty (0 = not given). A prefilled 5 turned a typed 5 into 55.
+    key: idGenerator.generate(), name: '', hp: 0, phase: '3', powerSourceType: 'MSEB',
     hasDrip: false, dripPipeSize: '16mm', dripHasFilter: true, dripFlow: '',
 });
 
@@ -94,7 +95,7 @@ const MotorEditor: React.FC<{ m: MotorDraft; n: number; onChange: (m: MotorDraft
         <input value={m.name} onChange={e => onChange({ ...m, name: e.target.value })} placeholder={words.motorName} data-testid={`motor-name-${n}`}
             className="min-h-[50px] w-full rounded-xl bg-white px-3 text-[16px] font-bold text-stone-900 outline-none ring-1 ring-stone-300 focus:ring-2 focus:ring-blue-500" />
         <label className="flex items-center gap-2 text-[14px] font-extrabold text-stone-700">HP
-            <input type="number" inputMode="decimal" value={m.hp} onChange={e => onChange({ ...m, hp: parseFloat(twoDecimalsInput(e.target.value)) || 0 })} data-testid={`motor-hp-${n}`}
+            <input type="number" inputMode="decimal" value={m.hp > 0 ? m.hp : ''} placeholder="5" onChange={e => onChange({ ...m, hp: parseFloat(twoDecimalsInput(e.target.value)) || 0 })} data-testid={`motor-hp-${n}`}
                 className="min-h-[46px] w-24 rounded-xl bg-white px-3 text-[17px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300" />
         </label>
         <p className="m-0 text-[13px] font-extrabold text-stone-600">{words.phase}</p>

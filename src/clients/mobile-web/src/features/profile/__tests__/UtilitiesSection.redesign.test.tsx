@@ -93,13 +93,33 @@ describe('UtilitiesSection (redesigned) — every real control still saves throu
         expect(next.motors).toHaveLength(2);
     });
 
-    it('removes one motor', () => {
+    it('removes one motor only after asking (D-9 drive, 27 Nov: removing a motor had no confirmation)', () => {
         const onUpdate = vi.fn();
         render(<UtilitiesSection profile={seeded()} onUpdate={onUpdate} />);
         fireEvent.click(screen.getByTestId('source-toggle-w1'));
         fireEvent.click(screen.getByTestId('motor-remove-m1'));
+        expect(onUpdate).not.toHaveBeenCalled();
+        expect(screen.getByTestId('motor-remove-ask-m1')).toHaveTextContent('ही मोटर काढायची?');
+        fireEvent.click(screen.getByTestId('motor-remove-no-m1'));
+        expect(onUpdate).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('motor-remove-ask-m1')).toBeNull();
+        fireEvent.click(screen.getByTestId('motor-remove-m1'));
+        fireEvent.click(screen.getByTestId('motor-remove-yes-m1'));
         expect(lastUpdate(onUpdate).motors.map(m => m.id)).toEqual(['m2']);
         expect(lastUpdate(onUpdate).waterResources).toHaveLength(2);
+    });
+
+    it('a new motor\'s HP starts EMPTY, so typing 5 gives 5, not 55 (D-9 drive, 27 Nov)', () => {
+        const onUpdate = vi.fn();
+        render(<UtilitiesSection profile={profileWith()} onUpdate={onUpdate} />);
+        fireEvent.click(screen.getByTestId('source-add'));
+        fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'विहीर' } });
+        fireEvent.click(screen.getByTestId('source-next'));
+        expect(screen.getByTestId('motor-hp-1')).toHaveValue(null);
+        fireEvent.change(screen.getByTestId('motor-name-1'), { target: { value: 'पंप' } });
+        fireEvent.change(screen.getByTestId('motor-hp-1'), { target: { value: '5' } });
+        fireEvent.click(screen.getByTestId('source-save'));
+        expect(lastUpdate(onUpdate).motors[0]).toMatchObject({ name: 'पंप', hp: 5 });
     });
 
     it('removes a source only after asking, and its motors go with it', () => {
