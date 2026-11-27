@@ -57,6 +57,10 @@ export interface LabourItemPayload {
      // bounds BEFORE enqueue (`buildLabourPayloads`), because a payload the zod
      // schema refuses throws at `MutationQueue.enqueue` and costs the whole day.
      workerNames?: string[];
+     // Repair FIX-1 item 8 — "कोणामार्फत?": the field operator (of this farm) THROUGH WHOM this crew came, as the
+     // farmer chose it on a new entry (create_daily_log.zod.ts:92 `engagedThroughFieldOperatorId`, kept by the server
+     // on a new log: CreateDailyLogHandler.cs:654-661, :718). Absent = nobody said; never guessed.
+     engagedThroughFieldOperatorId?: string;
 }
 
 /**

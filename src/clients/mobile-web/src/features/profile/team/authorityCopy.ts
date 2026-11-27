@@ -38,7 +38,33 @@ export interface AuthorityCopy {
     payoutNeedsWages: string;
     /** lane MU-1 (D-70 option 2) - one line when the wages switch is on for a person who covers only chosen plots. */
     dayWagesNotOnChosenPlots: string;
+    /** Repair FIX-1 item 9 (R2-B 16 Step A) — the four headings the switches sit under. */
+    group: Record<AuthorityGroupKey, string>;
+    /** "भूमिका: मुकादम" on the card, without a tap. */
+    roleLine: (role: string) => string;
+    /** "काय करू शकतात: …" on the card, without a tap. */
+    canDoLine: (what: string) => string;
+    /** The founder's words: nothing (else) is switched on. */
+    nothingElse: string;
+    /** Every responsibility is on (the primary owner). */
+    all: string;
 }
+
+/** Repair FIX-1 item 9 — the four headings, in the founder's order. */
+export type AuthorityGroupKey = 'records' | 'attendance' | 'money' | 'planning';
+
+/**
+ * Repair FIX-1 item 9 (R2-B 16 Step A, founder 27 Nov) — the thirteen switches under four headings, each EXACTLY once
+ * (pinned against `SWITCHABLE_AUTHORITIES` by TeamPersonCard.duties.test.tsx; a switch in no group is still drawn, last).
+ * नोंद व खात्री: confirming records, lab test records, the comparison · हजेरी · पैसे: see money, see wages, check money ·
+ * नियोजन व शेताची रचना: plan, hand work, see all tasks, schedule templates, reminder settings, farm setup.
+ */
+export const AUTHORITY_GROUPS: readonly { key: AuthorityGroupKey; names: readonly string[] }[] = [
+    { key: 'records', names: ['ConfirmRecords', 'LabRecords', 'SeeCompare'] },
+    { key: 'attendance', names: ['TakeAttendance'] },
+    { key: 'money', names: ['SeeMoney', 'SeeWages', 'ReviewMoney'] },
+    { key: 'planning', names: ['PlanWork', 'AssignWork', 'SeeAllTasks', 'ScheduleTemplates', 'ManageReminders', 'EditFarmSetup'] },
+];
 
 const mr: AuthorityCopy = {
     title: 'जबाबदाऱ्या', // PROPOSED (Marathi)
@@ -80,6 +106,12 @@ const mr: AuthorityCopy = {
     },
     payoutNeedsWages: 'नोंदी तपासता येतील, पण "इतरांची मजुरी पाहणे" नसेल तर मजुरीचे पैसे देणं पूर्ण करता येणार नाही.', // PROPOSED (Marathi) — lane MU-1
     dayWagesNotOnChosenPlots: 'निवडलेले प्लॉट असतील तर दिवसाच्या हिशोबाची मजुरी दिसत नाही; फक्त उक्ते कामाचे पैसे त्या प्लॉटचे दिसतात.', // PROPOSED (Marathi) — lane MU-1, D-70 option 2
+    // Repair FIX-1 item 9 — the founder's words (R2-B 16 Step A); "सर्व जबाबदाऱ्या" is new (PROPOSED).
+    group: { records: 'नोंद व खात्री', attendance: 'हजेरी', money: 'पैसे', planning: 'नियोजन व शेताची रचना' },
+    roleLine: role => `भूमिका: ${role}`,
+    canDoLine: what => `काय करू शकतात: ${what}`,
+    nothingElse: 'बाकी काही नाही',
+    all: 'सर्व जबाबदाऱ्या', // PROPOSED (Marathi)
 };
 
 const en: AuthorityCopy = {
@@ -122,6 +154,12 @@ const en: AuthorityCopy = {
     },
     payoutNeedsWages: "He can check entries, but without 'See other people's wages' he cannot complete a wage payout.", // PROPOSED (English) — lane MU-1
     dayWagesNotOnChosenPlots: 'With chosen plots, day wages are not shown to him; only job-work money of those plots is.', // PROPOSED (English) — lane MU-1, D-70 option 2
+    // Repair FIX-1 item 9 — English twins (PROPOSED).
+    group: { records: 'Records and confirming', attendance: 'Attendance', money: 'Money', planning: 'Planning and farm setup' },
+    roleLine: role => `Role: ${role}`,
+    canDoLine: what => `Can do: ${what}`,
+    nothingElse: 'Nothing else',
+    all: 'All responsibilities',
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */
@@ -132,4 +170,12 @@ export function authorityCopy(language: string | null | undefined): AuthorityCop
 /** The label of one authority, or '' for one this screen has no switch for. */
 export function authorityLabel(copy: AuthorityCopy, name: AuthorityName | string): string {
     return copy.label[name] ?? '';
+}
+
+/**
+ * Repair FIX-1 item 9 — the short form for the card's one line: the switch's own label without its bracketed example
+ * ("नोंदी पक्क्या करणे (मंजूर / शंका)" → "नोंदी पक्क्या करणे"). No new words.
+ */
+export function authorityShortLabel(copy: AuthorityCopy, name: AuthorityName | string): string {
+    return authorityLabel(copy, name).replace(/\s*\([^)]*\)\s*$/, '');
 }

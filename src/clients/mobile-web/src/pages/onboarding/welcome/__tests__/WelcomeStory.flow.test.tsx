@@ -14,15 +14,17 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 import WelcomeStory from '../WelcomeStory';
 
 const OWNER_LINE = 'सुव्यवस्थित शेतीचा मालक होण्याच्या वाटेवर!';
 let loadedSrcs: string[] = [];
+let players: HTMLMediaElement[] = [];
 
 beforeEach(() => {
     loadedSrcs = [];
-    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function (this: HTMLMediaElement) { loadedSrcs.push(this.src); });
+    players = [];
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function (this: HTMLMediaElement) { loadedSrcs.push(this.src); players.push(this); });
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:welcome-note') });
@@ -93,5 +95,48 @@ describe('WelcomeStory — the welcome voice note step', () => {
         fireEvent.click(screen.getByTestId('welcome-story-skip'));
         fireEvent.click(screen.getByTestId('welcome-skip-stay'));
         expect(play).toHaveBeenCalled();
+    });
+
+    // R1 04-A (root cause proven in the walk, 26 Nov): the router handed a NEW "finished" callback on
+    // every redraw (background sync redraws every 15 s); the player's set-up re-ran on it and its
+    // clean-up paused the voice. The note stopped somewhere between 0 and 15 s on every phone.
+    it('a redraw with a NEW callback mid-play neither pauses nor re-creates the player; the end calls the latest one', async () => {
+        vi.useFakeTimers();
+        const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+        const first = vi.fn();
+        const latest = vi.fn();
+        const { rerender } = render(<WelcomeStory onDone={first} />);
+        await flush();
+        fireEvent.click(screen.getByTestId('welcome-story-skip'));
+        fireEvent.click(screen.getByTestId('welcome-skip-stay'));
+        expect(players).toHaveLength(1);
+        const pausesBefore = pause.mock.calls.length;
+
+        rerender(<WelcomeStory onDone={vi.fn()} />);
+        rerender(<WelcomeStory onDone={latest} />);
+        await flush();
+
+        expect(pause.mock.calls.length).toBe(pausesBefore);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(players).toHaveLength(1);
+        expect(players[0].getAttribute('src')).toBe('blob:welcome-note');
+
+        act(() => { players[0].dispatchEvent(new Event('ended')); });
+        await act(async () => { vi.advanceTimersByTime(1000); });
+        expect(latest).toHaveBeenCalledWith(true);
+        expect(first).not.toHaveBeenCalled();
+    });
+
+    it('the play button always shows what the voice is really doing', async () => {
+        render(<WelcomeStory onDone={vi.fn()} />);
+        await flush();
+        const audio = players[0];
+        let paused = false;
+        Object.defineProperty(audio, 'paused', { configurable: true, get: () => paused });
+        act(() => { audio.dispatchEvent(new Event('play')); });
+        expect(screen.getByRole('button', { name: 'थांबवा' })).toBeInTheDocument();
+        // The voice stops without a "pause" event (as when the old player was swapped out): the button follows.
+        paused = true;
+        await waitFor(() => expect(screen.getByRole('button', { name: 'ऐका' })).toBeInTheDocument());
     });
 });

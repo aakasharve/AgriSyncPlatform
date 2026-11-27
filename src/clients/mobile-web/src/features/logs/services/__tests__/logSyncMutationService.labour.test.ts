@@ -523,3 +523,56 @@ describe('enqueueLogsForSync — the worker names the farmer gave', () => {
         expect(validatePayload(SyncMutationName.CreateDailyLog, enqueueCreate.mock.calls[0][0])).toEqual({ ok: true });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Repair FIX-1 item 8 (R2-B 19-E step 1, founder 27 Nov) — "कोणामार्फत?": THROUGH WHOM this crew came, on a NEW
+// work entry. The contract's member is `engagedThroughFieldOperatorId` inside each `labour[]` line of
+// create_daily_log (create_daily_log.zod.ts:92); the server keeps it on a new log after a same-farm check
+// (CreateDailyLogHandler.cs:654-661, :718). Nothing chosen = the key is NOT sent: never guessed from the role
+// or from who typed it (final direction §3, D-5).
+// ---------------------------------------------------------------------------
+
+describe('enqueueLogsForSync — कोणामार्फत (through whom)', () => {
+    const SHANKAR = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    beforeEach(() => {
+        enqueueCreate.mockReset().mockResolvedValue('m1');
+        enqueueTask.mockReset().mockResolvedValue('m2');
+        triggerNow.mockReset().mockResolvedValue(undefined);
+        plotsGet.mockReset().mockResolvedValue({ payload: { id: PLOT_UUID, farmId: FARM_UUID } });
+        cropCyclesWhere.mockReset().mockReturnValue({
+            equals: () => ({
+                toArray: async () => [{ payload: { id: CYCLE_UUID, cropName: 'Grapes', modifiedAtUtc: '2026-08-01T00:00:00Z' } }],
+            }),
+        });
+    });
+
+    it('a labour line with कोणामार्फत = a person puts engagedThroughFieldOperatorId in the queued change; the canonical schema accepts it', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8, engagedThroughFieldOperatorId: SHANKAR },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        const [item] = sentLabour();
+        expect(item.engagedThroughFieldOperatorId).toBe(SHANKAR);
+        expect(item.workerCount).toBe(8); // P7: naming who brought them never changes how many
+        const payload = enqueueCreate.mock.calls[0][0];
+        expect(validatePayload(SyncMutationName.CreateDailyLog, payload)).toEqual({ ok: true });
+        // the queue keeps the payload it validated (it never sends a stripped copy): the key rides to the server
+        expect(JSON.parse(JSON.stringify(payload)).labour[0].engagedThroughFieldOperatorId).toBe(SHANKAR);
+    });
+
+    it('nothing chosen ("कोणी नाही" / "माहीत नाही" too): the key is absent, never null or a guess', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8 },
+        ], LOG_UUID, PLOT_UUID)]);
+        expect(Object.prototype.hasOwnProperty.call(sentLabour()[0], 'engagedThroughFieldOperatorId')).toBe(false);
+    });
+
+    it('a value that is not a GUID is never sent (the contract would refuse it at the queue and cost the whole day, P9)', async () => {
+        const result = await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8, engagedThroughFieldOperatorId: 'demo_shankar' },
+        ], LOG_UUID, PLOT_UUID)]);
+        expect(result.queuedLogIds).toEqual([LOG_UUID]);
+        expect(Object.prototype.hasOwnProperty.call(sentLabour()[0], 'engagedThroughFieldOperatorId')).toBe(false);
+        expect(validatePayload(SyncMutationName.CreateDailyLog, enqueueCreate.mock.calls[0][0])).toEqual({ ok: true });
+    });
+});

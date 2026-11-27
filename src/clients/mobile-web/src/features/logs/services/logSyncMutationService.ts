@@ -7,7 +7,7 @@ import { startSyncAfterEnqueue } from './startSyncAfterEnqueue';
 import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
-import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
+import { buildTaskPayloads, engagedThroughForWire, ensureUuid, normalizeName } from './logTaskPayloads';
 import { logContentFor } from './logContentPayload';
 import { buildWeatherStampPayload } from './weatherStampPayload';
 import {
@@ -238,7 +238,6 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
         // Assumed. Zero and negatives are unstated too — not an error (P9).
         const durationHours = finiteOrOmitted(event.durationHours);
         const workerNames = workerNamesForWire(event.workerNames);
-
         // Conditional spreads, so a value we cannot send is simply NOT SENT: the
         // key is absent rather than present-and-undefined. One uniform rule for
         // every optional number on this payload.
@@ -273,6 +272,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
             task: event.activity,
             notes: event.notes,
             ...(workerNames !== undefined && { workerNames }),
+            ...engagedThroughForWire(event.engagedThroughFieldOperatorId), // FIX-1 item 8, "कोणामार्फत?" (see logTaskPayloads)
         };
     });
 }

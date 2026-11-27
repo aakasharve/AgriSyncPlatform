@@ -65,8 +65,10 @@ describe('sync helpers', () => {
     it('fills section bars and formats the clock', () => {
         const fills = chapterFills([0, 10, 20], 30, 15);
         expect(fills).toEqual([1, 0.5, 0]);
-        expect(formatClock(83.6)).toBe('1:24');
-        expect(formatClock(STORY_DURATION)).toBe('2:19');
+        // A clock counts whole seconds passed: the 138.53 s note ends on 2:18, never 2:19 (R1 04).
+        expect(formatClock(83.6)).toBe('1:23');
+        expect(formatClock(59.99)).toBe('0:59');
+        expect(formatClock(STORY_DURATION)).toBe('2:18');
     });
 
     it('reads word styles and ignores unknown tokens', () => {

@@ -36,6 +36,17 @@ import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { BigButton, GlassCard, IconDot, Tap } from '../../../shared/components/ui/placeUi';
 import { IRRIGATION_LABEL, LAND_UNIT_LABEL } from '../components/setupLabels';
 import { SCHEDULE_LINE_WORDS, plotsFollowingCount, scheduleLineText } from './cropScheduleLine';
+import { cropNameIn } from '../../../shared/names/namesIn';
+import { PLOT_PENDING_WORDS, pendingPlots, type PlotPendingReason } from './plotPending';
+
+/**
+ * Repair FIX-1 item 5 (founder's word: RED) - the small red mark on a plot that still misses a link: the app's danger colour
+ * (rose-600, the colour of its remove and refuse buttons), a dot in the tile's top-left corner, the tick keeps the right one.
+ */
+const PendingDot: React.FC<{ plotId: string }> = ({ plotId }) => (
+    <span aria-hidden="true" data-testid={`plot-pending-dot-${plotId}`}
+        className="absolute left-[3px] top-[3px] h-3 w-3 rounded-full bg-rose-600 ring-2 ring-white" />
+);
 
 interface StructureSectionProps {
     crops: CropProfile[];
@@ -54,7 +65,8 @@ interface StructureSectionProps {
     setWizardCropId: (id: string | null) => void;
     /**
      * lane 2b (D-15 via D-26) — the server lets this person add a plot ("edit farm setup"). False:
-     * no add-plot door, since the server would refuse the plot (P5). Absent = true.
+     * no add-plot door, since the server would refuse the plot (P5) — and no add-crop door either (FIX-1
+     * round 1, Bug 3: a crop is part of the farm's structure too). Absent = true.
      */
     canAddPlot?: boolean;
     onOpenScheduleLibrary?: (cropId?: string) => void;
@@ -135,12 +147,25 @@ const StructureSection: React.FC<StructureSectionProps> = ({
         : undefined;
     const chosenName = picked ? cropLabel(picked, language) : (newCropData.name ?? '').trim();
 
+    // Repair FIX-1 item 5 - the plots still missing a link (the hub's line counts the same list).
+    const pending = useMemo(() => pendingPlots(crops, scheduleChoices, todayKey), [crops, scheduleChoices, todayKey]);
+    const pendingById = useMemo(() => new Map(pending.map(x => [x.plotId, x.reasons])), [pending]);
+    const pendingWords = PLOT_PENDING_WORDS[lineLanguage];
+    const reasonsLine = (reasons: readonly PlotPendingReason[]) => reasons.map(r => pendingWords.reason[r]).join(' · ');
+    /** A tap on a "बाकी" line opens that plot (its card, under the grid from 4 plots) and brings it into view. */
+    const openPendingPlot = (cropId: string, plotId: string) => {
+        setConfirmPlot(null);
+        setOpenPlotByCrop(prev => ({ ...prev, [cropId]: plotId }));
+        window.setTimeout(() => document.getElementById(`setup-plot-${plotId}`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 0);
+    };
+
     /** One plot's card, as it always was: area, irrigation, "mapped"; draw / redraw its boundary; remove it (asks first). */
     const renderPlotCard = (crop: CropProfile, p: Plot) => {
         const irrigation = p.infrastructure?.irrigationMethod ? IRRIGATION_LABEL[p.infrastructure.irrigationMethod] : null;
         const confirming = confirmPlot === p.id;
         return (
-            <div key={p.id} className="space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`plot-${p.id}`}>
+            <div key={p.id} id={`setup-plot-${p.id}`} className="relative space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`plot-${p.id}`}>
+                {pendingById.has(p.id) && <PendingDot plotId={p.id} />}
                 <div className="min-w-0">
                     <p className="m-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{p.name}</p>
                     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-stone-600">
@@ -174,6 +199,29 @@ const StructureSection: React.FC<StructureSectionProps> = ({
 
     return (
         <div className="space-y-3" data-testid="hub-crops">
+            {pending.length > 0 && (
+                <GlassCard className="ring-1 ring-rose-200" testId="plots-pending">
+                    <p className="m-0 flex items-center gap-2 text-[16px] font-extrabold text-rose-800">
+                        <AlertTriangle size={18} className="shrink-0" aria-hidden="true" />{pendingWords.title}
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                        {pending.map(x => {
+                            const crop = crops.find(c => c.id === x.cropId);
+                            return (
+                                <Tap key={x.plotId} onClick={() => openPendingPlot(x.cropId, x.plotId)} data-testid={`plots-pending-row-${x.plotId}`}
+                                    className="flex min-h-[44px] w-full items-center gap-2.5 rounded-xl bg-white px-3 py-2 text-left ring-1 ring-stone-200">
+                                    <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full bg-rose-600" />
+                                    <span className="min-w-0 flex-1 text-[14.5px] font-bold leading-snug text-stone-800">
+                                        <span className="font-extrabold text-stone-900">{crop ? `${cropNameIn(crop.name, lineLanguage, crop.masterId)} · ` : ''}{x.plotName}</span>
+                                        {' — '}{reasonsLine(x.reasons)}
+                                    </span>
+                                </Tap>
+                            );
+                        })}
+                    </div>
+                </GlassCard>
+            )}
+
             {isAddingCrop ? (
                 <GlassCard className="ring-2 ring-emerald-300" testId="crop-form">
                     <div className="space-y-3">
@@ -199,7 +247,9 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                         </div>
                     </div>
                 </GlassCard>
-            ) : (
+            ) : canAddPlot && (
+                // Repair FIX-1 round 1 (Bug 3): a crop is part of the farm's structure, like a plot — the same
+                // "edit farm setup" rule draws both doors (a seat without it never sees a door the server would refuse).
                 <BigButton onClick={() => setIsAddingCrop(true)} tone="white" testId="crop-add"><Plus size={20} aria-hidden="true" />नवीन पीक जोडा</BigButton>
             )}
 
@@ -232,7 +282,8 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                                 <>
                                     <SinglePlotSection crop={crop} plotId={openPlot?.id ?? null} onPickPlot={tapPlot} language={lineLanguage}
                                         sectionTestId={`plots-${crop.id}`}
-                                        testIds={{ plot: id => `plot-pick-${id}`, grid: `plot-grid-${crop.id}` }} />
+                                        testIds={{ plot: id => `plot-pick-${id}`, grid: `plot-grid-${crop.id}` }}
+                                        mark={id => (pendingById.has(id) ? <PendingDot plotId={id} /> : null)} />
                                     {openPlot
                                         ? renderPlotCard(crop, openPlot)
                                         : <p className="m-0 text-[14px] font-bold text-stone-700" data-testid={`plot-hint-${crop.id}`}>{SCHEDULE_LINE_WORDS[lineLanguage].hint}</p>}

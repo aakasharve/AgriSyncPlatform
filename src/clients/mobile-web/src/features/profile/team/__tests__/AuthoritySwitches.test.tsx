@@ -80,7 +80,9 @@ describe('the primary owner\'s responsibility switches', () => {
         // lane MU-3 — see money / see wages are enforced on every download and money read now: real switches.
         // lane L8b-1 (founder D-73) — plan work is enforced on every planning door now: a real switch too.
         // lane L8c-2 — assign work and see all tasks are enforced since L8c-1: real switches, in the server's order.
-        const order = ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'AssignWork', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates', 'SeeAllTasks', 'SeeCompare'];
+        // Repair FIX-1 item 9 (R2-B 16 Step A): drawn under four headings, in the founder's order of headings —
+        // नोंद व खात्री · हजेरी · पैसे · नियोजन व शेताची रचना (TeamPersonCard.duties.test.tsx pins each switch exactly once).
+        const order = ['ConfirmRecords', 'LabRecords', 'SeeCompare', 'TakeAttendance', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'AssignWork', 'SeeAllTasks', 'ScheduleTemplates', 'EditFarmSetup'];
         for (const name of order) {
             expect(within(block).getByTestId(`authority-${name}-fam`)).toBeTruthy();
         }

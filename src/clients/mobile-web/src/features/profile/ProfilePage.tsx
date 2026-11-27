@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, CreditCard, Mic, BookOpen, Check } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, CreditCard, Mic, BookOpen, Check, Droplets, Settings2, Users } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
@@ -29,7 +29,7 @@ import { SetupHubMenu, type HubMenuItem } from './components/SetupHubMenu';
 import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
-import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, PRIVACY_TITLE } from './settingsItems';
+import { buildSettingsExtraIds } from './settingsItems';
 import { useWaitingDraftCount } from './hooks/useWaitingDraftCount';
 import { useWaitingVoiceNotes } from '../voiceDiary/waiting/useWaitingVoiceNotes';
 import { voiceNotesWords } from '../voiceDiary/waiting/voiceNotesWords';
@@ -46,20 +46,34 @@ import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
+import { HUB_STEP_ORDER, HUB_STEP_TAB, powerTimesSaved, teamSoloKey, teamStepOf, type HubStepId } from './hubSteps';
+import { hubWords } from './hubWords';
+import { useSentInvitations } from './components/TeamFirstStepCard';
+import { useFarmPlots } from './team/useFarmPlots';
+import { InviteBuilderSheet } from '../invitations/InviteBuilderSheet';
+import type { InvitationLabel } from '../invitations/personalInvitationClient';
+import { useUiPref } from '../../shared/hooks/useUiPref';
+import { PLOT_PENDING_WORDS, pendingPlots } from './sections/plotPending';
+import { usePlotScheduleChoices } from '../scheduler/schedulePage/usePlotScheduleChoices';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
 
 /**
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — one plain Marathi title per hub
- * page, the same words on the hub row and on the page's title bar (no English doubling).
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — one plain title per hub page, the same words on the
+ * hub row and on the page's title bar. Repair FIX-1 round 1 (Bug 5): every hub word now lives in `hubWords.ts`, one
+ * language at a time (Marathi exactly as before, English PROPOSED).
  */
-const HUB_TITLE: Record<'identity' | 'structure' | 'utils' | 'machines' | 'health', string> = {
-    identity: 'माझी ओळख',
-    structure: 'पिकं आणि प्लॉट',
-    utils: 'पाणी आणि वीज',
-    machines: 'यंत्रं',
-    health: 'माती व पाणी अहवाल',
+const STEP_ICON: Record<HubStepId, React.ReactNode> = {
+    identity: <User size={20} />,
+    water: <Droplets size={20} />,
+    motor: <Settings2 size={20} />,
+    power: <Zap size={20} />,
+    structure: <Sprout size={20} />,
+    team: <Users size={20} />,
+    machines: <Tractor size={20} />,
+    health: <FlaskConical size={20} />,
 };
 
 /**
@@ -135,7 +149,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const { notes: waitingVoice } = useWaitingVoiceNotes();
 
     const cropPlot = useCropPlotState({ crops, onUpdateCrops });
-    const farmAdmin = useFarmAdminState();
+    // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
+    // Mukadam on any farm.
+    const { currentFarmId: profileFarmId, currentFarm: appFarm, switchFarm, farms: meFarms, meContext } = useFarmContext();
+    // Repair FIX-1 item 2 (R2-A 03 + 20): the hub follows the farm OPEN in the app — the one the header
+    // and the switcher show — never "the first farm I own".
+    const farmAdmin = useFarmAdminState(appFarm?.farmId ?? profileFarmId ?? null);
 
     // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
     // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
@@ -158,9 +177,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         }
     }, [adminMyFarm, adminSetShowFarmBoundary]);
 
-    // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
-    // Mukadam on any farm.
-    const { currentFarmId: profileFarmId, switchFarm, farms: meFarms, meContext } = useFarmContext();
     // lane HONESTY-2 (H4) — the number this account signed in with, as the server holds it, for the one "सत्यापित" tick.
     const signedInPhone = meContext?.me
         ? { masked: meContext.me.phoneMasked, verified: meContext.me.phoneVerifiedAtUtc != null }
@@ -178,47 +194,42 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         return ids;
     }, [farmAdmin.myMemberships]);
 
-    // Open a specific farm: switch app-wide farm context to it, sync the
-    // local farm-admin snapshot, and drill into its own page (Identity).
+    // Open a specific farm: switch app-wide farm context to it (the hub's farm follows it) and drill
+    // into its own page (Identity).
     const handleOpenFarm = React.useCallback((farmId: string) => {
         switchFarm(farmId);
-        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
-        if (picked) {
-            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
-        }
         setActiveTab('identity');
-    }, [switchFarm, farmAdmin]);
+    }, [switchFarm]);
 
     // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
     // row's own switch handler: switches farm context only, same as
     // AppHeader's own farm-switcher trigger (no drill-into-Identity, unlike
     // `handleOpenFarm` above, which is a DIFFERENT affordance — "open this
-    // farm's page" — that already exists in `FarmsSection`). Mirrors
-    // `handleOpenFarm`'s own `farmAdmin.setMyFarm` sync so the profile
-    // summary's farm name stays correct after switching from this row too.
-    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => {
-        switchFarm(farmId);
-        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
-        if (picked) {
-            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
-        }
-    }, [switchFarm, farmAdmin]);
+    // farm's page" — that already exists in `FarmsSection`). The hub's farm
+    // is read from the farm context, so it follows this switch by itself.
+    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => { switchFarm(farmId); }, [switchFarm]);
 
-    // Guided-setup progress: a section counts as "done" once its core data
-    // exists. Identity = name + village; Crops = at least one crop. The rest
-    // are refined as their completion signals are wired.
+    // Guided-setup progress: a step counts as "done" once its core data is really saved.
+    // Identity = name + village; water / motor / power = a source / a motor / power times the farmer
+    // saved (repair FIX-1 item 3: three steps, one page); Crops = at least one crop.
     const doneIds = React.useMemo(() => {
-        const s = new Set<ProfileTab>();
+        const s = new Set<HubStepId>();
         if (profile.name && profile.village) s.add('identity');
+        if ((profile.waterResources?.length ?? 0) > 0) s.add('water');
+        if ((profile.motors?.length ?? 0) > 0) s.add('motor');
+        if (powerTimesSaved(profile.electricityTiming)) s.add('power');
         if (crops.length > 0) s.add('structure');
-        if ((profile.waterResources?.length ?? 0) > 0) s.add('utils');
         if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
         // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
         // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
-    }, [profile.name, profile.village, profile.waterResources, profile.machineries, crops.length]);
+    }, [profile.name, profile.village, profile.waterResources, profile.motors, profile.electricityTiming, profile.machineries, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+    // Repair FIX-1 item 5 - the plots still missing a link, by the same rule as the red marks on पिकं आणि प्लॉट.
+    const scheduleChoices = usePlotScheduleChoices();
+    const todayKey = getDateKey();
+    const pendingPlotCount = React.useMemo(() => pendingPlots(crops, scheduleChoices, todayKey).length, [crops, scheduleChoices, todayKey]);
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner-only team roster, read ONCE here:
     // the hub's "माझी टीम" row shows how many people wait for an answer, the team page lists them.
@@ -238,6 +249,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const canEditFarmSetup = setupFarm
         ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
         : callerIsPrimary;
+    // Repair FIX-1 item 10 (R2-B 15, founder 27 Nov) — the माझी टीम step: a MUST for the primary owner (red बाकी, counted by
+    // "पुढचं", never a block), done once someone else is on the list, an invitation stands, or he says he runs this farm alone
+    // for now — that mark is kept on this phone per farm (`teamSoloKey`; phone-only until the farm setup moves to the server).
+    const [inviteKey, setInviteKey] = useState(0);
+    const sentInvitations = useSentInvitations(callerIsPrimary ? teamFarmId : null, inviteKey);
+    const [teamSolo, setTeamSolo, teamSoloLoaded] = useUiPref<boolean>(teamSoloKey(teamFarmId ?? '__no_farm__'), false);
+    const teamStep = teamStepOf({
+        isPrimaryOwner: callerIsPrimary && !!teamFarmId,
+        callerUserId: authSession?.userId,
+        rows: teamRoster.loadFailed ? null : teamRoster.rows,
+        invitations: sentInvitations,
+        solo: teamSoloLoaded ? teamSolo : null,
+    });
+    // The first team card's choice: the EXISTING invite sheet, that label chosen.
+    const [inviteLabel, setInviteLabel] = useState<InvitationLabel | null>(null);
+    const invitePlots = useFarmPlots(inviteLabel ? teamFarmId : null);
     // Founder D-22 (26 Oct): only the PRIMARY owner answers a request, so only his hub counts them.
     const teamRequestCount = farmAdmin.myFarm?.role === 'PrimaryOwner'
         ? splitRoster(teamRoster.rows).requests.length
@@ -258,6 +285,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     farmId={farmAdmin.myFarm.farmId}
                     farmName={farmAdmin.myFarm.name}
                 />
+            )}
+            {/* Repair FIX-1 item 10 — the first team card's choice opens the EXISTING invite sheet with that label chosen. */}
+            {inviteLabel && teamFarmId && (
+                <InviteBuilderSheet farmId={teamFarmId} farmName={farmAdmin.myFarm?.name ?? ''} farmPlots={invitePlots} initialLabel={inviteLabel}
+                    onMade={() => setInviteKey(k => k + 1)}
+                    onClose={() => { setInviteLabel(null); setInviteKey(k => k + 1); }} />
             )}
             {farmAdmin.farmLookupError && farmAdmin.showInviteQr === false && (
                 // lane FX-1 (FOOT-1) — above the bar's whole room (bottom-24 sat under its raised centre button).
@@ -304,10 +337,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             )}
 
             {(() => {
+                // Repair FIX-1 round 1 (Bug 5): the hub's words in the app's language (hubWords.ts).
+                const hw = hubWords(language);
                 const sections: HubSection[] = [
                     {
                         id: 'identity',
-                        label: HUB_TITLE.identity,
+                        label: hw.pages.identity,
                         icon: <User size={20} />,
                         body: (
                             <IdentitySection
@@ -336,7 +371,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     },
                     {
                         id: 'structure',
-                        label: HUB_TITLE.structure,
+                        label: hw.pages.structure,
                         icon: <Sprout size={20} />,
                         body: (
                             <StructureSection
@@ -360,47 +395,53 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             />
                         ),
                     },
-                    { id: 'utils', label: HUB_TITLE.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'machines', label: HUB_TITLE.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'health', label: HUB_TITLE.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
+                    { id: 'utils', label: hw.pages.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'machines', label: hw.pages.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'health', label: hw.pages.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
 
                 // One plain line per row, from the farmer's REAL data (no sample values).
                 const waterCount = profile.waterResources?.length ?? 0;
                 const motorCount = profile.motors?.length ?? 0;
                 const machineCount = profile.machineries?.length ?? 0;
-                const subtitleFor = (id: ProfileTab): string => {
-                    if (id === 'identity') return doneIds.has('identity') ? 'नाव आणि गाव भरलं' : 'नाव आणि गाव भरा';
-                    if (id === 'structure') return crops.length > 0 ? `${crops.length} पिकं · ${plotCount} प्लॉट` : 'पिकं आणि प्लॉट जोडा';
-                    if (id === 'utils') return waterCount > 0 ? `${waterCount} स्रोत · ${motorCount} मोटर · विजेच्या वेळा` : 'विहीर, मोटर, विजेच्या वेळा';
-                    if (id === 'machines') return machineCount > 0 ? `${machineCount} यंत्रं` : 'ट्रॅक्टर, फवारणी यंत्र';
-                    if (id === 'health') return 'अहवाल जोडण्याची सोय अजून नाही';
+                const subtitleFor = (id: HubStepId): string => {
+                    if (id === 'identity') return hw.line.identity(doneIds.has('identity'));
+                    if (id === 'water') return hw.line.water(waterCount);
+                    if (id === 'motor') return hw.line.motor(motorCount);
+                    if (id === 'power') return hw.line.power(doneIds.has('power'));
+                    if (id === 'structure') {
+                        // The pending count (FIX-1 item 5) only when there is one.
+                        const line = hw.line.structure(crops.length, plotCount);
+                        return crops.length > 0 && pendingPlotCount > 0
+                            ? `${line} · ${PLOT_PENDING_WORDS[language === 'en' ? 'en' : 'mr'].hubCount(pendingPlotCount)}` : line;
+                    }
+                    if (id === 'machines') return hw.line.machines(machineCount);
+                    if (id === 'health') return hw.line.health;
                     return '';
                 };
-                const SETUP_HELP: Partial<Record<ProfileTab, { what: string; do: string; why: string }>> = {
-                    identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
-                    structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
-                    utils: { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' },
-                    machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
-                    // P5: no promise of an upload that does not exist.
-                    health: { what: 'तुमच्या मातीची आणि पाण्याची तपासणी.', do: 'अहवाल जोडण्याची सोय अजून तयार नाही — लवकरच.', why: 'तयार झाल्यावर तुमच्या मातीप्रमाणे खताचा विचार करता येईल.' },
-                };
-                const menuItems: HubMenuItem[] = sections.map(s => ({
-                    id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id),
-                    done: doneIds.has(s.id), soon: s.id === 'health', help: SETUP_HELP[s.id],
+                // The three water / motor / power steps open one page, so they share its one guide (hubWords).
+                const SETUP_HELP = hw.guide;
+                // Repair FIX-1 item 3: the founder's order (hubSteps.ts). माझी टीम sits in it for whoever has the team door.
+                const steps = HUB_STEP_ORDER.filter(id => id !== 'team' || openTeam);
+                // FIX-1 item 10: the team step is a counted step only for the primary owner, once its facts are known.
+                const isDone = (id: HubStepId): boolean => (id === 'team' ? teamStep.counted && teamStep.done : doneIds.has(id));
+                const menuItems: HubMenuItem[] = steps.map(id => ({
+                    id, tab: HUB_STEP_TAB[id], label: hw.steps[id], icon: STEP_ICON[id], subtitle: subtitleFor(id),
+                    done: id === 'team' && !teamStep.counted ? undefined : isDone(id), soon: id === 'health', help: SETUP_HELP[id],
+                    ...(id === 'team' && teamStep.counted && { mustDo: true, firstCard: teamStep.firstCard }),
                 }));
 
-                // Farm-setup progress — one honest count over the setup sections that CAN be done
-                // ('health' cannot: report upload is not built).
-                const setupOrder = sections.map(s => s.id).filter(id => id !== 'health');
-                const doneCount = setupOrder.filter(id => doneIds.has(id)).length;
-                const nextId = setupOrder.find(id => !doneIds.has(id));
+                // Farm-setup progress — one honest count over the setup steps that CAN be done
+                // ('health' cannot: report upload is not built; the team step only where it is counted).
+                const setupOrder = steps.filter(id => id !== 'health' && (id !== 'team' || teamStep.counted));
+                const doneCount = setupOrder.filter(isDone).length;
+                const nextId = setupOrder.find(id => !isDone(id));
                 const setupProgress = {
                     done: doneCount,
                     total: setupOrder.length,
                     percent: Math.round((doneCount / setupOrder.length) * 100),
                     nextId,
-                    nextLabel: nextId ? sections.find(s => s.id === nextId)?.label : undefined,
+                    nextLabel: nextId ? hw.steps[nextId] : undefined,
                 };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';
@@ -409,21 +450,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
                 // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }> = {
-                    language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
+                    language: { label: hw.settings.language, icon: <Globe size={22} />, subtitle: langLabel },
                     // Lane OF (founder D-59) — recordings not saved yet live here: the row says how many (THE one reader,
                     // the same number as on the gear and the page).
                     'voice-diary': {
-                        label: 'आवाज नोंदी', icon: <BookOpen size={22} />,
-                        subtitle: voiceNotesWords(language).rowLine(waitingCounts(waitingVoice), 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका'),
+                        label: hw.settings.voiceDiary, icon: <BookOpen size={22} />,
+                        subtitle: voiceNotesWords(language).rowLine(waitingCounts(waitingVoice), hw.settings.voiceDiaryLine),
                         ...(waitingVoice.length > 0 && { badge: <span data-testid="voice-notes-row-count"><Chip tone="amber">{waitingVoice.length}</Chip></span> }),
                     },
                     // PROPOSED (Marathi): "परवानग्या · माझा डेटा" (the preview's line; copy + erase now live inside).
-                    consent: { label: PRIVACY_TITLE, icon: <Shield size={22} />, subtitle: 'परवानग्या · माझा डेटा' },
-                    billing: { label: 'बिलिंग', icon: <CreditCard size={22} />, subtitle: 'तुमचा प्लॅन' },
+                    consent: { label: hw.settings.privacy, icon: <Shield size={22} />, subtitle: hw.settings.privacyLine },
+                    billing: { label: hw.settings.billing, icon: <CreditCard size={22} />, subtitle: hw.settings.billingLine },
                     // PROPOSED (Marathi): one name with its page (OFFLINE_NOTES_TITLE). Lane OF (D-59): voice recordings moved
                     // to आवाज नोंदी; this row now counts only bill / sale-slip photos made without internet.
                     'ai-drafts': {
-                        label: OFFLINE_NOTES_TITLE, icon: <Mic size={22} />, subtitle: 'बिलाचे / पट्टीचे फोटो', // PROPOSED (Marathi) — lane OF
+                        label: hw.settings.offlineNotes, icon: <Mic size={22} />, subtitle: hw.settings.offlineNotesLine, // PROPOSED (Marathi) — lane OF
                         badge: <Chip tone="amber">{waitingDrafts}</Chip>,
                     },
                 };
@@ -513,7 +554,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             verified={profile.verificationStatus === VerificationStatus.GovernmentVerified}
                             farmName={farmAdmin.myFarm?.name ?? undefined}
                             farms={farmAdmin.myMemberships}
-                            familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
+                            familyName={profile.name ? hubWords(language).family(profile.name.split(' ')[0]) : undefined}
                             onOpenFarm={handleOpenFarm}
                             currentFarmId={profileFarmId ?? undefined}
                             onSwitchFarm={handleSwitchFarmFromMenu}
@@ -531,6 +572,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onOpenTeam={openTeam}
                             teamViewOnly={!callerIsPrimary}
                             teamRequestCount={teamRequestCount}
+                            onInviteLabel={callerIsPrimary && teamFarmId ? setInviteLabel : undefined}
+                            onTeamSolo={() => setTeamSolo(true)}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}
                             logout={logout}
@@ -539,7 +582,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 }
                 return (
                     <div data-testid={`hub-page-${current.id}`}>
-                        <PageBar title={current.label} onBack={() => setActiveTab(null)} />
+                        <PageBar title={current.label} onBack={() => setActiveTab(null)} backLabel={hw.back} />
                         {current.body}
                     </div>
                 );

@@ -8,8 +8,37 @@
  * back exactly as the server sent it.
  */
 import { MARATHI_MONTHS_FULL } from '../../labour/marathiDate';
-import { authorityNeeds } from '../../../core/session/farmAuthorities';
+import { SWITCHABLE_AUTHORITIES, authorityNeeds } from '../../../core/session/farmAuthorities';
 import type { AuthorityGrant } from '../data/labourPermissionsClient';
+import { AUTHORITY_GROUPS, type AuthorityGroupKey } from './authorityCopy';
+
+/**
+ * Repair FIX-1 item 9 — the switches by heading, in the founder's order; a switchable responsibility no heading names is
+ * never hidden: it comes last, under no heading (`key: null`).
+ */
+export function groupedSwitches(): { key: AuthorityGroupKey | null; names: string[] }[] {
+    const switchable = new Set<string>(SWITCHABLE_AUTHORITIES);
+    const grouped = AUTHORITY_GROUPS.map(g => ({ key: g.key as AuthorityGroupKey | null, names: g.names.filter(n => switchable.has(n)) }));
+    const placed = new Set(grouped.flatMap(g => g.names));
+    const rest = SWITCHABLE_AUTHORITIES.filter(n => !placed.has(n));
+    return rest.length > 0 ? [...grouped, { key: null, names: [...rest] }] : grouped;
+}
+
+/**
+ * Repair FIX-1 item 9 — what he may use NOW, for the card's "काय करू शकतात" line: held, not ended (an end that has passed or
+ * cannot be read counts as ended — never shown as allowed), and in force on his seat; in the headings' order.
+ */
+export function responsibilitiesInForce(
+    authorities: readonly AuthorityGrant[],
+    notInForce: readonly string[] | null | undefined,
+    nowMs: number,
+): string[] {
+    const live = new Set(authorities
+        .filter(a => a.expiresAtUtc == null || Date.parse(a.expiresAtUtc) > nowMs)
+        .map(a => a.name));
+    const idle = new Set(notInForce ?? []);
+    return groupedSwitches().flatMap(g => g.names).filter(n => live.has(n) && !idle.has(n));
+}
 
 /** Is `name` in the server's list? */
 export function holds(current: readonly AuthorityGrant[], name: string): boolean {

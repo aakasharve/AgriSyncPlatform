@@ -27,6 +27,14 @@ export function useUiPref<T>(
 ): readonly [T, (next: T) => void, boolean] {
     const [value, setValue] = useState<T>(fallback);
     const [loaded, setLoaded] = useState(false);
+    // Repair FIX-1 (Bug 1, the check-10 path): a NEW key (a per-farm mark after a farm switch) starts again from the fallback,
+    // "not loaded", in the same render — never the previous key's value while its own row is read (or when it has none).
+    const [valueKey, setValueKey] = useState(key);
+    if (valueKey !== key) {
+        setValueKey(key);
+        setValue(fallback);
+        setLoaded(false);
+    }
     const reread = options?.rereadOnDatabaseChange === true;
     // Bumped when the active per-farmer database changes (login / logout). Only subscribed
     // when the caller opts in: a device-level decision (the consent gate) is stored in ONE

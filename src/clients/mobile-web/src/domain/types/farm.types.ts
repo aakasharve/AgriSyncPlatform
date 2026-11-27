@@ -228,6 +228,11 @@ export interface ElectricityTimingConfiguration {
     singlePhase: ElectricityPhaseSchedule;
     threePhase: ElectricityPhaseSchedule;
     updatedAt?: string;
+    /**
+     * Set only when the farmer presses जतन करा on the power page. The app's own starting timetable
+     * never carries it, so the Setup Hub can tell "saved by him" from "the default" (repair FIX-1 item 3).
+     */
+    savedByFarmerAt?: string;
 }
 
 export interface FarmMotor {
@@ -245,10 +250,22 @@ export interface FarmMotor {
 export interface FarmMachinery {
     id: string;
     name: string; // "John Deere 5050"
-    type: 'Tractor' | 'Sprayer' | 'Rotavator' | 'Harvester' | 'Other';
+    /** 'Blower' added by repair FIX-1 item 7 (founder 27 Nov); a machine saved before it keeps its own type. */
+    type: 'Tractor' | 'Blower' | 'Sprayer' | 'Rotavator' | 'Harvester' | 'Other';
     ownership: 'Owned' | 'Rented';
     defaultOperatorId?: string;
     capacity?: number; // Liters (for Sprayers/Blowers)
+    // Repair FIX-1 item 7 — optional details by type (all optional, so every machine saved before still loads).
+    /** कंपनी (any type). */
+    company?: string;
+    /** मॉडेल (any type). */
+    model?: string;
+    /** HP (tractor). */
+    hp?: number;
+    /** नोझलची संख्या (blower, sprayer). */
+    nozzleCount?: number;
+    /** One free line of other details (blower, sprayer), until the founder names exact fields. */
+    otherDetails?: string;
 }
 
 export interface FarmInfrastructure {

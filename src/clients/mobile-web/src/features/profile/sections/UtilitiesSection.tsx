@@ -20,7 +20,33 @@ import type { FarmerProfile, FarmMotor, WaterResource } from '../../../domain/ty
 import ElectricityTimingConfigurator from '../components/ElectricityTimingConfigurator';
 import WaterSourceWizard from '../components/WaterSourceWizard';
 import { BigButton, GlassCard, IconDot, SectionHead, Soon, Tap, ThisPhoneOnly } from '../../../shared/components/ui/placeUi';
-import { SOURCE_TYPE_LABEL, motorLine, pipeLabel } from '../components/setupLabels';
+import { motorLine, setupWords } from '../components/setupLabels';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+
+/**
+ * Repair FIX-1 round 1 (Bug 5, CTO ruling: English mode is English only on this page) — the page's words, one language at
+ * a time. Marathi exactly as before; English PROPOSED (English).
+ */
+const UTIL_WORDS = {
+    mr: {
+        sources: 'पाण्याचे स्रोत', sourcesHint: 'विहीर, बोअर, कालवा, शेततळं — आणि त्यावरच्या मोटर',
+        empty: 'अजून पाण्याचा स्रोत जोडलेला नाही. स्रोत आणि त्यावरची मोटर जोडा.',
+        motors: (n: number) => `${n} मोटर`, noMotor: 'मोटर नाही', noMotorHere: 'या स्रोतावर अजून मोटर जोडलेली नाही.',
+        drip: 'ठिबक', filter: 'फिल्टर', flow: (n: number) => `${n} लि/तास`, removeMotor: 'ही मोटर काढा',
+        soon: 'मोटर कोणत्या प्लॉटला पाणी देते ते जोडणं', change: 'स्रोत आणि मोटर बदला',
+        removeAsk: 'हा स्रोत आणि त्यावरच्या सगळ्या मोटर काढायच्या?', no: 'नको', yesRemove: 'हो, काढा', remove: 'हा स्रोत काढा',
+        add: 'पाण्याचा स्रोत जोडा', power: 'वीज कधी असते?', powerHint: 'सिंगल फेज आणि थ्री फेज — दोन्हीची वेळ वेगळी',
+    },
+    en: {
+        sources: 'Water sources', sourcesHint: 'Well, borewell, canal, farm pond — and the motors on them',
+        empty: 'No water source added yet. Add a source and the motor on it.',
+        motors: (n: number) => `${n} ${n === 1 ? 'motor' : 'motors'}`, noMotor: 'No motor', noMotorHere: 'No motor added on this source yet.',
+        drip: 'Drip', filter: 'Filter', flow: (n: number) => `${n} L/hour`, removeMotor: 'Remove this motor',
+        soon: 'Linking a motor to the plots it waters', change: 'Change source and motors',
+        removeAsk: 'Remove this source and all the motors on it?', no: 'No', yesRemove: 'Yes, remove', remove: 'Remove this source',
+        add: 'Add a water source', power: 'When is there power?', powerHint: 'Single phase and three phase — each has its own times',
+    },
+};
 
 interface UtilitiesSectionProps {
     profile: FarmerProfile;
@@ -31,6 +57,9 @@ interface UtilitiesSectionProps {
 type FormState = null | 'new' | string;
 
 const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }) => {
+    const language = useOptionalLanguage()?.language;
+    const words = language === 'en' ? UTIL_WORDS.en : UTIL_WORDS.mr;
+    const labels = setupWords(language);
     const [form, setForm] = useState<FormState>(null);
     const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -65,14 +94,14 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }
 
     return (
         <div className="space-y-3" data-testid="hub-water-power">
-            <ThisPhoneOnly />
-            <SectionHead title="पाण्याचे स्रोत" hint="विहीर, बोअर, कालवा, शेततळं — आणि त्यावरच्या मोटर" />
+            <ThisPhoneOnly language={language} />
+            <SectionHead title={words.sources} hint={words.sourcesHint} />
 
             {profile.waterResources.length === 0 && !form && (
                 <GlassCard testId="sources-empty">
                     <div className="flex items-center gap-3">
                         <IconDot tone="blue"><Droplets size={22} aria-hidden="true" /></IconDot>
-                        <p className="m-0 text-[15px] font-bold leading-snug text-stone-700">अजून पाण्याचा स्रोत जोडलेला नाही. स्रोत आणि त्यावरची मोटर जोडा.</p>
+                        <p className="m-0 text-[15px] font-bold leading-snug text-stone-700">{words.empty}</p>
                     </div>
                 </GlassCard>
             )}
@@ -89,50 +118,50 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }
                             <span className="min-w-0 flex-1">
                                 <span className="block text-[16.5px] font-extrabold text-stone-900">{source.name}</span>
                                 <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold">
-                                    <span className="text-stone-500">{SOURCE_TYPE_LABEL[source.type] ?? source.type}</span>
+                                    <span className="text-stone-500">{labels.sourceType[source.type] ?? source.type}</span>
                                     {linkedMotors.length
-                                        ? <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 size={13} aria-hidden="true" />{linkedMotors.length} मोटर</span>
-                                        : <span className="flex items-center gap-1 text-orange-600" data-testid={`no-motor-${source.id}`}><AlertTriangle size={13} aria-hidden="true" />मोटर नाही</span>}
+                                        ? <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 size={13} aria-hidden="true" />{words.motors(linkedMotors.length)}</span>
+                                        : <span className="flex items-center gap-1 text-orange-600" data-testid={`no-motor-${source.id}`}><AlertTriangle size={13} aria-hidden="true" />{words.noMotor}</span>}
                                 </span>
                             </span>
                             <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                         </Tap>
                         {isOpen && (
                             <div className="space-y-2 border-t border-stone-100 px-3 pb-3 pt-2.5">
-                                {linkedMotors.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-500">या स्रोतावर अजून मोटर जोडलेली नाही.</p>}
+                                {linkedMotors.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-500">{words.noMotorHere}</p>}
                                 {linkedMotors.map(m => (
                                     <div key={m.id} className="flex items-start gap-3 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`motor-${m.id}`}>
                                         <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-800 text-white"><Settings2 size={19} aria-hidden="true" /></span>
                                         <span className="min-w-0 flex-1">
                                             <span className="block text-[15.5px] font-extrabold text-stone-900">{m.name}</span>
-                                            <span className="block text-[13px] font-bold text-stone-600">{motorLine(m)}</span>
+                                            <span className="block text-[13px] font-bold text-stone-600">{motorLine(m, language)}</span>
                                             {m.dripDetails && (
                                                 <span className="mt-1 inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-0.5 text-[12.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-100">
-                                                    <Droplets size={12} aria-hidden="true" />ठिबक{m.dripDetails.pipeSize ? `: ${pipeLabel(m.dripDetails.pipeSize)}` : ''}{m.dripDetails.hasFilter ? ' · फिल्टर' : ''}{m.dripDetails.flowRatePerHour ? ` · ${m.dripDetails.flowRatePerHour} लि/तास` : ''}
+                                                    <Droplets size={12} aria-hidden="true" />{words.drip}{m.dripDetails.pipeSize ? `: ${labels.pipe(m.dripDetails.pipeSize)}` : ''}{m.dripDetails.hasFilter ? ` · ${words.filter}` : ''}{m.dripDetails.flowRatePerHour ? ` · ${words.flow(m.dripDetails.flowRatePerHour)}` : ''}
                                                 </span>
                                             )}
                                         </span>
-                                        <Tap onClick={() => deleteMotor(m.id)} aria-label="ही मोटर काढा" data-testid={`motor-remove-${m.id}`}
+                                        <Tap onClick={() => deleteMotor(m.id)} aria-label={words.removeMotor} data-testid={`motor-remove-${m.id}`}
                                             className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200"><Trash2 size={18} aria-hidden="true" /></Tap>
                                     </div>
                                 ))}
-                                <Soon what="मोटर कोणत्या प्लॉटला पाणी देते ते जोडणं" />
+                                <Soon what={words.soon} language={language} />
                                 <Tap onClick={() => { setForm(source.id); setConfirmDeleteId(null); }} data-testid={`source-edit-${source.id}`}
                                     className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full bg-blue-50 text-[15px] font-extrabold text-blue-800 ring-1 ring-blue-200">
-                                    <Pencil size={16} aria-hidden="true" />स्रोत आणि मोटर बदला
+                                    <Pencil size={16} aria-hidden="true" />{words.change}
                                 </Tap>
                                 {confirmDeleteId === source.id ? (
                                     <div className="rounded-2xl bg-rose-50 p-3 ring-1 ring-rose-200" data-testid={`source-remove-confirm-${source.id}`}>
-                                        <p className="m-0 text-[14.5px] font-extrabold text-rose-900">हा स्रोत आणि त्यावरच्या सगळ्या मोटर काढायच्या?</p>
+                                        <p className="m-0 text-[14.5px] font-extrabold text-rose-900">{words.removeAsk}</p>
                                         <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <Tap onClick={() => setConfirmDeleteId(null)} className="min-h-[46px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">नको</Tap>
-                                            <Tap onClick={() => deleteSource(source.id)} data-testid={`source-remove-yes-${source.id}`} className="min-h-[46px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">हो, काढा</Tap>
+                                            <Tap onClick={() => setConfirmDeleteId(null)} className="min-h-[46px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">{words.no}</Tap>
+                                            <Tap onClick={() => deleteSource(source.id)} data-testid={`source-remove-yes-${source.id}`} className="min-h-[46px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">{words.yesRemove}</Tap>
                                         </div>
                                     </div>
                                 ) : (
                                     <Tap onClick={() => setConfirmDeleteId(source.id)} data-testid={`source-remove-${source.id}`}
                                         className="flex min-h-[46px] w-full items-center justify-center gap-1.5 rounded-full text-[14px] font-extrabold text-rose-700 ring-1 ring-rose-200">
-                                        <Trash2 size={16} aria-hidden="true" />हा स्रोत काढा
+                                        <Trash2 size={16} aria-hidden="true" />{words.remove}
                                     </Tap>
                                 )}
                             </div>
@@ -149,10 +178,10 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }
                     onCancel={() => setForm(null)}
                 />
             ) : (
-                <BigButton onClick={() => setForm('new')} tone="white" testId="source-add"><Plus size={20} aria-hidden="true" />पाण्याचा स्रोत जोडा</BigButton>
+                <BigButton onClick={() => setForm('new')} tone="white" testId="source-add"><Plus size={20} aria-hidden="true" />{words.add}</BigButton>
             )}
 
-            <SectionHead title="वीज कधी असते?" hint="सिंगल फेज आणि थ्री फेज — दोन्हीची वेळ वेगळी" />
+            <SectionHead title={words.power} hint={words.powerHint} />
             <ElectricityTimingConfigurator profile={profile} onUpdate={onUpdate} />
         </div>
     );

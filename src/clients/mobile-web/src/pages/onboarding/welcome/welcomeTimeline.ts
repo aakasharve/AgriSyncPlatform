@@ -105,9 +105,9 @@ export function chapterFills(starts: readonly number[], duration: number, t: num
     });
 }
 
-/** 83.6 → "1:24". */
+/** 83.6 → "1:23": whole seconds passed, like any player, so the 138.53 s note ends on 2:18 (not 2:19). */
 export function formatClock(sec: number): string {
-    const s = Math.max(0, Math.round(sec));
+    const s = Math.max(0, Math.floor(sec));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 

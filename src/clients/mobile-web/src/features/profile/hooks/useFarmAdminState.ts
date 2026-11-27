@@ -35,8 +35,12 @@ export interface MyFarmSummary {
 }
 
 export interface UseFarmAdminStateResult {
+    /**
+     * The farm OPEN in the app (repair FIX-1 item 2, R2-A 03 + 20): the same farm the header and the
+     * switcher show, read from the app's farm context. Null while the farm lists have not answered,
+     * or when the open farm is not one of my active seats. Never "the first farm I own".
+     */
     myFarm: MyFarmSummary | null;
-    setMyFarm: React.Dispatch<React.SetStateAction<MyFarmSummary | null>>;
     myMemberships: MyFarmDto[];
     setMyMemberships: React.Dispatch<React.SetStateAction<MyFarmDto[]>>;
     /**
@@ -64,9 +68,15 @@ export interface UseFarmAdminStateResult {
     handleExitMembership: (farmId: string, _farmName: string) => Promise<void>;
 }
 
-export function useFarmAdminState(): UseFarmAdminStateResult {
-    const [myFarm, setMyFarm] = React.useState<MyFarmSummary | null>(null);
+function summaryOf(f: MyFarmDto): MyFarmSummary {
+    return { farmId: f.farmId, name: f.name, role: f.role, subscription: f.subscription ?? null };
+}
+
+/** @param appFarmId the farm open in the app (`useFarmContext`), the one the header shows. */
+export function useFarmAdminState(appFarmId: string | null): UseFarmAdminStateResult {
     const [myMemberships, setMyMemberships] = React.useState<MyFarmDto[]>([]);
+    const openSeat = myMemberships.find(f => f.farmId === appFarmId) ?? null;
+    const myFarm = React.useMemo(() => (openSeat ? summaryOf(openSeat) : null), [openSeat]);
     const [pendingSeats, setPendingSeats] = React.useState<MyFarmDto[]>([]);
     const [farmLookupError, setFarmLookupError] = React.useState<string | null>(null);
     const [farmDetails, setFarmDetails] = React.useState<FarmDetailsDto | null>(null);
@@ -97,14 +107,6 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
                 if (cancelled) return;
                 setMyMemberships(farms);
                 setPendingSeats(listed.filter(f => !isActiveSeat(f)));
-                if (farms.length === 0) return;
-                const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
-                setMyFarm(prev => prev ?? {
-                    farmId: ownerFarm.farmId,
-                    name: ownerFarm.name,
-                    role: ownerFarm.role,
-                    subscription: ownerFarm.subscription ?? null,
-                });
             } catch {
                 /* silent — user may not be authenticated yet */
             }
@@ -135,22 +137,17 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
         try {
             const { getMyFarms } = await import('../../onboarding/qr/inviteApi');
             const farms = (await getMyFarms()).filter(isActiveSeat);
-            if (farms.length === 0) {
+            setMyMemberships(farms);
+            // The QR is the OPEN farm's (never another farm I happen to own).
+            if (!farms.some(f => f.farmId === appFarmId)) {
                 setFarmLookupError('You do not own a farm yet. Ask for help to set one up.');
                 return;
             }
-            const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
-            setMyFarm({
-                farmId: ownerFarm.farmId,
-                name: ownerFarm.name,
-                role: ownerFarm.role,
-                subscription: ownerFarm.subscription ?? null,
-            });
             setShowInviteQr(true);
         } catch (err) {
             setFarmLookupError(err instanceof Error ? err.message : 'Could not load your farm.');
         }
-    }, [myFarm]);
+    }, [myFarm, appFarmId]);
 
     const handleSaveFarmBoundary = React.useCallback(async (geoData: PlotGeoData) => {
         if (!myFarm?.farmId || savingBoundary) return;
@@ -208,19 +205,17 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
             await exitMembership(farmId);
             const listed = await getMyFarms();
             const refreshed = listed.filter(isActiveSeat);
+            // The exited farm leaves the list, so it can no longer be the hub's farm.
             setMyMemberships(refreshed);
             setPendingSeats(listed.filter(f => !isActiveSeat(f)));
-            if (myFarm?.farmId === farmId) {
-                setMyFarm(null);
-            }
         } catch (err) {
             const message = isInviteApiError(err) ? err.message : 'Exit failed.';
             throw new Error(message);
         }
-    }, [myFarm?.farmId]);
+    }, []);
 
     return {
-        myFarm, setMyFarm,
+        myFarm,
         myMemberships, setMyMemberships,
         pendingSeats,
         farmLookupError,

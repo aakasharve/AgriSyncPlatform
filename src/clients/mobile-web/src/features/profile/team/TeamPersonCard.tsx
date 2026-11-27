@@ -36,6 +36,25 @@ import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, seatWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { SWITCHABLE_AUTHORITIES } from '../../../core/session/farmAuthorities';
+import { getOperatorRoleLabel } from '../../../shared/roles/roleLabels';
+import { authorityCopy, authorityShortLabel, type AuthorityCopy } from './authorityCopy';
+import { responsibilitiesInForce } from './authoritySwitchModel';
+import { plotScopeCopy, plotScopeSummary } from './plotScopeCopy';
+
+/** English seat words for the card's role line (Marathi mode reads `seatWord`, as the chip does). */
+const SEAT_EN: Record<string, string> = { CoOwner: 'Co-owner', Family: 'Family', Mukadam: 'Mukadam', Worker: 'Worker' };
+
+/**
+ * Repair FIX-1 item 9 — "काय करू शकतात: …": the responsibilities in force now, then "बाकी काही नाही" (nothing else is on);
+ * "बाकी काही नाही" alone when none is; "सर्व जबाबदाऱ्या" when every one is.
+ */
+function canDoText(copy: AuthorityCopy, inForce: readonly string[]): string {
+    if (inForce.length === 0) return copy.canDoLine(copy.nothingElse);
+    if (SWITCHABLE_AUTHORITIES.every(n => inForce.includes(n))) return copy.canDoLine(copy.all);
+    return copy.canDoLine([...inForce.map(n => authorityShortLabel(copy, n)), copy.nothingElse].join(' · '));
+}
 
 export interface TeamPersonCardProps {
     row: LabourPermission;
@@ -85,7 +104,18 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>(null);
     const paused = row.status === 'Suspended';
-    const line = doLine(row);
+    const language = useOptionalLanguage()?.language;
+    // Repair FIX-1 item 9 (R2-B 16 Step A): a server that sends the responsibilities gets the three plain lines (role,
+    // plots, what he may do). The always-open line then keeps only what every member does: the responsibilities have
+    // their own line, so हजेरी is never said twice. An older server keeps the card exactly as before.
+    const duties = Array.isArray(row.authorities);
+    const line = duties ? doLine({ ...row, authorities: [] }) : doLine(row);
+    const dutyCopy = authorityCopy(language);
+    const plotCopy = plotScopeCopy(language);
+    const roleText = language === 'en' ? (row.label ? SEAT_EN[row.label] : undefined) ?? getOperatorRoleLabel(row.role).en : seatWord(row);
+    const plotText = `${plotCopy.rowLabel}: ${plotScopeSummary(plotCopy, row.effectivePlotScope ?? row.plotScope ?? 'AllPlots', row.plotIds,
+        new Map((plotAccess?.farmPlots ?? []).map(p => [p.id, p.name])))}`;
+    const canDo = duties ? canDoText(dutyCopy, responsibilitiesInForce(row.authorities ?? [], row.authoritiesNotInForce, Date.now())) : '';
     const phone = phoneLine(row);
     const arrival = arrivalLine(row);
     const current = presetOf(row.role);
@@ -109,12 +139,17 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
             </div>
             {line && <p className="m-0 mt-1.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-line">{line}</p>}
             {arrival && <p className="m-0 mt-0.5 text-[12.5px] font-semibold text-stone-500" data-testid="team-person-arrival">{arrival}</p>}
-            {plotAccess && (
+            {duties && <p className="m-0 mt-1.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-role">{dutyCopy.roleLine(roleText)}</p>}
+            {plotAccess ? (
+                // The owner's plot row already reads "प्लॉट: …" (and opens his choice): it IS the plot line.
                 <div className="mt-2">
                     <PlotScopePicker memberId={row.userId} value={plotAccess.value} farmPlots={plotAccess.farmPlots} busy={busy}
                         choices={plotAccess.choices} onSave={plotAccess.onSave} />
                 </div>
+            ) : duties && (
+                <p className="m-0 mt-0.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-plots">{plotText}</p>
             )}
+            {duties && <p className="m-0 mt-0.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-can">{canDo}</p>}
             {paused && (
                 <div className="mt-1 space-y-0.5" data-testid="team-person-paused">
                     <p className="m-0 text-[13px] font-extrabold text-amber-900">{TEAM_COPY.pausedNote}</p>

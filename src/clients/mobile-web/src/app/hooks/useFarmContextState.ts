@@ -201,9 +201,14 @@ export function useFarmContextState(): FarmContextState {
                 setShowMinimalOnboarding(false);
 
                 if (!currentFarmId || !farms.some(f => f.farmId === currentFarmId)) {
-                    const next = farms[0].farmId;
+                    // Repair FIX-1 round 1 (Bug 1): never a farm other than the app-wide one. The two lists may come
+                    // back in different orders, so "the first listed" is only a stand-in until /me/context has
+                    // answered — and then FarmContext, which keeps the pointer, is the answer (see `openFarmId`).
+                    const app = farmContextRef.current;
+                    const appPick = app?.meContext ? app.currentFarmId : null;
+                    const next = appPick && farms.some(f => f.farmId === appPick) ? appPick : farms[0].farmId;
                     setCurrentFarmId(next);
-                    SessionStore.setCurrentFarmId(next);
+                    if (!app) SessionStore.setCurrentFarmId(next);
                 }
             } catch {
                 clearTimeout(waitTimer);
@@ -217,9 +222,13 @@ export function useFarmContextState(): FarmContextState {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshCounter, isAuthenticated, session?.userId, hasRealToken]);
 
+    // Repair FIX-1 round 1 (Bug 1): a switch goes through FarmContext (the app-wide farm, which keeps the pointer), so the
+    // header, the Setup Hub and every reader of either move together. No provider (a bare test): this hook keeps it.
     const handleSwitchFarm = React.useCallback((farmId: string) => {
         setCurrentFarmId(farmId);
-        SessionStore.setCurrentFarmId(farmId);
+        const app = farmContextRef.current;
+        if (app?.switchFarm) app.switchFarm(farmId);
+        else SessionStore.setCurrentFarmId(farmId);
     }, []);
 
     const handleWizardComplete = React.useCallback((result: BootstrapFirstFarmResponse) => {
@@ -227,6 +236,8 @@ export function useFarmContextState(): FarmContextState {
         setShowMinimalOnboarding(false);
         setCurrentFarmId(result.farmId);
         SessionStore.setCurrentFarmId(result.farmId);
+        // Bug 1: the app-wide farm opens the new farm too (its list learns it from the refresh below).
+        farmContextRef.current?.switchFarm?.(result.farmId);
         // spec: plr-d10-redesign-real-integration-2026-10-25 (I16) — the farm the server just made
         // is listed AT ONCE, so the first run goes straight on to फोनच्या परवानग्या instead of
         // flashing the empty app until /farms/mine answers. Only what the server returned: its id,
@@ -280,10 +291,16 @@ export function useFarmContextState(): FarmContextState {
         void farmContextRef.current?.refresh();
     }, []);
 
+    // Repair FIX-1 round 1 (Bug 1, CTO ruling): FarmContext is the ONE source of the open farm. Once /me/context has
+    // answered with a current farm, that is the farm; this hook's own record stands in only with no provider, or before
+    // that answer (an installed phone's stored pointer, then the first farm listed).
+    const app = farmContext;
+    const openFarmId = (app?.meContext ? app.currentFarmId : null) ?? currentFarmId;
+
     return {
         myFarms,
         pendingFarms,
-        currentFarmId,
+        currentFarmId: openFarmId,
         showFirstFarmWizard,
         setShowFirstFarmWizard,
         showMinimalOnboarding,

@@ -290,14 +290,17 @@ export const SinglePlotSection: React.FC<{
     sectionTestId?: string;
     headerTestId?: string;
     language?: Language;
-}> = ({ crop, plotId, onPickPlot, header = false, testIds, sectionTestId, headerTestId, language: languageProp }) => {
+    /** A small tag on a plot's box or chip (Setup's red "बाकी" mark, repair FIX-1 item 5). Absent: none, as before. */
+    mark?: (plotId: string) => React.ReactNode;
+}> = ({ crop, plotId, onPickPlot, header = false, testIds, sectionTestId, headerTestId, language: languageProp, mark }) => {
     const ctxLanguage = useOptionalLanguage()?.language;
     const language: Language = languageProp ?? ctxLanguage ?? 'mr';
     return (
         <section className="space-y-2" data-testid={sectionTestId} data-header={header ? 'yes' : 'no'}>
             {header && <PlotGroupHeader crop={crop} testId={headerTestId} language={language} sub={<PlotCount total={crop.plots.length} language={language} />} />}
             <PlotSelector plots={crop.plots} numbers={plotNumbers(crop.plots)} chosen={plotId ? [plotId] : []} onTapPlot={onPickPlot} allToggle="none"
-                color={crop.color} cropNames={cropWordsOf(crop)} underHeader={header || photoOnceFor(crop.plots.length)} testIds={testIds} language={language} />
+                color={crop.color} cropNames={cropWordsOf(crop)} underHeader={header || photoOnceFor(crop.plots.length)} testIds={testIds} language={language}
+                mark={mark ? (id => mark(id)) : undefined} />
         </section>
     );
 };
