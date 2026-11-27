@@ -6,7 +6,10 @@
  *     moment, not a quick action. Full-screen + soft emerald gradient
  *     halo makes it feel like a milestone.
  *   - ONE input per step. Semi-literate users lose the thread in stacked
- *     forms. 3 deliberate steps with a single focus each.
+ *     forms. 2 deliberate steps with a single focus each. Pilot lane IDENT
+ *     (CTO ruling Q10 = A, P5): the "Which village?" step is gone — the server
+ *     accepted the answer and stored it nowhere. The farm's own place comes
+ *     with the real 7/12 work.
  *   - Marathi above English, same weight. Never English-only on CTAs.
  *   - Farm code reveal is the climax — giant mono letter-spacing, emerald
  *     gradient background, auto-copy on tap.
@@ -21,7 +24,6 @@ import {
     ArrowRight,
     ArrowLeft,
     Sprout,
-    MapPin,
     CheckCircle2,
     Copy,
     Check,
@@ -31,7 +33,7 @@ import {
 import { bootstrapFirstFarm, isInviteApiError, type BootstrapFirstFarmResponse } from '../qr/inviteApi';
 import { isBillingVisible } from '../../../app/featureFlags';
 
-type Step = 'welcome' | 'farm-name' | 'village' | 'confirm' | 'submitting' | 'done';
+type Step = 'welcome' | 'farm-name' | 'confirm' | 'submitting' | 'done';
 
 /**
  * Repair R1-g (founder 27 Nov: "Do not mention anything about pricing in the app anywhere right now"): the trial cell
@@ -75,12 +77,10 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
 }) => {
     const [step, setStep] = useState<Step>('welcome');
     const [farmName, setFarmName] = useState('');
-    const [village, setVillage] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<BootstrapFirstFarmResponse | null>(null);
     const [copied, setCopied] = useState(false);
     const farmNameInputRef = useRef<HTMLInputElement | null>(null);
-    const villageInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -93,7 +93,6 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
 
     useEffect(() => {
         if (step === 'farm-name') setTimeout(() => farmNameInputRef.current?.focus(), 150);
-        if (step === 'village') setTimeout(() => villageInputRef.current?.focus(), 150);
     }, [step]);
 
     if (!isOpen) return null;
@@ -102,7 +101,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
         setError(null);
         setStep('submitting');
         try {
-            const response = await bootstrapFirstFarm(farmName, village || undefined);
+            const response = await bootstrapFirstFarm(farmName);
             setResult(response);
             setStep('done');
         } catch (err) {
@@ -148,8 +147,8 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                     {/* Step indicator */}
                     {step !== 'done' && step !== 'submitting' && (
                         <div className="mb-8 flex items-center justify-center gap-1.5">
-                            {(['welcome', 'farm-name', 'village', 'confirm'] as const).map((s, i) => {
-                                const activeIndex = ['welcome', 'farm-name', 'village', 'confirm'].indexOf(step);
+                            {(['welcome', 'farm-name', 'confirm'] as const).map((s, i) => {
+                                const activeIndex = ['welcome', 'farm-name', 'confirm'].indexOf(step);
                                 const isActive = i <= activeIndex;
                                 return (
                                     <div
@@ -213,7 +212,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                         <section className="flex flex-1 flex-col">
                             <div className="mb-2 flex items-center gap-2 text-emerald-700">
                                 <Sprout size={16} />
-                                <span className="text-[11px] font-bold uppercase tracking-widest">Step 1 of 3</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Step 1 of 2</span>
                             </div>
                             <h2 className="font-display text-3xl font-black leading-tight text-stone-900">
                                 शेतीचे नाव काय?
@@ -241,7 +240,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                 <button
                                     type="button"
                                     disabled={farmName.trim().length < 2}
-                                    onClick={() => setStep('village')}
+                                    onClick={() => setStep('confirm')}
                                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-emerald-200 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     पुढे चला
@@ -252,60 +251,11 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                         </section>
                     )}
 
-                    {step === 'village' && (
-                        <section className="flex flex-1 flex-col">
-                            <div className="mb-2 flex items-center gap-2 text-emerald-700">
-                                <MapPin size={16} />
-                                <span className="text-[11px] font-bold uppercase tracking-widest">Step 2 of 3</span>
-                            </div>
-                            <h2 className="font-display text-3xl font-black leading-tight text-stone-900">
-                                गाव कोणते?
-                            </h2>
-                            <p className="mt-1 text-base font-semibold text-stone-500">
-                                Which village? <span className="text-stone-400">(optional / ऐच्छिक)</span>
-                            </p>
-
-                            <input
-                                ref={villageInputRef}
-                                type="text"
-                                value={village}
-                                onChange={e => setVillage(e.target.value)}
-                                maxLength={80}
-                                placeholder="e.g. खार्डी"
-                                className="mt-8 w-full rounded-2xl border-2 border-stone-200 bg-white px-4 py-4 font-display text-2xl font-black text-stone-900 outline-none placeholder:font-sans placeholder:text-stone-300 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                            />
-
-                            <p className="mt-3 text-xs text-stone-500">
-                                हवामान आणि स्थानिक सल्ल्यासाठी उपयोगी.
-                                <span className="block text-stone-400">Helps us tailor weather alerts & local advice.</span>
-                            </p>
-
-                            <div className="mt-auto grid grid-cols-[auto_1fr] gap-2 pt-8">
-                                <button
-                                    type="button"
-                                    onClick={() => setStep('farm-name')}
-                                    className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-4 py-4 text-sm font-bold text-stone-600 hover:border-stone-300"
-                                >
-                                    <ArrowLeft size={16} />
-                                    मागे
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setStep('confirm')}
-                                    className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700"
-                                >
-                                    पुढे चला
-                                    <ArrowRight size={18} />
-                                </button>
-                            </div>
-                        </section>
-                    )}
-
                     {step === 'confirm' && (
                         <section className="flex flex-1 flex-col">
                             <div className="mb-2 flex items-center gap-2 text-emerald-700">
                                 <Sparkles size={16} />
-                                <span className="text-[11px] font-bold uppercase tracking-widest">Step 3 of 3</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Step 2 of 2</span>
                             </div>
                             <h2 className="font-display text-3xl font-black leading-tight text-stone-900">
                                 तयार आहात?
@@ -323,12 +273,6 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                         <div className="truncate font-display text-xl font-black text-stone-900">
                                             {farmName || 'My farm'}
                                         </div>
-                                        {village && (
-                                            <div className="flex items-center gap-1 text-xs font-semibold text-stone-500">
-                                                <MapPin size={11} />
-                                                {village}
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                                 <WizardSummaryRoleTrial />
@@ -343,7 +287,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                             <div className="mt-auto grid grid-cols-[auto_1fr] gap-2 pt-8">
                                 <button
                                     type="button"
-                                    onClick={() => setStep('village')}
+                                    onClick={() => setStep('farm-name')}
                                     className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-4 py-4 text-sm font-bold text-stone-600 hover:border-stone-300"
                                 >
                                     <ArrowLeft size={16} />

@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ getMyFarms: vi.fn(), fetchLabourPermissions: vi.fn() }));
+const h = vi.hoisted(() => ({ getMyFarms: vi.fn(), fetchLabourPermissions: vi.fn(), cardComplete: true }));
 
 vi.mock('../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (k: string) => k }),
@@ -47,7 +47,14 @@ vi.mock('../../../features/admin/billing/EntitlementBanner', () => ({ default: (
 vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: () => null }));
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { waitFor, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => {
+    const { stubCard } = await import('../../identity/__tests__/identityApiStub');
+    const answer = () => ({ kind: 'ok' as const, card: stubCard({ complete: h.cardComplete }) });
+    return { getMyIdentity: async () => answer(), putMyIdentity: async () => answer() };
+});
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type CropProfile, type FarmerProfile } from '../../../domain/types/farm.types';
@@ -97,15 +104,20 @@ describe('सेट-अप केंद्र — the founder\'s order', () => {
         expect(within(screen.getByTestId('hub-people')).queryByTestId('hub-team')).toBeNull();
     });
 
-    it('with nothing set up, "पुढचं" goes माझी ओळख → पाण्याचे स्रोत → मोटर → वीज आणि वेळापत्रक → पिकं आणि प्लॉट → यंत्रं', () => {
+    it('with nothing set up, "पुढचं" goes माझी ओळख → पाण्याचे स्रोत → मोटर → वीज आणि वेळापत्रक → पिकं आणि प्लॉट → यंत्रं', async () => {
         h.getMyFarms.mockResolvedValue([]);
-        let p = empty();
-        const { rerender } = render(page(p));
+        // pilot lane IDENT (P10): माझी ओळख is done only when the SERVER says his card is complete, never from the phone's profile.
+        h.cardComplete = false;
+        let p = { ...empty(), name: 'Purvesh Arve', village: 'Pimpalgaon' };
+        const first = render(page(p));
         const next = () => screen.getByTestId('hub-next').textContent;
+        await waitFor(() => expect(screen.getByTestId('id-full-name-input')).toHaveValue('Purvesh Arve'));
         expect(next()).toBe('पुढचं: माझी ओळख');
-        p = { ...p, name: 'Purvesh Arve', village: 'Pimpalgaon' };
-        rerender(page(p));
-        expect(next()).toBe('पुढचं: पाण्याचे स्रोत');
+        first.unmount();
+        h.cardComplete = true;
+        p = empty();
+        const { rerender } = render(page(p));
+        await waitFor(() => expect(next()).toBe('पुढचं: पाण्याचे स्रोत'));
         p = { ...p, waterResources: [SOURCE] } as FarmerProfile;
         rerender(page(p));
         expect(next()).toBe('पुढचं: मोटर');

@@ -18,8 +18,6 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { SetupHubMenu } from '../SetupHubMenu';
 
 const baseProps = () => ({
-    farmerName: 'Test Farmer',
-    verified: false,
     items: [],
     onSelect: vi.fn(),
     logout: vi.fn(),
@@ -73,18 +71,19 @@ describe('SetupHubMenu - the setup progress count reads the right way round', ()
 });
 
 // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम" is its own row,
-// the farm's permanent code sits on the top card, and a waiting request is counted on the row.
+// and a waiting request is counted on the row. (Pilot lane IDENT: the farm's code moved to the "शेताची ओळख" card,
+// tested in features/identity/__tests__/FarmIdentityCard.test.tsx.)
 // Repair FIX-1 item 3: the row sits where the `team` step is in the setup sequence.
 describe('SetupHubMenu — माझी टीम and the farm code (PLR-D7 M1 step 2)', () => {
     afterEach(() => cleanup());
     const teamStep = [{ id: 'team' as const, tab: 'team' as const, label: 'माझी टीम', icon: null }];
 
-    it('shows the farm code on the top card only when the server sent one', () => {
-        const { rerender } = render(<SetupHubMenu {...baseProps()} farmCode="K7M2QP" />);
-        expect(screen.getByTestId('hub-farm-code')).toHaveTextContent('शेत कोड');
-        expect(screen.getByTestId('hub-farm-code')).toHaveTextContent('K7M2QP');
-        rerender(<SetupHubMenu {...baseProps()} farmCode={null} />);
-        expect(screen.queryByTestId('hub-farm-code')).toBeNull();
+    it('pilot lane IDENT (V2-A): the two top cards come first, above the progress; the old person card is gone', () => {
+        render(<SetupHubMenu {...baseProps()} topCards={<><div data-testid="card-1" /><div data-testid="card-2" /></>}
+            setupProgress={{ done: 1, total: 6, percent: 17, nextLabel: 'x' }} />);
+        const order = [...document.querySelectorAll('[data-testid="card-1"],[data-testid="card-2"],[data-testid="hub-progress"]')].map(e => e.getAttribute('data-testid'));
+        expect(order).toEqual(['card-1', 'card-2', 'hub-progress']);
+        expect(screen.queryByTestId('hub-me')).toBeNull();
     });
 
     it('the माझी टीम row opens the team page, and says how many people wait for an answer', () => {

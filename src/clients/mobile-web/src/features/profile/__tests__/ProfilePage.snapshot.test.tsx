@@ -124,6 +124,9 @@ vi.mock('../../../features/appUpdate/AppVersionRow', () => ({
 
 // Imports come AFTER vi.mock so hoisted mocks register first.
 import { render } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => (await import('../../identity/__tests__/identityApiStub')).identityApiStub());
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import {

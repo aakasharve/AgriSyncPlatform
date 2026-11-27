@@ -47,6 +47,9 @@ vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: (
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+// pilot lane IDENT: the person's own card comes from the server; here a complete one (identity step done, as the name + village did
+// before), and no network.
+vi.mock('../../identity/identityApi', async () => (await import('../../identity/__tests__/identityApiStub')).identityApiStub());
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type FarmOperator, type FarmerProfile } from '../../../domain/types/farm.types';

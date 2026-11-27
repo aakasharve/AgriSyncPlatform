@@ -50,10 +50,10 @@ export const PICTURE_WORDS: Readonly<Record<PictureLanguage, PictureWords>> = {
         scheduleHint: 'फक्त या शेड्यूलवर दिसेल, तुमच्या फोटोच्या जागी.', // PROPOSED (Marathi)
         choose: 'फोटो निवडा', // PROPOSED (Marathi)
         change: 'फोटो बदला', // PROPOSED (Marathi)
-        remove: 'फोटो काढा', // BRIEF
+        remove: 'फोटो काढून टाका', // CTO 27 Nov: the brief's 'फोटो काढा' means TAKE on every other screen (bill, packet, his own card)
         working: 'फोटो पाठवत आहे…', // PROPOSED (Marathi)
         saved: 'फोटो ठेवला. थोड्या वेळाने दिसेल.', // PROPOSED (Marathi)
-        removed: 'फोटो काढला. थोड्या वेळाने बदल दिसेल.', // PROPOSED (Marathi)
+        removed: 'फोटो काढून टाकला. थोड्या वेळाने बदल दिसेल.', // PROPOSED (Marathi)
         problem: {
             offline: 'इंटरनेट नाही. इंटरनेट चालू झाल्यावर पुन्हा प्रयत्न करा. काहीही नंतरसाठी ठेवलेलं नाही.', // PROPOSED (Marathi)
             unreadable: 'हा फोटो उघडता आला नाही. दुसरा फोटो निवडा.', // PROPOSED (Marathi)

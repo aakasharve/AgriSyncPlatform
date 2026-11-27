@@ -19,7 +19,9 @@ public sealed class GetMeContextHandler(
     IClock clock,
     // spec: plr-d10 lane MU-2 — optional, so an older composition (and the unit tests) need not supply it: absent =
     // no invitations listed, never a guess.
-    IMeInvitationSnapshotReader? invitationReader = null)
+    IMeInvitationSnapshotReader? invitationReader = null,
+    // spec: plr-d10 pilot lane IDENT (S1) — optional the same way: his own identity card, for his names in both scripts.
+    IUserIdentityProfileStore? identityProfiles = null)
 {
     private const int PlanExpiringWindowDays = 7;
 
@@ -84,6 +86,9 @@ public sealed class GetMeContextHandler(
                 .ToList();
         }
 
+        // spec: plr-d10 pilot lane IDENT (S1) — his names in both scripts, from his own card (none when he never saved one).
+        var card = identityProfiles is null ? null : await identityProfiles.GetAsync(userId, track: false, ct);
+
         var dto = new MeContextDto(
             Me: new MeIdentityDto(
                 UserId: user.Id.Value,
@@ -91,7 +96,9 @@ public sealed class GetMeContextHandler(
                 PhoneMasked: MaskPhone(user.Phone.Value),
                 PhoneVerifiedAtUtc: user.PhoneVerifiedAtUtc,
                 PreferredLanguage: user.PreferredLanguage,
-                AuthMode: user.AuthMode.ToString()),
+                AuthMode: user.AuthMode.ToString(),
+                NameMr: card?.NameMr,
+                NameEn: card?.NameEn),
             Farms: farmDtos,
             Share: new MeShareDto(
                 ReferralCode: affiliation.ReferralCode,

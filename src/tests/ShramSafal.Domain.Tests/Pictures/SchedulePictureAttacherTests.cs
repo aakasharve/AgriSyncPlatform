@@ -11,8 +11,8 @@ namespace ShramSafal.Domain.Tests.Pictures;
 
 /// <summary>
 /// What the PULL says each schedule shows to each reader: the three optional fields, decided on the server by seat. The owner sees his own;
-/// a seat that reads other people's records on his farm sees the schedule picture and his face; a seat that reads only its own records sees no
-/// face but does see a schedule picture or a logo; another farm sees only an outside schedule's institution logo.
+/// a seat on his farm sees the schedule picture and his face (pilot lane IDENT S3: an own-records seat too, since the owner is someone a कामगार
+/// works for); another farm sees only an outside schedule's institution logo.
 /// </summary>
 public sealed class SchedulePictureAttacherTests
 {
@@ -40,7 +40,7 @@ public sealed class SchedulePictureAttacherTests
         PreviousVersionId: row.TenantScope == TenantScope.Public ? null : row.PreviousVersionId);
 
     private async Task<IReadOnlyList<ScheduleTemplateDto>> PullAs(Guid reader, IEnumerable<FarmReadScope> seats, params ScheduleTemplateDto[] listing) =>
-        await SchedulePictureAttacher.AttachAsync(_repo, _store, reader, seats, listing);
+        await SchedulePictureAttacher.AttachAsync(_repo, _store, new PictureRepoMates(_repo), reader, seats, listing);
 
     private Picture Put(PictureKind kind, Guid subject, Guid setBy, byte fill)
     {
@@ -114,17 +114,19 @@ public sealed class SchedulePictureAttacherTests
         AssertShows(withLogo[1], logo);
     }
 
+    // spec: plr-d10 pilot lane IDENT (S3; CTO ruling on founder question 2 = B) - before this lane an own-records seat got no face at all; a कामगार
+    // now sees the face of the owner he works for (and still the schedule picture).
     [Fact]
-    public async Task A_worker_on_an_own_records_seat_gets_no_face_but_does_get_a_schedule_picture()
+    public async Task A_worker_on_an_own_records_seat_sees_the_face_of_the_owner_he_works_for_and_the_schedule_picture()
     {
         var (root, latest) = OwnChain();
-        Put(PictureKind.Person, Owner, Owner, 2);
+        var face = Put(PictureKind.Person, Owner, Owner, 2);
         _repo.OverrideFarmsOf(Worker, OwnerFarm);
         var seats = new[] { PictureTestKit.Seat(OwnerFarm, ownRecordsOnly: true) };
 
-        var noFace = await PullAs(Worker, seats, Dto(root), Dto(latest));
-        AssertShowsNothing(noFace[0]);
-        AssertShowsNothing(noFace[1]);
+        var withFace = await PullAs(Worker, seats, Dto(root), Dto(latest));
+        AssertShows(withFace[0], face);
+        AssertShows(withFace[1], face);
 
         var logo = Put(PictureKind.Schedule, root.Id, Owner, 1);
         var withLogo = await PullAs(Worker, seats, Dto(root), Dto(latest));
@@ -132,13 +134,13 @@ public sealed class SchedulePictureAttacherTests
     }
 
     [Fact]
-    public async Task A_seat_that_reads_records_on_another_farm_does_not_unlock_this_owners_face()
+    public async Task A_seat_on_another_farm_does_not_unlock_this_owners_face()
     {
-        // the worker's seat is own-records-only on the OWNER's farm, but he is a full seat on his OWN farm: that gives him no right to the owner's face
+        // the reader is a full seat on his OWN farm only: that gives him no right to the face of an owner he does not work for
         var (root, _) = OwnChain();
         Put(PictureKind.Person, Owner, Owner, 2);
-        _repo.OverrideFarmsOf(Worker, OwnerFarm, StrangerFarm);
-        var seats = new[] { PictureTestKit.Seat(OwnerFarm, ownRecordsOnly: true), PictureTestKit.Seat(StrangerFarm, ownRecordsOnly: false) };
+        _repo.OverrideFarmsOf(Worker, StrangerFarm);
+        var seats = new[] { PictureTestKit.Seat(StrangerFarm, ownRecordsOnly: false) };
 
         var result = await PullAs(Worker, seats, Dto(root));
 

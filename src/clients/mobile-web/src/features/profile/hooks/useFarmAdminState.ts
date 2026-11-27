@@ -185,14 +185,13 @@ export function useFarmAdminState(appFarmId: string | null): UseFarmAdminStateRe
             window.setTimeout(() => window.location.reload(), 200);
         } catch (err) {
             const apiErr = err as { error?: string; message?: string };
+            // pilot lane IDENT (S7): the KIND of problem; the farm page says it in the app's language (the server's words are English).
             if (apiErr?.error === 'ShramSafal.WeatherProviderNotConfigured') {
-                setConnectError(
-                    'Weather provider not yet available — your boundary is saved. We\'ll auto-enable live weather as soon as the provider key is configured.',
-                );
+                setConnectError('providerNotConfigured');
             } else if (apiErr?.error === 'ShramSafal.FarmCentreMissing') {
-                setConnectError('Farm boundary missing. Please draw the boundary first.');
+                setConnectError('centreMissing');
             } else {
-                setConnectError(apiErr?.message ?? 'Could not connect weather. Please try again.');
+                setConnectError('failed');
             }
         } finally {
             setConnectingWeather(false);

@@ -18,7 +18,18 @@ public sealed record SyncPushResponseDto(
 public sealed record SyncOperatorDto(
     Guid UserId,
     string DisplayName,
-    string Role);
+    string Role,
+    // spec: plr-d10 pilot lane IDENT (S3; P11) - ADDITIVE, last, and written ONLY to a phone that asks (people=1) and only when there is a value
+    // (PeopleOnThePull): the name in Marathi and in English letters the person saved on his own identity card (typed or confirmed by him), and
+    // the pointer to his face when this reader may see it (PictureViewer). An older phone's rows are byte-for-byte what they were.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? NameMr = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? NameEn = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Guid? PictureId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PictureSha256 = null);
 
 /// <summary>
 /// Labour V2 R1 Task 3.5c — one attendance ruling on the pull wire.

@@ -15,10 +15,12 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { requestCreateFarmWizard, requestJoinFarm } from '../../app/hooks/useFarmContextState';
-import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
 
-import IdentitySection from './sections/IdentitySection';
+import { FarmIdentityPage } from './farmIdentity/FarmIdentityPage';
+import { FarmIdentityCard } from '../identity/FarmIdentityCard';
+import { MyIdentityCard, MY_IDENTITY_TEST_ID, displayNameOf } from '../identity/MyIdentityCard';
+import { useMyIdentity } from '../identity/useMyIdentity';
 import StructureSection from './sections/StructureSection';
 import UtilitiesSection from './sections/UtilitiesSection';
 import MachinesSection from './sections/MachinesSection';
@@ -97,7 +99,9 @@ export type ProfileTab =
     | 'intelligence'
     | 'people'
     /** spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — "माझी टीम", its own page (not a setup step). */
-    | 'team';
+    | 'team'
+    /** pilot lane IDENT (S7) — the open farm's own "शेताची ओळख" page (boundary, weather, memberships, the V4-B land shells). */
+    | 'farm';
 
 /** Local Hub section type (was imported from the now-removed SetupHubAccordion). */
 type HubSection = { id: ProfileTab; label: string; icon: React.ReactNode; body: React.ReactNode };
@@ -179,8 +183,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
     // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
-    // open the Draw-Farm-Boundary drawer on the Identity tab. Two effects so the
-    // drawer only opens after the lazily-loaded farm resolves.
+    // open the Draw-Farm-Boundary drawer on the farm's own page (pilot lane IDENT: the boundary block
+    // moved there). Two effects so the drawer only opens after the lazily-loaded farm resolves.
     const { myFarm: adminMyFarm, setShowFarmBoundary: adminSetShowFarmBoundary } = farmAdmin;
     const pendingOpenBoundary = useRef(false);
     // Pilot lane PERM (S5.3) — the saved screen's "सेटिंग बदला" left a once-read key: open माझी टीम (and bring the money line into view).
@@ -201,7 +205,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         if (typeof window === 'undefined') return;
         if (window.sessionStorage.getItem('open_farm_boundary')) {
             window.sessionStorage.removeItem('open_farm_boundary');
-            setActiveTab('identity');
+            setActiveTab('farm');
             pendingOpenBoundary.current = true;
         }
     }, []);
@@ -216,11 +220,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const signedInPhone = meContext?.me
         ? { masked: meContext.me.phoneMasked, verified: meContext.me.phoneVerifiedAtUtc != null }
         : null;
-    const isWorkerOnAnyFarm = farmAdmin.myMemberships.some(m => m.role === 'Worker' || m.role === 'Mukadam');
-    const { profile: workerProfile } = useWorkerProfile(
-        isWorkerOnAnyFarm ? (authSession?.userId ?? null) : null,
-        profileFarmId,
-    );
+    // pilot lane IDENT (S6) - the SIGNED-IN person's own card, from the server (never the farm owner's `profile.name`).
+    const identity = useMyIdentity(authSession?.userId ?? null);
+    const lang: 'mr' | 'en' = language === 'en' ? 'en' : 'mr';
+    const ownName = displayNameOf(identity.card, lang, meContext?.me?.displayName ?? '');
+    // Bumped when the QR sheet closes: it may have made a new QR, which the hub's farm card then asks for again.
+    const [qrRefreshKey, setQrRefreshKey] = useState(0);
     const nonExitableFarmIds = React.useMemo(() => {
         const ids = new Set<string>();
         for (const m of farmAdmin.myMemberships) {
@@ -230,10 +235,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }, [farmAdmin.myMemberships]);
 
     // Open a specific farm: switch app-wide farm context to it (the hub's farm follows it) and drill
-    // into its own page (Identity).
+    // into its own page ("शेताची ओळख").
     const handleOpenFarm = React.useCallback((farmId: string) => {
         switchFarm(farmId);
-        setActiveTab('identity');
+        setActiveTab('farm');
     }, [switchFarm]);
 
     // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
@@ -245,13 +250,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => { switchFarm(farmId); }, [switchFarm]);
 
     // Guided-setup progress: a step counts as "done" once its core data is really saved.
-    // Identity = name + village; water / motor / power = a source / a motor / power times the farmer
+    // Identity = the SERVER says his card is complete (name + village + taluka + district; P10: never from a phone-only copy); water / motor / power = a source / a motor / power times the farmer
     // saved (repair FIX-1 item 3: three steps, one page); Crops = at least one crop.
     // Repair D-9 (P8): with the open farm's set, water / motor / power / machines are the FARM's (`hubSetupFacts`); without it, the phone profile's.
     const setupFacts = React.useMemo(() => hubSetupFacts(farmSetup, profile), [farmSetup, profile]);
     const doneIds = React.useMemo(() => {
         const s = new Set<HubStepId>();
-        if (profile.name && profile.village) s.add('identity');
+        if (identity.card?.complete === true) s.add('identity');
         if (setupFacts.waterCount > 0) s.add('water');
         if (setupFacts.motorCount > 0) s.add('motor');
         if (setupFacts.powerSaved) s.add('power');
@@ -260,7 +265,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
         // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
-    }, [profile.name, profile.village, setupFacts, crops.length]);
+    }, [identity.card?.complete, setupFacts, crops.length]);
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
     // repair D-9 - "आधी पाण्याचा स्रोत जोडा": the add-plot form closes (the plot is not saved half) and पाणी आणि वीज opens.
@@ -329,7 +334,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             {farmAdmin.myFarm && (
                 <FarmInviteQrSheet
                     isOpen={farmAdmin.showInviteQr}
-                    onClose={() => farmAdmin.setShowInviteQr(false)}
+                    onClose={() => { farmAdmin.setShowInviteQr(false); setQrRefreshKey(k => k + 1); }}
                     farmId={farmAdmin.myFarm.farmId}
                     farmName={farmAdmin.myFarm.name}
                 />
@@ -391,18 +396,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const hw = hubWords(language);
                 const sections: HubSection[] = [
                     {
-                        id: 'identity',
-                        label: hw.pages.identity,
-                        icon: <User size={20} />,
+                        id: 'farm',
+                        label: hw.pages.farm,
+                        icon: <Sprout size={20} />,
                         body: (
-                            <IdentitySection
-                                profile={profile}
-                                onUpdateProfile={onUpdateProfile}
-                                logout={logout}
+                            <FarmIdentityPage
+                                language={lang}
                                 myFarm={farmAdmin.myFarm}
+                                farmCode={teamFarmCode}
                                 myMemberships={farmAdmin.myMemberships}
                                 pendingSeats={farmAdmin.pendingSeats}
-                                currentFarmId={profileFarmId}
                                 farmDetails={farmAdmin.farmDetails}
                                 weatherConnected={farmAdmin.weatherConnected}
                                 connectingWeather={farmAdmin.connectingWeather}
@@ -413,9 +416,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 onOpenTeam={openTeam}
                                 nonExitableFarmIds={nonExitableFarmIds}
                                 handleExitMembership={farmAdmin.handleExitMembership}
-                                isWorkerOnAnyFarm={isWorkerOnAnyFarm}
-                                workerProfile={workerProfile}
-                                signedInPhone={signedInPhone}
                             />
                         ),
                     },
@@ -607,15 +607,27 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 const current = activeTab ? sections.find(s => s.id === activeTab) : undefined;
                 if (!current) {
+                    // pilot lane IDENT (V2-A): the open farm's card, then his own card. "माझी ओळख" (the row and "पुढचं") scrolls to it.
+                    const topCards = (
+                        <>
+                            <FarmIdentityCard farmId={teamFarmId ?? appFarm?.farmId ?? null} farmName={farmAdmin.myFarm?.name ?? appFarm?.name ?? null}
+                                farmCode={teamFarmCode ?? appFarm?.farmCode ?? null} isPrimaryOwner={callerIsPrimary && !!teamFarmId} language={lang}
+                                onOpenFarmPage={() => setActiveTab('farm')} onOpenQrSheet={() => { void farmAdmin.handleOpenInviteQr(); }} qrRefreshKey={qrRefreshKey} />
+                            <MyIdentityCard userId={authSession?.userId ?? null} identity={identity} language={lang} role={farmAdmin.myFarm?.role ?? null}
+                                ownDisplayName={meContext?.me?.displayName ?? ''} ownPhone={signedInPhone}
+                                /* One truth about verification (PLR-D9 T4): only a government-verified identity is called that. */
+                                governmentVerified={profile.verificationStatus === VerificationStatus.GovernmentVerified} />
+                        </>
+                    );
+                    const selectHubTab = (tab: ProfileTab) => {
+                        if (tab !== 'identity') { setActiveTab(tab); return; }
+                        document.querySelector(`[data-testid="${MY_IDENTITY_TEST_ID}"]`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                    };
                     return (
                         <SetupHubMenu
-                            farmerName={profile.name ?? ''}
-                            /* One truth about verification (PLR-D9 T4): a filled name + village is NOT a verified
-                               identity — only a government-verified one is called that. */
-                            verified={profile.verificationStatus === VerificationStatus.GovernmentVerified}
-                            farmName={farmAdmin.myFarm?.name ?? undefined}
+                            topCards={topCards}
                             farms={farmAdmin.myMemberships}
-                            familyName={profile.name ? hubWords(language).family(profile.name.split(' ')[0]) : undefined}
+                            familyName={ownName ? hubWords(language).family(ownName.split(' ')[0]) : undefined}
                             onOpenFarm={handleOpenFarm}
                             currentFarmId={profileFarmId ?? undefined}
                             onSwitchFarm={handleSwitchFarmFromMenu}
@@ -624,12 +636,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             language={language}
                             setupProgress={setupProgress}
                             items={menuItems}
-                            onSelect={setActiveTab}
+                            onSelect={selectHubTab}
                             onExit={onExit}
                             // spec: plr-d10 lane MU-1 - "पैसे व हिशोब" is drawn only for a seat that sees the farm's money.
                             onOpenFinance={seatDoors(setupFarm).money ? onOpenFinanceManager : undefined}
                             onOpenLabour={onOpenLabour}
-                            farmCode={teamFarmCode}
                             onOpenTeam={openTeam}
                             teamViewOnly={!callerIsPrimary}
                             teamRequestCount={teamRequestCount}

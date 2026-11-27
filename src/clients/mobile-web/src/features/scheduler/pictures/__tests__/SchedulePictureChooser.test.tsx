@@ -5,7 +5,7 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane SCH-ID-P; founder D-146, D-148 default 2) - the owner's photo action on the owner bar:
  * shown to the OWNER of the schedule only; picks a photo, shrinks an oversize one on the phone, sends the raw bytes in a direct call, and removes with
- * "फोटो काढा". Offline it says so and keeps nothing (no outbox row, no queue row). Plain Marathi (and English) messages, 44 px tap targets, no emoji.
+ * "फोटो काढून टाका". Offline it says so and keeps nothing (no outbox row, no queue row). Plain Marathi (and English) messages, 44 px tap targets, no emoji.
  */
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
@@ -107,7 +107,7 @@ describe('who sees the action', () => {
 });
 
 describe('the panel', () => {
-    it('opens on "फोटो लावा" with who-sees-it words and two choices, each with a 44 px "फोटो निवडा"; "फोटो काढा" only on the picture that is showing', () => {
+    it('opens on "फोटो लावा" with who-sees-it words and two choices, each with a 44 px "फोटो निवडा"; "फोटो काढून टाका" only on the picture that is showing', () => {
         render(<SchedulePictureChooser template={own()} currentUserId={ME} actions={actions()} engine={engine()} />);
         expect(screen.getByTestId('picture-open')).toHaveTextContent('फोटो लावा');
         open();
@@ -123,15 +123,15 @@ describe('the panel', () => {
         expect(screen.getByTestId('picture-close').className).toContain('h-11');
     });
 
-    it('with his own photo showing, the bar says "फोटो बदला" and the photo row offers "फोटो काढा"', () => {
+    it('with his own photo showing, the bar says "फोटो बदला" and the photo row offers "फोटो काढून टाका"', () => {
         render(<SchedulePictureChooser template={own({ pictureKind: 'PERSON' })} currentUserId={ME} actions={actions()} engine={engine()} />);
         expect(screen.getByTestId('picture-open')).toHaveTextContent('फोटो बदला');
         open();
-        expect(screen.getByTestId('picture-remove-PERSON')).toHaveTextContent('फोटो काढा');
+        expect(screen.getByTestId('picture-remove-PERSON')).toHaveTextContent('फोटो काढून टाका');
         expect(screen.queryByTestId('picture-remove-SCHEDULE')).toBeNull();
     });
 
-    it('an institution\'s logo showing is not his to change: no "फोटो काढा" for it', () => {
+    it('an institution\'s logo showing is not his to change: no "फोटो काढून टाका" for it', () => {
         render(<SchedulePictureChooser template={own({ pictureKind: 'INSTITUTION' })} currentUserId={ME} actions={actions()} engine={engine()} />);
         expect(screen.getByTestId('picture-open')).toHaveTextContent('फोटो लावा');
         open();
@@ -249,14 +249,14 @@ describe('choosing a photo', () => {
 });
 
 describe('removing', () => {
-    it('"फोटो काढा" on his photo removes HIS photo (DELETE person), on the schedule\'s picture removes that one', async () => {
+    it('"फोटो काढून टाका" on his photo removes HIS photo (DELETE person), on the schedule\'s picture removes that one', async () => {
         const a = actions();
         const changed = vi.fn();
         render(<SchedulePictureChooser template={own({ pictureKind: 'PERSON' })} currentUserId={ME} actions={a} engine={engine()} onChanged={changed} />);
         open();
         fireEvent.click(screen.getByTestId('picture-remove-PERSON'));
         await waitFor(() => expect(a.removePerson).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(status()).toHaveTextContent('फोटो काढला'));
+        await waitFor(() => expect(status()).toHaveTextContent('फोटो काढून टाकला'));
         expect(changed).toHaveBeenCalledTimes(1);
         cleanup();
 
@@ -293,8 +293,8 @@ describe('the words', () => {
         expect(Object.keys(PICTURE_WORDS.mr.problem).sort()).toEqual(Object.keys(PICTURE_WORDS.en.problem).sort());
     });
 
-    it('Marathi mode says Marathi only; REMOVE is "फोटो काढा"', () => {
-        expect(PICTURE_WORDS.mr.remove).toBe('फोटो काढा');
+    it('Marathi mode says Marathi only; REMOVE is "फोटो काढून टाका"', () => {
+        expect(PICTURE_WORDS.mr.remove).toBe('फोटो काढून टाका');
         const devanagari = /[ऀ-ॿ]/;
         for (const s of allWords('mr')) expect(devanagari.test(s), s).toBe(true);
     });

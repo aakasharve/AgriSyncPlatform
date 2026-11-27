@@ -532,6 +532,8 @@ public static class DependencyInjection
 
         // spec: plr-d10 lane SCH-ID-S (founder D-146) - the picture of who made a schedule (a person's, a schedule's, an institution's).
         services.AddScoped<IPictureStore, PictureStore>();
+        // spec: plr-d10 pilot lane IDENT (S3) - the Active seats of a person's farms, so the picture rule can say whose face he may see.
+        services.AddScoped<IFarmMateSeatReader, FarmMateSeatReader>();
 
         // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - the reasons kept on records of work ("का केलं"); append-only.
         services.AddScoped<ILogPracticeReasonStore, LogPracticeReasonStore>();

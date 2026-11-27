@@ -107,6 +107,23 @@ internal sealed class PictureRepo : FakeShramSafalRepository, IShramSafalReposit
     }
 }
 
+/// <summary>
+/// spec: plr-d10 pilot lane IDENT (S3) - the farm-mate seats the picture rule reads: every Active seat <see cref="PictureRepo"/> was given on the
+/// farms asked about (the real reader reads them under each farm's tenant scope).
+/// </summary>
+internal sealed class PictureRepoMates(PictureRepo repo) : IFarmMateSeatReader
+{
+    public Task<IReadOnlyList<FarmMateSeat>> GetActiveSeatsAsync(IReadOnlyCollection<FarmMateFarm> farms, Guid readerUserId, CancellationToken ct = default)
+    {
+        var asked = farms.Select(f => f.FarmId).ToHashSet();
+        IReadOnlyList<FarmMateSeat> seats = repo.Access
+            .Where(a => asked.Contains(a.Key.Farm) && a.Value.Status == MembershipStatus.Active)
+            .Select(a => new FarmMateSeat(a.Key.Farm, a.Key.User, a.Value.Role))
+            .ToList();
+        return Task.FromResult(seats);
+    }
+}
+
 internal class MemoryPictureStore : IPictureStore
 {
     public List<Picture> Rows { get; } = [];

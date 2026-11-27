@@ -92,6 +92,7 @@ public static class SyncEndpoints
             string? scheduleFormat,
             string? farmSetup,
             string? seenBy,
+            string? people,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
             PullSyncChangesHandler handler,
@@ -138,13 +139,16 @@ public static class SyncEndpoints
             // parameter (no new header, so CORS is untouched), read leniently like `farms`: an unreadable value says nothing and never refuses the pull.
             // spec: plr-d10 repair D-9 - `farmSetup=1`: the phone asks for the farm's setup (water sources, motors, power times, machines, plot water).
             // A QUERY parameter for the same reason (CORS untouched) and read as leniently; a phone that does not ask is never sent the key.
+            // spec: plr-d10 pilot lane IDENT (S3) - `people=1`: the phone asks for each people row's names in both scripts and the face it may see.
+            // The same lenient reader; a phone that does not ask gets its people rows exactly as before.
             var result = await handler.HandleAsync(
                 new PullSyncChangesQuery(
                     cursor, actorUserId, heldFarmIds, PullSyncChangesQuery.ParseScheduleFormat(scheduleFormat),
                     PullSyncChangesQuery.ParseScheduleFormat(farmSetup),
                     // pilot lane PERM - `seenBy=1`: the phone asks for each farm's name-free "who sees this". A QUERY parameter (CORS untouched), read as
                     // leniently; a phone that does not ask is never sent the key.
-                    PullSyncChangesQuery.ParseScheduleFormat(seenBy)),
+                    PullSyncChangesQuery.ParseScheduleFormat(seenBy),
+                    PullSyncChangesQuery.ParseScheduleFormat(people)),
                 ct);
             if (!result.IsSuccess)
             {

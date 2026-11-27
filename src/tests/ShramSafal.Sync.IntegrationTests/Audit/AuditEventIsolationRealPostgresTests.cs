@@ -1487,6 +1487,15 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // work_kinds_changed_at_utc) to ssf.farm_memberships and nothing else. It never touches ssf.audit_events, its policies or its grants. Down() refuses while any seat is limited (none is in this
         // proof) and otherwise drops exactly those. Safe mid-proof.
         "20261127031000_AddMemberWorkKinds",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S2) - Up() and Down() read in full: a User-context migration (public schema; it shares the
+        // scratch database's history table, so it is only LISTED here: the ShramSafal migrator never reverts or re-applies it). Up() creates public.lgd_districts, lgd_talukas,
+        // lgd_villages and lgd_list_versions (the government village list, loaded from the embedded file; RLS enabled with a read-all policy; SELECT granted to the app role and
+        // every write revoked). It never touches ssf.audit_events, its policies or its grants. Down() drops exactly those four tables. Safe mid-proof.
+        "20261127040000_AddLgdPlaceList",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane IDENT, S1) - Up() and Down() read in full: a User-context migration (public schema; only LISTED here,
+        // the ShramSafal migrator never reverts or re-applies it). Up() creates public.user_identity_profiles (a person's own identity card; its checks; SELECT, INSERT,
+        // UPDATE for the app role). It never touches ssf.audit_events, its policies or its grants. Down() refuses while any card exists and otherwise drops the table.
+        "20261127041000_AddPersonIdentityProfile",
     ];
 
     /// <summary>

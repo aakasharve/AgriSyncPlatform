@@ -49,10 +49,10 @@ describe('FarmInviteQrSheet farm code', () => {
         render(<FarmInviteQrSheet isOpen onClose={() => {}} farmId="f1" farmName="पवार शेती" />);
 
         // the sheet has loaded the invite (the QR is drawn) …
-        await waitFor(() => expect(screen.getByAltText(/QR code to join/)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('invite-qr-image')).toBeInTheDocument());
         // … and there is nothing to type
         expect(screen.queryByTestId('invite-farm-code-card')).toBeNull();
         expect(screen.queryByTestId('invite-type-code-line')).toBeNull();
-        expect(screen.queryByLabelText('Copy farm code')).toBeNull();
+        expect(screen.queryByLabelText('कोड कॉपी करा')).toBeNull();
     });
 });

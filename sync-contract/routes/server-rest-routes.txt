@@ -112,6 +112,7 @@ GET /shramsafal/workers/{userId:guid}/profile
 GET /shramsafal/workers/{userId:guid}/reputation
 GET /sync/pull
 GET /user/auth/me/context
+GET /user/auth/me/identity
 GET /user/health
 GET /version
 GET /version/app
@@ -250,3 +251,4 @@ PUT /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
 PUT /shramsafal/pictures/institution/{rootId:guid}
 PUT /shramsafal/pictures/person
 PUT /shramsafal/pictures/schedule/{rootId:guid}
+PUT /user/auth/me/identity

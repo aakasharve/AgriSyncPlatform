@@ -1,0 +1,1976 @@
+{
+ "version": "lgd-mh-2026-11-26",
+ "source": "LGD mirror 2026-11-26 (villages + pincode_villages parquet)",
+ "provenance": "Secondary source; not independently verified",
+ "districtNamesMr": "Maharashtra_geographic_master_PARTIAL.xlsx, sheet District master (mahavillages.mahabhumi.gov.in); not checked by a Marathi reader",
+ "talukaNamesMr": "not loaded: founder question 8 is open; left out, never invented",
+ "districts": [
+  {
+   "code": 466,
+   "en": "Ahilyanagar",
+   "mr": "अहिल्यानगर"
+  },
+  {
+   "code": 467,
+   "en": "Akola",
+   "mr": "अकोला"
+  },
+  {
+   "code": 468,
+   "en": "Amravati",
+   "mr": "अमरावती"
+  },
+  {
+   "code": 469,
+   "en": "Chhatrapati Sambhajinagar",
+   "mr": "छत्रपती संभाजीनगर"
+  },
+  {
+   "code": 470,
+   "en": "Beed",
+   "mr": "बीड"
+  },
+  {
+   "code": 471,
+   "en": "Bhandara",
+   "mr": "भंडारा"
+  },
+  {
+   "code": 472,
+   "en": "Buldhana",
+   "mr": "बुलढाणा"
+  },
+  {
+   "code": 473,
+   "en": "Chandrapur",
+   "mr": "चंद्रपूर"
+  },
+  {
+   "code": 474,
+   "en": "Dhule",
+   "mr": "धुळे"
+  },
+  {
+   "code": 475,
+   "en": "Gadchiroli",
+   "mr": "गडचिरोली"
+  },
+  {
+   "code": 476,
+   "en": "Gondia",
+   "mr": "गोंदीया"
+  },
+  {
+   "code": 477,
+   "en": "Hingoli",
+   "mr": "हिंगोली"
+  },
+  {
+   "code": 478,
+   "en": "Jalgaon",
+   "mr": "जळगाव"
+  },
+  {
+   "code": 479,
+   "en": "Jalna",
+   "mr": "जालना"
+  },
+  {
+   "code": 480,
+   "en": "Kolhapur",
+   "mr": "कोल्हापूर"
+  },
+  {
+   "code": 481,
+   "en": "Latur",
+   "mr": "लातूर"
+  },
+  {
+   "code": 483,
+   "en": "Mumbai Suburban",
+   "mr": "मुंबई उपनगर"
+  },
+  {
+   "code": 484,
+   "en": "Nagpur",
+   "mr": "नागपूर"
+  },
+  {
+   "code": 485,
+   "en": "Nanded",
+   "mr": "नांदेड"
+  },
+  {
+   "code": 486,
+   "en": "Nandurbar",
+   "mr": "नंदूरबार"
+  },
+  {
+   "code": 487,
+   "en": "Nashik",
+   "mr": "नाशिक"
+  },
+  {
+   "code": 488,
+   "en": "Dharashiv",
+   "mr": "धाराशिव"
+  },
+  {
+   "code": 489,
+   "en": "Parbhani",
+   "mr": "परभणी"
+  },
+  {
+   "code": 490,
+   "en": "Pune",
+   "mr": "पुणे"
+  },
+  {
+   "code": 491,
+   "en": "Raigad",
+   "mr": "रायगड"
+  },
+  {
+   "code": 492,
+   "en": "Ratnagiri",
+   "mr": "रत्नागिरी"
+  },
+  {
+   "code": 493,
+   "en": "Sangli",
+   "mr": "सांगली"
+  },
+  {
+   "code": 494,
+   "en": "Satara",
+   "mr": "सातारा"
+  },
+  {
+   "code": 495,
+   "en": "Sindhudurg",
+   "mr": "सिंधुदुर्ग"
+  },
+  {
+   "code": 496,
+   "en": "Solapur",
+   "mr": "सोलापूर"
+  },
+  {
+   "code": 497,
+   "en": "Thane",
+   "mr": "ठाणे"
+  },
+  {
+   "code": 498,
+   "en": "Wardha",
+   "mr": "वर्धा"
+  },
+  {
+   "code": 499,
+   "en": "Washim",
+   "mr": "वाशिम"
+  },
+  {
+   "code": 500,
+   "en": "Yavatmal",
+   "mr": "यवतमाळ"
+  },
+  {
+   "code": 665,
+   "en": "Palghar",
+   "mr": "पालघर"
+  }
+ ],
+ "talukas": [
+  {
+   "code": 3950,
+   "district": 486,
+   "en": "Akkalkuwa"
+  },
+  {
+   "code": 3951,
+   "district": 486,
+   "en": "Akrani"
+  },
+  {
+   "code": 3952,
+   "district": 486,
+   "en": "Talode"
+  },
+  {
+   "code": 3953,
+   "district": 486,
+   "en": "Shahade"
+  },
+  {
+   "code": 3954,
+   "district": 486,
+   "en": "Nandurbar"
+  },
+  {
+   "code": 3955,
+   "district": 486,
+   "en": "Nawapur"
+  },
+  {
+   "code": 3956,
+   "district": 474,
+   "en": "Shirpur"
+  },
+  {
+   "code": 3957,
+   "district": 474,
+   "en": "Sindkhede"
+  },
+  {
+   "code": 3958,
+   "district": 474,
+   "en": "Sakri"
+  },
+  {
+   "code": 3959,
+   "district": 474,
+   "en": "Dhule"
+  },
+  {
+   "code": 3960,
+   "district": 478,
+   "en": "Chopda"
+  },
+  {
+   "code": 3961,
+   "district": 478,
+   "en": "Yawal"
+  },
+  {
+   "code": 3962,
+   "district": 478,
+   "en": "Raver"
+  },
+  {
+   "code": 3963,
+   "district": 478,
+   "en": "Muktainagar (Edlabad)"
+  },
+  {
+   "code": 3964,
+   "district": 478,
+   "en": "Bodvad"
+  },
+  {
+   "code": 3965,
+   "district": 478,
+   "en": "Bhusawal"
+  },
+  {
+   "code": 3966,
+   "district": 478,
+   "en": "Jalgaon"
+  },
+  {
+   "code": 3967,
+   "district": 478,
+   "en": "Erandol"
+  },
+  {
+   "code": 3968,
+   "district": 478,
+   "en": "Dharangaon"
+  },
+  {
+   "code": 3969,
+   "district": 478,
+   "en": "Amalner"
+  },
+  {
+   "code": 3970,
+   "district": 478,
+   "en": "Parola"
+  },
+  {
+   "code": 3971,
+   "district": 478,
+   "en": "Bhadgaon"
+  },
+  {
+   "code": 3972,
+   "district": 478,
+   "en": "Chalisgaon"
+  },
+  {
+   "code": 3973,
+   "district": 478,
+   "en": "Pachora"
+  },
+  {
+   "code": 3974,
+   "district": 478,
+   "en": "Jamner"
+  },
+  {
+   "code": 3975,
+   "district": 472,
+   "en": "Jalgaon (Jamod)"
+  },
+  {
+   "code": 3976,
+   "district": 472,
+   "en": "Sangrampur"
+  },
+  {
+   "code": 3977,
+   "district": 472,
+   "en": "Shegaon"
+  },
+  {
+   "code": 3978,
+   "district": 472,
+   "en": "Nandura"
+  },
+  {
+   "code": 3979,
+   "district": 472,
+   "en": "Malkapur"
+  },
+  {
+   "code": 3980,
+   "district": 472,
+   "en": "Motala"
+  },
+  {
+   "code": 3981,
+   "district": 472,
+   "en": "Khamgaon"
+  },
+  {
+   "code": 3982,
+   "district": 472,
+   "en": "Mehkar"
+  },
+  {
+   "code": 3983,
+   "district": 472,
+   "en": "Chikhli"
+  },
+  {
+   "code": 3984,
+   "district": 472,
+   "en": "Buldana"
+  },
+  {
+   "code": 3985,
+   "district": 472,
+   "en": "Deolgaon Raja"
+  },
+  {
+   "code": 3986,
+   "district": 472,
+   "en": "Sindkhed Raja"
+  },
+  {
+   "code": 3987,
+   "district": 472,
+   "en": "Lonar"
+  },
+  {
+   "code": 3988,
+   "district": 467,
+   "en": "Telhara"
+  },
+  {
+   "code": 3989,
+   "district": 467,
+   "en": "Akot"
+  },
+  {
+   "code": 3990,
+   "district": 467,
+   "en": "Balapur"
+  },
+  {
+   "code": 3991,
+   "district": 467,
+   "en": "Akola"
+  },
+  {
+   "code": 3992,
+   "district": 467,
+   "en": "Murtijapur"
+  },
+  {
+   "code": 3993,
+   "district": 467,
+   "en": "Patur"
+  },
+  {
+   "code": 3994,
+   "district": 467,
+   "en": "Barshitakli"
+  },
+  {
+   "code": 3995,
+   "district": 499,
+   "en": "Malegaon"
+  },
+  {
+   "code": 3996,
+   "district": 499,
+   "en": "Mangrulpir"
+  },
+  {
+   "code": 3997,
+   "district": 499,
+   "en": "Karanja"
+  },
+  {
+   "code": 3998,
+   "district": 499,
+   "en": "Manora"
+  },
+  {
+   "code": 3999,
+   "district": 499,
+   "en": "Washim"
+  },
+  {
+   "code": 4000,
+   "district": 499,
+   "en": "Risod"
+  },
+  {
+   "code": 4001,
+   "district": 468,
+   "en": "Dharni"
+  },
+  {
+   "code": 4002,
+   "district": 468,
+   "en": "Chikhaldara"
+  },
+  {
+   "code": 4003,
+   "district": 468,
+   "en": "Anjangaon Surji"
+  },
+  {
+   "code": 4004,
+   "district": 468,
+   "en": "Achalpur"
+  },
+  {
+   "code": 4005,
+   "district": 468,
+   "en": "Chandurbazar"
+  },
+  {
+   "code": 4006,
+   "district": 468,
+   "en": "Morshi"
+  },
+  {
+   "code": 4007,
+   "district": 468,
+   "en": "Warud"
+  },
+  {
+   "code": 4008,
+   "district": 468,
+   "en": "Tiosa"
+  },
+  {
+   "code": 4009,
+   "district": 468,
+   "en": "Amravati"
+  },
+  {
+   "code": 4010,
+   "district": 468,
+   "en": "Bhatkuli"
+  },
+  {
+   "code": 4011,
+   "district": 468,
+   "en": "Daryapur"
+  },
+  {
+   "code": 4012,
+   "district": 468,
+   "en": "Nandgaon-Khandeshwar"
+  },
+  {
+   "code": 4013,
+   "district": 468,
+   "en": "Chandur Railway"
+  },
+  {
+   "code": 4014,
+   "district": 468,
+   "en": "Dhamangaon Railway"
+  },
+  {
+   "code": 4015,
+   "district": 498,
+   "en": "Ashti"
+  },
+  {
+   "code": 4016,
+   "district": 498,
+   "en": "Karanja"
+  },
+  {
+   "code": 4017,
+   "district": 498,
+   "en": "Arvi"
+  },
+  {
+   "code": 4018,
+   "district": 498,
+   "en": "Seloo"
+  },
+  {
+   "code": 4019,
+   "district": 498,
+   "en": "Wardha"
+  },
+  {
+   "code": 4020,
+   "district": 498,
+   "en": "Deoli"
+  },
+  {
+   "code": 4021,
+   "district": 498,
+   "en": "Hinganghat"
+  },
+  {
+   "code": 4022,
+   "district": 498,
+   "en": "Samudrapur"
+  },
+  {
+   "code": 4023,
+   "district": 484,
+   "en": "Narkhed"
+  },
+  {
+   "code": 4024,
+   "district": 484,
+   "en": "Katol"
+  },
+  {
+   "code": 4025,
+   "district": 484,
+   "en": "Kalameshwar"
+  },
+  {
+   "code": 4026,
+   "district": 484,
+   "en": "Savner"
+  },
+  {
+   "code": 4027,
+   "district": 484,
+   "en": "Parseoni"
+  },
+  {
+   "code": 4028,
+   "district": 484,
+   "en": "Ramtek"
+  },
+  {
+   "code": 4029,
+   "district": 484,
+   "en": "Mauda"
+  },
+  {
+   "code": 4030,
+   "district": 484,
+   "en": "Kamptee"
+  },
+  {
+   "code": 4031,
+   "district": 484,
+   "en": "Nagpur (Rural)"
+  },
+  {
+   "code": 4032,
+   "district": 484,
+   "en": "Nagpur (Urban)"
+  },
+  {
+   "code": 4033,
+   "district": 484,
+   "en": "Hingna"
+  },
+  {
+   "code": 4034,
+   "district": 484,
+   "en": "Umred"
+  },
+  {
+   "code": 4035,
+   "district": 484,
+   "en": "Kuhi"
+  },
+  {
+   "code": 4036,
+   "district": 484,
+   "en": "Bhiwapur"
+  },
+  {
+   "code": 4037,
+   "district": 471,
+   "en": "Tumsar"
+  },
+  {
+   "code": 4038,
+   "district": 471,
+   "en": "Mohadi"
+  },
+  {
+   "code": 4039,
+   "district": 471,
+   "en": "Bhandara"
+  },
+  {
+   "code": 4040,
+   "district": 471,
+   "en": "Sakoli"
+  },
+  {
+   "code": 4041,
+   "district": 471,
+   "en": "Lakhani"
+  },
+  {
+   "code": 4042,
+   "district": 471,
+   "en": "Pauni"
+  },
+  {
+   "code": 4043,
+   "district": 471,
+   "en": "Lakhandur"
+  },
+  {
+   "code": 4044,
+   "district": 476,
+   "en": "Tirora"
+  },
+  {
+   "code": 4045,
+   "district": 476,
+   "en": "Goregaon"
+  },
+  {
+   "code": 4046,
+   "district": 476,
+   "en": "Gondiya"
+  },
+  {
+   "code": 4047,
+   "district": 476,
+   "en": "Amgaon"
+  },
+  {
+   "code": 4048,
+   "district": 476,
+   "en": "Salekasa"
+  },
+  {
+   "code": 4049,
+   "district": 476,
+   "en": "Sadak-Arjuni"
+  },
+  {
+   "code": 4050,
+   "district": 476,
+   "en": "Arjuni Morgaon"
+  },
+  {
+   "code": 4051,
+   "district": 476,
+   "en": "Deori"
+  },
+  {
+   "code": 4052,
+   "district": 475,
+   "en": "Desaiganj (Vadasa)"
+  },
+  {
+   "code": 4053,
+   "district": 475,
+   "en": "Armori"
+  },
+  {
+   "code": 4054,
+   "district": 475,
+   "en": "Kurkheda"
+  },
+  {
+   "code": 4055,
+   "district": 475,
+   "en": "Korchi"
+  },
+  {
+   "code": 4056,
+   "district": 475,
+   "en": "Dhanora"
+  },
+  {
+   "code": 4057,
+   "district": 475,
+   "en": "Gadchiroli"
+  },
+  {
+   "code": 4058,
+   "district": 475,
+   "en": "Chamorshi"
+  },
+  {
+   "code": 4059,
+   "district": 475,
+   "en": "Mulchera"
+  },
+  {
+   "code": 4060,
+   "district": 475,
+   "en": "Etapalli"
+  },
+  {
+   "code": 4061,
+   "district": 475,
+   "en": "Bhamragad"
+  },
+  {
+   "code": 4062,
+   "district": 475,
+   "en": "Aheri"
+  },
+  {
+   "code": 4063,
+   "district": 475,
+   "en": "Sironcha"
+  },
+  {
+   "code": 4064,
+   "district": 473,
+   "en": "Warora"
+  },
+  {
+   "code": 4065,
+   "district": 473,
+   "en": "Chimur"
+  },
+  {
+   "code": 4066,
+   "district": 473,
+   "en": "Nagbhid"
+  },
+  {
+   "code": 4067,
+   "district": 473,
+   "en": "Brahmapuri"
+  },
+  {
+   "code": 4068,
+   "district": 473,
+   "en": "Sawali"
+  },
+  {
+   "code": 4069,
+   "district": 473,
+   "en": "Sindewahi"
+  },
+  {
+   "code": 4070,
+   "district": 473,
+   "en": "Bhadravati"
+  },
+  {
+   "code": 4071,
+   "district": 473,
+   "en": "Chandrapur"
+  },
+  {
+   "code": 4072,
+   "district": 473,
+   "en": "Mul"
+  },
+  {
+   "code": 4073,
+   "district": 473,
+   "en": "Pombhurna"
+  },
+  {
+   "code": 4074,
+   "district": 473,
+   "en": "Ballarpur"
+  },
+  {
+   "code": 4075,
+   "district": 473,
+   "en": "Korpana"
+  },
+  {
+   "code": 4076,
+   "district": 473,
+   "en": "Jiwati"
+  },
+  {
+   "code": 4077,
+   "district": 473,
+   "en": "Rajura"
+  },
+  {
+   "code": 4078,
+   "district": 473,
+   "en": "Gondpipri"
+  },
+  {
+   "code": 4079,
+   "district": 500,
+   "en": "Ner"
+  },
+  {
+   "code": 4080,
+   "district": 500,
+   "en": "Babulgaon"
+  },
+  {
+   "code": 4081,
+   "district": 500,
+   "en": "Kalamb"
+  },
+  {
+   "code": 4082,
+   "district": 500,
+   "en": "Yavatmal"
+  },
+  {
+   "code": 4083,
+   "district": 500,
+   "en": "Darwha"
+  },
+  {
+   "code": 4084,
+   "district": 500,
+   "en": "Digras"
+  },
+  {
+   "code": 4085,
+   "district": 500,
+   "en": "Pusad"
+  },
+  {
+   "code": 4086,
+   "district": 500,
+   "en": "Umarkhed"
+  },
+  {
+   "code": 4087,
+   "district": 500,
+   "en": "Mahagaon"
+  },
+  {
+   "code": 4088,
+   "district": 500,
+   "en": "Arni"
+  },
+  {
+   "code": 4089,
+   "district": 500,
+   "en": "Ghatanji"
+  },
+  {
+   "code": 4090,
+   "district": 500,
+   "en": "Kelapur"
+  },
+  {
+   "code": 4091,
+   "district": 500,
+   "en": "Ralegaon"
+  },
+  {
+   "code": 4092,
+   "district": 500,
+   "en": "Maregaon"
+  },
+  {
+   "code": 4093,
+   "district": 500,
+   "en": "Zari-Jamani"
+  },
+  {
+   "code": 4094,
+   "district": 500,
+   "en": "Wani"
+  },
+  {
+   "code": 4095,
+   "district": 485,
+   "en": "Mahur"
+  },
+  {
+   "code": 4096,
+   "district": 485,
+   "en": "Kinwat"
+  },
+  {
+   "code": 4097,
+   "district": 485,
+   "en": "Himayatnagar"
+  },
+  {
+   "code": 4098,
+   "district": 485,
+   "en": "Hadgaon"
+  },
+  {
+   "code": 4099,
+   "district": 485,
+   "en": "Ardhapur"
+  },
+  {
+   "code": 4100,
+   "district": 485,
+   "en": "Nanded"
+  },
+  {
+   "code": 4101,
+   "district": 485,
+   "en": "Mudkhed"
+  },
+  {
+   "code": 4102,
+   "district": 485,
+   "en": "Bhokar"
+  },
+  {
+   "code": 4103,
+   "district": 485,
+   "en": "Umri"
+  },
+  {
+   "code": 4104,
+   "district": 485,
+   "en": "Dharmabad"
+  },
+  {
+   "code": 4105,
+   "district": 485,
+   "en": "Biloli"
+  },
+  {
+   "code": 4106,
+   "district": 485,
+   "en": "Naigaon (Khairgaon)"
+  },
+  {
+   "code": 4107,
+   "district": 485,
+   "en": "Loha"
+  },
+  {
+   "code": 4108,
+   "district": 485,
+   "en": "Kandhar"
+  },
+  {
+   "code": 4109,
+   "district": 485,
+   "en": "Mukhed"
+  },
+  {
+   "code": 4110,
+   "district": 485,
+   "en": "Deglur"
+  },
+  {
+   "code": 4111,
+   "district": 477,
+   "en": "Sengaon"
+  },
+  {
+   "code": 4112,
+   "district": 477,
+   "en": "Hingoli"
+  },
+  {
+   "code": 4113,
+   "district": 477,
+   "en": "Aundha (Nagnath)"
+  },
+  {
+   "code": 4114,
+   "district": 477,
+   "en": "Kalamnuri"
+  },
+  {
+   "code": 4115,
+   "district": 477,
+   "en": "Vasmath"
+  },
+  {
+   "code": 4116,
+   "district": 489,
+   "en": "Selu"
+  },
+  {
+   "code": 4117,
+   "district": 489,
+   "en": "Jintur"
+  },
+  {
+   "code": 4118,
+   "district": 489,
+   "en": "Parbhani"
+  },
+  {
+   "code": 4119,
+   "district": 489,
+   "en": "Manwath"
+  },
+  {
+   "code": 4120,
+   "district": 489,
+   "en": "Pathri"
+  },
+  {
+   "code": 4121,
+   "district": 489,
+   "en": "Sonpeth"
+  },
+  {
+   "code": 4122,
+   "district": 489,
+   "en": "Gangakhed"
+  },
+  {
+   "code": 4123,
+   "district": 489,
+   "en": "Palam"
+  },
+  {
+   "code": 4124,
+   "district": 489,
+   "en": "Purna"
+  },
+  {
+   "code": 4125,
+   "district": 479,
+   "en": "Bhokardan"
+  },
+  {
+   "code": 4126,
+   "district": 479,
+   "en": "Jafrabad"
+  },
+  {
+   "code": 4127,
+   "district": 479,
+   "en": "Jalna"
+  },
+  {
+   "code": 4128,
+   "district": 479,
+   "en": "Badnapur"
+  },
+  {
+   "code": 4129,
+   "district": 479,
+   "en": "Ambad"
+  },
+  {
+   "code": 4130,
+   "district": 479,
+   "en": "Ghansawangi"
+  },
+  {
+   "code": 4131,
+   "district": 479,
+   "en": "Partur"
+  },
+  {
+   "code": 4132,
+   "district": 479,
+   "en": "Mantha"
+  },
+  {
+   "code": 4133,
+   "district": 469,
+   "en": "Kannad"
+  },
+  {
+   "code": 4134,
+   "district": 469,
+   "en": "Soegaon"
+  },
+  {
+   "code": 4135,
+   "district": 469,
+   "en": "Sillod"
+  },
+  {
+   "code": 4136,
+   "district": 469,
+   "en": "Phulambri"
+  },
+  {
+   "code": 4137,
+   "district": 469,
+   "en": "Chhatrapati Sambhajinagar"
+  },
+  {
+   "code": 4138,
+   "district": 469,
+   "en": "Khuldabad"
+  },
+  {
+   "code": 4139,
+   "district": 469,
+   "en": "Vaijapur"
+  },
+  {
+   "code": 4140,
+   "district": 469,
+   "en": "Gangapur"
+  },
+  {
+   "code": 4141,
+   "district": 469,
+   "en": "Paithan"
+  },
+  {
+   "code": 4142,
+   "district": 487,
+   "en": "Surgana"
+  },
+  {
+   "code": 4143,
+   "district": 487,
+   "en": "Kalwan"
+  },
+  {
+   "code": 4144,
+   "district": 487,
+   "en": "Deola"
+  },
+  {
+   "code": 4145,
+   "district": 487,
+   "en": "Baglan"
+  },
+  {
+   "code": 4146,
+   "district": 487,
+   "en": "Malegaon"
+  },
+  {
+   "code": 4147,
+   "district": 487,
+   "en": "Nandgaon"
+  },
+  {
+   "code": 4148,
+   "district": 487,
+   "en": "Chandvad"
+  },
+  {
+   "code": 4149,
+   "district": 487,
+   "en": "Dindori"
+  },
+  {
+   "code": 4150,
+   "district": 487,
+   "en": "Peth"
+  },
+  {
+   "code": 4151,
+   "district": 487,
+   "en": "Trimbakeshwar"
+  },
+  {
+   "code": 4152,
+   "district": 487,
+   "en": "Nashik"
+  },
+  {
+   "code": 4153,
+   "district": 487,
+   "en": "Igatpuri"
+  },
+  {
+   "code": 4154,
+   "district": 487,
+   "en": "Sinnar"
+  },
+  {
+   "code": 4155,
+   "district": 487,
+   "en": "Niphad"
+  },
+  {
+   "code": 4156,
+   "district": 487,
+   "en": "Yevla"
+  },
+  {
+   "code": 4157,
+   "district": 665,
+   "en": "Talasari"
+  },
+  {
+   "code": 4158,
+   "district": 665,
+   "en": "Dahanu"
+  },
+  {
+   "code": 4159,
+   "district": 665,
+   "en": "Vikramgad"
+  },
+  {
+   "code": 4160,
+   "district": 665,
+   "en": "Jawhar"
+  },
+  {
+   "code": 4161,
+   "district": 665,
+   "en": "Mokhada"
+  },
+  {
+   "code": 4162,
+   "district": 665,
+   "en": "Wada"
+  },
+  {
+   "code": 4163,
+   "district": 665,
+   "en": "Palghar"
+  },
+  {
+   "code": 4164,
+   "district": 665,
+   "en": "Vasai"
+  },
+  {
+   "code": 4165,
+   "district": 497,
+   "en": "Thane"
+  },
+  {
+   "code": 4166,
+   "district": 497,
+   "en": "Bhiwandi"
+  },
+  {
+   "code": 4167,
+   "district": 497,
+   "en": "Shahapur"
+  },
+  {
+   "code": 4168,
+   "district": 497,
+   "en": "Kalyan"
+  },
+  {
+   "code": 4169,
+   "district": 497,
+   "en": "Ulhasnagar"
+  },
+  {
+   "code": 4170,
+   "district": 497,
+   "en": "Ambarnath"
+  },
+  {
+   "code": 4171,
+   "district": 497,
+   "en": "Murbad"
+  },
+  {
+   "code": 4172,
+   "district": 491,
+   "en": "Uran"
+  },
+  {
+   "code": 4173,
+   "district": 491,
+   "en": "Panvel"
+  },
+  {
+   "code": 4174,
+   "district": 491,
+   "en": "Karjat"
+  },
+  {
+   "code": 4175,
+   "district": 491,
+   "en": "Khalapur"
+  },
+  {
+   "code": 4176,
+   "district": 491,
+   "en": "Pen"
+  },
+  {
+   "code": 4177,
+   "district": 491,
+   "en": "Alibag"
+  },
+  {
+   "code": 4178,
+   "district": 491,
+   "en": "Murud"
+  },
+  {
+   "code": 4179,
+   "district": 491,
+   "en": "Roha"
+  },
+  {
+   "code": 4180,
+   "district": 491,
+   "en": "Sudhagad"
+  },
+  {
+   "code": 4181,
+   "district": 491,
+   "en": "Mangaon"
+  },
+  {
+   "code": 4182,
+   "district": 491,
+   "en": "Tala"
+  },
+  {
+   "code": 4183,
+   "district": 491,
+   "en": "Shrivardhan"
+  },
+  {
+   "code": 4184,
+   "district": 491,
+   "en": "Mhasla"
+  },
+  {
+   "code": 4185,
+   "district": 491,
+   "en": "Mahad"
+  },
+  {
+   "code": 4186,
+   "district": 491,
+   "en": "Poladpur"
+  },
+  {
+   "code": 4187,
+   "district": 490,
+   "en": "Junnar"
+  },
+  {
+   "code": 4188,
+   "district": 490,
+   "en": "Ambegaon"
+  },
+  {
+   "code": 4189,
+   "district": 490,
+   "en": "Shirur"
+  },
+  {
+   "code": 4190,
+   "district": 490,
+   "en": "Khed"
+  },
+  {
+   "code": 4191,
+   "district": 490,
+   "en": "Mawal"
+  },
+  {
+   "code": 4192,
+   "district": 490,
+   "en": "Mulshi"
+  },
+  {
+   "code": 4193,
+   "district": 490,
+   "en": "Haveli"
+  },
+  {
+   "code": 4194,
+   "district": 490,
+   "en": "Pune City"
+  },
+  {
+   "code": 4195,
+   "district": 490,
+   "en": "Daund"
+  },
+  {
+   "code": 4196,
+   "district": 490,
+   "en": "Purandhar"
+  },
+  {
+   "code": 4197,
+   "district": 490,
+   "en": "Rajgad"
+  },
+  {
+   "code": 4198,
+   "district": 490,
+   "en": "Bhor"
+  },
+  {
+   "code": 4199,
+   "district": 490,
+   "en": "Baramati"
+  },
+  {
+   "code": 4200,
+   "district": 490,
+   "en": "Indapur"
+  },
+  {
+   "code": 4201,
+   "district": 466,
+   "en": "Akole"
+  },
+  {
+   "code": 4202,
+   "district": 466,
+   "en": "Sangamner"
+  },
+  {
+   "code": 4203,
+   "district": 466,
+   "en": "Kopargaon"
+  },
+  {
+   "code": 4204,
+   "district": 466,
+   "en": "Rahta"
+  },
+  {
+   "code": 4205,
+   "district": 466,
+   "en": "Shrirampur"
+  },
+  {
+   "code": 4206,
+   "district": 466,
+   "en": "Nevasa"
+  },
+  {
+   "code": 4207,
+   "district": 466,
+   "en": "Shevgaon"
+  },
+  {
+   "code": 4208,
+   "district": 466,
+   "en": "Pathardi"
+  },
+  {
+   "code": 4209,
+   "district": 466,
+   "en": "Nagar"
+  },
+  {
+   "code": 4210,
+   "district": 466,
+   "en": "Rahuri"
+  },
+  {
+   "code": 4211,
+   "district": 466,
+   "en": "Parner"
+  },
+  {
+   "code": 4212,
+   "district": 466,
+   "en": "Shrigonda"
+  },
+  {
+   "code": 4213,
+   "district": 466,
+   "en": "Karjat"
+  },
+  {
+   "code": 4214,
+   "district": 466,
+   "en": "Jamkhed"
+  },
+  {
+   "code": 4215,
+   "district": 470,
+   "en": "Ashti"
+  },
+  {
+   "code": 4216,
+   "district": 470,
+   "en": "Patoda"
+  },
+  {
+   "code": 4217,
+   "district": 470,
+   "en": "Shirur (Kasar)"
+  },
+  {
+   "code": 4218,
+   "district": 470,
+   "en": "Georai"
+  },
+  {
+   "code": 4219,
+   "district": 470,
+   "en": "Majalgaon"
+  },
+  {
+   "code": 4220,
+   "district": 470,
+   "en": "Wadwani"
+  },
+  {
+   "code": 4221,
+   "district": 470,
+   "en": "Beed"
+  },
+  {
+   "code": 4222,
+   "district": 470,
+   "en": "Kaij"
+  },
+  {
+   "code": 4223,
+   "district": 470,
+   "en": "Dharur"
+  },
+  {
+   "code": 4224,
+   "district": 470,
+   "en": "Parli"
+  },
+  {
+   "code": 4225,
+   "district": 470,
+   "en": "Ambejogai"
+  },
+  {
+   "code": 4226,
+   "district": 481,
+   "en": "Latur"
+  },
+  {
+   "code": 4227,
+   "district": 481,
+   "en": "Renapur"
+  },
+  {
+   "code": 4228,
+   "district": 481,
+   "en": "Ahmadpur"
+  },
+  {
+   "code": 4229,
+   "district": 481,
+   "en": "Jalkot"
+  },
+  {
+   "code": 4230,
+   "district": 481,
+   "en": "Chakur"
+  },
+  {
+   "code": 4231,
+   "district": 481,
+   "en": "Shirur Anantpal"
+  },
+  {
+   "code": 4232,
+   "district": 481,
+   "en": "Ausa"
+  },
+  {
+   "code": 4233,
+   "district": 481,
+   "en": "Nilanga"
+  },
+  {
+   "code": 4234,
+   "district": 481,
+   "en": "Deoni"
+  },
+  {
+   "code": 4235,
+   "district": 481,
+   "en": "Udgir"
+  },
+  {
+   "code": 4236,
+   "district": 488,
+   "en": "Paranda"
+  },
+  {
+   "code": 4237,
+   "district": 488,
+   "en": "Bhum"
+  },
+  {
+   "code": 4238,
+   "district": 488,
+   "en": "Washi"
+  },
+  {
+   "code": 4239,
+   "district": 488,
+   "en": "Kalamb"
+  },
+  {
+   "code": 4240,
+   "district": 488,
+   "en": "Dharashiv"
+  },
+  {
+   "code": 4241,
+   "district": 488,
+   "en": "Tuljapur"
+  },
+  {
+   "code": 4242,
+   "district": 488,
+   "en": "Lohara"
+  },
+  {
+   "code": 4243,
+   "district": 488,
+   "en": "Omarga"
+  },
+  {
+   "code": 4244,
+   "district": 496,
+   "en": "Karmala"
+  },
+  {
+   "code": 4245,
+   "district": 496,
+   "en": "Madha"
+  },
+  {
+   "code": 4246,
+   "district": 496,
+   "en": "Barshi"
+  },
+  {
+   "code": 4247,
+   "district": 496,
+   "en": "Solapur North"
+  },
+  {
+   "code": 4248,
+   "district": 496,
+   "en": "Mohol"
+  },
+  {
+   "code": 4249,
+   "district": 496,
+   "en": "Pandharpur"
+  },
+  {
+   "code": 4250,
+   "district": 496,
+   "en": "Malshiras"
+  },
+  {
+   "code": 4251,
+   "district": 496,
+   "en": "Sangole"
+  },
+  {
+   "code": 4252,
+   "district": 496,
+   "en": "Mangalvedhe"
+  },
+  {
+   "code": 4253,
+   "district": 496,
+   "en": "Solapur South"
+  },
+  {
+   "code": 4254,
+   "district": 496,
+   "en": "Akkalkot"
+  },
+  {
+   "code": 4255,
+   "district": 494,
+   "en": "Mahabaleshwar"
+  },
+  {
+   "code": 4256,
+   "district": 494,
+   "en": "Wai"
+  },
+  {
+   "code": 4257,
+   "district": 494,
+   "en": "Khandala"
+  },
+  {
+   "code": 4258,
+   "district": 494,
+   "en": "Phaltan"
+  },
+  {
+   "code": 4259,
+   "district": 494,
+   "en": "Man"
+  },
+  {
+   "code": 4260,
+   "district": 494,
+   "en": "Khatav"
+  },
+  {
+   "code": 4261,
+   "district": 494,
+   "en": "Koregaon"
+  },
+  {
+   "code": 4262,
+   "district": 494,
+   "en": "Satara"
+  },
+  {
+   "code": 4263,
+   "district": 494,
+   "en": "Jaoli"
+  },
+  {
+   "code": 4264,
+   "district": 494,
+   "en": "Patan"
+  },
+  {
+   "code": 4265,
+   "district": 494,
+   "en": "Karad"
+  },
+  {
+   "code": 4266,
+   "district": 492,
+   "en": "Mandangad"
+  },
+  {
+   "code": 4267,
+   "district": 492,
+   "en": "Dapoli"
+  },
+  {
+   "code": 4268,
+   "district": 492,
+   "en": "Khed"
+  },
+  {
+   "code": 4269,
+   "district": 492,
+   "en": "Chiplun"
+  },
+  {
+   "code": 4270,
+   "district": 492,
+   "en": "Guhagar"
+  },
+  {
+   "code": 4271,
+   "district": 492,
+   "en": "Ratnagiri"
+  },
+  {
+   "code": 4272,
+   "district": 492,
+   "en": "Sangameshwar"
+  },
+  {
+   "code": 4273,
+   "district": 492,
+   "en": "Lanja"
+  },
+  {
+   "code": 4274,
+   "district": 492,
+   "en": "Rajapur"
+  },
+  {
+   "code": 4275,
+   "district": 495,
+   "en": "Devgad"
+  },
+  {
+   "code": 4276,
+   "district": 495,
+   "en": "Vaibhavvadi"
+  },
+  {
+   "code": 4277,
+   "district": 495,
+   "en": "Kankavli"
+  },
+  {
+   "code": 4278,
+   "district": 495,
+   "en": "Malwan"
+  },
+  {
+   "code": 4279,
+   "district": 495,
+   "en": "Vengurla"
+  },
+  {
+   "code": 4280,
+   "district": 495,
+   "en": "Kudal"
+  },
+  {
+   "code": 4281,
+   "district": 495,
+   "en": "Sawantwadi"
+  },
+  {
+   "code": 4282,
+   "district": 495,
+   "en": "Dodamarg"
+  },
+  {
+   "code": 4283,
+   "district": 480,
+   "en": "Shahuwadi"
+  },
+  {
+   "code": 4284,
+   "district": 480,
+   "en": "Panhala"
+  },
+  {
+   "code": 4285,
+   "district": 480,
+   "en": "Hatkanangle"
+  },
+  {
+   "code": 4286,
+   "district": 480,
+   "en": "Shirol"
+  },
+  {
+   "code": 4287,
+   "district": 480,
+   "en": "Karvir"
+  },
+  {
+   "code": 4288,
+   "district": 480,
+   "en": "Gaganbawada"
+  },
+  {
+   "code": 4289,
+   "district": 480,
+   "en": "Radhanagari"
+  },
+  {
+   "code": 4290,
+   "district": 480,
+   "en": "Kagal"
+  },
+  {
+   "code": 4291,
+   "district": 480,
+   "en": "Bhudargad"
+  },
+  {
+   "code": 4292,
+   "district": 480,
+   "en": "Ajra"
+  },
+  {
+   "code": 4293,
+   "district": 480,
+   "en": "Gadhinglaj"
+  },
+  {
+   "code": 4294,
+   "district": 480,
+   "en": "Chandgad"
+  },
+  {
+   "code": 4295,
+   "district": 493,
+   "en": "Shirala"
+  },
+  {
+   "code": 4296,
+   "district": 493,
+   "en": "Walwa"
+  },
+  {
+   "code": 4297,
+   "district": 493,
+   "en": "Palus"
+  },
+  {
+   "code": 4298,
+   "district": 493,
+   "en": "Kadegaon"
+  },
+  {
+   "code": 4299,
+   "district": 493,
+   "en": "Khanapur"
+  },
+  {
+   "code": 4300,
+   "district": 493,
+   "en": "Atpadi"
+  },
+  {
+   "code": 4301,
+   "district": 493,
+   "en": "Tasgaon"
+  },
+  {
+   "code": 4302,
+   "district": 493,
+   "en": "Miraj"
+  },
+  {
+   "code": 4303,
+   "district": 493,
+   "en": "Kavathemahankal"
+  },
+  {
+   "code": 4304,
+   "district": 493,
+   "en": "Jat"
+  },
+  {
+   "code": 7179,
+   "district": 483,
+   "en": "Andheri"
+  },
+  {
+   "code": 7180,
+   "district": 483,
+   "en": "Kurla"
+  },
+  {
+   "code": 7181,
+   "district": 483,
+   "en": "Borivali"
+  }
+ ]
+}

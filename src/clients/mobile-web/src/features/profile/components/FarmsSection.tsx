@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * "Your Farms" block on the Profile menu. Farms are one-per-7/12 holdings,
- * visually separated, sorted by name, and grouped under a light family
+ * "Your Farms" block on the Profile menu. One farm can be several 7/12 extracts operated together (A8.3),
+ * so a farm is not "one 7/12". Farms are visually separated, sorted by name, and grouped under a light family
  * header (grouping is UI-only — no data merge). Presentational.
  */
 import React from 'react';

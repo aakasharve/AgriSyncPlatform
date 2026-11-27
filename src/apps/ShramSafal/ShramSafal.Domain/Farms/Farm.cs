@@ -45,8 +45,9 @@ public sealed class Farm : Entity<FarmId>
     /// access by itself: TYPING it (<c>POST /shramsafal/join/by-code</c>) only
     /// creates a join REQUEST — a <see cref="MembershipStatus.PendingApproval"/>
     /// seat with a placeholder role — that the farm's owner must approve and
-    /// give a role to. The signed QR token remains the only artifact that
-    /// joins without approval (spec §5.4). "No access" is enforced outside this
+    /// give a role to. Since lane MU-2 the signed QR token joins no one either:
+    /// a scan, like the typed code, only makes a waiting request the owner
+    /// approves (<c>ClaimJoinHandler</c>). "No access" is enforced outside this
     /// entity: every data and operational gate (sync pull, push, REST farm
     /// scope, role checks, user-scoped data RLS) counts the owner and ACTIVE
     /// seats only — see <c>PendingJoinRequestAccessRealPostgresTests</c>. Older
