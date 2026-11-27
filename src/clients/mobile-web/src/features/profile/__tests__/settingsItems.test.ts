@@ -1,7 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+
+// The billing switch (VITE_BILLING_VISIBLE, default off). featureFlags.ts reads its env in a form vi.stubEnv does not reach in
+// this repo (see MeterQuestionHost.test.tsx), so the switch is turned through the module.
+const billing = vi.hoisted(() => ({ on: false }));
+vi.mock('../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 import { buildSettingsExtraIds, PRIVACY_TITLE } from '../settingsItems';
 
+// Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users"): the owner's बिलिंग row only with the
+// billing switch on. OFF is the default on every phone.
+describe('buildSettingsExtraIds — billing switch OFF (the default)', () => {
+    it('no billing row, even for the primary owner', () => {
+        expect(buildSettingsExtraIds(true)).toEqual(['language', 'voice-diary', 'consent']);
+        expect(buildSettingsExtraIds(true, true)).toEqual(['language', 'voice-diary', 'consent', 'ai-drafts']);
+    });
+});
+
 describe('buildSettingsExtraIds', () => {
+    // The rows as they are once billing applies (switch on).
+    beforeEach(() => { billing.on = true; });
+    afterEach(() => { billing.on = false; });
+
     // spec: plr-d10 (I17, PLR-D9 §6 line 106) — copy-of-my-data and erase live inside the ONE
     // "गोपनीयता व संमती" place, so they are no longer rows of their own.
     it('lists language, recordings and the one privacy place, in order', () => {

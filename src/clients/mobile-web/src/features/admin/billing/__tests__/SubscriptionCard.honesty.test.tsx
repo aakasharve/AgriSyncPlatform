@@ -10,12 +10,20 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The billing switch (VITE_BILLING_VISIBLE, default off). featureFlags.ts reads its env in a form vi.stubEnv does not reach in
+// this repo (see MeterQuestionHost.test.tsx), so the switch is turned through the module.
+const billing = vi.hoisted(() => ({ on: false }));
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import SubscriptionCard, { BILLING_UNKNOWN } from '../SubscriptionCard';
 import type { SubscriptionSnapshotDto } from '../../../onboarding/qr/inviteApi';
 
-afterEach(cleanup);
+// Repair R1-g 1c (founder, 28 Nov): the card is drawn only with the billing switch on (off by default; billingSwitch.test.tsx).
+// This suite checks what the card SAYS once it is drawn, so it turns the switch on.
+beforeEach(() => { billing.on = true; });
+afterEach(() => { cleanup(); billing.on = false; });
 
 const DAY = 24 * 60 * 60 * 1000;
 const snap = (over: Partial<SubscriptionSnapshotDto> = {}): SubscriptionSnapshotDto => ({

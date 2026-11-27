@@ -1,3 +1,5 @@
+import { isBillingVisible } from '../../app/featureFlags';
+
 /** The hub row and the privacy page's title bar say the same words (PLR-D9 T3). */
 export const PRIVACY_TITLE = 'गोपनीयता व संमती';
 
@@ -27,5 +29,7 @@ export type SettingsExtraId = 'language' | 'voice-diary' | 'consent' | 'billing'
 export function buildSettingsExtraIds(isOwner: boolean, hasWaitingDrafts = false): SettingsExtraId[] {
     const base: SettingsExtraId[] = ['language', 'voice-diary', 'consent'];
     if (hasWaitingDrafts) base.push('ai-drafts');
-    return isOwner ? [...base, 'billing'] : base;
+    // Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users") — the owner's बिलिंग row only with the
+    // default-off billing switch on; off, the row is not drawn at all.
+    return isOwner && isBillingVisible() ? [...base, 'billing'] : base;
 }

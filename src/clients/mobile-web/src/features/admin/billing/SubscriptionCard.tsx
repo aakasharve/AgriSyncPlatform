@@ -16,6 +16,7 @@
 import React from 'react';
 import { CreditCard, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import type { SubscriptionSnapshotDto } from '../../onboarding/qr/inviteApi';
+import { isBillingVisible } from '../../../app/featureFlags';
 
 interface SubscriptionCardProps {
     subscription: SubscriptionSnapshotDto | null | undefined;
@@ -86,6 +87,9 @@ const CONFIG: Record<string, StatusLook> = {
 };
 
 const SubscriptionCard: React.FC<SubscriptionCardProps> = ({ subscription, role, onManageBilling }) => {
+    // Repair R1-g 1c (founder, 28 Nov: "Don't show billing card yet for Pilot users") — nothing at all unless the default-off
+    // billing switch is on: no box, no "not known", no "coming soon".
+    if (!isBillingVisible()) return null;
     if (role !== 'PrimaryOwner') return null;
 
     // No snapshot, or a status the card has no wording for: "we do not know". The server's answer is the only thing
