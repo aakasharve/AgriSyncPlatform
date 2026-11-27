@@ -198,11 +198,14 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                             </button>
                             <p className="mt-2 text-xs text-stone-500">Let's start</p>
 
-                            <p className="mt-8 text-[11px] leading-relaxed text-stone-400">
-                                तुम्हाला 21 दिवसांचे ट्रायल मिळेल. नंतर तुम्ही सब्स्क्रिप्शन निवडू शकता.
-                                <br />
-                                21-day trial, no card needed.
-                            </p>
+                            {/* Repair R1-g (founder 27 Nov: no pricing anywhere for now): only behind the billing switch. */}
+                            {isBillingVisible() && (
+                                <p className="mt-8 text-[11px] leading-relaxed text-stone-400">
+                                    तुम्हाला 21 दिवसांचे ट्रायल मिळेल. नंतर तुम्ही सब्स्क्रिप्शन निवडू शकता.
+                                    <br />
+                                    21-day trial, no card needed.
+                                </p>
+                            )}
                         </section>
                     )}
 

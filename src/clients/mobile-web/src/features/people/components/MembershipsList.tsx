@@ -16,6 +16,7 @@ import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { errorTextIn } from '../../../shared/names/namesIn';
+import { isBillingVisible } from '../../../app/featureFlags';
 
 interface MembershipsListProps {
     farms: MyFarmDto[];
@@ -64,10 +65,13 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                     {farms.map(farm => {
                         const roleLabel = getRoleLabel(farm.role);
                         const canExit = !(nonExitableFarmIds?.has(farm.farmId));
-                        const trialing = farm.subscription?.statusCode === 1;
-                        const paused = farm.subscription
+                        // Repair R1-g (founder 27 Nov: no pricing anywhere in the app for now): the plan chips only behind the
+                        // default-off billing switch.
+                        const billingShown = isBillingVisible();
+                        const trialing = billingShown && farm.subscription?.statusCode === 1;
+                        const paused = billingShown && (farm.subscription
                             ? !farm.subscription.allowsOwnerWrites
-                            : false;
+                            : false);
 
                         return (
                             <li
