@@ -712,6 +712,21 @@ describe('lane PERM S5.2 — the saved screen never asks who may see the record'
         const rows = (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === SyncMutationName.SetRecordAudience);
         expect(rows).toHaveLength(0);
     });
+
+    // pilot lane PERM S5.3 — the read-only line in its place, from the server's name-free seat summary only.
+    it('shows "हे दिसतं: तुम्ही, मुकादम" and the owner\'s सेटिंग बदला; nothing without the summary', async () => {
+        mount(props());
+        await new Promise(r => setTimeout(r, 60));
+        expect(screen.queryByTestId('vr-seen-by')).toBeNull();
+        cleanup();
+        await getDatabase().appMeta.put({ key: 'shramsafal_access_scopes_v1', updatedAt: 'x', value: { receivedAtUtc: 'x', scopes: [{
+            farmId: 'farm-1', ownRecordsOnly: false, seeMoney: true, seeWages: true, seeAttendance: true, seeTests: true, seeCompliance: true, seeFarmOverview: true,
+            seenBy: { work: [{ who: 'Mukadam' }], attendance: [], money: [] },
+        }] } });
+        mount(props());
+        await waitFor(() => expect(screen.getByTestId('vr-seen-by-line').textContent).toContain('हे दिसतं: तुम्ही, मुकादम'));
+        expect((await screen.findByTestId('vr-seen-by-change')).textContent).toContain('सेटिंग बदला');
+    });
 });
 
 // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, slice S4.2; CTO ruling Q3 A) — a part he may not record was taken out

@@ -23,6 +23,12 @@ export const SCHEDULE_FORMAT = 2;
  * no `farmSetup` key at all (its pull is byte for byte what it was).
  */
 export const FARM_SETUP_FORMAT = 1;
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, contract S3) - this build shows the saved screen's read-only "हे दिसतं" line, so
+ * it asks for the name-free `accessScopes[].seenBy` (`seenBy=1`). A query, not a header: CORS needs nothing new. An older server ignores it; a phone
+ * that does not send it is sent no `seenBy` key at all (its pull is byte for byte what it was).
+ */
+export const SEEN_BY_FORMAT = 1;
 
 const normalizedCursorOrEmpty = (sinceCursorIso?: string): string | undefined => normalizeSyncCursorForApi(sinceCursorIso) || undefined;
 
@@ -41,6 +47,7 @@ export async function pullSyncChanges(
         ...(farms !== undefined ? { farms } : {}),
         scheduleFormat: SCHEDULE_FORMAT,
         farmSetup: FARM_SETUP_FORMAT,
+        seenBy: SEEN_BY_FORMAT,
     };
     const response = await t.http.get<SyncPullResponse>('/sync/pull', { params });
     return response.data;

@@ -34,6 +34,7 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // Finding F2 — the waiting drawer's `approval` row's destination arrives
 // here as a window event; see that module's header for why.
 import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
+import { OPEN_TEAM_SETTING_EVENT } from '../../features/recordAudience/teamSettingLink';
 import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
 import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 // spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
@@ -268,6 +269,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // `features/oversight/oversightNavigationEvents.ts` for why, and for the
     // effect-ordering check.
     useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => setShowReviewInbox(true));
+    // pilot lane PERM (S5.3) — the saved screen's "सेटिंग बदला": the setup hub (it opens माझी टीम from the key the button left).
+    useOpenSurfaceRequest(OPEN_TEAM_SETTING_EVENT, () => setCurrentRoute('profile'));
 
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.6) —
     // arriving at the log page with logIntent === 'labour' auto-scrolls the

@@ -53,6 +53,7 @@ import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { kindsNotSavedOf } from '../../../workKinds/closedKinds';
 import { KindsNotSavedNote } from '../../../workKinds/KindsNotSavedNote';
+import { SeenByLine } from '../../../recordAudience/SeenByLine';
 import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
 import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
 import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
@@ -214,7 +215,9 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
     // lane PRV (D-26) AMENDED by pilot lane PERM (S5.2; founder 27 Nov "Every log should not be asked"): no record asks who may see it. The
-    // per-record row is gone; the setting lives in माझी टीम (the owner's "सेटिंग बदला" there).
+    // per-record row is gone; in its place ONE read-only line "हे दिसतं: …" from the server's seat summary (none stored = no line, P4), and
+    // for the farm's registrant "सेटिंग बदला", which opens माझी टीम (S5.3).
+    const seenBy = (className: string) => (farmId ? <SeenByLine farmId={farmId} logs={current} selfUserId={sessionUserId} testId="vr-seen-by" className={className} /> : null);
     const refusedBanner = refused ? (
         <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
             {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
@@ -229,7 +232,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         </div>
     ) : null;
     // The old screen keeps its order (refusal, money). The v2 saved screen's audience slot (under "बदला", F6) is empty here.
-    const banners = <>{refusedBanner}{kindsBanner}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
+    const banners = <>{refusedBanner}{kindsBanner}{seenBy('mx-3 mt-2')}{moneyBanner}{firstRecordOffer && <div className="mx-3 mt-2">{firstRecordOffer}</div>}</>;
     const bannersV2 = <>{refusedBanner}{kindsBanner}{moneyBanner}</>;
     const daySheet = moveDay && pickingDay && (
         <DayPickSheet
@@ -260,7 +263,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             <>
             {bannersV2}
             <SavedScreen
-                audience={null}
+                audience={seenBy('')}
                 day={day}
                 recordingKey={result.key}
                 placeLabel={placeLabel}
