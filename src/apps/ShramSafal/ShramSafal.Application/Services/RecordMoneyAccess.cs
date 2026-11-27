@@ -74,6 +74,14 @@ public static class RecordMoneyAccess
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(log);
+
+        // spec: plr-d10 pilot lane PERM — a record made while the farm's money was private: its money is the registrant's and its maker's only.
+        if (log.MoneyIsPrivate && readerUserId != log.OperatorUserId.Value
+            && (await FarmReadGate.ScopeAsync(repository, (Guid)log.FarmId, readerUserId, atUtc, ct))?.IsRecordHolder != true)
+        {
+            return true;
+        }
+
         var visibility = await RecordVisibility.ForFarmAsync(repository, (Guid)log.FarmId, readerUserId, atUtc, ct);
         return await MoneyHiddenAsync(repository, log, visibility, ct);
     }
@@ -85,6 +93,19 @@ public static class RecordMoneyAccess
         ArgumentNullException.ThrowIfNull(logs);
         ArgumentNullException.ThrowIfNull(visibility);
         var result = new HashSet<Guid>();
+        logs = logs.ToList();
+
+        // spec: plr-d10 pilot lane PERM — records made while the farm's money was private, made by someone else: their money is the registrant's
+        // (and the maker's) only. The reader's standing is read once per farm, and only when such a record exists.
+        var reader = visibility.ReaderUserId;
+        foreach (var farm in logs.Where(l => l.MoneyIsPrivate && l.OperatorUserId.Value != reader).GroupBy(l => (Guid)l.FarmId))
+        {
+            if ((await FarmReadGate.ScopeAsync(repository, farm.Key, reader, DateTime.UtcNow, ct))?.IsRecordHolder != true)
+            {
+                result.UnionWith(farm.Select(l => l.Id));
+            }
+        }
+
         if (visibility.HiddenCostIds.Count == 0)
         {
             return result;

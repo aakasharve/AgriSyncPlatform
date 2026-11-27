@@ -313,6 +313,27 @@ public sealed record ScheduleMechanismCapabilityDto(IReadOnlyList<Guid> FarmIds)
 public sealed record PlotMainScheduleDto(Guid PlotId, Guid CropCycleId, Guid SubscriptionId);
 
 /// <summary>
+/// spec: plr-d10 pilot lane PERM (contract §3.3 S3) — the reader-specific, name-free "who sees this" of one farm, for the saved screen's read-only line.
+/// <see cref="Work"/>: the other live seats that would see a work record THIS reader makes; <see cref="Attendance"/>: the seats that see हजेरी;
+/// <see cref="Money"/>: the seats that see money (none while the farm's money is private). The registrant is implied (always first) and the reader
+/// himself is never listed. Built from real seats only (P4).
+/// </summary>
+public sealed record SeenByDto(
+    IReadOnlyList<SeenByEntryDto> Work,
+    IReadOnlyList<SeenByEntryDto> Attendance,
+    IReadOnlyList<SeenByEntryDto> Money);
+
+/// <summary>
+/// pilot lane PERM — one seat kind in <see cref="SeenByDto"/>: its label (<c>CoOwner</c> / <c>Family</c> / <c>Mukadam</c> / <c>Worker</c>), else its
+/// role (<c>SecondaryOwner</c> / <c>Mukadam</c> / <c>Worker</c>), never guessed (D-8); and, for a seat on chosen plots only, those plots (left out for a
+/// seat on every plot).
+/// </summary>
+public sealed record SeenByEntryDto(
+    string Who,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<Guid>? PlotIds = null);
+
+/// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.
 /// </summary>
 public sealed record WithdrawnRecordDto(string Kind, Guid Id);
@@ -367,7 +388,22 @@ public sealed record FarmAccessScopeDto(
     // to approve a bill he made himself. Written ONLY when true: off (the default for every farm) is no key at all, so an old phone's bytes are
     // unchanged and it keeps the stricter behaviour (P11). A not-readable entry carries none. The server decides again when an approval arrives.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    bool? ReviewerMayApproveOwnBill = null)
+    bool? ReviewerMayApproveOwnBill = null,
+    // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the FARM's "पैशांच्या नोंदी फक्त मला दिसू दे": true while its registrant has it on.
+    // Written ONLY when on: off (every farm's default) is no key at all, so an old phone's bytes are unchanged (P11). A not-readable entry carries none.
+    // The server stamps each NEW money record when it arrives; the phone only shows the line and its waiting state.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? MoneyPrivate = null,
+    // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") - the kinds of work THIS reader may record on this farm, in the
+    // contract's order (sync-contract/schemas/work-kinds.json). Written ONLY when his seat is limited: absent = every kind (every seat today, and every
+    // older server), so an old phone's bytes are unchanged (P11). A not-readable entry carries none. The server decides again on every write.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? WorkKinds = null,
+    // spec: plr-d10 pilot lane PERM (contract S3; founder 27 Nov: the saved screen's read-only "हे दिसतं: मालक, मुकादम") - who besides the farm's
+    // registrant (implied) and this reader would see a work record he makes, who sees हजेरी and who sees money, as seat labels only (no name, no id,
+    // no count). Written ONLY for a phone that asks (seenBy=1): every other pull is byte-for-byte as before (P11). A not-readable entry carries none.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    SeenByDto? SeenBy = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";

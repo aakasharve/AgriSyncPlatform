@@ -666,6 +666,30 @@ public static class MembershipEndpoints
         })
         .WithName("SetFarmMemberPlotScope");
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov "kinds of work he may record") — the farm's REGISTRANT sets which kinds of work one person may
+        // record: { workKinds: ["irrigation", "inputs"] } (the WHOLE set; all six = no limit). Refused for anyone else (403), a bad set 400, audited once per
+        // real change (from and to). What he may read does not move. Online only, like every other team-card decision.
+        group.MapPut("/farms/{farmId:guid}/memberships/{targetUserId:guid}/work-kinds", async Task<IResult> (
+            Guid farmId, Guid targetUserId, SetMemberWorkKindsRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.SetWorkKinds, httpContext, handler, ct,
+                workKinds: request?.WorkKinds);
+        })
+        .WithName("SetFarmMemberWorkKinds");
+
         // Minimal "my farms" list so the frontend can resolve the real farmId.
         //
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
@@ -715,7 +739,8 @@ public static class MembershipEndpoints
         bool? labourGrant = null,
         IReadOnlyList<AuthorityGrantDto>? authorities = null,
         string? plotScope = null,
-        IReadOnlyList<Guid>? plotIds = null)
+        IReadOnlyList<Guid>? plotIds = null,
+        IReadOnlyList<string>? workKinds = null)
     {
         var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
         var result = await handler.HandleAsync(
@@ -733,6 +758,7 @@ public static class MembershipEndpoints
                 Authorities: authorities,
                 PlotScope: plotScope,
                 PlotIds: plotIds,
+                WorkKinds: workKinds,
                 ClientAppVersion: ResolveClientAppVersion(httpContext),
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash),
@@ -880,3 +906,9 @@ public sealed record SetMemberAuthoritiesRequest(IReadOnlyList<AuthorityGrantDto
 /// this farm.
 /// </summary>
 public sealed record SetMemberPlotScopeRequest(string? PlotScope = null, IReadOnlyList<Guid>? PlotIds = null);
+
+/// <summary>
+/// spec: plr-d10 pilot lane PERM — body of <c>PUT farms/{farmId}/memberships/{userId}/work-kinds</c>: the WHOLE set of kinds of work the person may
+/// record (<c>cropActivities</c>, <c>irrigation</c>, <c>inputs</c>, <c>labour</c>, <c>machinery</c>, <c>activityExpenses</c>; all six = no limit).
+/// </summary>
+public sealed record SetMemberWorkKindsRequest(IReadOnlyList<string>? WorkKinds = null);

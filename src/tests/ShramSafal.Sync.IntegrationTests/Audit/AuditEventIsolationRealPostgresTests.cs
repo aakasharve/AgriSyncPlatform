@@ -1479,6 +1479,14 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (repair D-177) - Up() and Down() read in full: Up() adds ONE boolean column (reviewer_may_approve_own_bill, NOT NULL DEFAULT false) to ssf.farms and nothing
         // else. It never touches ssf.audit_events, its policies or its grants. Down() refuses while any farm has the switch on (none does in this proof) and otherwise drops the column. Safe mid-proof.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - Up() and Down() read in full (by their author; the CTO's read is the review): Up() adds ONE boolean column
+        // (money_private_to_holder, NOT NULL DEFAULT false) to ssf.farms and ONE nullable column (money_audience varchar(16), CHECK NULL or 'OnlyMe') to ssf.daily_logs, nothing else. It never touches
+        // ssf.audit_events, its policies or its grants. Down() refuses while any farm has the switch on or any record is stamped (none is in this proof) and otherwise drops exactly those. Safe mid-proof.
+        "20261127030000_AddMoneyPrivateSwitch",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM) - Up() and Down() read in full (by their author): Up() adds TWO nullable columns (allowed_work_kinds text[] with its CHECK,
+        // work_kinds_changed_at_utc) to ssf.farm_memberships and nothing else. It never touches ssf.audit_events, its policies or its grants. Down() refuses while any seat is limited (none is in this
+        // proof) and otherwise drops exactly those. Safe mid-proof.
+        "20261127031000_AddMemberWorkKinds",
     ];
 
     /// <summary>

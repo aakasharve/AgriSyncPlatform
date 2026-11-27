@@ -71,6 +71,7 @@ export const SYNC_MUTATION_TYPES = [
   "farmsetup.machine.remove",
   "farmsetup.plot_water.set",
   "farm.own_bill_approval.set",
+  "farm.money_private.set",
 ] as const;
 
 export type SyncMutationType = typeof SYNC_MUTATION_TYPES[number];
@@ -152,6 +153,7 @@ export const SYNC_MUTATION_CATALOG: Readonly<Record<SyncMutationType, SyncMutati
   "farmsetup.machine.remove": { name: "farmsetup.machine.remove", ownerAggregate: "FarmMachine", sinceVersion: "1.0.18", payloadSchema: "FarmsetupMachineRemove" },
   "farmsetup.plot_water.set": { name: "farmsetup.plot_water.set", ownerAggregate: "PlotWaterSetup", sinceVersion: "1.0.18", payloadSchema: "FarmsetupPlotWaterSet" },
   "farm.own_bill_approval.set": { name: "farm.own_bill_approval.set", ownerAggregate: "Farm", sinceVersion: "1.0.18", payloadSchema: "FarmOwnBillApprovalSet" },
+  "farm.money_private.set": { name: "farm.money_private.set", ownerAggregate: "Farm", sinceVersion: "1.0.18", payloadSchema: "FarmMoneyPrivateSet" },
 });
 
 export function isSyncMutationType(value: string): value is SyncMutationType {
@@ -233,4 +235,5 @@ export const SyncMutationName = {
   FarmsetupMachineRemove: "farmsetup.machine.remove",
   FarmsetupPlotWaterSet: "farmsetup.plot_water.set",
   FarmOwnBillApprovalSet: "farm.own_bill_approval.set",
+  FarmMoneyPrivateSet: "farm.money_private.set",
 } as const satisfies Record<string, SyncMutationType>;

@@ -68,6 +68,7 @@
     { "name": "farmsetup.machine.save",        "ownerAggregate": "FarmMachine",     "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupMachineSave" },
     { "name": "farmsetup.machine.remove",      "ownerAggregate": "FarmMachine",     "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupMachineRemove" },
     { "name": "farmsetup.plot_water.set",      "ownerAggregate": "PlotWaterSetup",  "sinceVersion": "1.0.18", "payloadSchema": "FarmsetupPlotWaterSet" },
-    { "name": "farm.own_bill_approval.set",    "ownerAggregate": "Farm",            "sinceVersion": "1.0.18", "payloadSchema": "FarmOwnBillApprovalSet" }
+    { "name": "farm.own_bill_approval.set",    "ownerAggregate": "Farm",            "sinceVersion": "1.0.18", "payloadSchema": "FarmOwnBillApprovalSet" },
+    { "name": "farm.money_private.set",        "ownerAggregate": "Farm",            "sinceVersion": "1.0.18", "payloadSchema": "FarmMoneyPrivateSet" }
   ]
 }

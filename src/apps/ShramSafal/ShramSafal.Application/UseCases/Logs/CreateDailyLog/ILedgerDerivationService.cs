@@ -49,7 +49,8 @@ public interface ILedgerDerivationService
     /// </param>
     Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
-        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default);
+        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default,
+        IReadOnlySet<string>? closedKinds = null);
 
     /// <summary>
     /// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the MANUAL
@@ -84,9 +85,13 @@ public interface ILedgerDerivationService
     /// acquire this behaviour by omission.</para>
     /// </param>
     /// <param name="labourOnly">The same हजेरी-door gate as on <see cref="DeriveAsync"/>.</param>
+    /// <param name="closedKinds">spec: plr-d10 pilot lane PERM — the kinds of work the record's maker may not record on this farm (<c>WorkKindGate</c>):
+    /// their branches (inputs, irrigation, labour, machinery) are left underived, the same way <paramref name="labourOnly"/> leaves the others. Null or
+    /// empty = every kind, exactly as before.</param>
     Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default);
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default,
+        IReadOnlySet<string>? closedKinds = null);
 }
 
 /// <summary>Small tally of what a derivation staged, for the audit / log line.</summary>

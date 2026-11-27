@@ -100,6 +100,28 @@ public sealed class Farm : Entity<FarmId>
         return true;
     }
 
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM; founder 27 Nov follow-up 2: "पैशांच्या नोंदी फक्त मला दिसू दे") - while
+    /// this is on, every NEW money record of the farm (a bill or खर्च, and the money a work record states) is seen only by the farm's registrant and
+    /// the person who made it. Decided when the record ARRIVES at the server and stamped on the record in the same save; a later change of this
+    /// switch never moves a record already made (follow-up 1: new records only). <c>false</c> for every farm, old and new, until its registrant
+    /// turns it on (the <c>farm.money_private.set</c> door).
+    /// </summary>
+    public bool MoneyPrivateToHolder { get; private set; }
+
+    /// <summary>pilot lane PERM - sets the farm's money-private switch. Returns false, and changes nothing, when it already holds this value.</summary>
+    public bool SetMoneyPrivateToHolder(bool isPrivate, DateTime utcNow)
+    {
+        if (MoneyPrivateToHolder == isPrivate)
+        {
+            return false;
+        }
+
+        MoneyPrivateToHolder = isPrivate;
+        ModifiedAtUtc = utcNow;
+        return true;
+    }
+
     public static Farm Create(FarmId id, string name, UserId ownerUserId, DateTime createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(name))

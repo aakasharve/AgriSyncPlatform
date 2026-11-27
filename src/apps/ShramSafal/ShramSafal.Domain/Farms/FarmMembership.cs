@@ -207,6 +207,53 @@ public sealed class FarmMembership : Entity<Guid>
         return true;
     }
 
+    private List<string>? _allowedWorkKinds;
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM, contract §2.2) — the kinds of work this person may RECORD on this farm
+    /// (<see cref="WorkKinds"/>), in the contract's order; <c>null</c> = every kind, which every seat reads until the farm's registrant limits it
+    /// (P9, P11). It decides what he may write, never what he may read.
+    /// </summary>
+    public IReadOnlyList<string>? AllowedWorkKinds => _allowedWorkKinds?.AsReadOnly();
+
+    /// <summary>pilot lane PERM — when the kinds he may record last changed (the late-arrival window is judged against it); <c>null</c> = never.</summary>
+    public DateTime? WorkKindsChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// pilot lane PERM — the registrant sets the WHOLE set of kinds this person may record (<paramref name="desired"/>; all six = no limit). Returns
+    /// <c>true</c> only when something stored moved (a re-sent set writes no history). It does NOT move <see cref="AccessChangedAtUtc"/>: it changes
+    /// what he may write, not what he may read, so no phone is re-sent anything.
+    /// <para><b>Refused (never silently trimmed):</b> an empty set, an unknown or always-open name, a name twice (<see cref="ArgumentException"/>);
+    /// an ended seat and the primary owner's own seat (<see cref="InvalidOperationException"/>).</para>
+    /// </summary>
+    public bool SetWorkKinds(IReadOnlyCollection<string> desired, DateTime utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(desired);
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException($"Cannot change the kinds of work of a {Status} membership.");
+        }
+
+        if (Role == AppRole.PrimaryOwner)
+        {
+            throw new InvalidOperationException("The primary owner records every kind of work; his kinds are not chosen.");
+        }
+
+        var stored = WorkKinds.Normalize(desired);
+        var same = stored is null
+            ? _allowedWorkKinds is null
+            : _allowedWorkKinds is not null && _allowedWorkKinds.SequenceEqual(stored, StringComparer.Ordinal);
+        if (same)
+        {
+            return false;
+        }
+
+        _allowedWorkKinds = stored is null ? null : new List<string>(stored);
+        WorkKindsChangedAtUtc = utcNow;
+        ModifiedAtUtc = utcNow;
+        return true;
+    }
+
     /// <summary>
     /// lane MU-4 — the plot set a scope stores, or <see cref="ArgumentException"/>: chosen plots need one or more
     /// (non-empty) plot ids, and every other scope names none.

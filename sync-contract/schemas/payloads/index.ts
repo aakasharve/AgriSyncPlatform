@@ -98,6 +98,8 @@ export { FarmsetupMachineRemovePayload } from './farmsetup_machine_remove.zod';
 export { FarmsetupPlotWaterSetPayload } from './farmsetup_plot_water_set.zod';
 // repair D-177 (27 Nov): the farm's own-bill approval switch, primary owner only, off by default.
 export { FarmOwnBillApprovalSetPayload } from './farm_own_bill_approval_set.zod';
+// pilot lane PERM (27 Nov): the farm's money-private switch, the registrant's alone, off by default.
+export { FarmMoneyPrivateSetPayload } from './farm_money_private_set.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly

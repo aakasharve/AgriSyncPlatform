@@ -98,6 +98,13 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasDefaultValue(false)
             .IsRequired();
 
+        // spec: plr-d10 pilot lane PERM (founder 27 Nov follow-up 2) - the farm's money-private switch: while on, every NEW money record is seen by the
+        // registrant and its maker only. false for every farm, old and new, unless its registrant turned it on. Migration AddMoneyPrivateSwitch.
+        builder.Property(x => x.MoneyPrivateToHolder)
+            .HasColumnName("money_private_to_holder")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasIndex(x => x.ModifiedAtUtc);
         builder.HasIndex(x => x.OwnerAccountId)
             .HasDatabaseName("ix_farms_owner_account_id");

@@ -144,6 +144,21 @@ public sealed class DailyLog : Entity<Guid>
     public void MarkCapturedAtLabourDoor() => CaptureScope = CaptureScopeLabour;
 
     /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane PERM; founder 27 Nov follow-ups 1 and 2) - who may see the MONEY this record
+    /// states (crew totals and wages, input / machine / expense amounts, money words). <c>null</c> = its normal readers (every record made while the
+    /// farm's money was not private, and every record older than this). <see cref="RecordAudience.OnlyMe"/> = the farm's registrant and the record's
+    /// maker only: stamped when the record ARRIVED while the farm's "पैशांच्या नोंदी फक्त मला दिसू दे" was on, in the same save as the record (P1),
+    /// and never moved by a later change of that switch. The WORK itself stays visible exactly as its audience says.
+    /// </summary>
+    public RecordAudience? MoneyAudience { get; private set; }
+
+    /// <summary>pilot lane PERM - the record was made while the farm's money was private. Set once, at creation, before the record's first save.</summary>
+    public void MarkMoneyPrivateAtCreation() => MoneyAudience = RecordAudience.OnlyMe;
+
+    /// <summary>pilot lane PERM - its money is seen only by the farm's registrant and its maker.</summary>
+    public bool MoneyIsPrivate => MoneyAudience == RecordAudience.OnlyMe;
+
+    /// <summary>
     /// spec: plr-d10 lane PRV (founder D-26) — who may see this record, as the farm's primary account holder chose it.
     /// <see cref="RecordAudience.Team"/> (the default, exactly today's behaviour) for every record until he
     /// narrows it; nothing at capture ever asks (P9).

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "limitable": ["cropActivities", "irrigation", "inputs", "labour", "machinery", "activityExpenses"],
+  "alwaysOpen": ["observations", "plannedTasks"]
+}

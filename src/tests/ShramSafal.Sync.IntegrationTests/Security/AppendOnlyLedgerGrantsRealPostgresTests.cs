@@ -364,6 +364,14 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         // ── Reviewed 2026-11-27 (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, repair D-177); Up() and Down() read in full: Up() adds ONE boolean column (NOT NULL DEFAULT false) to ssf.farms. It GRANTs and
         //    REVOKEs nothing and touches no ledger this suite asserts about. Down() REFUSES while any farm has the switch on and otherwise drops the column, so on this harness's schema it reverts and re-applies.
         "20261127021000_AddFarmOwnBillApprovalSwitch",
+        // ── Reviewed 2026-11-27 by its author (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, pilot lane PERM); Up() and Down() read in full: Up() adds ONE boolean column (NOT NULL DEFAULT false) to
+        //    ssf.farms and ONE nullable column with its CHECK to ssf.daily_logs. It GRANTs and REVOKEs nothing and touches no ledger this suite asserts about. Down() REFUSES while any value is stored and
+        //    otherwise drops exactly those, so on this harness's schema it reverts and re-applies.
+        "20261127030000_AddMoneyPrivateSwitch",
+        // ── Reviewed 2026-11-27 by its author (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, pilot lane PERM); Up() and Down() read in full: Up() adds TWO nullable columns with one CHECK to
+        //    ssf.farm_memberships. It GRANTs and REVOKEs nothing and touches no ledger this suite asserts about. Down() REFUSES while any seat is limited and otherwise drops exactly those, so on this
+        //    harness's schema it reverts and re-applies.
+        "20261127031000_AddMemberWorkKinds",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");
