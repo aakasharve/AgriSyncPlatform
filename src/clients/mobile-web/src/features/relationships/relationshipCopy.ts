@@ -2,12 +2,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1 (MU design §6). The words of the team screens: the role band,
- * the farm switcher's rows, the relationship cards ("माझी शेती व जबाबदाऱ्या") and the owner's two cards on लक्ष द्या (joining
- * requests, kept work). One language at a time (founder rule: Marathi mode shows only Marathi, English mode only English).
+ * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1 (MU design §6). The words of the team screens: the farm
+ * switcher's rows, the relationship cards ("माझी शेती व जबाबदाऱ्या") and the owner's two cards on लक्ष द्या (joining requests, kept
+ * work). One language at a time (founder rule: Marathi mode shows only Marathi, English mode only English).
  * Every line is NEW wording, PROPOSED, awaiting the founder's wording review. No emoji, never "AI".
+ *
+ * Repair R3 lane S1 (V3-D, 27 Nov 2026): the role band's "तुम्ही: ‹नाव› · ‹भूमिका›" left the app with the band; the colour card's
+ * words (`here`) and the switcher's "सध्या इथे" are the approved design's.
  */
 import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
+import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 
 export type RelationshipLanguage = 'mr' | 'en';
 
@@ -16,8 +20,15 @@ export const toRelationshipLanguage = (language: string | null | undefined): Rel
     language === 'en' ? 'en' : 'mr';
 
 export interface RelationshipCopy {
-    /** The role band: "तुम्ही: रामराव · मुकादम". */
-    bandLine: (name: string, role: string) => string;
+    /** V3-D - the colour card under the three big buttons, and the note after a switch. */
+    here: {
+        /** "तुम्ही इथे", the card's small label. */
+        label: string;
+        /** "३ शेती", the pill that opens the switcher (2 or more farms). */
+        farmCount: (n: number) => string;
+        /** "आता: पाटील मळा", the short note after a switch. */
+        now: (farmName: string) => string;
+    };
     /** The role words, by label. */
     role: Record<string, string>;
     allPlots: string;
@@ -83,7 +94,11 @@ export interface RelationshipCopy {
 }
 
 const mr: RelationshipCopy = {
-    bandLine: (name, role) => `तुम्ही: ${name} · ${role}`, // PROPOSED (Marathi) - the brief's words
+    here: {
+        label: 'तुम्ही इथे', // PROPOSED (V3-D, the approved design's words)
+        farmCount: n => `${toDevanagariDigits(n)} शेती`, // the design's "३ शेती" (Devanagari digits, D-123b)
+        now: farmName => `आता: ${farmName}`, // PROPOSED (V3-D, the approved design's words)
+    },
     role: {
         Owner: 'मालक', // PROPOSED (Marathi)
         CoOwner: 'सहमालक',
@@ -96,7 +111,7 @@ const mr: RelationshipCopy = {
     ownWork: 'स्वतःचं काम', // the design's words (MU §6)
     switcher: {
         title: 'तुमच्या शेती', // existing
-        current: 'सध्या उघडलेली', // the brief's pill
+        current: 'सध्या इथे', // V3-D (was 'सध्या उघडलेली'), the approved design's pill
         until: day => `${day} पर्यंत`, // the design's "४ नोव्हें पर्यंत"
         createFarm: 'शेती तयार करा', // existing
         workerOwnFarm: 'तुमचं स्वतःचं शेत आहे का?', // the brief's line
@@ -174,14 +189,18 @@ const mr: RelationshipCopy = {
 };
 
 const en: RelationshipCopy = {
-    bandLine: (name, role) => `You: ${name} · ${role}`, // PROPOSED (English)
+    here: {
+        label: 'You are here', // PROPOSED (English twin)
+        farmCount: n => `${n} farms`, // shown only with 2 or more farms
+        now: farmName => `Now: ${farmName}`, // PROPOSED (English twin)
+    },
     role: { Owner: 'Owner', CoOwner: 'Co-owner', Family: 'Family', Mukadam: 'Mukadam', Worker: 'Worker' },
     allPlots: 'All plots',
     plotCount: n => `${n} ${n === 1 ? 'plot' : 'plots'}`,
     ownWork: 'Own work',
     switcher: {
         title: 'Your farms',
-        current: 'Open now',
+        current: 'Current', // V3-D (was 'Open now')
         until: day => `until ${day}`,
         createFarm: 'Create a farm',
         workerOwnFarm: 'Do you have a farm of your own?',

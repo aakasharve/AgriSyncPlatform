@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1 (MU design §6). The team screens over ONE read model
- * (`/me/context`): the role band, the farm switcher's rows (Marathi only; Active relationships only; the open farm marked), the
- * relationship cards (active / invited / waiting / paused), the nameboard's small word, and the totals line for a chosen-plots
- * seat. Marathi mode shows only Marathi and English mode only English. Only the network and the language are stubbed.
+ * (`/me/context`): the farm switcher's rows (Marathi only; Active relationships only; the open farm first and marked), the
+ * relationship cards (active / invited / waiting / paused), and the totals line for a chosen-plots seat. Marathi mode shows only
+ * Marathi and English mode only English. Only the network and the language are stubbed.
+ *
+ * Repair R3 lane S1 (V3-D, 27 Nov 2026): the role band and the nameboard's small word left the app (their tests went with them;
+ * the colour card that replaces them is pinned in `AppHeader.farmColour.test.tsx`). The switcher's rows carry each farm's colour:
+ * the current farm first, tinted, with "सध्या इथे" in its colour (was "सध्या उघडलेली" and a tick).
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -24,11 +28,13 @@ vi.mock('../../invitations/personalInvitationClient', async (actual) => ({
 import { FarmContext } from '../../../core/session/FarmContext';
 import type { MeContext, MeFarm } from '../../../core/session/MeContextService';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
-import FarmNameBoard from '../../context/components/FarmNameBoard';
 import { MyResponsibilities } from '../MyResponsibilities';
 import { PlotsOnlyNote } from '../PlotsOnlyNote';
-import RoleBand from '../RoleBand';
-import { boardRelationWord, ownsNoFarm, switcherRows } from '../relationshipModel';
+import { ownsNoFarm, switcherRows } from '../relationshipModel';
+
+/** The farms' colours (`farmColour.ts`): id "a" hashes to teal, "b" to indigo. jsdom writes inline colours as rgb(). */
+const TEAL = { ink: 'rgb(15, 118, 110)', tint: 'rgb(240, 253, 250)' };
+const INDIGO = { ink: 'rgb(67, 56, 202)', tint: 'rgb(238, 242, 255)' };
 
 const NOW = new Date();
 const inDays = (n: number) => new Date(NOW.getTime() + n * 86_400_000).toISOString();
@@ -86,7 +92,7 @@ describe('the farm switcher sheet', () => {
         expect(text.replace(/QR/g, '').replace(/Arve Farm|Patil Farm/g, '')).not.toMatch(/[A-Za-z]/);
     });
 
-    it('one row per Active relationship: name, word, scope summary, expiry only when near, the open one marked "सध्या उघडलेली"', () => {
+    it('one row per Active relationship: name, word, scope summary, expiry only when near, the open one marked "सध्या इथे"', () => {
         open(ctx([OWNER_FARM, MUKADAM_FARM]), 'b');
         const rowA = screen.getByTestId('farm-switcher-row-a');
         const rowB = screen.getByTestId('farm-switcher-row-b');
@@ -98,8 +104,47 @@ describe('the farm switcher sheet', () => {
         expect(within(rowB).getByTestId('farm-switcher-row-word')).toHaveTextContent('मुकादम');
         expect(within(rowB).getByTestId('farm-switcher-row-plots')).toHaveTextContent('2 प्लॉट');
         expect(within(rowB).getByTestId('farm-switcher-row-until')).toHaveTextContent(/पर्यंत$/);
-        expect(within(rowB).getByTestId('farm-switcher-row-current')).toHaveTextContent('सध्या उघडलेली');
-        expect(within(rowB).getByTestId('farm-switcher-row-check')).toBeInTheDocument();
+        expect(within(rowB).getByTestId('farm-switcher-row-current')).toHaveTextContent('सध्या इथे');
+        expect(screen.getByTestId('farm-switcher-sheet').textContent).not.toContain('सध्या उघडलेली');
+    });
+
+    it('the current farm comes first; every row has a bar in its farm\'s colour; the current one is tinted, its pill in its colour', () => {
+        open(ctx([OWNER_FARM, MUKADAM_FARM]), 'b');
+        const rows = screen.getAllByTestId(/^farm-switcher-row-[ab]$/);
+        expect(rows.map(r => r.getAttribute('data-testid'))).toEqual(['farm-switcher-row-b', 'farm-switcher-row-a']);
+
+        const rowB = screen.getByTestId('farm-switcher-row-b');
+        expect(rowB).toHaveAttribute('data-farm-colour', 'indigo');
+        expect(within(rowB).getByTestId('farm-switcher-row-bar').style.background).toBe(INDIGO.ink);
+        expect(rowB.style.background).toBe(INDIGO.tint);
+        expect(rowB.style.borderColor).toBe(INDIGO.ink);
+        const pill = within(rowB).getByTestId('farm-switcher-row-current');
+        expect(pill.style.background).toBe(INDIGO.ink);
+        expect(pill.style.color).toBe('rgb(255, 255, 255)');
+
+        const rowA = screen.getByTestId('farm-switcher-row-a');
+        expect(rowA).toHaveAttribute('data-farm-colour', 'teal');
+        expect(within(rowA).getByTestId('farm-switcher-row-bar').style.background).toBe(TEAL.ink);
+        expect(rowA.style.background).toBe('rgb(255, 255, 255)');
+
+        // the two buttons stay at the bottom
+        expect(screen.getByText('शेती तयार करा')).toBeInTheDocument();
+        expect(screen.getByText('कोड किंवा QR ने सामील व्हा')).toBeInTheDocument();
+    });
+
+    it('before /me/context answers, the plain farm list is ordered and coloured the same way', () => {
+        render(
+            <FarmSwitcherSheet
+                farms={[
+                    { farmId: 'a', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: null, subscription: null },
+                    { farmId: 'b', name: 'Patil Farm', role: 'Worker', farmCode: null, subscription: null },
+                ]}
+                currentFarmId="b" onClose={vi.fn()} onSwitch={vi.fn()} onCreateFarm={vi.fn()} onJoinViaQr={vi.fn()} language="mr"
+            />,
+        );
+        const rows = screen.getAllByTestId(/^farm-switcher-row-[ab]$/);
+        expect(rows.map(r => r.getAttribute('data-farm-colour'))).toEqual(['indigo', 'teal']);
+        expect(within(rows[0]!).getByTestId('farm-switcher-row-current')).toHaveTextContent('सध्या इथे');
     });
 
     it('the whole card is the button: a tap on the row switches', () => {
@@ -138,33 +183,10 @@ describe('the farm switcher sheet', () => {
         open(ctx([OWNER_FARM, MUKADAM_FARM]), 'b', 'en');
         const text = screen.getByTestId('farm-switcher-sheet').textContent ?? '';
         expect(text).toContain('Your farms');
-        expect(text).toContain('Open now');
+        expect(text).toContain('Current');
+        expect(text).not.toContain('Open now');
         expect(text).toContain('Mukadam');
         expect(text).not.toMatch(DEVANAGARI);
-    });
-});
-
-describe('the role band and the nameboard word', () => {
-    it('draws the band and the plots line for a मुकादम on chosen plots', () => {
-        const meContext = ctx([MUKADAM_FARM]);
-        render(<RoleBand meContext={meContext} currentFarmId="b" language="mr" />);
-        expect(screen.getByTestId('role-band-line')).toHaveTextContent('तुम्ही: रामराव · मुकादम');
-        expect(screen.getByTestId('role-band-plots')).toHaveTextContent('2 प्लॉट');
-    });
-
-    it('draws nothing for a single-farm primary owner (his screens stay as today)', () => {
-        const { container } = render(<RoleBand meContext={ctx([OWNER_FARM])} currentFarmId="a" language="mr" />);
-        expect(container).toBeEmptyDOMElement();
-    });
-
-    it('the nameboard keeps the farm name primary and shows the relationship word under it only when given', () => {
-        const meContext = ctx([OWNER_FARM, MUKADAM_FARM]);
-        render(<FarmNameBoard farmName="Patil Farm" onOpenFarmSwitcher={vi.fn()} canSwitch relationWord={boardRelationWord(meContext, 'b', 'mr')} />);
-        expect(screen.getByTestId('farm-nameboard-name')).toHaveTextContent('Patil Farm');
-        expect(screen.getByTestId('farm-nameboard-subtitle')).toHaveTextContent('मुकादम');
-        cleanup();
-        render(<FarmNameBoard farmName="Arve Farm" onOpenFarmSwitcher={vi.fn()} />);
-        expect(screen.getByTestId('farm-nameboard-subtitle')).toHaveTextContent('Managed by Shram Safal');
     });
 });
 

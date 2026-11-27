@@ -3,14 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1 (MU design §6, "one source of truth"). The pure reading of
- * `/me/context` that the role band, the farm switcher and the relationship cards all share - no parallel client arrays.
- * A seat is read by its LABEL (the owner's word: सहमालक, कुटुंब, मुकादम, कामगार) and its PLOTS; what it may do comes from the
- * authorities the server sent, never from the label (D-22, D-26).
+ * `/me/context` that the header's "तुम्ही इथे" card, the farm switcher and the relationship cards all share - no parallel client
+ * arrays. A seat is read by its LABEL (the owner's word: सहमालक, कुटुंब, मुकादम, कामगार) and its PLOTS; what it may do comes from
+ * the authorities the server sent, never from the label (D-22, D-26).
  */
 import type { MeAuthority, MeContext, MeFarm } from '../../core/session/MeContextService';
 import { isActiveSeat } from '../../core/session/seatStatus';
+import { getRoleLabel } from '../../shared/roles/roleLabels';
 import { dayOf } from '../invitations/invitationModel';
-import { relationshipCopy, type RelationshipCopy } from './relationshipCopy';
+import { relationshipCopy, toRelationshipLanguage, type RelationshipCopy } from './relationshipCopy';
 
 /** An authority end is "near" when it falls within this many days (CTO call, reversible). */
 export const NEAR_EXPIRY_DAYS = 14;
@@ -60,43 +61,35 @@ export function activeSeats(me: MeContext | null | undefined): MeFarm[] {
     return (me?.farms ?? []).filter(isActiveSeat);
 }
 
-export interface RoleBandModel {
-    /** "तुम्ही: रामराव · मुकादम". */
-    line: string;
-    /** "सर्व प्लॉट" / "3 प्लॉट" / "स्वतःचं काम". */
-    plots: string;
-}
-
 /**
- * The role band for the open farm, or null when there is none to draw: a single-farm primary owner's screens stay exactly as
- * today (design §6, Scenario A). Everyone else - a non-owner, or anyone holding two or more farms - sees who he is HERE.
+ * Repair R3 lane S1 (V3-D, 27 Nov 2026) - the line of the header's "तुम्ही इथे" card: "मालक · सर्व प्लॉट", "मुकादम · 3 प्लॉट",
+ * "कामगार · स्वतःचं काम". It replaces the role band and the nameboard's small word, with the same words, and now everyone sees it:
+ * a single-farm owner too (the approved design changes MU §6 Scenario A). It reads the OPEN farm only: when /me/context does not
+ * list that farm as an active seat, the answer is null, never another seat's role.
  */
-export function roleBandFor(
-    me: MeContext | null | undefined,
-    currentFarmId: string | null | undefined,
-    language: string | null | undefined,
-): RoleBandModel | null {
-    const seats = activeSeats(me);
-    const current = seats.find(s => s.farmId === currentFarmId) ?? seats[0];
-    if (!me || !current) return null;
-    if (isPrimarySeat(current) && seats.length <= 1) return null;
-    const copy = relationshipCopy(language);
-    const name = me.me?.displayName?.trim() || '';
-    const word = roleWordOf(current, copy);
-    return { line: copy.bandLine(name || '—', word), plots: plotsLineOf(current, copy) };
-}
-
-/** The small secondary word under the farm name on the closed nameboard (same rule as the band). */
-export function boardRelationWord(
+export function hereLineFor(
     me: MeContext | null | undefined,
     currentFarmId: string | null | undefined,
     language: string | null | undefined,
 ): string | null {
-    const seats = activeSeats(me);
-    const current = seats.find(s => s.farmId === currentFarmId) ?? seats[0];
-    if (!current) return null;
-    if (isPrimarySeat(current) && seats.length <= 1) return null;
-    return roleWordOf(current, relationshipCopy(language));
+    const seat = activeSeats(me).find(s => s.farmId === currentFarmId);
+    if (!seat) return null;
+    const copy = relationshipCopy(language);
+    return `${roleWordOf(seat, copy)} · ${plotsLineOf(seat, copy)}`;
+}
+
+/** The role word of the plain farm list (/farms/mine's role), before /me/context answers: one language only. */
+export function plainRoleWord(role: string, language: string | null | undefined): string {
+    switch (role) {
+        case 'PrimaryOwner':
+        case 'SecondaryOwner':
+        case 'Mukadam':
+        case 'Worker': {
+            const l = getRoleLabel(role);
+            return toRelationshipLanguage(language) === 'en' ? l.en : l.mr;
+        }
+        default: return role;
+    }
 }
 
 export interface SwitcherRow {

@@ -1,13 +1,18 @@
 /**
- * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1. The pure reading of /me/context behind the role band, the farm
- * switcher and the relationship cards: the band and plots line per role (a single-farm owner gets none), the switcher's rows
- * (Active relationships only, an expiry only when near), and the cards' states. Marathi mode Marathi only, English mode English.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 - lane MU-1. The pure reading of /me/context behind the "तुम्ही इथे" card, the
+ * farm switcher and the relationship cards: the role and plots line per role, the switcher's rows (Active relationships only, an
+ * expiry only when near), and the cards' states. Marathi mode Marathi only, English mode English.
+ *
+ * Repair R3 lane S1 (V3-D, 27 Nov 2026): the role band ("तुम्ही: ‹नाव› · ‹भूमिका›") and the nameboard's small word are gone; the
+ * colour card's line "‹भूमिका› · ‹प्लॉट›" takes their words, and now a single-farm owner sees it too (the design's change to MU §6
+ * Scenario A).
  */
 import { describe, expect, it } from 'vitest';
 import type { MeContext, MeFarm } from '../../../core/session/MeContextService';
 import {
-    boardRelationWord, isChosenPlotsSeat, labelKeyOf, nearestEnd, ownsNoFarm, relationshipCards, roleBandFor, switcherRows,
+    hereLineFor, isChosenPlotsSeat, labelKeyOf, nearestEnd, ownsNoFarm, relationshipCards, switcherRows,
 } from '../relationshipModel';
+import { relationshipCopy } from '../relationshipCopy';
 
 const NOW = new Date('2026-11-07T06:00:00Z');
 const DEVANAGARI = /[ऀ-ॿ]/;
@@ -38,11 +43,10 @@ const me = (farms: MeFarm[], over: Partial<MeContext> = {}): MeContext => ({
     ...over,
 });
 
-describe('the role band', () => {
-    it('a single-farm primary owner gets none: his screens stay as today (Scenario A)', () => {
+describe('the "तुम्ही इथे" line (V3-D colour card)', () => {
+    it('a single-farm primary owner gets it too: "मालक · सर्व प्लॉट"', () => {
         const ctx = me([farm({ farmId: 'a', role: 'PrimaryOwner', plotScope: 'AllPlots' })]);
-        expect(roleBandFor(ctx, 'a', 'mr')).toBeNull();
-        expect(boardRelationWord(ctx, 'a', 'mr')).toBeNull();
+        expect(hereLineFor(ctx, 'a', 'mr')).toBe('मालक · सर्व प्लॉट');
     });
 
     it('an owner who holds two farms is told which hat he wears on each', () => {
@@ -50,19 +54,19 @@ describe('the role band', () => {
             farm({ farmId: 'a', name: 'Arve Farm', role: 'PrimaryOwner', plotScope: 'AllPlots' }),
             farm({ farmId: 'b', name: 'Patil Farm', role: 'Mukadam', label: 'Mukadam', plotScope: 'AllPlots' }),
         ]);
-        expect(roleBandFor(ctx, 'a', 'mr')).toEqual({ line: 'तुम्ही: रामराव · मालक', plots: 'सर्व प्लॉट' });
-        expect(roleBandFor(ctx, 'b', 'mr')).toEqual({ line: 'तुम्ही: रामराव · मुकादम', plots: 'सर्व प्लॉट' });
+        expect(hereLineFor(ctx, 'a', 'mr')).toBe('मालक · सर्व प्लॉट');
+        expect(hereLineFor(ctx, 'b', 'mr')).toBe('मुकादम · सर्व प्लॉट');
     });
 
     it('per role: a मुकादम on chosen plots, a कामगार on his own work, a सहमालक, a कुटुंब', () => {
         const mukadam = me([farm({ farmId: 'a', role: 'Mukadam', label: 'Mukadam', plotScope: 'ChosenPlots', plotNames: ['प्लॉट 2', 'प्लॉट 4', 'प्लॉट 5'] })]);
-        expect(roleBandFor(mukadam, 'a', 'mr')).toEqual({ line: 'तुम्ही: रामराव · मुकादम', plots: '3 प्लॉट' });
+        expect(hereLineFor(mukadam, 'a', 'mr')).toBe('मुकादम · 3 प्लॉट');
         const worker = me([farm({ farmId: 'a', role: 'Worker', plotScope: 'OwnWork' })]);
-        expect(roleBandFor(worker, 'a', 'mr')).toEqual({ line: 'तुम्ही: रामराव · कामगार', plots: 'स्वतःचं काम' });
+        expect(hereLineFor(worker, 'a', 'mr')).toBe('कामगार · स्वतःचं काम');
         const co = me([farm({ farmId: 'a', role: 'SecondaryOwner', label: 'CoOwner', plotScope: 'AllPlots' })]);
-        expect(roleBandFor(co, 'a', 'mr')?.line).toBe('तुम्ही: रामराव · सहमालक');
+        expect(hereLineFor(co, 'a', 'mr')).toBe('सहमालक · सर्व प्लॉट');
         const family = me([farm({ farmId: 'a', role: 'SecondaryOwner', label: 'Family', plotScope: 'AllPlots' })]);
-        expect(roleBandFor(family, 'a', 'mr')?.line).toBe('तुम्ही: रामराव · कुटुंब');
+        expect(hereLineFor(family, 'a', 'mr')).toBe('कुटुंब · सर्व प्लॉट');
         // A seat made before MU-2 carries no label: its role is read, never a guessed label (P4).
         const old = me([farm({ farmId: 'a', role: 'SecondaryOwner', label: null, plotScope: 'AllPlots' })]);
         expect(labelKeyOf(old.farms[0]!)).toBe('CoOwner');
@@ -70,16 +74,40 @@ describe('the role band', () => {
 
     it('English mode is English only', () => {
         const ctx = me([farm({ farmId: 'a', role: 'Mukadam', label: 'Mukadam', plotScope: 'ChosenPlots', plotNames: ['P1'] })]);
-        const band = roleBandFor(ctx, 'a', 'en')!;
-        expect(band.line).toBe('You: रामराव · Mukadam');
-        expect(band.plots).toBe('1 plot');
-        expect(boardRelationWord(ctx, 'a', 'en')).toBe('Mukadam');
-        expect(band.plots).not.toMatch(DEVANAGARI);
+        expect(hereLineFor(ctx, 'a', 'en')).toBe('Mukadam · 1 plot');
+        expect(hereLineFor(ctx, 'a', 'en')).not.toMatch(DEVANAGARI);
     });
 
     it('a server that sent no plot scope reads every plot (older server), not a made-up count', () => {
         const ctx = me([farm({ farmId: 'a', role: 'SecondaryOwner', plotScope: undefined, plotNames: undefined })]);
-        expect(roleBandFor(ctx, 'a', 'mr')?.plots).toBe('सर्व प्लॉट');
+        expect(hereLineFor(ctx, 'a', 'mr')).toBe('सहमालक · सर्व प्लॉट');
+    });
+
+    it('reads the OPEN farm only: never another seat\'s role, and nothing without the context', () => {
+        const ctx = me([farm({ farmId: 'a', role: 'Worker', plotScope: 'OwnWork' })]);
+        expect(hereLineFor(ctx, 'z', 'mr')).toBeNull();
+        expect(hereLineFor(null, 'a', 'mr')).toBeNull();
+        expect(hereLineFor(me([farm({ farmId: 'a', status: 'PendingApproval' })]), 'a', 'mr')).toBeNull();
+    });
+});
+
+describe('the colour card\'s words', () => {
+    it('Marathi: "तुम्ही इथे", "३ शेती" (Devanagari digits), "आता: ‹शेत›"; the switcher\'s pill is "सध्या इथे"', () => {
+        const mr = relationshipCopy('mr');
+        expect(mr.here.label).toBe('तुम्ही इथे');
+        expect(mr.here.farmCount(3)).toBe('३ शेती');
+        expect(mr.here.farmCount(2)).toBe('२ शेती');
+        expect(mr.here.now('पाटील मळा')).toBe('आता: पाटील मळा');
+        expect(mr.switcher.current).toBe('सध्या इथे');
+    });
+
+    it('English: "You are here", "3 farms", "Now: ‹farm›", "Current"; no Devanagari', () => {
+        const en = relationshipCopy('en');
+        expect(en.here.label).toBe('You are here');
+        expect(en.here.farmCount(3)).toBe('3 farms');
+        expect(en.here.now('Patil Farm')).toBe('Now: Patil Farm');
+        expect(en.switcher.current).toBe('Current');
+        expect([en.here.label, en.here.farmCount(2), en.here.now('X'), en.switcher.current].join(' ')).not.toMatch(DEVANAGARI);
     });
 });
 

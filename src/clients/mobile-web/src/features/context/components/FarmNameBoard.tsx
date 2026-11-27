@@ -159,12 +159,8 @@ export interface FarmNameBoardProps {
      *  this is false, and only becomes a button when there is a second farm to
      *  reach. */
     canSwitch?: boolean;
-    /**
-     * spec: plr-d10 lane MU-1 (MU design §6) - the small secondary relationship word under the farm name ("जबाबदार", "कामगार" ...),
-     * shown when the person is not the primary owner or holds two or more farms. It takes the place of the subtitle line; the
-     * farm name stays primary. Absent = the board is exactly as before (a single-farm owner's board).
-     */
-    relationWord?: string | null;
+    // Repair R3 lane S1 (V3-D, 27 Nov 2026): the MU-1 relationship word under the name is gone. The header's board shows only the
+    // farm name (`showSubtitle={false}`); who he is on the farm is the "तुम्ही इथे" card under the three big buttons.
 }
 
 /**
@@ -182,7 +178,6 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
     showSubtitle = true,
     disabled = false,
     canSwitch = false,
-    relationWord = null,
 }) => {
     const rowRef = React.useRef<HTMLSpanElement>(null);
     const markRef = React.useRef<HTMLSpanElement>(null);
@@ -352,9 +347,9 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                         <span
                                             data-testid="farm-nameboard-subtitle"
                                             className="min-w-0 text-balance text-center text-[9px] font-semibold tracking-[0.06em] min-[400px]:shrink-0 min-[400px]:whitespace-nowrap"
-                                            style={{ color: '#EAD9A8', ...bodyFontFor(relationWord ?? SUBTITLE) }}
+                                            style={{ color: '#EAD9A8', ...bodyFontFor(SUBTITLE) }}
                                         >
-                                            {relationWord ?? SUBTITLE}
+                                            {SUBTITLE}
                                         </span>
                                         <i
                                             aria-hidden="true"

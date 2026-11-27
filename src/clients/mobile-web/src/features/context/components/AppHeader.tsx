@@ -15,8 +15,9 @@ import { FarmOperator } from '../../../domain/types/farm.types';
 import type { DailyLog } from '../../../domain/types/log.types';
 import { FarmSwitcherSheet } from './FarmContextSwitcher';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
-import RoleBand from '../../relationships/RoleBand';
-import { boardRelationWord, ownsNoFarm, switcherRows } from '../../relationships/relationshipModel';
+import { activeSeats, hereLineFor, ownsNoFarm, plainRoleWord, switcherRows } from '../../relationships/relationshipModel';
+import { farmColoursFor } from './farmColour';
+import { FARM_SWITCH_NOTE_MS, FarmHereCard, FarmSwitchNote } from './FarmHereCard';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { useSyncQueueStatus, useUnqueueableLogCount, SyncStatusDrawer } from '../../sync';
 import type { WeatherStatus } from '../../weather/useWeatherMonitor';
@@ -224,9 +225,29 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const storedScopes = useStoredAccessScopes();
   const plotsOnly = scopeForFarm(storedScopes, currentFarmId)?.plotScope === 'ChosenPlots';
   const farmName = currentFarm?.name ?? '';
-  // spec: plr-d10 lane MU-1 - the ONE relationship read model (/me/context): the role band, the nameboard's small word and the
-  // switcher's rows all read it. Absent without a FarmContextProvider (a test) = none drawn.
+  // spec: plr-d10 lane MU-1 - the ONE relationship read model (/me/context): the "तुम्ही इथे" card's line and the switcher's rows
+  // both read it. Absent without a FarmContextProvider (a test) = the plain farm list's role word only.
   const meContext = useOptionalFarmContext()?.meContext ?? null;
+
+  // Repair R3 lane S1 (V3-D) - each farm's colour, over ALL his farms (both lists), so a clash between two of them is settled
+  // the same way for the card, the header's edge, the sheet and the note.
+  const farmList = farmContext?.farms;
+  const colourOf = React.useMemo(
+    () => farmColoursFor([...(farmList ?? []).map((f) => f.farmId), ...activeSeats(meContext).map((s) => s.farmId)]),
+    [farmList, meContext],
+  );
+  const currentColour = currentFarm ? colourOf(currentFarm.farmId) : null;
+  // "मालक · सर्व प्लॉट"; before /me/context answers, the role word of /farms/mine alone (no plots line it cannot know).
+  const hereLine = currentFarm
+    ? hereLineFor(meContext, currentFarm.farmId, language) ?? plainRoleWord(currentFarm.role, language)
+    : null;
+  // "आता: ‹शेत›" after a switch, for FARM_SWITCH_NOTE_MS; a second switch starts the clock again.
+  const [switchNote, setSwitchNote] = React.useState<{ farmId: string; name: string } | null>(null);
+  React.useEffect(() => {
+    if (!switchNote) return;
+    const id = window.setTimeout(() => setSwitchNote(null), FARM_SWITCH_NOTE_MS);
+    return () => window.clearTimeout(id);
+  }, [switchNote]);
   // `plotCount` was derived here for `FarmIdentityElement`'s plot line. That
   // element left row 1 with the founder's 2026-08-30 nameboard ruling — the
   // count is not a farm IDENTITY, and he removed it from this row. The number
@@ -447,19 +468,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             The Shram Safal lockup that used to sit here is NOT restored: the
             founder ruled the farm is the hero of this screen and the brand
             already appears on the app icon, the splash and the login. It
-            survives on the board as the shield mark and the subtitle line,
-            which name the tool without claiming a credential for the farm.
-            See `FarmNameBoard.tsx` for why that distinction was load-bearing. */}
+            survives on the board as the shield mark.
+            Repair R3 lane S1 (V3-D, founder 27 Nov 2026): the board shows ONLY
+            the farm name - no subtitle, no role word. Who he is on this farm
+            is the "तुम्ही इथे" card under the three big buttons. */}
         {farmContext ? (
           <FarmNameBoard
             farmName={farmName}
             language={language}
             disabled={disabled}
+            showSubtitle={false}
             /* Task 12's rule, carried over: only a real second farm turns the
                board into a control. See the prop doc in `FarmNameBoard.tsx`. */
             canSwitch={farmCount > 1}
             onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
-            relationWord={boardRelationWord(meContext, currentFarm?.farmId, language)}
           />
         ) : (
           <div className="min-w-0 flex-1" />
@@ -513,9 +535,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
       </div>
 
-      {/* spec: plr-d10 lane MU-1 - the role band: who he is on the open farm (not for a single-farm primary owner). */}
-      {farmContext && <RoleBand meContext={meContext} currentFarmId={currentFarm?.farmId} language={language} />}
-
       {/* Task 13 (founder reference image + his own Marathi table) — the
           nav-cards row. Renders "in its own row below the header, not
           inside it" (the founder's own words): a sibling of row 1's div
@@ -537,6 +556,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             plotsOnly={plotsOnly}
           />
         </div>
+      )}
+
+      {/* Repair R3 lane S1 (V3-D) - the open farm in its colour, under the three big buttons: "तुम्ही इथे", "‹भूमिका› · ‹प्लॉट›",
+          and with 2+ farms the "‹N› शेती ▾" pill that opens the switcher. It replaces the MU-1 role band, so it is drawn where the
+          band was: on every screen with a farm (on a place without the three buttons it sits under the header row). */}
+      {farmContext && currentColour && hereLine && (
+        <FarmHereCard
+          line={hereLine}
+          colour={currentColour}
+          farmCount={farmCount}
+          language={language}
+          disabled={disabled}
+          onOpenSwitcher={() => setIsFarmSwitcherOpen(true)}
+        />
       )}
 
       {/* Owner Oversight Loop (spec §2) — the canonical strip, row 2: the
@@ -581,10 +614,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           rows={switcherRows(meContext, currentFarm?.farmId, language)}
           ownsNoFarm={ownsNoFarm(meContext)}
           language={language}
+          colourOf={colourOf}
           onClose={() => setIsFarmSwitcherOpen(false)}
           onSwitch={(farmId) => {
+            const opened = farmId !== currentFarm?.farmId;
             farmContext.onSwitchFarm(farmId);
             setIsFarmSwitcherOpen(false);
+            // V3-D: "आता: ‹शेत›" - only for a real switch, not a tap on the farm already open.
+            if (opened) {
+              const name = farmContext.farms.find((f) => f.farmId === farmId)?.name
+                ?? activeSeats(meContext).find((s) => s.farmId === farmId)?.name;
+              if (name) setSwitchNote({ farmId, name });
+            }
           }}
           onCreateFarm={() => {
             setIsFarmSwitcherOpen(false);
@@ -594,6 +635,21 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             setIsFarmSwitcherOpen(false);
             farmContext.onJoinViaQr();
           }}
+        />
+      )}
+
+      {/* V3-D - the short note after a switch, in the new farm's colour (drawn on document.body, see FarmHereCard.tsx). */}
+      {switchNote && (
+        <FarmSwitchNote farmName={switchNote.name} colour={colourOf(switchNote.farmId)} language={language} />
+      )}
+
+      {/* V3-D - a 4 px strip in the open farm's colour along the header's bottom edge (inset clear of the rounded corners). */}
+      {farmContext && currentColour && (
+        <span
+          aria-hidden="true"
+          data-testid="farm-colour-edge"
+          className="pointer-events-none absolute inset-x-7 bottom-0 h-1 rounded-t transition-colors duration-200 motion-reduce:transition-none"
+          style={{ background: currentColour.ink }}
         />
       )}
 
