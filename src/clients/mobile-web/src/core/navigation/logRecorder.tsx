@@ -19,6 +19,7 @@ import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 import { VoiceJourney } from '../../features/logs/components/voiceFlowV2/VoiceJourney';
+import { RingWaitScreen } from '../../features/logs/components/voiceFlowV2/RingWaitScreen';
 import { ShramSathiUnderstanding as ShramSathiUnderstandingLine } from './mainViewComponents';
 import type { AppRouterContext } from './routeContext';
 import type { RecorderFlowV2 } from '../../features/voice/components/recorder/flowV2Types';
@@ -58,6 +59,8 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, ar
         card: armSeq !== undefined
             ? { armSeq, placeLabel: (language: string | undefined) => placeLabelOf(ctx.logScope, ctx.crops, language, resultStr(language).wholeFarm) ?? '' }
             : undefined,
+        // spec plr-d10 (part 03, A3): the founder's final recording screen, for the log tab's own flow only (where the mic card is).
+        ...(armSeq !== undefined && { listening: true }),
     } : undefined;
     return (
         <>
@@ -101,8 +104,17 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, ar
     );
 };
 
+export interface ProcessingScreenOptions {
+    /**
+     * spec plr-d10 (part 03, A4; founder 28 Nov: "No old approved your new suggestion") — the log tab's own flow (not the हजेरी door):
+     * the ring screen after stop ("जतन झालं", then "श्रम साथी समजून घेत आहे" with the quiet chase until the real answer comes).
+     */
+    ring?: boolean;
+}
+
 /** THE waiting screen after he speaks (founder-approved; its component is not touched here). */
-export const renderProcessingScreen = (ctx: AppRouterContext): React.ReactNode => {
+export const renderProcessingScreen = (ctx: AppRouterContext, options: ProcessingScreenOptions = {}): React.ReactNode => {
+    if (FEATURE_FLAGS.voiceFlowV2 && options.ring) return <RingWaitScreen />;
     // spec voice-flow-v2-2026-11-23 (Task 6) — the calm step list, each tick a real event. OFF: today's screen below.
     if (FEATURE_FLAGS.voiceFlowV2) return <VoiceJourney crops={ctx.crops} farmerProfile={ctx.farmerProfile} logScope={ctx.logScope} />;
     const { liveCaption, voiceStreamingPhase } = ctx;

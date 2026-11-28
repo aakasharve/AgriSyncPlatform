@@ -18,4 +18,9 @@ export interface RecorderFlowV2 {
     silenceHelp: boolean;
     /** The mic card instead of the plain idle mic. */
     card?: MicCardSpec;
+    /**
+     * spec plr-d10 (part 03, A3) — the founder's final recording screen (`SathiListening`: the listening wave, the blackboard, the
+     * centred stop, one buzz per finished sentence). Only the log tab's flow sets it; absent = today's v2 recording screen.
+     */
+    listening?: boolean;
 }

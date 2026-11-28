@@ -311,7 +311,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             {status === 'processing' && (FEATURE_FLAGS.voiceFlowV2 ? (
                 // spec voice-flow-v2-2026-11-23 (F2): the step list is the same full-screen layer as the crop, plot and mic steps.
                 <VoiceLayer step="processing" monthOf={{ history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null }} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
-                    {renderProcessingScreen(ctx)}
+                    {/* spec plr-d10 (part 03, A4): the log tab's own flow gets the ring screen; the हजेरी door keeps the step list. */}
+                    {renderProcessingScreen(ctx, { ring: logIntent !== 'labour' })}
                 </VoiceLayer>
             ) : renderProcessingScreen(ctx))}
 

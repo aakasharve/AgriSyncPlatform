@@ -101,6 +101,18 @@ export interface VoiceFlowWords {
     finishSub: string;
     /** The short note shown just before the result moves to पूर्ण शेतीचा आढावा by itself. */
     movingToReview: string;
+    // spec plr-d10 (part 03, A3 / A4; approved 28 Nov 2026) — the recording screen's top line, the screen after stop
+    /** The app's name as it leads the lines below, in brand green. */
+    brand: string;
+    /** The recording screen's top line after the name ("श्रम साथी तुमचं बोलणं ऐकून घेतोय"). */
+    listeningRest: string;
+    /** The screen after stop, while his words are being understood ("श्रम साथी समजून घेत आहे"). */
+    understandingRest: string;
+    /** The same screen once the real answer came: the name as the doer, then the rest. */
+    understoodBrand: string;
+    understoodRest: string;
+    /** Under the ring when some parts were not told at all today. */
+    missedNote: string;
 }
 
 export const VOICE_FLOW_MR: VoiceFlowWords = {
@@ -180,6 +192,13 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     finishTitle: 'झालं',
     finishSub: 'पूर्ण शेतीचा आढावा बघा',
     movingToReview: 'आजच्या शेतीचा आढावा बघा',
+    // FOUNDER approved 28 Nov 2026 (recording-redesign, result-v12-final; coordinator's A4 line)
+    brand: 'श्रम साथी',
+    listeningRest: 'तुमचं बोलणं ऐकून घेतोय',
+    understandingRest: 'समजून घेत आहे',
+    understoodBrand: 'श्रम साथीने',
+    understoodRest: 'समजून घेतलं ✓',
+    missedNote: 'लाल भाग अजून सांगितले नाहीत',
 };
 
 export const VOICE_FLOW_EN: VoiceFlowWords = {
@@ -258,6 +277,12 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     finishTitle: 'Done', // PROPOSED (English)
     finishSub: 'See the whole farm review', // PROPOSED (English)
     movingToReview: 'See today\'s farm review', // PROPOSED (English)
+    brand: 'Shram Sathi', // PROPOSED (English)
+    listeningRest: 'is listening to you', // PROPOSED (English)
+    understandingRest: 'is understanding', // PROPOSED (English)
+    understoodBrand: 'Shram Sathi', // PROPOSED (English)
+    understoodRest: 'has understood ✓', // PROPOSED (English)
+    missedNote: 'The red parts are not told yet', // PROPOSED (English)
 };
 
 /** The words in the screen's language (Marathi unless English is chosen). */

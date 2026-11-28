@@ -23,6 +23,7 @@ import { TypedLink, TypedSheet, TypedTag } from './TypedEntry';
 import type { RecorderFlowV2 } from './flowV2Types';
 import { MicCard } from './MicCard';
 import { SathiRecording } from './SathiRecording';
+import { SathiListening } from './SathiListening';
 import { NothingUnderstood } from './NothingUnderstood';
 import { HintSlot, useSilenceHelp, type AutoCancelReason } from './SilenceHelp';
 import { AUTO_START_SEC, noteLevelUnmeasurable, noteMicGranted, useAutoStartCountdown } from './useAutoStartCountdown';
@@ -69,6 +70,8 @@ export interface RecorderFaceProps {
     flowV2?: RecorderFlowV2;
     /** spec plr-d10 (voice live words) — the words heard so far in what he is saying; the v2 recording screen's words strip shows them. Empty = none yet. */
     liveWords?: string;
+    /** spec plr-d10 (part 03, A3) — finished sentences so far in this recording (the phone's own phrase cut); the final screen buzzes once per new one. */
+    phrases?: number;
 }
 
 interface RecordingProps {
@@ -85,9 +88,12 @@ interface RecordingProps {
     place?: string;
     /** The words heard so far (v2 recording screen only). */
     liveWords?: string;
+    /** The founder's final recording screen (the log tab's flow, `flowV2.listening`). */
+    listening?: boolean;
+    phrases?: number;
 }
 
-const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel, place, liveWords }) => {
+const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel, place, liveWords, listening = false, phrases }) => {
     const [hintDismissed, setHintDismissed] = useState(false);
     const language = useOptionalLanguage()?.language;
     // spec plr-d10 (part 03, A2): on the v2 recording screen, 3 s of quiet after at least 1 s of real speech is the same stop as his tap,
@@ -98,6 +104,7 @@ const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel,
     const help = useSilenceHelp({ on: silenceHelp || autoStarted, level, autoStarted, onAutoCancel, onQuietStop: silenceHelp ? quietStop : undefined });
     const hintOn = !silenceHelp && !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
     // spec voice-flow-v2-2026-11-23 (F4): with the flow on, the recording screen is Sathi's (ring of the parts, bubble, field, bottom stop).
+    if (silenceHelp && listening) return <SathiListening seconds={seconds} level={level} onStop={tapStop} onCancel={onCancel} help={help} phrases={phrases} liveWords={liveWords} />;
     if (silenceHelp) return <SathiRecording seconds={seconds} level={level} onStop={tapStop} onCancel={onCancel} help={help} place={place} liveWords={liveWords} />;
     return (
         <div data-testid="mic-ui" data-recording="yes" style={{ fontFamily: SANS }}
@@ -143,7 +150,7 @@ const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel,
 
 export const RecorderFace: React.FC<RecorderFaceProps> = ({
     isRecording, seconds, level, disabled, suggest, error, keptNote, errorCode, transcript, lastInputTyped, micRefused,
-    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2, liveWords,
+    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2, liveWords, phrases,
 }) => {
     const language = useOptionalLanguage()?.language;
     const [typedOpen, setTypedOpen] = useState(false);
@@ -205,7 +212,7 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
         return (
             <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel}
                 silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel}
-                place={card?.placeLabel(language)} liveWords={liveWords} />
+                place={card?.placeLabel(language)} liveWords={liveWords} listening={flowV2?.listening === true} phrases={phrases} />
         );
     }
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;

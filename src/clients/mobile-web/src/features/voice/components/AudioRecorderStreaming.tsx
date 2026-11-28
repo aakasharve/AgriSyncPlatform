@@ -35,6 +35,7 @@ import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency
 import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
 import { LiveWordsSession } from '../liveWords/liveWordsSession';
+import { PhraseChunker } from '../liveWords/phraseChunker';
 
 interface AudioRecorderStreamingProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -109,6 +110,11 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     liveWordsRef.current = null;
     setLiveWords('');
   };
+  // spec plr-d10 (part 03, A3): the final recording screen buzzes once per finished sentence. The sentences are cut on the phone
+  // (`PhraseChunker`, the live-words lane's own cut, fed a COPY of each frame): nothing is sent anywhere and nothing recorded changes.
+  const [phrases, setPhrases] = useState(0);
+  const phraseRef = useRef<PhraseChunker | null>(null);
+  const phrasesOn = flowV2?.listening === true;
 
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
   const language = useOptionalLanguage()?.language;
@@ -156,6 +162,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
         trimmer.feed(frame);
         hasher.feed(frame);
         liveWordsRef.current?.feed(frame); // a COPY is read; what is recorded is untouched
+        if (phraseRef.current?.feed(frame)) setPhrases((n) => n + 1); // a COPY too: one finished sentence, counted on the phone
       });
 
       // Voice live words (display only, never blocks): the session cuts his speech into phrases and shows each one's words.
@@ -165,6 +172,8 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       if (liveWordsOn && liveWordsFarmId && rate) {
         liveWordsRef.current = new LiveWordsSession({ farmId: liveWordsFarmId, sampleRate: rate, onWords: setLiveWords });
       }
+      setPhrases(0);
+      phraseRef.current = phrasesOn && rate ? new PhraseChunker({ sampleRate: rate }) : null;
 
       setIsRecording(true);
       setLastInputTyped(false);
@@ -197,7 +206,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       setInternalErrorCode(name);
       setIsRecording(false);
     }
-  }, [liveWordsOn, liveWordsFarmId]);
+  }, [liveWordsOn, liveWordsFarmId, phrasesOn]);
 
   const stopRecording = useCallback(async () => {
     if (!recorderRef.current || !isRecording) return;
@@ -206,6 +215,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
 
     endLiveWords(); // no more phrases leave the phone once he has stopped; the words shown go away with the screen
+    phraseRef.current = null;
     setIsRecording(false);
     setLiveStream(null);
     if (timerRef.current) {
@@ -323,6 +333,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       if (timerRef.current) clearInterval(timerRef.current);
       liveWordsRef.current?.stop();
       liveWordsRef.current = null;
+      phraseRef.current = null;
       void liveEncoderRef.current?.stop();
       liveEncoderRef.current = null;
       // Best-effort cleanup; recorder.stop() is async and we don't await on unmount.
@@ -358,6 +369,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
       flowV2={flowV2}
       liveWords={liveWords}
+      phrases={phrases}
     />
   );
 };

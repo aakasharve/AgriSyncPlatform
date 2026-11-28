@@ -782,8 +782,8 @@ export function ringNodesV2(states: Partial<Record<CategoryId, RingNodeData['sta
     });
 }
 
-/** The v2 ring, clockwise from the top: the old order without 'cropNote'; 'blockers' always present. */
-const RING_V2_ORDER: readonly CategoryId[] = ['work', 'labour', 'inputs', 'water', 'machinery', 'blockers', 'expenses', 'observations', 'reminders'];
+/** The v2 ring, clockwise from the top: the old order without 'cropNote'; 'blockers' always present. (Also the recording ring's 9 icons, plr-d10 A3.) */
+export const RING_V2_ORDER: readonly CategoryId[] =['work', 'labour', 'inputs', 'water', 'machinery', 'blockers', 'expenses', 'observations', 'reminders'];
 /** The founder's word for the orb (2026-11-23). PROPOSED (Marathi) until his string review. */
 const RING_V2_BLOCKER_LABEL = 'अडथळा';
 

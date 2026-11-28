@@ -143,6 +143,36 @@ describe('voice flow v2 — around the saved screen', { timeout: 60_000 }, () =>
         expect(c.handleReset).toHaveBeenCalledTimes(1);
     });
 
+    it('A4: while processing the log tab shows the ring screen; a failed parse goes to the existing failure path (the mic page), never a result', async () => {
+        const { renderLogView } = await load(true);
+        render(<>{renderLogView(ctx({ status: 'processing', voiceResult: undefined, lastSavedLogIds: [] }))}</>);
+        expect(screen.getByTestId('ring-wait')).toBeTruthy();
+        expect(screen.getByTestId('voice-layer').getAttribute('data-step')).toBe('processing');
+        expect(screen.queryByTestId('voice-result-stub')).toBeNull();
+
+        cleanup();
+        render(<>{renderLogView(ctx({ status: 'idle', error: 'काहीतरी चुकलं', voiceResult: undefined, lastSavedLogIds: [] }))}</>);
+        expect(screen.queryByTestId('ring-wait')).toBeNull();
+        expect(screen.queryByTestId('ring-reveal')).toBeNull();
+        expect(screen.queryByTestId('voice-result-stub')).toBeNull();
+        expect(screen.getByTestId('log-entry-flow').getAttribute('data-step')).toBe('mic');
+    });
+
+    it('A4: the हजेरी door keeps the step list while processing', async () => {
+        const { renderLogView } = await load(true);
+        render(<>{renderLogView(ctx({ status: 'processing', logIntent: 'labour', voiceResult: undefined, lastSavedLogIds: [] }))}</>);
+        expect(screen.getByTestId('voice-journey')).toBeTruthy();
+        expect(screen.queryByTestId('ring-wait')).toBeNull();
+    });
+
+    it('A4: the result screen opens under the ring, which lights this recording\'s parts first', async () => {
+        const { renderLogView } = await load(true);
+        render(<>{renderLogView(ctx())}</>);
+        await screen.findByTestId('voice-result-stub');
+        expect(screen.getByTestId('ring-reveal')).toBeTruthy();
+        expect(screen.getByTestId('sathi-ring-labour').getAttribute('data-state')).toBe('told');
+    });
+
     it('flag OFF: no close is handed to the screen, and the sticky back is the reset as before', async () => {
         const { renderLogView, back } = await load(false);
         back.resetDetailBackForTests();

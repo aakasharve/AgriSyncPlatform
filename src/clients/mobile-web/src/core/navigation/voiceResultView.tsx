@@ -51,6 +51,7 @@ import { TodayAttendanceCard } from '../../features/logs/components/entry/TodayA
 import { entryAttendance } from '../../features/logs/components/entry/todayAttendance';
 import { leaveDetailIfOpen } from '../../features/logs/components/voiceFlowV2/detailBack';
 import { VoiceLayer } from '../../features/logs/components/voiceFlowV2/VoiceLayer';
+import { RingRevealHost } from '../../features/logs/components/voiceFlowV2/RingReveal';
 
 /** No plot chosen: the entry flow opens on the work home (`LogEntryFlow` starts at home without a selection). */
 const WORK_HOME_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -199,7 +200,13 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
     // spec voice-flow-v2-2026-11-23 (F2): the saved screen is the last part of the voice journey's ONE full-screen layer: its top row
     // holds "मागे" and the place chip; the bottom bar ("आणखी सांगा") is the layer's bottom slot.
     if (FEATURE_FLAGS.voiceFlowV2) {
-        return <VoiceLayer step="saved" back={backBar} monthOf={{ history: ctx.history, plotId: (() => { const ids = [...new Set(logs.flatMap(l => (l.context?.selection ?? []).flatMap(x => x.selectedPlotIds ?? [])))]; return ids.length === 1 ? ids[0] : null; })() }} placeLabel={language => placeOf(logs, language, ctx.crops)}>{container}</VoiceLayer>;
+        // spec plr-d10 (part 03, A4): the ring first lights what this recording told (once), over the result screen mounting underneath.
+        return (
+            <VoiceLayer step="saved" back={backBar} monthOf={{ history: ctx.history, plotId: (() => { const ids = [...new Set(logs.flatMap(l => (l.context?.selection ?? []).flatMap(x => x.selectedPlotIds ?? [])))]; return ids.length === 1 ? ids[0] : null; })() }} placeLabel={language => placeOf(logs, language, ctx.crops)}>
+                {container}
+                <RingRevealHost recordingKey={result.key} logs={logs} history={ctx.history} />
+            </VoiceLayer>
+        );
     }
     return (
         <>

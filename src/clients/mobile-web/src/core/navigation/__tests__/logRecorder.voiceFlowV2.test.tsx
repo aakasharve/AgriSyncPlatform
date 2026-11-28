@@ -25,8 +25,9 @@ vi.mock('../../../i18n/LanguageContext', () => {
     return { useOptionalLanguage: ctx, useLanguage: ctx };
 });
 
-import { renderProcessingScreen } from '../logRecorder';
+import { renderLogRecorder, renderProcessingScreen } from '../logRecorder';
 import type { AppRouterContext } from '../routeContext';
+import type { RecorderFlowV2 } from '../../../features/voice/components/recorder/flowV2Types';
 
 const ctx = {
     liveCaption: '', voiceStreamingPhase: 'idle',
@@ -65,5 +66,66 @@ describe('renderProcessingScreen — voice flow v2', () => {
         expect(container.querySelector('.animate-spin')).not.toBeNull();
         expect(container).toHaveTextContent('श्रम साथी तुम्ही जे बोललात ते समजून घेत आहे');
         expect(screen.queryByTestId('voice-journey')).toBeNull();
+    });
+});
+
+/** spec plr-d10 (part 03, A4): the log tab's own flow gets the ring screen; everything else keeps its screen. */
+describe('renderProcessingScreen — the ring screen after stop (A4)', () => {
+    it('flag on + the log tab\'s own flow: the ring screen, not the step list and not the श्रम साथी video screen', () => {
+        flags.voiceFlowV2 = true;
+        render(<>{renderProcessingScreen(ctx, { ring: true })}</>);
+        expect(screen.getByTestId('ring-wait')).toBeInTheDocument();
+        expect(screen.getByTestId('ring-wait-line')).toHaveTextContent('श्रम साथी समजून घेत आहे');
+        expect(screen.queryByTestId('voice-journey')).toBeNull();
+        expect(screen.queryByTestId('shram-sathi-understanding')).toBeNull();
+    });
+
+    it('flag on without the ring (the हजेरी door, the ONE mic\'s own screen): the step list, as before', () => {
+        flags.voiceFlowV2 = true;
+        render(<>{renderProcessingScreen(ctx)}</>);
+        expect(screen.getByTestId('voice-journey')).toBeInTheDocument();
+        expect(screen.queryByTestId('ring-wait')).toBeNull();
+    });
+
+    it('flag off: the old waiting screen is still used, even when the ring is asked for', () => {
+        flags.voiceFlowV2 = false;
+        const { container } = render(<>{renderProcessingScreen(ctx, { ring: true })}</>);
+        expect(container.innerHTML).toBe('<div data-testid="shram-sathi-understanding"></div>');
+    });
+});
+
+/** spec plr-d10 (part 03, A3): the final recording screen is asked for only by the log tab's own flow (where the mic card is). */
+describe('renderLogRecorder — the final recording screen (A3)', () => {
+    const flowOf = (node: React.ReactNode): RecorderFlowV2 | undefined => {
+        const all: React.ReactElement[] = [];
+        const walk = (n: React.ReactNode) => {
+            if (Array.isArray(n)) { n.forEach(walk); return; }
+            if (!React.isValidElement(n)) return;
+            all.push(n);
+            walk((n.props as { children?: React.ReactNode }).children);
+        };
+        walk(node);
+        const recorder = all.find(el => (el.props as { onAudioCaptured?: unknown }).onAudioCaptured !== undefined);
+        return (recorder?.props as { flowV2?: RecorderFlowV2 } | undefined)?.flowV2;
+    };
+    const recCtx = { ...ctx, handleAudioReady: vi.fn(), handleTextReady: vi.fn(), setStatus: vi.fn(), isContextReady: true, error: null } as unknown as AppRouterContext;
+
+    it('the log tab\'s flow (an armSeq): `listening` with the card', () => {
+        flags.voiceFlowV2 = true;
+        const v2 = flowOf(renderLogRecorder(recCtx, { armSeq: 2 }));
+        expect(v2?.listening).toBe(true);
+        expect(v2?.card?.armSeq).toBe(2);
+    });
+
+    it('the ONE mic and the हजेरी door (no armSeq): no `listening`, the earlier screen', () => {
+        flags.voiceFlowV2 = true;
+        const v2 = flowOf(renderLogRecorder(recCtx, {}));
+        expect(v2?.silenceHelp).toBe(true);
+        expect(v2?.listening).toBeUndefined();
+    });
+
+    it('flag off: no flowV2 at all', () => {
+        flags.voiceFlowV2 = false;
+        expect(flowOf(renderLogRecorder(recCtx, { armSeq: 2 }))).toBeUndefined();
     });
 });

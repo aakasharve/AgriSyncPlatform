@@ -10,35 +10,19 @@
  * lines as white-chalk quotes (fixed-height so it never jumps; per-line reading
  * time), two chalk pieces on the ledge, and a sickle (विळा) leaning bottom-left.
  * Rendered by mainView while `status === 'processing'`. Flat / vector-friendly.
+ *
+ * The grain, the 15 lines and the rule that turns them are read from `chalkBoard.tsx` (spec plr-d10 part 03 A3): the recording screen's
+ * board uses the same ones, so the two can never drift apart. Nothing about this screen's look or behaviour changed.
  */
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { BOARD_LINES as LINES, GRAIN, useBoardLine } from './chalkBoard';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
-const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
-
 const BRAND = 'श्रम साथी';
 const SUPPORT = 'तुम्ही शेतात केलेली कामे आणि तुमची शेती करण्याची कार्यपद्धत समजून घेत आहे';
-
-const LINES = [
-    'जे मोजता येतं, त्याचं नियोजन करता येतं — आणि आज तुम्ही शेतकाम मोजायला सुरुवात केली.',
-    'दिवसातला एक मिनिट दिलात — शेतावरची पकड इथूनच सुरू होते.',
-    'आतापासून तुमची शेती अंदाजावर नाही, तुमच्या पूर्वीच्या निर्णयांवर उभी राहील.',
-    'आजचं काम आज नोंदवलं, तर उद्याचा निर्णय अंदाजावर राहत नाही.',
-    'आज तुम्ही फक्त पीक घेत नाही — स्वतःचं आणि तुमच्या शेतजमिनीच्या ज्ञानाचा पाया रोवत आहात.',
-    'हुशार शेतकरी शंकेवर नाही, स्वतःच्या नोंदींवर निर्णय घेतो.',
-    'आज केलेली प्रत्येक नोंद, उद्याचा निर्णय सोपा करते.',
-    'मोजायला लागलात, की शेती नशिबावर राहत नाही.',
-    'नोंदवलेलं शहाणपण पुढच्या पिढीला कामी येतं; विसरलेली चूक पुन्हा तीच चूक करायला भाग पाडते.',
-    'आज तुम्ही ‘असेल कदाचित’ वरून ‘मला माहीत आहे’ पर्यंत पोहोचलात.',
-    'आकड्यांवर चालणारी शेती, हीच खऱ्या अर्थाने तुमच्या हातातली शेती.',
-    'इतिहास त्यांनाच मार्ग दाखवतो जे तो लिहितात — आज तुम्ही तुमचा लिहिताय.',
-    'पुढची शेती अंदाजावर नाही, नोंदीवर चालणार आहे.',
-    'आज तुम्ही फक्त शेतकरी नाही — स्वतःची शेती पुढे नेणारे प्रगतशील आणि नियोजनबद्ध शेतकरी आहात.',
-    'आजचं छोटं मोजमाप, उद्या तुमच्या शेतीवरचं पूर्ण नियंत्रण देतं.',
-];
 
 // green→blue waveform (short bars green → tall bars blue)
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
@@ -85,18 +69,8 @@ export function ShramSathiUnderstanding(): React.ReactElement {
         ro.observe(el);
         return () => ro.disconnect();
     }, [sc]);
-    // start on a RANDOM line; reading time scales with length → longer quotes linger longer
-    const [li, setLi] = useState(() => Math.floor(Math.random() * LINES.length));
-    useEffect(() => {
-        const words = LINES[li].trim().split(/\s+/).length;
-        const dur = Math.min(9000, Math.max(4200, 2200 + words * 440));
-        const t = window.setTimeout(() => setLi((v) => {
-            let n = Math.floor(Math.random() * LINES.length);
-            if (n === v) n = (n + 1) % LINES.length; // no immediate repeat
-            return n;
-        }), dur);
-        return () => window.clearTimeout(t);
-    }, [li]);
+    // start on a RANDOM line; reading time scales with length → longer quotes linger longer; no immediate repeat (`chalkBoard.useBoardLine`)
+    const li = useBoardLine();
     return (
         <div className="su-root" data-fit={sc.toFixed(2)}>
             <style>{`
