@@ -682,7 +682,8 @@ public static class AiEndpoints
             parseResult.StageTimings,
             Stopwatch.GetElapsedTime(handlerStartedAt),
             job?.Id,
-            parsed.InputRawDurationMs);
+            parsed.InputRawDurationMs,
+            parsed.ClientTimingPrev);
         // jobId (legacy) and sourceAiJobId (spine) both emitted from the same
         // AiJob.Id. Phase 01.5 forward-declares sourceAiJobId for downstream
         // spine consumers (CreateDailyLog at user-Confirm); jobId stays for
@@ -1025,7 +1026,8 @@ public static class AiEndpoints
                 rawDuration,
                 segmentMetadataJson,
                 requestPayloadHash,
-                RecordedAtUtc: recordedAtUtc));
+                RecordedAtUtc: recordedAtUtc,
+                ClientTimingPrev: SanitizeClientTiming(form["client_timing_prev"])));
         }
 
         var jsonRequest = await request.ReadFromJsonAsync<ParseVoiceInputRequest>(cancellationToken: ct);
@@ -1629,7 +1631,8 @@ public static class AiEndpoints
         VoiceStageTimings? timings,
         TimeSpan handlerElapsed,
         Guid? jobId,
-        int? rawDurationMs)
+        int? rawDurationMs,
+        string? phonePrev = null)
     {
         var handlerMs = (int)Math.Clamp(Math.Round(handlerElapsed.TotalMilliseconds, MidpointRounding.AwayFromZero), 0, int.MaxValue);
         var measured = timings ?? new VoiceStageTimings(0, 0, 0, 0, VoiceStageTimings.OneCallPath);
@@ -1642,14 +1645,45 @@ public static class AiEndpoints
 
         context.Response.Headers["Server-Timing"] = effective.ToServerTimingHeader();
         logger.LogInformation(
-            "[voice-timing] jobId={JobId} path={Path} s3Ms={S3Ms} sttMs={SttMs} structMs={StructMs} totalMs={TotalMs} rawDurationMs={RawDurationMs}",
+            "[voice-timing] jobId={JobId} path={Path} s3Ms={S3Ms} sttMs={SttMs} structMs={StructMs} totalMs={TotalMs} rawDurationMs={RawDurationMs} phonePrev={PhonePrev}",
             jobId,
             effective.Path,
             effective.S3Ms,
             effective.SttMs,
             effective.StructMs,
             effective.TotalMs,
-            rawDurationMs);
+            rawDurationMs,
+            phonePrev ?? "none");
+    }
+
+    /// <summary>
+    /// spec plr-d10 (voice AI review, 28 Nov 2026) - the phone's timing line for its previous recording, made safe to write into a log:
+    /// at most 240 characters, only letters, digits and <c>= , . : ; _ -</c> (anything else becomes <c>?</c>), so a caller cannot put
+    /// a line break or free text into the server's log. Null when blank.
+    /// </summary>
+    public static string? SanitizeClientTiming(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var text = raw.Trim();
+        if (text.Length > 240)
+        {
+            text = text[..240];
+        }
+
+        return string.Create(text.Length, text, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+            {
+                var c = source[i];
+                span[i] = c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '=' or ',' or '.' or ':' or ';' or '_' or '-'
+                    ? c
+                    : '?';
+            }
+        });
     }
 
     private static IResult UnexpectedNullResult(string operation)
@@ -1730,4 +1764,7 @@ internal sealed record ParseVoiceHttpRequest(
     // ISO-8601 UTC; null when the client did not send the field
     // (legacy/orphan clips). Backward-compatible default avoids breaking
     // pre-fix clients.
-    DateTime? RecordedAtUtc = null);
+    DateTime? RecordedAtUtc = null,
+    // spec plr-d10 (voice AI review, 28 Nov 2026) - the phone's own numbers for its PREVIOUS recording (multipart field
+    // `client_timing_prev`, milliseconds only), written into the [voice-timing] log line so one file holds the whole chain.
+    string? ClientTimingPrev = null);

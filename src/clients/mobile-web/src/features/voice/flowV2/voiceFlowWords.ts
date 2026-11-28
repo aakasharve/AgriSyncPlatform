@@ -93,7 +93,7 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     sathiListening: 'आता बोला — मी ऐकतोय', // PROPOSED (Marathi)
     sathiListeningSub: 'आज शेतात काय काम झालं ते सांगा', // PROPOSED (Marathi)
     recOnPhone: (n: number) => `✓ ${digitsFor(String(n), 'mr')} सेकंद आवाज फोनवर`, // PROPOSED (Marathi) - "फोनवर" only: the server has not answered while he speaks (P10)
-    wordsStrip: 'बोला... साथी ऐकतोय', // PROPOSED (Marathi) - no live words exist today (P4)
+    wordsStrip: 'बोला... साथी ऐकतोय', // PROPOSED (Marathi) - the calm line until the first live words arrive (voice live words, 28 Nov 2026); the strip then shows the words heard so far
     fieldCaption: (place: string) => `तुमचं शेत · ${place}`, // PROPOSED (Marathi)
     stopLabel: 'झालं की थांबवा', // PROPOSED (Marathi)
     cancelLabel: 'काही चुकीचे बोलले गेले असेल तर रद्द करा', // the recorder's own founder-worded cancel (REC_WORDS.cancel)

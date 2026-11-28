@@ -98,3 +98,40 @@ describe('parseVoiceLog — measured, and otherwise unchanged', () => {
         expect(h.info).not.toHaveBeenCalled();
     });
 });
+
+describe('parseVoiceLog — the numbers of the previous recording ride the NEXT upload as a plain form field', () => {
+    it('the first upload carries none; the second carries the line of the first, once; a third carries none', async () => {
+        const first = transport({ 'server-timing': 's3;dur=120, stt;dur=2400, struct;dur=3100, total;dur=5800' });
+        recordingStopped();
+        await parseVoiceLog(first.t, BLOB, 'audio/webm', {}, 'farm-1', { inputRawDurationMs: 31_400 });
+        expect((first.post.mock.calls[0][1] as FormData).has('client_timing_prev')).toBe(false);
+
+        // The second upload carries the first one's line and then FAILS: it finishes no record of its own.
+        const second = transport({}, new Error('network down'));
+        recordingStopped();
+        await expect(parseVoiceLog(second.t, BLOB, 'audio/webm', {}, 'farm-1')).rejects.toThrow('network down');
+        const line = (second.post.mock.calls[0][1] as FormData).get('client_timing_prev') as string;
+        expect(line).toContain('stopToResult=6000');
+        expect(line).toContain('stt=2400');
+        expect(line).toContain('recording=31400');
+
+        // The line was used up once: a third upload carries none.
+        const third = transport({});
+        recordingStopped();
+        await parseVoiceLog(third.t, BLOB, 'audio/webm', {}, 'farm-1');
+        expect((third.post.mock.calls[0][1] as FormData).has('client_timing_prev')).toBe(false);
+    });
+
+    it('it is a form field, never a header (a header would need the CORS list of the server first)', async () => {
+        const first = transport({});
+        recordingStopped();
+        await parseVoiceLog(first.t, BLOB, 'audio/webm', {}, 'farm-1');
+        const second = transport({});
+        recordingStopped();
+        await parseVoiceLog(second.t, BLOB, 'audio/webm', {}, 'farm-1');
+
+        const config = second.post.mock.calls[0][2] as { headers?: unknown } | undefined;
+        expect(config?.headers).toBeUndefined();
+    });
+});
+

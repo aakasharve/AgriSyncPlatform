@@ -134,12 +134,37 @@ export function finishVoiceTiming(headers: unknown, extras: { recordingMs?: numb
         };
         try { performance.mark('voice:result'); } catch { /* observability-only */ }
         logger.info('voice_timing', { ...record });
+        lastRecord = record;
         return record;
     } catch {
         return null;
     }
 }
 
+/** The last finished record, kept until the NEXT voice upload carries it to the server's log (once). */
+let lastRecord: VoiceTimingRecord | null = null;
+
+/**
+ * spec plr-d10 (voice AI review, 28 Nov 2026) — the phone's numbers for the PREVIOUS recording, as one short line for the next
+ * voice upload to carry (a plain form field, `client_timing_prev`, which a server that does not know it ignores — never a header, which
+ * the CORS allow-list would refuse in preflight). The server writes it into its own `[voice-timing]` log line, so ONE file holds the
+ * whole chain of a recording: stop, phone write, upload, server (S3, speech-to-text, structuring) and the answer back. Returns it once,
+ * then null until another recording finishes. Display/measurement only: it carries no words, ids or place, only milliseconds, the
+ * connection kind and a memory class.
+ */
+export function takePreviousTimingForUpload(): string | null {
+    const r = lastRecord;
+    lastRecord = null;
+    if (!r) return null;
+    const parts: Array<[string, number | string | undefined]> = [
+        ['stopToAck', r.stopToAckMs], ['stopToUpload', r.stopToUploadStartMs], ['upload', r.uploadMs], ['server', r.serverMs],
+        ['s3', r.serverStagesMs?.s3], ['stt', r.serverStagesMs?.stt], ['struct', r.serverStagesMs?.struct],
+        ['stopToResult', r.stopToResultMs], ['recording', r.recordingMs], ['net', r.networkType], ['mem', r.memoryClass],
+    ];
+    return parts.filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join(',');
+}
+
 export function resetVoiceTimingForTests(): void {
     timeline = {};
+    lastRecord = null;
 }

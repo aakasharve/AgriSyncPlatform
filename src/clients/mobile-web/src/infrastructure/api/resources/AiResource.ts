@@ -15,7 +15,7 @@ import type {
     UpdateAiProviderConfigRequest,
 } from '../dtos';
 import type { HttpTransport } from '../transport';
-import { endVoiceTiming, finishVoiceTiming, markVoice, noteUploadProgress } from '../../voice/voiceTiming';
+import { endVoiceTiming, finishVoiceTiming, markVoice, noteUploadProgress, takePreviousTimingForUpload } from '../../voice/voiceTiming';
 
 export async function parseVoice(
     t: HttpTransport,
@@ -104,6 +104,9 @@ export async function parseVoiceLog(
     // backend's `form["recorded_at"]` lookup in AiEndpoints.cs and
     // AiTranscribeStreamEndpoints.cs.
     if (options?.recordedAtUtc) formData.append('recorded_at', options.recordedAtUtc);
+    // The phone's own numbers for the PREVIOUS recording, for the server's log (a form field: an older server ignores it).
+    const previousTiming = takePreviousTimingForUpload();
+    if (previousTiming) formData.append('client_timing_prev', previousTiming);
 
     // spec: voice-instant-phase-a-2026-11-23 (Task 0) — measure this request (stop → upload → server → result). Reads the
     // server's `Server-Timing` header when it sends one; never changes what is sent or what comes back.

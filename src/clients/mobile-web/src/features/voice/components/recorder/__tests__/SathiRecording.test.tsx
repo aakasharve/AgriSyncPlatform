@@ -43,7 +43,7 @@ describe('F4 - the recording screen', () => {
         expect(screen.getByTestId('mic-stop-instruction')).toHaveTextContent('झालं की थांबवा');
     });
 
-    it('P4: no part lights while he speaks - and no words appear (there is no live transcript)', () => {
+    it('P4: no part lights while he speaks - and, before any live words have arrived, the strip keeps its calm line', () => {
         face();
         expect(screen.getByTestId('sathi-ring').getAttribute('data-lit')).toBe('0');
         for (const node of screen.getByTestId('sathi-ring').querySelectorAll('[data-state]')) expect(node.getAttribute('data-state')).toBe('quiet');

@@ -14,6 +14,7 @@ vi.mock('../../observability/Logger', () => ({ logger: { info: h.info, warn: vi.
 
 import {
     endVoiceTiming, finishVoiceTiming, markVoice, noteUploadProgress, parseServerTiming, resetVoiceTimingForTests,
+    takePreviousTimingForUpload,
 } from '../voiceTiming';
 import { noteVoiceJourney, resetVoiceJourneyForTests } from '../voiceJourneySignal';
 
@@ -142,5 +143,47 @@ describe('the phone write is the ack', () => {
         at(1400); markVoice('upload-start');
         at(3000);
         expect(finishVoiceTiming({})).toMatchObject({ stopToAckMs: 250, stopToUploadStartMs: 400 });
+    });
+});
+
+describe('takePreviousTimingForUpload — the numbers of the phone travel to the log of the server with the NEXT upload', () => {
+    it('is nothing until a recording has finished, then one short line, then nothing again (once)', () => {
+        expect(takePreviousTimingForUpload()).toBeNull();
+
+        interactive();
+        at(7000);
+        finishVoiceTiming({ 'server-timing': HEADER }, { recordingMs: 31_400 });
+
+        const line = takePreviousTimingForUpload();
+        expect(line).toMatch(/^stopToAck=400,stopToUpload=500,upload=600,server=5800,s3=120,stt=2400,struct=3100,stopToResult=6000,recording=31400,net=[a-z0-9-]+,mem=(low|mid|high|unknown)$/);
+        expect(takePreviousTimingForUpload()).toBeNull();
+    });
+
+    it('leaves out what was not measured instead of inventing it', () => {
+        at(1000); markVoice('stop'); at(1400); markVoice('ack'); at(1500); markVoice('upload-start');
+        at(4000);
+        finishVoiceTiming({});
+
+        const line = takePreviousTimingForUpload()!;
+        expect(line).not.toContain('upload=');
+        expect(line).not.toContain('server=');
+        expect(line).not.toContain('stt=');
+        expect(line).toContain('stopToResult=3000');
+    });
+
+    it('is only milliseconds, the connection kind and a memory class: the characters the log of the server keeps, no words, no ids', () => {
+        interactive();
+        at(7000);
+        finishVoiceTiming({ 'server-timing': HEADER }, { recordingMs: 1000 });
+
+        expect(takePreviousTimingForUpload()).toMatch(/^[A-Za-z0-9=,._-]+$/);
+    });
+
+    it('a job the offline queue sends later (no record) leaves nothing to carry', () => {
+        at(1000); markVoice('stop');
+        at(9_000_000); markVoice('upload-start');
+        finishVoiceTiming({ 'server-timing': HEADER });
+
+        expect(takePreviousTimingForUpload()).toBeNull();
     });
 });

@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LiveWordsSession, tailOf, type LiveWordsSessionOptions } from '../liveWordsSession';
 import type { LiveWordsAnswer, LiveWordsRequest } from '../liveWordsClient';
+import { readVoiceJourney, resetVoiceJourneyForTests } from '../../../../infrastructure/voice/voiceJourneySignal';
 
 const RATE = 16000;
 const FRAME = 128;
@@ -210,6 +211,17 @@ describe('LiveWordsSession — it can never reach the recording (P9)', () => {
         await flush();
 
         expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    it('live words never tick the understanding step list: no journey exists until the real parse (P4)', async () => {
+        resetVoiceJourneyForTests();
+        const { session, onWords } = make({ answers: [{ kind: 'words', text: 'आज पाच मजूर होते चार तास फवारणी केली' }] });
+
+        speak(session);
+        await flush();
+
+        expect(onWords).toHaveBeenCalledTimes(1); // the words arrived...
+        expect(readVoiceJourney()).toBeNull(); // ...and nothing was "kept", "understood" or "written": that is the real save path's alone
     });
 
     it('feeding a finished session costs nothing and does nothing', () => {
