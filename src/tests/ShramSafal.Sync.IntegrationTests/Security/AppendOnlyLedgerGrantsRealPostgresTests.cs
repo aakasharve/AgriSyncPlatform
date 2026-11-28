@@ -381,6 +381,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    the ShramSafal migrator never reverts or re-applies it). Up() creates public.user_identity_profiles and GRANTs SELECT, INSERT, UPDATE on that new table only;
         //    no ledger this suite asserts about is touched. Down() refuses while any card exists and otherwise drops the table.
         "20261127041000_AddPersonIdentityProfile",
+        // ── Reviewed 2026-11-28 by its author (spec: plr-d10-schedule-mechanism-pilot-2026-11-22, part 03 B4); Up() and Down() read in full: Up() adds THREE nullable columns
+        //    (answer_mode, answer_code, product_name) to ssf.question_events. It GRANTs and REVOKEs nothing, so that ledger stays append-only exactly as before (a new column
+        //    inherits the table's privileges). Down() drops exactly those three, so on this harness's schema it reverts and re-applies.
+        "20261128091742_AddProductPurposeAnswers",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

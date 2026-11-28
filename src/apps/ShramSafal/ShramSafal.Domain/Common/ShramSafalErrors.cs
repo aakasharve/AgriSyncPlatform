@@ -101,6 +101,10 @@ public static class ShramSafalErrors
     public static readonly Error CropCycleOverlap = Error.Conflict("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DuplicateLogRequest = Error.Conflict("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
     public static readonly Error AttachmentAlreadyFinalized = Error.Conflict("ShramSafal.AttachmentAlreadyFinalized", "Attachment is already finalized and immutable.");
+    // Part 03 B4 — a product's purpose is answered once per record; the first answer stands (append-only, P3). A replay of the
+    // SAME answer is not this error: it returns the stored row.
+    public static readonly Error ProductPurposeAlreadyAnswered = Error.Conflict(
+        "ShramSafal.ProductPurposeAnswered.Conflict", "What this product was for was already answered; the first answer is kept.");
     // spec: 2026-08-25-prod-cutover-waves (voice archive path). The client mints the retained
     // clip id, so the id space is shared by every account. An id already held by ANOTHER
     // account must never be answered with the success a repeat upload by its owner gets:

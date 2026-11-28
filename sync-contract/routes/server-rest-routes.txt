@@ -83,6 +83,7 @@ GET /shramsafal/me/erasure/requests
 GET /shramsafal/pictures/{id:guid}
 GET /shramsafal/plan/stage
 GET /shramsafal/plan/today
+GET /shramsafal/question-events/product-purposes
 GET /shramsafal/question-events/recent
 GET /shramsafal/reference/activity-categories
 GET /shramsafal/reference/cost-categories

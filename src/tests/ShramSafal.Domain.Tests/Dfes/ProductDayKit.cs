@@ -86,6 +86,36 @@ internal static class ProductDay
         Attachment.Create(id, new FarmId(farm ?? TheFarm), Guid.NewGuid(), "InputIdentityAssertion", "packet.jpg", "image/jpeg",
             new UserId(Speaker), NoonOn(Day));
 
+    /// <summary>A stored content document whose one input event "e1" carries <paramref name="reason"/> (null: none said).</summary>
+    public static string DocumentWithReason(string? reason, params string[] names) =>
+        "{\"schema\":1,\"inputs\":[{\"id\":\"e1\",\"method\":\"Spray\","
+        + (reason is null ? string.Empty : $"\"reason\":\"{reason}\",")
+        + "\"mix\":["
+        + string.Join(",", names.Select((n, i) => $"{{\"id\":\"m{i}\",\"productName\":\"{n}\"}}"))
+        + "]}]}";
+
+    /// <summary>Part 03 B4 - his stored answer to the product-purpose question about one slot (a question_events row, as the
+    /// handler writes it).</summary>
+    public static QuestionEvent PurposeAnswer(
+        DailyLog log,
+        string response = "करपा",
+        string mode = ProductPurposeAnswerModes.Chip,
+        string? code = "downy",
+        string eventId = "e1",
+        int slot = 0,
+        string productName = FoundName,
+        Guid? by = null,
+        DateTime? at = null,
+        Guid? farm = null) =>
+        QuestionEvent.Create(
+            Guid.NewGuid(), log.Id, farm ?? (Guid)log.FarmId, log.PlotId, ProductPurpose.KeyFor(eventId, slot), "grapes", null, null,
+            "log_date", "Product", "product_purpose", "Execution", 1, 1, 0, "chip,voice", "informational",
+            false, true, "dfes-bank-test", "dfes-qengine-test", null, at ?? NoonOn(log.LogDate), null, null,
+            response, null, null, false, at ?? NoonOn(log.LogDate),
+            new QuestionEventContext(
+                AskedUserId: by ?? log.OperatorUserId.Value, QuestionKind: QuestionKinds.ProductPurpose,
+                AnswerMode: mode, AnswerCode: code, ProductName: productName));
+
     /// <summary>The newest row per (record, event, slot, speaker-or-check): what the real repository member returns.</summary>
     public static IReadOnlyList<InputIdentityAssertion> Newest(IEnumerable<InputIdentityAssertion> rows) =>
         rows.GroupBy(a => (a.DailyLogId, a.InputEventId, a.MixIndex, a.IsCheck))
@@ -107,6 +137,18 @@ internal class ProductRepo : FakeShramSafalRepository, IShramSafalRepository
     public List<Plot> Plots { get; } = [];
     public HashSet<Guid> Members { get; } = [];
     public Dictionary<Guid, AppRole> Roles { get; } = [];
+
+    /// <summary>Part 03 B4 - the stored question_events rows (product-purpose answers among them).</summary>
+    public List<QuestionEvent> QuestionEvents { get; } = [];
+
+    // As the real read: the product-purpose rows of these records, skips excluded, oldest first.
+    Task<IReadOnlyList<QuestionEvent>> IShramSafalRepository.GetProductPurposeAnswersForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<QuestionEvent>>(QuestionEvents
+            .Where(q => q.DailyLogId is { } id && dailyLogIds.Contains(id)
+                && q.QuestionKey.StartsWith(ProductPurpose.StoredKeyPrefix, StringComparison.Ordinal) && q.Skipped != true)
+            .OrderBy(q => q.CreatedAtUtc).ThenBy(q => q.Id)
+            .ToList());
 
     public DailyLog AddLog(DailyLog log, string? document)
     {

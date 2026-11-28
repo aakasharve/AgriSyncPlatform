@@ -15,6 +15,11 @@ namespace ShramSafal.Domain.Dfes;
 /// <param name="DeviationReasonCode">One of <see cref="DeviationReasons.Codes"/>.</param>
 /// <param name="DeviationChallenge">His "अडचण", verbatim.</param>
 /// <param name="PhotoAttachmentId">The attachment he gave as proof of an observation.</param>
+/// <param name="AnswerMode">Part 03 B4 - how he answered: <c>chip</c> or <c>voice</c> (<see cref="Inputs.ProductPurposeAnswerModes"/>), so
+/// the record says whether the answer's words are his or a chip's (P8).</param>
+/// <param name="AnswerCode">Part 03 B4 - the code of the chip he tapped (for example a library target code), when it has one.</param>
+/// <param name="ProductName">Part 03 B4 - the product a product-purpose question was about, copied by the server from the record's
+/// stored content (a value, not his words).</param>
 public sealed record QuestionEventContext(
     Guid? AskedUserId = null,
     string? PromptText = null,
@@ -24,4 +29,7 @@ public sealed record QuestionEventContext(
     string? ScheduleCardRef = null,
     string? DeviationReasonCode = null,
     string? DeviationChallenge = null,
-    Guid? PhotoAttachmentId = null);
+    Guid? PhotoAttachmentId = null,
+    string? AnswerMode = null,
+    string? AnswerCode = null,
+    string? ProductName = null);

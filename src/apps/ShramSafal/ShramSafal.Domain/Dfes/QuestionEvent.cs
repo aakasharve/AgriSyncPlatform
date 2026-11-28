@@ -72,6 +72,13 @@ public sealed class QuestionEvent : Entity<Guid>
         DeviationReasonCode = context?.DeviationReasonCode;
         DeviationChallenge = context?.DeviationChallenge;
         PhotoAttachmentId = context?.PhotoAttachmentId;
+
+        // Part 03 B4 - absent on every row but a product-purpose answer (and on every older phone's row, P11).
+        if (context?.AnswerMode is { } mode && !Inputs.ProductPurposeAnswerModes.IsKnown(mode))
+            throw new ArgumentException("answerMode is chip or voice.", nameof(context));
+        AnswerMode = context?.AnswerMode;
+        AnswerCode = context?.AnswerCode;
+        ProductName = context?.ProductName;
     }
 
     public Guid? DailyLogId { get; private set; }
@@ -114,6 +121,11 @@ public sealed class QuestionEvent : Entity<Guid>
     public string? DeviationReasonCode { get; private set; }
     public string? DeviationChallenge { get; private set; }
     public Guid? PhotoAttachmentId { get; private set; }
+
+    // Part 03 B4 (founder's final design, 28 Nov 2026) - see QuestionEventContext.
+    public string? AnswerMode { get; private set; }
+    public string? AnswerCode { get; private set; }
+    public string? ProductName { get; private set; }
 
     public static QuestionEvent Create(
         Guid id, Guid? dailyLogId, Guid farmId, Guid? plotId,

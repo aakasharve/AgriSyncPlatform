@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Inputs;
 
 namespace ShramSafal.Infrastructure.Persistence.Configurations;
 
@@ -54,6 +55,11 @@ internal sealed class QuestionEventConfiguration : IEntityTypeConfiguration<Ques
         builder.Property(x => x.DeviationReasonCode).HasColumnName("deviation_reason_code").HasMaxLength(40);
         builder.Property(x => x.DeviationChallenge).HasColumnName("deviation_challenge").HasColumnType("text");
         builder.Property(x => x.PhotoAttachmentId).HasColumnName("photo_attachment_id");
+
+        // Part 03 B4 (product-purpose answers) - additive, nullable; every other row has none of them.
+        builder.Property(x => x.AnswerMode).HasColumnName("answer_mode").HasMaxLength(ProductPurposeAnswerModes.MaxLength);
+        builder.Property(x => x.AnswerCode).HasColumnName("answer_code").HasMaxLength(ProductPurpose.MaxAnswerCodeLength);
+        builder.Property(x => x.ProductName).HasColumnName("product_name").HasMaxLength(InputIdentityAssertion.MaxSpokenName);
 
         builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_question_events_farm_id");
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_question_events_daily_log_id");

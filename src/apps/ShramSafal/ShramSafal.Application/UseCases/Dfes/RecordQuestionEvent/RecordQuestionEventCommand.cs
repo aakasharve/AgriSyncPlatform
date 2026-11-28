@@ -21,4 +21,11 @@ public sealed record RecordQuestionEventCommand(
     string? ScheduleCardRef = null,
     string? DeviationReasonCode = null,
     string? DeviationChallenge = null,
-    Guid? PhotoAttachmentId = null);
+    Guid? PhotoAttachmentId = null,
+    // Part 03 B4 (product-purpose question, key "product.purpose") — which product of the record he was asked about (the input
+    // event's id and its mix slot), how he answered (chip or voice) and the chip's code. Only that question carries them; an
+    // older phone sends none (P11). The SERVER names the product in the stored key and copies its name from the stored record.
+    string? InputEventId = null,
+    int? MixIndex = null,
+    string? AnswerMode = null,
+    string? AnswerCode = null);

@@ -76,8 +76,16 @@ public static class DfesTuning
     /// needed</b>. The guard reads the version as a number: a dfes-4 day keeps ALL of the Wave-3 rules above (it is not sent
     /// back to dfes-3 behaviour) and lacks only PRODUCT_ID. The point reasons for product answers
     /// (<see cref="ShramPointValues"/>) are not version-gated: they come from answers, which did not exist before this
-    /// lane.</para></summary>
-    public const string ScoreEngineVersion = "dfes-5";
+    /// lane.</para>
+    ///
+    /// <para><c>dfes-6</c> (2026-11-28, part 03 B4, the founder's final design: "the score goes up only on a real answer" —
+    /// bumped ONCE). One scoring change: a new roster dimension <c>PURPOSE</c> (weight 10), owed on a day whose latest stored
+    /// content names a product, earned per product when the content says what it was for (the input event's <c>reason</c>) or
+    /// he answered Sathi's product-purpose question (<see cref="Inputs.ProductPurpose"/>). <b>Like dfes-4 and dfes-5 it does
+    /// NOT reach old rows</b>: a row stamped dfes-1..5 is rescored on its own engine's rules and keeps its ORIGINAL version, so
+    /// no stored day moves because we deployed; a day with no aggregate yet, or stamped dfes-6, gets it. ROSTER only: the
+    /// three lenses, the classifier and the reward economy do not move.</para></summary>
+    public const string ScoreEngineVersion = "dfes-6";
 
     /// <summary>Maximum Shram points a single LocalDate can earn after all bonuses.</summary>
     public const int DailyPointCap = 15;

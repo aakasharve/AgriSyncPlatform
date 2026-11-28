@@ -56,7 +56,9 @@ public sealed class DfesLensExtractorProductIdTests
         Part(newEngine).Applicable.Should().BeFalse("a day with no inputs owes no product identity");
         DayUnderstandingScore.From(newEngine).Should().Be(DayUnderstandingScore.From(dfes4),
             "a day with no inputs scores EXACTLY what the previous engine gave it");
-        newEngine.Possible!.Where(d => d.Name != "PRODUCT_ID").Select(d => (d.Name, d.Weight, d.Applicable, d.Coverage))
+        // Part 03 B4 (dfes-6) adds PURPOSE beside PRODUCT_ID; on a day with no inputs it is not applicable either.
+        newEngine.Possible!.Single(d => d.Name == "PURPOSE").Applicable.Should().BeFalse("a day with no inputs owes no product purpose");
+        newEngine.Possible!.Where(d => d.Name is not ("PRODUCT_ID" or "PURPOSE")).Select(d => (d.Name, d.Weight, d.Applicable, d.Coverage))
             .Should().Equal(dfes4.Possible!.Select(d => (d.Name, d.Weight, d.Applicable, d.Coverage)),
                 "every other part of the roster is untouched");
     }

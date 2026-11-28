@@ -2166,6 +2166,16 @@ public interface IShramSafalRepository
         => Task.FromResult<ShramSafal.Domain.Dfes.QuestionEvent?>(null);
 
     /// <summary>
+    /// Part 03 B4 — every stored answer to Sathi's product-purpose question about these records: the <c>question_events</c> rows
+    /// whose key is a product slot's (<see cref="ShramSafal.Domain.Inputs.ProductPurpose.KeyFor"/>) and that are not skips, oldest
+    /// first. The caller checks each row's farm against its record's (E4). The default REFUSES, like the product-identity reads:
+    /// a store that cannot answer must never look as though nobody answered (the day's score would be stamped lower).
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetProductPurposeAnswersForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot read the product-purpose answers of a record.");
+
+    /// <summary>
     /// task-3 (2026-08-14), founder ruling A — the gap dimensions the farmer actually
     /// ANSWERED on one local day, for the daily-richness recompute to credit.
     ///

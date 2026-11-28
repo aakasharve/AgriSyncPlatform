@@ -187,6 +187,8 @@ public static class DependencyInjection
         services.AddScoped<GetPlotDayUnderstandingHandler>(); // lane IT3, Task 2
         services.AddScoped<RecordQuestionEventHandler>();
         services.AddScoped<GetRecentQuestionEventsHandler>();
+        // Part 03 B4 — one record's products and what each was for (the product-purpose question's read).
+        services.AddScoped<ShramSafal.Application.UseCases.Dfes.GetProductPurposes.GetProductPurposesHandler>();
         // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.
         services.AddScoped<ShramSafal.Application.UseCases.Consent.RecordConsentGateAcceptance
             .RecordConsentGateAcceptanceHandler>();

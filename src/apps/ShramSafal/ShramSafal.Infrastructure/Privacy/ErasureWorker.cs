@@ -355,6 +355,10 @@
 //     like response) and source_refs / schedule_card_ref / deviation_reason_code / question_kind / prompt_origin
 //     (fixed values and ids, no person). photo_attachment_id points at an attachment whose own disposition governs the
 //     file. The "NO user_id column" sentence above is the history of this table before that migration.
+//     PART 03 B4 (20261128091742_AddProductPurposeAnswers) — three more columns for the answer to "what was this product for?":
+//     answer_mode (the fixed word chip / voice), answer_code (a chip's fixed code) and product_name (the product's name copied
+//     from the record's stored content — a value, not his words, LogContentDocument.WordKeys). No person, no new free text: a
+//     spoken answer's words sit in response and KEEP for the reason above.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
 //   - ssf.question_photo_checks (lane DFES-Q, founder D-E) — KEEP. One row is one check of a photo given as proof of an

@@ -929,6 +929,26 @@ internal sealed class ShramSafalRepository(
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.DailyLogId == dailyLogId && q.QuestionKey == questionKey, ct);
 
+    // Part 03 B4 — the product-purpose answers of these records (keys "product.purpose:{slot}:{event}"), skips excluded, oldest
+    // first. RLS scopes the rows to the tenant; the reader checks each row's farm against its record's (E4).
+    public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetProductPurposeAnswersForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = dailyLogIds.Distinct().ToList();
+        return await db.QuestionEvents
+            .AsNoTracking()
+            .Where(q => q.DailyLogId != null && ids.Contains(q.DailyLogId.Value)
+                && q.QuestionKey.StartsWith(ShramSafal.Domain.Inputs.ProductPurpose.StoredKeyPrefix)
+                && q.Skipped != true)
+            .OrderBy(q => q.CreatedAtUtc).ThenBy(q => q.Id)
+            .ToListAsync(ct);
+    }
+
     // task-3 (2026-08-14), founder ruling A. question_events carries no local_date, so the
     // day is a half-open UTC window (FarmLocalDay — the SAME rule the handler and the
     // derivation service use; a second one here would credit the wrong day). ShownAtUtc is

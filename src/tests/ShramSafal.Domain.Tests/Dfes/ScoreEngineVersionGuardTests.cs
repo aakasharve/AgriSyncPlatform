@@ -131,7 +131,7 @@ public sealed class ScoreEngineVersionGuardTests
         var stamped = await StampWrittenForAsync(scoredUnder: null);
 
         stamped.Should().Be(DfesTuning.ScoreEngineVersion);
-        stamped.Should().Be("dfes-5", "lane IT3 bumps the engine exactly once, here (wave-3.5 did dfes-4)");
+        stamped.Should().Be("dfes-6", "part 03 B4 bumps the engine exactly once, here (wave-3.5 did dfes-4, lane IT3 dfes-5)");
     }
 
     [Fact]

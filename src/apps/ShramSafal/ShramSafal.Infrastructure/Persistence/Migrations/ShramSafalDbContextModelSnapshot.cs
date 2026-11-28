@@ -1735,6 +1735,16 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("anchor_date_type");
 
+                    b.Property<string>("AnswerCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("answer_code");
+
+                    b.Property<string>("AnswerMode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("answer_mode");
+
                     b.Property<string>("AnswerModes")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -1820,6 +1830,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<int>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("product_name");
 
                     b.Property<string>("PromptOrigin")
                         .HasMaxLength(20)

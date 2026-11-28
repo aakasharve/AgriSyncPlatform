@@ -9,7 +9,7 @@
 //      names each product of the record's latest stored content, the library's match, the speaker's answer and the check apart,
 //      and the unchecked count - and farm B's owner never sees farm A's record or its products;
 //   C  ThePlotScoreRisesWithTheCheck_AndTheDayStaysOnItsOwnEngine: a checker's yes raises the plot's /10 and the stored farm-day
-//      row is stamped dfes-5 with the product part in its roster.
+//      row is stamped on the current engine (dfes-6 since part 03 B4) with the product part in its roster.
 // The merge owner runs this class (it needs the throwaway cluster the other RealPostgres suites use). It could not be run where
 // it was written.
 using System;
@@ -260,7 +260,7 @@ public sealed class ProductIdentityReadsRealPostgresTests(ITestOutputHelper outp
 
         // The stored farm-day row is on the current engine and holds the product part.
         (await ScalarLongAsync(
-            "SELECT COUNT(*) FROM ssf.daily_richness_aggregates WHERE farm_id = @id AND score_engine_version = 'dfes-5' "
+            "SELECT COUNT(*) FROM ssf.daily_richness_aggregates WHERE farm_id = @id AND score_engine_version = 'dfes-6' "
             + "AND components_json::text LIKE '%PRODUCT_ID%'", FarmA)).Should().BeGreaterThan(0);
     }
 }

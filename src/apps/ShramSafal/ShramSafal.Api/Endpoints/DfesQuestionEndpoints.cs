@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.UseCases.Dfes.GetProductPurposes;
 using ShramSafal.Application.UseCases.Dfes.GetRecentQuestionEvents;
 using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 
@@ -9,7 +10,8 @@ namespace ShramSafal.Api.Endpoints;
 /// DFES Phase 5 — D8 question-engine telemetry surface.
 ///   POST /shramsafal/question-events          → append one shown/answered row
 ///   GET  /shramsafal/question-events/recent    → cooldown / anti-repeat feed
-/// Both require farm membership (enforced in the handlers; RLS scopes reads).
+///   GET  /shramsafal/question-events/product-purposes?farmId&amp;dailyLogId → one record's products and what each was for (part 03 B4)
+/// All three require farm membership (enforced in the handlers; RLS scopes reads).
 /// </summary>
 public static class DfesQuestionEndpoints
 {
@@ -42,7 +44,8 @@ public static class DfesQuestionEndpoints
                 request.AnswerObservationId, request.ShownAtUtc, request.TriggerReason, request.WeatherContext,
                 request.Response, request.StageConfirmed, request.PhotoSubmitted, request.Skipped,
                 request.PromptText, request.PromptOrigin, request.LookLineIds, request.ScheduleCardRef,
-                request.DeviationReasonCode, request.DeviationChallenge, request.PhotoAttachmentId);
+                request.DeviationReasonCode, request.DeviationChallenge, request.PhotoAttachmentId,
+                request.InputEventId, request.MixIndex, request.AnswerMode, request.AnswerCode);
 
             var result = await handler.HandleAsync(cmd, ct);
             return result.IsSuccess ? Results.Ok(new { id = result.Value }) : ToErrorResult(result.Error);
@@ -72,6 +75,28 @@ public static class DfesQuestionEndpoints
         })
         .WithName("GetRecentDfesQuestionEvents");
 
+        // Part 03 B4 — the products of ONE saved record and what each was for: whether its purpose was said, whether Sathi
+        // should ask, and the answer to show on the product row (his voice words only to those who may hear the record's words).
+        group.MapGet("/question-events/product-purposes", async (
+            Guid farmId, Guid dailyLogId,
+            ClaimsPrincipal user,
+            GetProductPurposesHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+                return Results.Unauthorized();
+
+            // Same posture as the two routes above: the membership-validated farm scope before the first read (prod FORCE-RLS).
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+                return ToErrorResult(scopeResult.Error);
+
+            var result = await handler.HandleAsync(new GetProductPurposesQuery(actorUserId, farmId, dailyLogId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetDfesProductPurposes");
+
         return group;
     }
 
@@ -86,10 +111,14 @@ public static class DfesQuestionEndpoints
         // Lane DFES-Q — optional; an older phone's body has none of them and binds unchanged (P11).
         string? PromptText = null, string? PromptOrigin = null, IReadOnlyList<string>? LookLineIds = null,
         string? ScheduleCardRef = null, string? DeviationReasonCode = null, string? DeviationChallenge = null,
-        Guid? PhotoAttachmentId = null);
+        Guid? PhotoAttachmentId = null,
+        // Part 03 B4 — the product-purpose question only (questionKey "product.purpose"); an older phone sends none (P11).
+        string? InputEventId = null, int? MixIndex = null, string? AnswerMode = null, string? AnswerCode = null);
 
     private static IResult ToErrorResult(Error error) =>
         error.Code.Contains("NotFound") ? Results.NotFound(error.Description)
         : error.Code.Contains("Forbidden") ? Results.Forbid()
+        // Part 03 B4 — "already answered, the first answer is kept" (the only Conflict these routes return).
+        : error.Code.EndsWith(".Conflict", StringComparison.Ordinal) ? Results.Conflict(error.Description)
         : Results.BadRequest(error.Description);
 }

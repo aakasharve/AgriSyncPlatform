@@ -724,6 +724,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // migrator never reverts or re-applies it). Up() creates public.user_identity_profiles with its checks and a grant; no policy at all, no farm_memberships or
         // farm_join_requests object, no ssf.farms policy, no seat. Down() refuses while any card exists and otherwise drops the table.
         "20261127041000_AddPersonIdentityProfile",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (part 03 B4) - Up() and Down() read in full (by their author): Up() adds THREE nullable columns (answer_mode,
+        // answer_code, product_name) to ssf.question_events. It creates and alters no policy, no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat.
+        // Down() drops exactly those three.
+        "20261128091742_AddProductPurposeAnswers",
     ];
 
     /// <summary>

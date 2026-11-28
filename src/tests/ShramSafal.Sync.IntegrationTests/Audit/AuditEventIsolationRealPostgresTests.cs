@@ -1496,6 +1496,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // the ShramSafal migrator never reverts or re-applies it). Up() creates public.user_identity_profiles (a person's own identity card; its checks; SELECT, INSERT,
         // UPDATE for the app role). It never touches ssf.audit_events, its policies or its grants. Down() refuses while any card exists and otherwise drops the table.
         "20261127041000_AddPersonIdentityProfile",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (part 03 B4) - Up() and Down() read in full (by their author): Up() adds THREE nullable columns (answer_mode,
+        // answer_code, product_name) to ssf.question_events and nothing else. It never touches ssf.audit_events, its policies or its grants. Down() drops exactly those three.
+        // Safe mid-proof.
+        "20261128091742_AddProductPurposeAnswers",
     ];
 
     /// <summary>

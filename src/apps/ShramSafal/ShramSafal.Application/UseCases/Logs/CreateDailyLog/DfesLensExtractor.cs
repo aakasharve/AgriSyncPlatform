@@ -20,6 +20,8 @@ internal static class DfesLensExtractor
     private const int W_WHAT = 20, W_DOSE = 20, W_CARRIER = 10, W_COST = 12, W_WEATHER = 8;
     // dfes-5 (lane IT3; spec dfes-input-truth-and-mix-check-2026-11-06) — "did the app understand WHICH product he used".
     private const int W_PRODUCT_ID = 10;
+    // dfes-6 (part 03 B4, founder's final design 2026-11-28) — "did the app understand what each product was FOR".
+    private const int W_PURPOSE = 10;
     private const int W_OBS_FACET = 15, W_LEARN_FACET = 15; // structured-noticing pseudo-dims
     private const double Cf = 1.0;
 
@@ -51,6 +53,9 @@ internal static class DfesLensExtractor
     /// <param name="Products">dfes-5 (lane IT3) — what the day's LATEST stored content, the library's match and the
     /// newest answers say about each product he named (<see cref="ProductIdentity"/>), judged by the caller. Null or empty
     /// means the day names no product in its stored content. It never comes from the parse job (P4).</param>
+    /// <param name="Purposes">dfes-6 (part 03 B4) — for each product of the day's LATEST stored content, whether what it was for
+    /// is known: said in the content (the event's <c>reason</c>) or answered by him (<see cref="ProductPurpose"/>). Null or
+    /// empty means the day names no product. Never from the parse job (P4).</param>
     public sealed record DayData(
         IReadOnlyList<JsonElement> Roots,
         IReadOnlyList<ObservationEvent> Observations,
@@ -60,7 +65,8 @@ internal static class DfesLensExtractor
         Guid? PlotId = null,
         DateOnly? LocalDate = null,
         string? ScoredUnderVersion = null,
-        IReadOnlyList<ProductJudgement>? Products = null);
+        IReadOnlyList<ProductJudgement>? Products = null,
+        IReadOnlyList<ProductPurposeJudgement>? Purposes = null);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
@@ -102,6 +108,8 @@ internal static class DfesLensExtractor
         // is rescored on its own engine's rules and re-stamped with its ORIGINAL version.
         var appliesNewRules = AppliesFrom(data.ScoredUnderVersion, 4);
         var appliesProductId = AppliesFrom(data.ScoredUnderVersion, 5);
+        // dfes-6 (part 03 B4): PURPOSE applies to a day with no aggregate and to a row stamped dfes-6 or later only.
+        var appliesPurpose = AppliesFrom(data.ScoredUnderVersion, 6);
 
         var hasStructuredObs = HasStructuredObservation(data.Observations, appliesNewRules);
         var hasLearning = HasLearningFacet(data.Observations);
@@ -150,6 +158,17 @@ internal static class DfesLensExtractor
         var productId = productOwed
             ? Dim("PRODUCT_ID", W_PRODUCT_ID, ProductIdentity.MeanCoverage(judged) ?? 0.0)
             : new ScoredDimension("PRODUCT_ID", W_PRODUCT_ID, Applicable: false, Coverage: 0.0, ConfidenceFactor: Cf);
+
+        // dfes-6 (part 03 B4, founder's final design 2026-11-28: "the score goes up only on a real answer") — PURPOSE: did the app
+        // understand what each product he named was FOR. ROSTER only, like PRODUCT_ID: the lenses, the classifier and the reward
+        // economy do not move. Owed only when the stored content names a product (a product nobody named cannot be asked about).
+        // Each product counts 1 when the content says its purpose or his answer tells it, else 0; the part's coverage is the share
+        // of the day's products whose purpose is known. A skip, a let-go or a "माहीत नाही" chip is never a known purpose (P4), and
+        // because the part sits in the denominator from the first save, an answer can only ever ADD to the number.
+        var purposes = data.Purposes ?? [];
+        var purpose = appliesPurpose && purposes.Count > 0
+            ? Dim("PURPOSE", W_PURPOSE, ProductPurpose.MeanCoverage(purposes) ?? 0.0)
+            : new ScoredDimension("PURPOSE", W_PURPOSE, Applicable: false, Coverage: 0.0, ConfidenceFactor: Cf);
 
         // wave-3.5, Ruling 3 — do not ask the farmer to repeat weather the app already
         // knows. `weather` above (the LENS reading) is UNTOUCHED: it feeds ThreeLensScorer
@@ -232,6 +251,12 @@ internal static class DfesLensExtractor
         if (appliesProductId)
         {
             possible.Add(productId);
+        }
+
+        // Appended only when the day may be scored under dfes-6, so the roster of an older day is exactly what it was.
+        if (appliesPurpose)
+        {
+            possible.Add(purpose);
         }
 
         var input = new LensInput(execution, insight, learning, possible);

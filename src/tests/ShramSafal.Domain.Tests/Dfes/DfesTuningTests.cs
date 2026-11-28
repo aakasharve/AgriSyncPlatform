@@ -32,7 +32,8 @@ public sealed class DfesTuningTests
         // (mobile-web/src/features/logs/services/dfesTuning.ts) is value-locked to this
         // string by dfesTuning.test.ts — bump both or that test fails.
         // dfes-5 (2026-11-08, lane IT3): the PRODUCT_ID roster part. Like dfes-4 it does not reach old rows.
-        DfesTuning.ScoreEngineVersion.Should().Be("dfes-5");
+        // dfes-6 (2026-11-28, part 03 B4): the PURPOSE roster part (what each product was for). Like dfes-4/5 it does not reach old rows.
+        DfesTuning.ScoreEngineVersion.Should().Be("dfes-6");
     }
 
     [Fact]

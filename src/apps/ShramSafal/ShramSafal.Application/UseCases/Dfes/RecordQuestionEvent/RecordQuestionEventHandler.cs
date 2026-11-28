@@ -5,10 +5,13 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Inputs.AssertInputIdentity;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Inputs;
 
 namespace ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 
@@ -77,6 +80,15 @@ public sealed class RecordQuestionEventHandler(
         }
 
         var kind = QuestionKinds.ForKey(cmd.QuestionKey);
+        var isProductPurpose = kind == QuestionKinds.ProductPurpose;
+
+        // Part 03 B4 — the product slot, the answer mode and the chip code belong to the product-purpose question alone.
+        if (!isProductPurpose
+            && (cmd.InputEventId is not null || cmd.MixIndex is not null || cmd.AnswerMode is not null || cmd.AnswerCode is not null))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
         string? sourceRefsJson = null;
         if (QuestionKinds.StatesAgronomy(kind))
         {
@@ -105,6 +117,11 @@ public sealed class RecordQuestionEventHandler(
         if (!isMember)
         {
             return Result.Failure<Guid>(ShramSafalErrors.Forbidden);
+        }
+
+        if (isProductPurpose)
+        {
+            return await RecordProductPurposeAsync(cmd, origin, kind, ct);
         }
 
         // spec: plr-d10 lane PRV fix pass 1 (H2) — a question about a record kept from him is not his to answer.
@@ -270,6 +287,144 @@ public sealed class RecordQuestionEventHandler(
 
         if (recomputed)
         {
+            await repository.SaveChangesAsync(ct);
+        }
+
+        return Result.Success(entity.Id);
+    }
+
+    /// <summary>
+    /// Part 03 B4 (founder's final design, 28 Nov 2026) — his answer to "what was this product for?" about ONE product of ONE
+    /// saved record (<see cref="ProductPurpose"/>).
+    ///
+    /// <list type="number">
+    /// <item><b>Only a real answer is stored.</b> Words that carry something, by chip or by voice. A skip or a let-go after his
+    /// four tries is never sent and never stored, so the product can still be answered later and silence never scores (P4).</item>
+    /// <item><b>Which record, which product.</b> The record the command names, on the caller's farm (another farm's is "not
+    /// found", E4). The product is a slot of the record's LATEST stored content; its name is copied from there, never from the
+    /// request. The SERVER writes the stored key <c>product.purpose:{slot}:{event}</c>, so the existing unique index on
+    /// (daily_log_id, question_key) holds one answer per product.</item>
+    /// <item><b>Who answers.</b> The record's speaker, or a holder of the confirm-records authority (the D-95 standing of the
+    /// product's other answer), who may see the record and its plot. The person asked is the caller, never a value from the body
+    /// (founder D-D). How he answered (chip or voice) and the chip's code are kept with the words (P8).</item>
+    /// <item><b>The first answer stands (P3).</b> The same answer again is the stored row (an offline retry); a different one is
+    /// refused (<see cref="ShramSafalErrors.ProductPurposeAlreadyAnswered"/>), never silently dropped.</item>
+    /// <item><b>Never an edit of the record.</b> The record's content, version, quantities and confirmation are not read for
+    /// writing and not touched (P7), so it stays open after any change window on the record. It is not turned into an
+    /// observation: what a product was for is not something he saw in the field (E7).</item>
+    /// <item><b>The score follows a real answer.</b> The record's WORK day is recomputed (its PURPOSE part, dfes-6) in this
+    /// request's transaction, so the answer and the number commit together or not at all. A "माहीत नाही" chip is stored as his
+    /// answer and moves nothing.</item>
+    /// </list>
+    /// </summary>
+    private async Task<Result<Guid>> RecordProductPurposeAsync(
+        RecordQuestionEventCommand cmd, string? origin, string kind, CancellationToken ct)
+    {
+        var response = cmd.Response?.Trim();
+        var code = cmd.AnswerCode;
+        if (!string.Equals(cmd.QuestionKey.Trim(), ProductPurpose.QuestionKey, StringComparison.Ordinal)
+            || cmd.DailyLogId is not { } logId || logId == Guid.Empty
+            || string.IsNullOrWhiteSpace(cmd.InputEventId) || cmd.InputEventId.Trim().Length > InputIdentityAssertion.MaxInputEventId
+            || cmd.MixIndex is not { } slot || slot < 0
+            || !ProductPurposeAnswerModes.IsKnown(cmd.AnswerMode)
+            || cmd.Skipped == true
+            || string.IsNullOrEmpty(response) || response.Length > ProductPurpose.MaxResponseLength
+            || (code is not null && (cmd.AnswerMode != ProductPurposeAnswerModes.Chip || !ProductPurpose.IsWellFormedCode(code)))
+            // Nothing of another question rides on this one.
+            || cmd.ScheduleCardRef is not null || cmd.DeviationReasonCode is not null || cmd.DeviationChallenge is not null
+            || cmd.PhotoAttachmentId is not null || cmd.AnswerObservationId is not null || cmd.LookLineIds is { Count: > 0 })
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
+        var inputEventId = cmd.InputEventId.Trim();
+        var storedKey = ProductPurpose.KeyFor(inputEventId, slot);
+        if (storedKey.Length > ProductPurpose.MaxStoredKeyLength)
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // E4 — the record is the caller's farm's; another farm's record (or none) is "not found".
+        var log = await repository.GetDailyLogByIdAsync(logId, ct);
+        if (log is null || (Guid)log.FarmId != cmd.FarmId)
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.DailyLogNotFound);
+        }
+
+        var now = clock.UtcNow;
+        var caller = cmd.CallerUserId;
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, log, caller, now, ct))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
+        if (await Services.PlotScopeGate.RefuseAsync(repository, cmd.FarmId, log.PlotId, caller, now, ct) is { } outsidePlots)
+        {
+            return Result.Failure<Guid>(outsidePlots);
+        }
+
+        if (caller != log.OperatorUserId.Value
+            && !await Services.FarmAuthorityGate.HoldsAsync(repository, cmd.FarmId, caller, FarmAuthority.ConfirmRecords, now, ct))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.Forbidden);
+        }
+
+        // The first answer stands. Placed after every gate: a caller who may not answer is never handed an existing row's id.
+        var existing = await repository.FindQuestionEventAsync(log.Id, storedKey, ct);
+        if (existing is not null)
+        {
+            return string.Equals(existing.Response?.Trim(), response, StringComparison.Ordinal)
+                && string.Equals(existing.AnswerMode, cmd.AnswerMode, StringComparison.Ordinal)
+                && string.Equals(existing.AnswerCode, code, StringComparison.Ordinal)
+                    ? Result.Success(existing.Id)
+                    : Result.Failure<Guid>(ShramSafalErrors.ProductPurposeAlreadyAnswered);
+        }
+
+        // The product's name comes from the STORED record, never from the request (P1, P7).
+        var content = await repository.GetCurrentDailyLogContentAsync(log.Id, ct);
+        if (content is null || content.FarmId != log.FarmId)
+        {
+            return Result.Failure<Guid>(Error.Validation(
+                AssertInputIdentityHandler.InvalidPayloadCode, "The record holds no such product."));
+        }
+
+        var spoken = AssertInputIdentityHandler.SpokenNameOf(content.DocumentJson, inputEventId, slot);
+        if (spoken.IsFailure)
+        {
+            return Result.Failure<Guid>(spoken.Error);
+        }
+
+        var entity = QuestionEvent.Create(
+            id: Guid.NewGuid(), dailyLogId: log.Id, farmId: cmd.FarmId, plotId: log.PlotId,
+            questionKey: storedKey, crop: cmd.Crop, expectedStage: cmd.ExpectedStage,
+            actualStageApplicability: cmd.ActualStageApplicability, anchorDateType: cmd.AnchorDateType,
+            triggerType: cmd.TriggerType, questionType: cmd.QuestionType, lens: cmd.Lens,
+            depthLevel: cmd.DepthLevel, priority: cmd.Priority, cooldown: cmd.Cooldown,
+            answerModes: cmd.AnswerModes, safetyClass: cmd.SafetyClass,
+            agronomistApproved: cmd.AgronomistApproved, marathiApproved: cmd.MarathiApproved,
+            bankVersion: cmd.BankVersion, questionEngineVersion: cmd.QuestionEngineVersion,
+            answerObservationId: null, shownAtUtc: cmd.ShownAtUtc,
+            triggerReason: cmd.TriggerReason, weatherContext: cmd.WeatherContext,
+            response: response, stageConfirmed: cmd.StageConfirmed,
+            photoSubmitted: cmd.PhotoSubmitted, skipped: cmd.Skipped, createdAtUtc: now,
+            context: new QuestionEventContext(
+                AskedUserId: caller,
+                PromptText: string.IsNullOrWhiteSpace(cmd.PromptText) ? null : cmd.PromptText.Trim(),
+                PromptOrigin: origin,
+                QuestionKind: kind,
+                AnswerMode: cmd.AnswerMode,
+                AnswerCode: code,
+                ProductName: ProductPurpose.KeptName(spoken.Value!)));
+
+        await repository.AddQuestionEventAsync(entity, ct);
+        await repository.SaveChangesAsync(ct);
+
+        // Flushed, not committed: the recompute reads the answer back with an EF query and rides the same request transaction
+        // (see the gap route below for why that is load-bearing). Only an answer that tells the purpose can move the number.
+        var asStored = ProductPurposeReader.ToAnswers([entity]);
+        if (asStored.Count == 1 && ProductPurpose.Counts(asStored[0]))
+        {
+            await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, log.LogDate, ct);
             await repository.SaveChangesAsync(ct);
         }
 

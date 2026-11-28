@@ -287,6 +287,18 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
         => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>(
             _answers.Where(a => dailyLogIds.Contains(a.DailyLogId)).OrderBy(a => a.AssertedAtUtc).ThenBy(a => a.Id).ToList());
 
+    // Part 03 B4 - the product-purpose answers the day's score reads whenever a record names a product. Empty unless a test seeds
+    // them, as the product-identity answers above.
+    private readonly List<ShramSafal.Domain.Dfes.QuestionEvent> _purposeAnswers = new();
+
+    public void AddPurposeAnswer(ShramSafal.Domain.Dfes.QuestionEvent answer) => _purposeAnswers.Add(answer);
+
+    public Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetProductPurposeAnswersForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(
+            _purposeAnswers.Where(q => q.DailyLogId is { } id && dailyLogIds.Contains(id) && q.Skipped != true)
+                .OrderBy(q => q.CreatedAtUtc).ThenBy(q => q.Id).ToList());
+
     public Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsGivenBetweenAsync(
         Guid farmId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>(

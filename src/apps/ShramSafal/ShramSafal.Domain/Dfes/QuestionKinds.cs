@@ -26,6 +26,10 @@ public static class QuestionKinds
     public const string Weather = "weather";
     public const string Unknown = "unknown";
 
+    /// <summary>Part 03 B4 - "what was this product for?" about one product of one saved record. It asks him a fact of his own
+    /// work and states no agronomy, so it needs no source (<see cref="Inputs.ProductPurpose"/>).</summary>
+    public const string ProductPurpose = "product_purpose";
+
     private static readonly HashSet<string> AgronomyKinds = new(StringComparer.Ordinal)
     {
         StageLook, Safety, Weather, Unknown,
@@ -47,6 +51,7 @@ public static class QuestionKinds
             _ when key.StartsWith("learning.", StringComparison.Ordinal) => Learning,
             _ when key.StartsWith("schedule.", StringComparison.Ordinal) => WhyNot,
             _ when key.StartsWith("safety.", StringComparison.Ordinal) => Safety,
+            _ when Inputs.ProductPurpose.IsThisQuestion(key) => ProductPurpose,
             _ => Unknown,
         };
     }

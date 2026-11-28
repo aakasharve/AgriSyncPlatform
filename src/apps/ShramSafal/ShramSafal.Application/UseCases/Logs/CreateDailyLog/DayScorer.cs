@@ -154,9 +154,15 @@ internal sealed class DayScorer(
             var judged = await ProductIdentityReader.JudgeAsync(repository, logs, ct);
             var products = logs.SelectMany(l => judged.GetValueOrDefault(l.Id) ?? []).ToList();
 
+            // dfes-6 (part 03 B4) - what each of those products was FOR: said in the latest stored content, or answered by him to
+            // Sathi's product-purpose question. Per record, so a plot's read counts only its own records' answers. Read at this one
+            // point for the same reason as the products above.
+            var purposeJudged = await ProductPurposeReader.JudgeAsync(repository, logs, ct);
+            var purposes = logs.SelectMany(l => purposeJudged.GetValueOrDefault(l.Id) ?? []).ToList();
+
             var data = new DfesLensExtractor.DayData(
                 roots, observations, persistedRoots, answeredGaps,
-                weatherStamps, plotId, localDate, scoredUnder, products);
+                weatherStamps, plotId, localDate, scoredUnder, products, purposes);
             var probe = new DfesLensExtractor.LensScoresProbe();
             var (input, signals) = DfesLensExtractor.Build(data, probe, plausible);
             return new DayScore(input, signals, probe.Scores, plausible);
