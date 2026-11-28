@@ -219,7 +219,33 @@ public static class DependencyInjection
             {
                 options.TimeoutSeconds = timeoutSeconds;
             }
+
+            // 28 Nov 2026 — the sorting call's own limits (docs/ai/MODEL-SELECTION.md); absent = the code defaults.
+            if (int.TryParse(section["StructurerMaxOutputTokens"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var structurerMaxOutputTokens))
+            {
+                options.StructurerMaxOutputTokens = structurerMaxOutputTokens;
+            }
+
+            if (int.TryParse(section["StructurerTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var structurerTimeoutSeconds))
+            {
+                options.StructurerTimeoutSeconds = structurerTimeoutSeconds;
+            }
+
+            if (int.TryParse(section["StructurerThinkingBudget"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var structurerThinkingBudget))
+            {
+                options.StructurerThinkingBudget = structurerThinkingBudget;
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StructurerThinkingLevel"]))
+            {
+                options.StructurerThinkingLevel = section["StructurerThinkingLevel"]!.Trim();
+            }
         });
+
+        // 28 Nov 2026 — who sorts the transcript and who sorts it if that one fails (Ai:Structurer:Provider / :Fallback).
+        // Absent = the database row decides and there is no backup, as before this setting existed.
+        services.Configure<VoiceStructurerOptions>(
+            configuration.GetSection(VoiceStructurerOptions.SectionName));
 
         services.PostConfigure<GeminiOptions>(options =>
         {

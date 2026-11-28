@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Storage;
@@ -177,11 +178,14 @@ public sealed class AiOrchestratorTests
     }
 
     [Fact]
-    public async Task StreamingTextParse_FollowsTheConfiguredVoiceProvider_NeverGemini()
+    public async Task StreamingTextParse_FollowsTheConfiguredSorter_SarvamWhenTheRowSaysSarvam()
     {
-        // Founder's order 23 Nov 2026: no Gemini on any voice path. The streaming text parse used to prefer Gemini whenever
-        // it could structure voice; it now follows the configured voice provider (Sarvam by default).
-        var harness = CreateHarness(AiProviderConfig.CreateDefault());
+        // Founder's order 23 Nov 2026: no Gemini on a voice RECORDING. The streaming text parse used to prefer Gemini
+        // whenever it could structure voice; it follows the sorting choice instead (28 Nov 2026: Ai:Structurer, else the
+        // database row). The row every environment holds is Sarvam / Sarvam, which is what this models.
+        var config = AiProviderConfig.CreateDefault();
+        config.SetProviderTuple("Sarvam", "codemix", "Sarvam", null);
+        var harness = CreateHarness(config);
         harness.Sarvam.EnqueueStreamChunks(
             "{\"summary\":\"ok\",",
             "\"confidence\":0.91}");
@@ -203,6 +207,37 @@ public sealed class AiOrchestratorTests
 
         Assert.Equal(1, harness.Sarvam.VoiceStreamCallCount);
         Assert.Equal(0, harness.Gemini.VoiceStreamCallCount);
+        Assert.Contains(events, evt => evt.Type == "complete");
+    }
+
+    [Fact]
+    public async Task StreamingTextParse_UsesGemini_WhenTheStructurerSettingNamesGemini()
+    {
+        // 28 Nov 2026: Gemini sorts the transcript for the pilot. The streaming parse takes text, so it follows the setting.
+        var config = AiProviderConfig.CreateDefault();
+        config.SetProviderTuple("Sarvam", "codemix", "Sarvam", null);
+        var harness = CreateHarness(config, new VoiceStructurerOptions { Provider = "Gemini", Fallback = "Sarvam" });
+        harness.Gemini.EnqueueStreamChunks(
+            "{\"summary\":\"ok\",",
+            "\"confidence\":0.91}");
+
+        var events = new List<ParseStreamEvent>();
+        await foreach (var evt in harness.Orchestrator.ParseVoiceStreamAsync(
+                           "आज grapes ला spray मारला.",
+                           new VoiceParseContext(
+                               AvailableCrops: [],
+                               Profile: new FarmerProfileInfo([], [], [], null),
+                               FarmContext: null,
+                               FocusCategory: null,
+                               VocabDb: null),
+                           scenarioId: "gemini-structurer-test",
+                           CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Equal(1, harness.Gemini.VoiceStreamCallCount);
+        Assert.Equal(0, harness.Sarvam.VoiceStreamCallCount);
         Assert.Contains(events, evt => evt.Type == "complete");
     }
 
@@ -280,7 +315,7 @@ public sealed class AiOrchestratorTests
         return config;
     }
 
-    private static OrchestratorTestHarness CreateHarness(AiProviderConfig config)
+    private static OrchestratorTestHarness CreateHarness(AiProviderConfig config, VoiceStructurerOptions? structurer = null)
     {
         var repository = new InMemoryAiJobRepository(config);
         var sarvam = new FakeAiProvider(AiProviderType.Sarvam);
@@ -304,7 +339,8 @@ public sealed class AiOrchestratorTests
             new AiPromptBuilder(),
             blobStore,
             ssfRepository,
-            NullLogger<AiOrchestrator>.Instance);
+            NullLogger<AiOrchestrator>.Instance,
+            structurer is null ? null : Options.Create(structurer));
 
         return new OrchestratorTestHarness(
             orchestrator,

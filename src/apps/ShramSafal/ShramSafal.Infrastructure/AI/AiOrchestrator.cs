@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -23,7 +24,11 @@ internal sealed class AiOrchestrator(
     IAiPromptBuilder promptBuilder,
     IRawBlobStore blobStore,
     IShramSafalRepository shramSafalRepository,
-    ILogger<AiOrchestrator> logger) : IAiOrchestrator
+    ILogger<AiOrchestrator> logger,
+    // 28 Nov 2026 (founder's sorting-model decision) — who sorts the transcript and who sorts it if that one fails
+    // (Ai:Structurer). Optional and last, so a caller that does not name it (every test written before this) keeps the
+    // old behaviour: the database row decides and there is no text-only backup.
+    IOptions<VoiceStructurerOptions>? structurerOptions = null) : IAiOrchestrator
 {
     private const int MinProviderAttempts = 1;
     private const int MaxProviderAttempts = 5;
@@ -195,8 +200,17 @@ internal sealed class AiOrchestrator(
                 false);
         }
 
-        var primary = ResolveProvider(config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog), AiOperationType.VoiceToStructuredLog);
-        var fallback = ResolveFallbackProvider(primary?.ProviderType, AiOperationType.VoiceToStructuredLog);
+        // 28 Nov 2026 — a TRANSCRIPT (typed text; nothing to hear) is sorted by the configured sorter and its text-only
+        // backup, exactly like the second stage of the two-stage path. A RECORDING never goes through this choice: it
+        // resolves through CanHandle, which Gemini answers false, so audio cannot reach Gemini from here.
+        var isTranscriptInput = mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase);
+        var selection = ResolveStructurerSelection(config);
+        var primary = isTranscriptInput
+            ? ResolveTranscriptStructurer(selection.Provider)
+            : ResolveProvider(config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog), AiOperationType.VoiceToStructuredLog);
+        var fallback = isTranscriptInput
+            ? ResolveTranscriptFallback(selection)
+            : ResolveFallbackProvider(primary?.ProviderType, AiOperationType.VoiceToStructuredLog);
 
         if (fallbackProviderOnly && (!config.FallbackEnabled || fallback is null))
         {
@@ -360,7 +374,9 @@ internal sealed class AiOrchestrator(
         // path: there is nothing to transcribe, and sending text to speech-to-text only made it fail first.
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var transcriberType = ParseProviderTypeOrDefault(config.TranscriberProvider, AiProviderType.Gemini);
-        var structurerType = ParseProviderTypeOrDefault(config.StructurerProvider, AiProviderType.Gemini);
+        // 28 Nov 2026 — Ai:Structurer:Provider wins over the database row; the row decides when the setting is empty.
+        var selection = ResolveStructurerSelection(config);
+        var structurerType = selection.Provider;
 
         if (!_transcribers.TryGetValue(transcriberType, out var transcriber) ||
             mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
@@ -648,7 +664,9 @@ internal sealed class AiOrchestrator(
         // IAiProvider.ParseVoiceAsync with mime=text/plain so the existing
         // Gemini text-completion path handles the structure step. Mirrors
         // the eval-only ParseVoiceWithOverrideAsync flow on lines 359-428.
-        var structurer = ResolveProvider(structurerType, AiOperationType.VoiceToStructuredLog);
+        // CanStructureTranscript, not CanHandle: Gemini may sort text but is never given a recording (it answers
+        // CanHandle(voice) = false). Nothing but text/plain is handed to a sorter below.
+        var structurer = ResolveTranscriptStructurer(structurerType);
         if (structurer is null)
         {
             logger.LogWarning(
@@ -696,7 +714,48 @@ internal sealed class AiOrchestrator(
             config,
             requestPayloadHash,
             ct);
+
+        // 28 Nov 2026 — if the first sorter timed out, answered 5xx or still gave an unusable answer after its own retry,
+        // the SAME transcript is sorted ONCE by the backup (Sarvam in the pilot), text only, so the farmer still gets a
+        // result. A kept low-confidence answer is a success, not a failure, and never reaches here. The admin kill switch
+        // for fallbacks (FallbackEnabled) switches this off too.
+        var structurerFallbackUsed = false;
+        if (!structurerExecution.IsSuccess &&
+            config.FallbackEnabled &&
+            failureClassifier.IsFallbackEligible(structurerExecution.FailureClass) &&
+            ResolveTranscriptFallback(selection) is { } backupSorter)
+        {
+            logger.LogWarning(
+                "[parse-voice-two-stage] sorting by {Primary} failed for job {JobId} (failureClass={FailureClass}); sorting the same transcript once with {Backup}.",
+                structurerExecution.ProviderUsed,
+                job.Id,
+                structurerExecution.FailureClass,
+                backupSorter.ProviderType);
+            structurerExecution = await ExecuteVoiceAttemptWithRetriesAsync(
+                job,
+                backupSorter,
+                transcriptBytes,
+                mimeType: "text/plain",
+                languageHint,
+                systemPrompt,
+                config,
+                requestPayloadHash,
+                ct);
+            structurerFallbackUsed = true;
+        }
+
         clock.Struct = Stopwatch.GetElapsedTime(structStartedAt);
+        clock.StructProvider = structurerExecution.ProviderUsed.ToString();
+        clock.StructModel = structurerExecution.Result.ModelUsed;
+        clock.StructFallbackUsed = structurerFallbackUsed;
+        logger.LogInformation(
+            "[parse-voice-two-stage] sorted by {Provider} ({Model}) for job {JobId}: success={Success} fallbackSorter={FallbackSorter} structMs={StructMs}.",
+            structurerExecution.ProviderUsed,
+            structurerExecution.Result.ModelUsed ?? "unknown",
+            job.Id,
+            structurerExecution.IsSuccess,
+            structurerFallbackUsed,
+            ToLatencyMs(clock.Struct));
 
         if (structurerExecution.IsSuccess)
         {
@@ -715,9 +774,17 @@ internal sealed class AiOrchestrator(
             TryStampReferencedDate(job, structurerExecution.Result.NormalizedJson);
 
             job.UpdateProvenance(structurerExecution.Result.ModelUsed ?? "unknown");
-            job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", structurerExecution.Attempt!);
+            if (structurerFallbackUsed)
+            {
+                job.MarkFallbackSucceeded(resultWithHash.NormalizedJson ?? "{}", structurerExecution.Attempt!);
+            }
+            else
+            {
+                job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", structurerExecution.Attempt!);
+            }
+
             await aiJobRepository.SaveChangesAsync(ct);
-            return (resultWithHash, job.Id, structurerExecution.ProviderUsed, false);
+            return (resultWithHash, job.Id, structurerExecution.ProviderUsed, structurerFallbackUsed);
         }
 
         // Structurer failed: fall back the STRUCTURER step only. We
@@ -780,7 +847,7 @@ internal sealed class AiOrchestrator(
             },
             job.Id,
             structurerExecution.ProviderUsed,
-            false);
+            structurerFallbackUsed);
     }
 
     /// <summary>
@@ -1553,7 +1620,13 @@ internal sealed class AiOrchestrator(
             // sorting a second time, and counted against Sarvam's circuit breaker, so five low-confidence notes in a row
             // would have switched voice off for every farmer. It is kept with its low-confidence marks instead.
             var noOtherProviderTakesVoice = ResolveFallbackProvider(provider.ProviderType, AiOperationType.VoiceToStructuredLog) is null;
-            if (result.OverallConfidence < config.VoiceConfidenceThreshold && (result.StructuredParts > 1 || noOtherProviderTakesVoice))
+            // 28 Nov 2026 — a TRANSCRIPT sort (text in) by a provider that cannot take recordings (Gemini) that comes back
+            // unsure is kept with its low-confidence marks too: the farmer sees the "not sure" items. The only "other
+            // provider" that could be handed it is a recording-capable one, which would hear the whole recording AGAIN
+            // (billed again) for a second opinion; a second sorter is for a failed call, not an unsure answer.
+            var isTranscriptSort = mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) &&
+                                   !provider.CanHandle(AiOperationType.VoiceToStructuredLog);
+            if (result.OverallConfidence < config.VoiceConfidenceThreshold && (result.StructuredParts > 1 || noOtherProviderTakesVoice || isTranscriptSort))
             {
                 logger.LogInformation(
                     "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept with its low-confidence marks: a recording structured in {Parts} part(s) is never handed to a fallback that cannot take it.",
@@ -1739,12 +1812,50 @@ internal sealed class AiOrchestrator(
 
     private IAiProvider? ResolveVoiceStructurerProvider(AiProviderConfig config)
     {
-        // This used to prefer Gemini whenever it could structure voice (it was the only provider that could stream).
-        // Founder's order 23 Nov 2026: no Gemini on any voice path, so the configured voice provider decides, and a
-        // provider that cannot stream answers the streaming call with a plain "not supported" error event.
-        return ResolveProvider(
-            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
-            AiOperationType.VoiceToStructuredLog);
+        // The streaming parse and the eval parse take TEXT, so they follow the sorting choice (Ai:Structurer:Provider,
+        // else the database row), the same one the second stage of the two-stage path uses. A provider that cannot
+        // stream answers the streaming call with a plain "not supported" error event.
+        return ResolveTranscriptStructurer(ResolveStructurerSelection(config).Provider);
+    }
+
+    /// <summary>
+    /// 28 Nov 2026 — who sorts the transcript, and who sorts it once if that one fails. <c>Ai:Structurer</c> wins over the
+    /// database row; an unreadable database value reads as Gemini, as it always did. The backup is null when none is
+    /// configured or it would be the same provider.
+    /// </summary>
+    private StructurerSelection ResolveStructurerSelection(AiProviderConfig config)
+    {
+        var options = structurerOptions?.Value ?? new VoiceStructurerOptions();
+        var provider = options.ResolveProvider(config.StructurerProvider, AiProviderType.Gemini);
+        return new StructurerSelection(provider, options.ResolveFallback(provider));
+    }
+
+    private sealed record StructurerSelection(AiProviderType Provider, AiProviderType? Fallback);
+
+    /// <summary>
+    /// A provider that may sort a transcript. The preferred one when it can; else any that can (so a sorter named in the
+    /// settings but not registered still ends on a working one). Asked through <c>CanStructureTranscript</c>, never
+    /// <c>CanHandle</c>, so the answer says nothing about who may receive a recording.
+    /// </summary>
+    private IAiProvider? ResolveTranscriptStructurer(AiProviderType preferredType)
+    {
+        if (_providers.TryGetValue(preferredType, out var preferred) &&
+            preferred.CanStructureTranscript(AiOperationType.VoiceToStructuredLog))
+        {
+            return preferred;
+        }
+
+        return _providers.Values.FirstOrDefault(provider => provider.CanStructureTranscript(AiOperationType.VoiceToStructuredLog));
+    }
+
+    /// <summary>The configured text-only backup sorter, or null (none configured, not registered, or it cannot sort text).</summary>
+    private IAiProvider? ResolveTranscriptFallback(StructurerSelection selection)
+    {
+        return selection.Fallback is { } type &&
+               _providers.TryGetValue(type, out var provider) &&
+               provider.CanStructureTranscript(AiOperationType.VoiceToStructuredLog)
+            ? provider
+            : null;
     }
 
     private IAiProvider? ResolveFallbackProvider(AiProviderType? primaryType, AiOperationType operation)
@@ -1809,6 +1920,14 @@ internal sealed class AiOrchestrator(
         /// <summary>Sorting the transcript into the day's parts (retries included).</summary>
         public TimeSpan Struct { get; set; }
 
+        /// <summary>Who sorted the transcript (the provider that answered last), the model it reported, and whether it was
+        /// the backup. Null / false when no sorting stage ran.</summary>
+        public string? StructProvider { get; set; }
+
+        public string? StructModel { get; set; }
+
+        public bool StructFallbackUsed { get; set; }
+
         /// <summary>Which path ran: see <see cref="VoiceStageTimings"/>. A call that never reaches the two-stage branch
         /// stays on the one-call path; the two-stage branch says so when it starts and says it again if it hands over.</summary>
         public string Path { get; set; } = VoiceStageTimings.OneCallPath;
@@ -1818,7 +1937,10 @@ internal sealed class AiOrchestrator(
             ToLatencyMs(Stt),
             ToLatencyMs(Struct),
             ToLatencyMs(Stopwatch.GetElapsedTime(_startedAt)),
-            Path);
+            Path,
+            StructProvider,
+            StructModel,
+            StructFallbackUsed);
     }
 
     /// <summary>What speech-to-text came back with: its answer, or the exception it threw (never both).</summary>

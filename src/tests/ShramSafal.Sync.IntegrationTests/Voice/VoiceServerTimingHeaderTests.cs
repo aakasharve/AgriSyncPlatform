@@ -193,6 +193,59 @@ public sealed class VoiceServerTimingHeaderTests
         Assert.Contains(VoiceStageTimings.CachedPath, line, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_log_line_names_who_sorted_the_transcript_and_with_which_model()
+    {
+        var logger = new CapturingLogger();
+
+        Write(
+            new VoiceStageTimings(120, 2400, 3100, 5800, VoiceStageTimings.TwoStagePath, "Gemini", "gemini-3.5-flash-lite"),
+            TimeSpan.FromMilliseconds(5000),
+            logger);
+
+        var line = Assert.Single(logger.Lines);
+        Assert.Contains("structProvider=Gemini", line, StringComparison.Ordinal);
+        Assert.Contains("structModel=gemini-3.5-flash-lite", line, StringComparison.Ordinal);
+        Assert.Contains("structFallback=False", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_log_line_says_when_the_backup_sorter_answered()
+    {
+        var logger = new CapturingLogger();
+
+        Write(
+            new VoiceStageTimings(120, 2400, 9100, 12000, VoiceStageTimings.TwoStagePath, "Sarvam", "saaras:v4+sarvam-105b-conversations", StructFallbackUsed: true),
+            TimeSpan.FromMilliseconds(5000),
+            logger);
+
+        var line = Assert.Single(logger.Lines);
+        Assert.Contains("structProvider=Sarvam", line, StringComparison.Ordinal);
+        Assert.Contains("structFallback=True", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_call_with_no_sorting_stage_reads_none_never_a_guessed_model()
+    {
+        var logger = new CapturingLogger();
+
+        Write(new VoiceStageTimings(0, 0, 0, 3, VoiceStageTimings.CachedPath), TimeSpan.FromMilliseconds(3), logger);
+
+        var line = Assert.Single(logger.Lines);
+        Assert.Contains("structProvider=none", line, StringComparison.Ordinal);
+        Assert.Contains("structModel=none", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_sorting_stage_names_do_not_change_the_Server_Timing_header()
+    {
+        var header = Write(
+            new VoiceStageTimings(120, 2400, 3100, 5800, VoiceStageTimings.TwoStagePath, "Gemini", "gemini-3.5-flash-lite"),
+            TimeSpan.FromMilliseconds(4000));
+
+        Assert.Equal("s3;dur=120, stt;dur=2400, struct;dur=3100, total;dur=5800", header);
+    }
+
     private sealed class CapturingLogger : ILogger
     {
         public List<string> Lines { get; } = [];

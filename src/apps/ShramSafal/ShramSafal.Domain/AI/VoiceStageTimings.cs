@@ -21,7 +21,22 @@ namespace ShramSafal.Domain.AI;
 /// <see cref="Path"/> says which path ran so a 0 is never mistaken for "instant". No value is ever negative.
 /// </para>
 /// </summary>
-public sealed record VoiceStageTimings(int S3Ms, int SttMs, int StructMs, int TotalMs, string Path)
+/// <remarks>
+/// 28 Nov 2026 — <see cref="StructProvider"/>, <see cref="StructModel"/> and <see cref="StructFallbackUsed"/> say WHO
+/// sorted the transcript (the sorting stage only; speech-to-text is always Sarvam Saaras): the provider that answered,
+/// the model it reported, and whether it was the backup after the first choice failed. Null / false when no sorting
+/// stage ran (the one-call path, a repeated request, a failed speech-to-text). They are optional so every existing
+/// five-number call keeps compiling and the <c>Server-Timing</c> header is unchanged.
+/// </remarks>
+public sealed record VoiceStageTimings(
+    int S3Ms,
+    int SttMs,
+    int StructMs,
+    int TotalMs,
+    string Path,
+    string? StructProvider = null,
+    string? StructModel = null,
+    bool StructFallbackUsed = false)
 {
     /// <summary>The path where raw-audio write, speech-to-text and sorting each ran and were timed.</summary>
     public const string TwoStagePath = "two-stage";

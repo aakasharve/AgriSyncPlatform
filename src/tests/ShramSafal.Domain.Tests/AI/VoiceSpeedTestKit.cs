@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Storage;
@@ -146,12 +147,15 @@ internal sealed class VsTranscriber(
 /// <summary>
 /// A scripted <see cref="IAiProvider"/> that records every voice call (mime type and body). <paramref name="takesVoice"/>
 /// false makes <c>CanHandle(voice)</c> answer false, exactly as the shipped Gemini provider does since the founder's
-/// order that Gemini never handles voice.
+/// order that Gemini never handles voice. <paramref name="structuresText"/> is <c>CanStructureTranscript(voice)</c>: the
+/// shipped Gemini answers true (it sorts the transcript Sarvam heard, 28 Nov 2026); null = the same as
+/// <paramref name="takesVoice"/>, which is the interface default.
 /// </summary>
 internal sealed class VsProvider(
     AiProviderType type,
     bool takesVoice = true,
-    Func<VsCall, CancellationToken, Task<VoiceParseCanonicalResult>>? answer = null) : IAiProvider
+    Func<VsCall, CancellationToken, Task<VoiceParseCanonicalResult>>? answer = null,
+    bool? structuresText = null) : IAiProvider
 {
     private int _count;
 
@@ -162,6 +166,9 @@ internal sealed class VsProvider(
     public int VoiceCalls => Calls.Count;
 
     public bool CanHandle(AiOperationType operation) => operation != AiOperationType.VoiceToStructuredLog || takesVoice;
+
+    public bool CanStructureTranscript(AiOperationType operation) =>
+        operation != AiOperationType.VoiceToStructuredLog || (structuresText ?? takesVoice);
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(true);
 
@@ -296,6 +303,8 @@ internal sealed record VsRig(
 {
     /// <param name="registerTranscriber">False leaves the transcriber port unregistered (the one-call path).</param>
     /// <param name="geminiTakesVoice">False is the shipped state: Gemini answers CanHandle(voice) = false.</param>
+    /// <param name="gemini">A scripted Gemini; the default is the shipped one (no recordings, transcripts only).</param>
+    /// <param name="structurer">The <c>Ai:Structurer</c> setting; null = not named, so the database row decides and there is no backup.</param>
     public static VsRig Create(
         AiProviderConfig? config = null,
         VsTranscriber? transcriber = null,
@@ -303,13 +312,15 @@ internal sealed record VsRig(
         VsBlobStore? blob = null,
         VsProvider? sarvam = null,
         bool geminiTakesVoice = false,
-        VsLog? log = null)
+        VsLog? log = null,
+        VsProvider? gemini = null,
+        VoiceStructurerOptions? structurer = null)
     {
         log ??= new VsLog();
         config ??= VsConfig.SarvamSarvam();
         var jobs = new VsJobs(config, log);
         sarvam ??= new VsProvider(AiProviderType.Sarvam);
-        var gemini = new VsProvider(AiProviderType.Gemini, geminiTakesVoice);
+        gemini ??= new VsProvider(AiProviderType.Gemini, geminiTakesVoice, structuresText: true);
         blob ??= new VsBlobStore(log: log);
         var index = new RecordingShramSafalRepository();
         var port = registerTranscriber ? transcriber ?? new VsTranscriber(log: log) : null;
@@ -324,7 +335,8 @@ internal sealed record VsRig(
             new AiPromptBuilder(),
             blob,
             index,
-            NullLogger<AiOrchestrator>.Instance);
+            NullLogger<AiOrchestrator>.Instance,
+            structurer is null ? null : Options.Create(structurer));
 
         return new VsRig(orchestrator, jobs, sarvam, gemini, blob, port, index, log);
     }

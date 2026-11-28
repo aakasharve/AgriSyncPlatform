@@ -595,6 +595,71 @@ public sealed class AiEndpointsTests
         Assert.Contains("circuit", errorPayload, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static readonly IReadOnlyDictionary<string, string?> GeminiSortsWithSarvamBackup = new Dictionary<string, string?>
+    {
+        ["Ai:Structurer:Provider"] = "Gemini",
+        ["Ai:Structurer:Fallback"] = "Sarvam",
+    };
+
+    [Fact]
+    public async Task TypedNote_IsSortedByGemini_WhenTheStructurerSettingNamesGemini_ThroughTheRealHostWiring()
+    {
+        // 28 Nov 2026 (founder's sorting-model decision): the Ai:Structurer setting is bound by the real DI wiring, and a
+        // typed note (nothing to hear) is sorted by Gemini; Sarvam is not asked.
+        await using var harness = await TestHarness.CreateAsync(
+            FakeAiProviderMode.Success,
+            settings: GeminiSortsWithSarvamBackup);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-sort-1", "req-farm-ai-sort-1", farmId, "AI Sorting Farm");
+
+        var response = await harness.Client.PostAsJsonAsync("/shramsafal/ai/voice-parse", new
+        {
+            farmId,
+            textTranscript = "आज पाणी दिलं.",
+            idempotencyKey = "voice-sort-gemini-1"
+        });
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var doc = JsonDocument.Parse(body);
+        Assert.Equal("Gemini", doc.RootElement.GetProperty("providerUsed").GetString());
+        Assert.False(doc.RootElement.GetProperty("fallbackUsed").GetBoolean());
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+    }
+
+    [Fact]
+    public async Task TypedNote_WhenGeminiFails_IsSortedOnceBySarvam_ThroughTheRealHostWiring()
+    {
+        await using var harness = await TestHarness.CreateDualProviderAsync(
+            sarvamMode: FakeAiProviderMode.Success,
+            geminiMode: FakeAiProviderMode.FailVoice,
+            settings: GeminiSortsWithSarvamBackup);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-sort-2", "req-farm-ai-sort-2", farmId, "AI Sorting Backup Farm");
+
+        var response = await harness.Client.PostAsJsonAsync("/shramsafal/ai/voice-parse", new
+        {
+            farmId,
+            textTranscript = "आज पाणी दिलं.",
+            idempotencyKey = "voice-sort-backup-1"
+        });
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var doc = JsonDocument.Parse(body);
+        Assert.Equal("Sarvam", doc.RootElement.GetProperty("providerUsed").GetString());
+        Assert.True(doc.RootElement.GetProperty("fallbackUsed").GetBoolean());
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+
+        var jobId = doc.RootElement.GetProperty("jobId").GetGuid();
+        var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{jobId}");
+        statusResponse.EnsureSuccessStatusCode();
+        using var statusDoc = JsonDocument.Parse(await statusResponse.Content.ReadAsStringAsync());
+        Assert.Equal("FallbackSucceeded", statusDoc.RootElement.GetProperty("status").GetString());
+    }
+
     [Fact]
     public async Task Config_AdminCanUpdate_AndSettingsChangeIsAudited()
     {
@@ -606,8 +671,8 @@ public sealed class AiEndpointsTests
         var configId = configDoc.RootElement.GetProperty("id").GetGuid();
         Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("defaultProvider").GetString());
         Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("resolvedVoiceProvider").GetString());
-        Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiModelId").GetString());
-        Assert.Equal("gemini-3.1-flash-lite", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
+        Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiModelId").GetString());
+        Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
         Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiOcrModelId").GetString());
         Assert.Equal("gemini-3.5-flash-lite", configDoc.RootElement.GetProperty("geminiVoiceFallbackModelId").GetString());
 
@@ -878,28 +943,39 @@ public sealed class AiEndpointsTests
         public FakeAiProvider Provider => Providers.Values.First();
         public IReadOnlyDictionary<AiProviderType, FakeAiProvider> Providers { get; } = providers;
 
+        /// <summary>
+        /// 28 Nov 2026 - the sorting choice every environment's database row held before the sorting-model decision:
+        /// Sarvam sorts a typed transcript (the row is Sarvam / Sarvam). The harness has no row of its own (the code default
+        /// reads Gemini), so it names Sarvam through the same setting the shipped appsettings use for Gemini.
+        /// </summary>
+        private static readonly IReadOnlyDictionary<string, string?> SarvamSortsTypedText =
+            new Dictionary<string, string?> { ["Ai:Structurer:Provider"] = "Sarvam" };
+
         public static async Task<TestHarness> CreateAsync(
             FakeAiProviderMode mode,
-            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow)
+            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow,
+            IReadOnlyDictionary<string, string?>? settings = null)
         {
             var sarvam = new FakeAiProvider(mode, AiProviderType.Sarvam);
             var gemini = new FakeAiProvider(mode, AiProviderType.Gemini);
-            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode);
+            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode, settings);
         }
 
         public static async Task<TestHarness> CreateDualProviderAsync(
             FakeAiProviderMode sarvamMode,
             FakeAiProviderMode geminiMode,
-            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow)
+            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow,
+            IReadOnlyDictionary<string, string?>? settings = null)
         {
             var sarvam = new FakeAiProvider(sarvamMode, AiProviderType.Sarvam);
             var gemini = new FakeAiProvider(geminiMode, AiProviderType.Gemini);
-            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode);
+            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode, settings);
         }
 
         private static async Task<TestHarness> CreateInternalAsync(
             IReadOnlyList<FakeAiProvider> aiProviders,
-            EntitlementPolicyMode entitlementPolicyMode)
+            EntitlementPolicyMode entitlementPolicyMode,
+            IReadOnlyDictionary<string, string?>? settings = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -913,6 +989,7 @@ public sealed class AiEndpointsTests
                 ["ConnectionStrings:ShramSafalDb"] = "Host=localhost;Port=5432;Database=test;Username=test;Password=test",
                 ["ShramSafal:Storage:DataDirectory"] = storageDirectory
             });
+            builder.Configuration.AddInMemoryCollection(settings ?? SarvamSortsTypedText);
 
             builder.Services
                 .AddAuthentication("Test")

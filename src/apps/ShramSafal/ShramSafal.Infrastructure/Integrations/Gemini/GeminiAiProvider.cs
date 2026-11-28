@@ -63,15 +63,27 @@ internal sealed class GeminiAiProvider : IAiProvider
 
     public AiProviderType ProviderType => AiProviderType.Gemini;
 
-    // 23 Nov 2026, founder's order: Gemini never handles a voice recording, as primary, as structurer or as fallback.
-    // Every voice path (speech to text, then structuring the transcript into the log) runs on Sarvam only. The
-    // orchestrator resolves providers through CanHandle, so answering false for VoiceToStructuredLog removes Gemini from
-    // every voice choice at once. Bills (receipts) and sale slips (patti) stay on Gemini: they are photos, not voice.
+    // 23 Nov 2026, founder's order: Gemini never receives a voice RECORDING, as primary, as transcriber or as fallback.
+    // The orchestrator resolves every audio path through CanHandle, so answering false for VoiceToStructuredLog keeps
+    // Gemini out of all of them at once. Bills (receipts) and sale slips (patti) stay on Gemini: they are photos.
     public bool CanHandle(AiOperationType operation)
     {
         return operation is AiOperationType.ReceiptToExpenseItems
             or AiOperationType.PattiImageToSaleData;
     }
+
+    // 28 Nov 2026, founder's sorting-model decision for the pilot: Gemini MAY sort the transcript Sarvam Saaras heard
+    // (text in, JSON out). That is a different question from CanHandle: the orchestrator asks it only when it needs a
+    // sorter, and hands the answer nothing but text/plain. ParseVoiceAsync below refuses anything else on its own, so even
+    // a wrong routing could not send a recording to Google.
+    public bool CanStructureTranscript(AiOperationType operation)
+    {
+        return operation is AiOperationType.VoiceToStructuredLog;
+    }
+
+    /// <summary>The answer to anything that is not text. Says "unsupported" so the failure is never retried or handed on.</summary>
+    internal const string AudioRefusedError =
+        "Unsupported input: Gemini sorts transcript text only and is never sent a recording.";
 
     public async Task<bool> HealthCheckAsync(CancellationToken ct = default)
     {
@@ -118,6 +130,19 @@ internal sealed class GeminiAiProvider : IAiProvider
         }
     }
 
+    /// <summary>
+    /// Sorts a TRANSCRIPT into the structured log: text in, JSON out. 28 Nov 2026 (founder's decision for the pilot):
+    /// this is the ONLY voice work Gemini does. Speech-to-text stays on Sarvam Saaras, and a recording is refused here,
+    /// before anything is read, built or sent (see <see cref="AudioRefusedError"/>).
+    ///
+    /// <para>
+    /// <b>One call per talk.</b> The whole transcript goes in a single call: the model takes a million tokens in and the
+    /// answer cap is <see cref="GeminiOptions.StructurerMaxOutputTokens"/>, so the blind pieces the 4,096-token Sarvam
+    /// answer cap forced (accuracy risk D6-2) do not apply. Only an answer that is actually CUT OFF at the cap is split
+    /// in half and retried, by <see cref="ChunkedStructuring"/>, and that is logged. A failed call gets one more try
+    /// there; after that the orchestrator hands the transcript to the backup sorter.
+    /// </para>
+    /// </summary>
     public async Task<VoiceParseCanonicalResult> ParseVoiceAsync(
         Stream audioStream,
         string mimeType,
@@ -125,6 +150,20 @@ internal sealed class GeminiAiProvider : IAiProvider
         string systemPrompt,
         CancellationToken ct = default)
     {
+        // Never audio. Checked first: before the key, before the stream is touched.
+        if (string.IsNullOrWhiteSpace(mimeType) ||
+            !mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogError(
+                "Gemini was asked to take a non-text input (mime={MimeType}); refused. Gemini only sorts transcript text, never a recording.",
+                mimeType ?? "(none)");
+            return new VoiceParseCanonicalResult
+            {
+                Success = false,
+                Error = AudioRefusedError
+            };
+        }
+
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             return new VoiceParseCanonicalResult
@@ -136,113 +175,78 @@ internal sealed class GeminiAiProvider : IAiProvider
 
         try
         {
-            var userParts = new List<object>();
-            string? rawTranscript = null;
-
-            if (mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+            string rawTranscript;
+            using (var reader = new StreamReader(audioStream, leaveOpen: true))
             {
-                using var reader = new StreamReader(audioStream, leaveOpen: true);
-                rawTranscript = await reader.ReadToEndAsync(ct);
-                userParts.Add(new { text = rawTranscript });
-            }
-            else
-            {
-                var base64 = await ReadAsBase64Async(audioStream, ct);
-                userParts.Add(new
-                {
-                    inlineData = new
-                    {
-                        mimeType = string.IsNullOrWhiteSpace(mimeType) ? "audio/webm" : mimeType,
-                        data = base64
-                    }
-                });
-                if (!string.IsNullOrWhiteSpace(languageHint))
-                {
-                    userParts.Add(new { text = $"Language hint: {languageHint}" });
-                }
+                rawTranscript = (await reader.ReadToEndAsync(ct)).Trim();
             }
 
-            var modelId = string.IsNullOrWhiteSpace(rawTranscript)
-                ? ResolveVoiceFallbackModelId()
-                : ResolveStructurerModelId();
-
-            string? content;
-            var structuredParts = 1;
-            if (rawTranscript is not null)
-            {
-                // PLR lane V-1 fix pass (B001) — a long TEXT is structured in segments, all or nothing (the same rule
-                // as the Sarvam structurer); a correction is never segmented.
-                var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
-                var segmentTokens = isCorrection
-                    ? int.MaxValue
-                    : new StructuringBudget(_options.MaxTokens > 0 ? _options.MaxTokens : 4096).SegmentTokens;
-                var structured = await ChunkedStructuring.StructureAsync(
-                    rawTranscript,
-                    segmentTokens,
-                    async (segment, segmentCt) =>
-                    {
-                        var part = await GenerateContentAsync(systemPrompt, [new { text = segment }], modelId, segmentCt);
-                        if (part.Success)
-                        {
-                            return SegmentAnswer.Ok(part.Content);
-                        }
-
-                        // A truncated answer is split in half (fix pass 2); anything else gets one more try.
-                        return part.Error?.Contains("truncated", StringComparison.OrdinalIgnoreCase) == true
-                            ? SegmentAnswer.CutOffAnswer(part.Error)
-                            : SegmentAnswer.Failed(part.Error, retryable: true);
-                    },
-                    logger,
-                    ct,
-                    allowSplit: !isCorrection,
-                    maxParallel: _structuringMaxParallel);
-                if (!structured.IsSuccess)
-                {
-                    return new VoiceParseCanonicalResult { Success = false, Error = structured.Error };
-                }
-
-                content = structured.Content;
-                structuredParts = structured.Segments;
-            }
-            else
-            {
-                var generated = await GenerateContentAsync(systemPrompt, userParts, modelId, ct);
-                if (!generated.Success)
-                {
-                    return new VoiceParseCanonicalResult
-                    {
-                        Success = false,
-                        Error = generated.Error
-                    };
-                }
-
-                content = generated.Content;
-            }
-
-            var cleaned = GeminiJsonCleaner.Clean(content!);
-            var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
-            // PLR lane V-1 — for a text input the server holds the transcript and the model no longer repeats it;
-            // for audio (rawTranscript null) the model's own transcription stays.
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: rawTranscript);
-            var confidence = TryExtractConfidence(normalized) ?? 0.75m;
-            rawTranscript ??= TryExtractString(normalized, "fullTranscript");
-
-            // PLR lane V-1 fix pass (B007) — a successful AUDIO parse never stores an empty transcript: the model
-            // heard the recording itself and wrote no words for it, so nothing can be checked against what he said.
-            // That is a visible failure (a parse failure: no retry of the same call).
             if (string.IsNullOrWhiteSpace(rawTranscript))
             {
                 return new VoiceParseCanonicalResult
                 {
                     Success = false,
-                    Error = "Gemini audio parse returned no transcript of the recording (parse incomplete)."
+                    Error = "Gemini was given an empty transcript."
                 };
             }
 
-            // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful
-            // outbound Gemini call. Estimated payload bytes ≈ length of
-            // the user parts payload we just sent (transcript bytes for
-            // text path, 3/4-decoded base64 length for audio path).
+            var modelId = ResolveStructurerModelId();
+            var userParts = new List<object> { new { text = rawTranscript } };
+
+            // A correction ("बदला") is never split: its block asks for whole buckets, which pieces would repeat.
+            var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
+            var geminiCalls = 0;
+            var structured = await ChunkedStructuring.StructureAsync(
+                rawTranscript,
+                // The whole talk in one call: no planned split. Only a cut-off answer is split in half (allowSplit).
+                segmentTokens: int.MaxValue,
+                async (segment, segmentCt) =>
+                {
+                    Interlocked.Increment(ref geminiCalls);
+                    var part = await GenerateContentAsync(
+                        systemPrompt,
+                        [new { text = segment }],
+                        modelId,
+                        segmentCt,
+                        structurer: true);
+                    if (part.Success)
+                    {
+                        // JSON mode makes an invalid answer rare, not impossible. An answer that is not a JSON object is a
+                        // failed call: it gets the one more try below, and after that the backup sorter.
+                        return LooksLikeJsonObject(part.Content)
+                            ? SegmentAnswer.Ok(part.Content)
+                            : SegmentAnswer.Failed("Gemini returned an answer that is not a JSON object (parse failure).", retryable: true);
+                    }
+
+                    // A truncated answer is split in half (fix pass 2); anything else gets one more try.
+                    return part.Error?.Contains("truncated", StringComparison.OrdinalIgnoreCase) == true
+                        ? SegmentAnswer.CutOffAnswer(part.Error)
+                        : SegmentAnswer.Failed(part.Error, retryable: true);
+                },
+                logger,
+                ct,
+                allowSplit: !isCorrection,
+                maxParallel: _structuringMaxParallel);
+            if (!structured.IsSuccess)
+            {
+                return new VoiceParseCanonicalResult { Success = false, Error = structured.Error };
+            }
+
+            logger.LogInformation(
+                "Gemini sorted a transcript of ~{SpokenTokens} tokens in {Calls} call(s), {Parts} part(s), model {Model}.",
+                StructuringBudget.EstimateTokens(rawTranscript),
+                geminiCalls,
+                structured.Segments,
+                modelId);
+
+            var cleaned = GeminiJsonCleaner.Clean(structured.Content!);
+            var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
+            // The server holds the transcript and the model does not repeat it (PLR lane V-1).
+            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: rawTranscript);
+            var confidence = TryExtractConfidence(normalized) ?? 0.75m;
+
+            // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful outbound Gemini call. The payload is the
+            // transcript text; there is no audio path any more.
             await LogCrossBorderTransferAsync(
                 payloadClass: "voice_transcript",
                 sizeBytes: EstimateUserPartsSize(userParts),
@@ -259,7 +263,7 @@ internal sealed class GeminiAiProvider : IAiProvider
                 NormalizedJson = normalized,
                 RawTranscript = rawTranscript,
                 OverallConfidence = confidence,
-                StructuredParts = structuredParts,
+                StructuredParts = structured.Segments,
             };
         }
         catch (Exception ex)
@@ -270,6 +274,23 @@ internal sealed class GeminiAiProvider : IAiProvider
                 Success = false,
                 Error = ex.Message
             };
+        }
+    }
+
+    private static bool LooksLikeJsonObject(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonNode.Parse(GeminiJsonCleaner.Clean(content)) is JsonObject;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
@@ -411,15 +432,11 @@ internal sealed class GeminiAiProvider : IAiProvider
             throw new InvalidOperationException("Gemini API key is not configured.");
         }
 
-        using var timeout = CreateTimeoutToken(ct);
+        // 28 Nov 2026 — the streaming parse is the same sorting step (text in, JSON out), so it takes the same limits.
+        using var timeout = CreateTimeoutToken(ct, ResolveStructurerTimeoutSeconds());
         var client = httpClientFactory.CreateClient("GeminiAiProvider");
 
-        var generationConfig = new JsonObject
-        {
-            ["responseMimeType"] = "application/json",
-            ["temperature"] = JsonValue.Create(_options.Temperature),
-            ["maxOutputTokens"] = _options.MaxTokens
-        };
+        var generationConfig = BuildGenerationConfig(structurer: true, thinkingBudget: null, responseJsonSchema: null);
 
         var requestBody = new JsonObject
         {
@@ -552,30 +569,14 @@ internal sealed class GeminiAiProvider : IAiProvider
         string modelId,
         CancellationToken ct,
         JsonElement? responseJsonSchema = null,
-        int? thinkingBudget = null)
+        int? thinkingBudget = null,
+        bool structurer = false)
     {
-        using var timeout = CreateTimeoutToken(ct);
+        // The sorting step has its own, shorter deadline (so a stuck call reaches the Sarvam backup in about a minute).
+        using var timeout = CreateTimeoutToken(ct, structurer ? ResolveStructurerTimeoutSeconds() : null);
         var client = httpClientFactory.CreateClient("GeminiAiProvider");
 
-        var generationConfig = new JsonObject
-        {
-            ["responseMimeType"] = "application/json",
-            ["temperature"] = JsonValue.Create(_options.Temperature),
-            ["maxOutputTokens"] = _options.MaxTokens
-        };
-
-        if (responseJsonSchema.HasValue)
-        {
-            generationConfig["responseJsonSchema"] = JsonNode.Parse(responseJsonSchema.Value.GetRawText());
-        }
-
-        if (thinkingBudget.HasValue)
-        {
-            generationConfig["thinkingConfig"] = new JsonObject
-            {
-                ["thinkingBudget"] = thinkingBudget.Value
-            };
-        }
+        var generationConfig = BuildGenerationConfig(structurer, thinkingBudget, responseJsonSchema);
 
         var requestBody = new JsonObject
         {
@@ -609,6 +610,11 @@ internal sealed class GeminiAiProvider : IAiProvider
             return (false, null, message);
         }
 
+        if (structurer)
+        {
+            LogUsage(modelId, body);
+        }
+
         var generation = ExtractGenerationResult(body);
         if (string.Equals(generation.FinishReason, "MAX_TOKENS", StringComparison.OrdinalIgnoreCase))
         {
@@ -622,6 +628,91 @@ internal sealed class GeminiAiProvider : IAiProvider
         }
 
         return (true, generatedText, null);
+    }
+
+    /// <summary>
+    /// The request's <c>generationConfig</c>. Always JSON mode (<c>responseMimeType: application/json</c>: the model can
+    /// only answer in valid JSON). A response schema is sent only where a caller gives one (bills and sale slips). The
+    /// sorting step (<paramref name="structurer"/>) gets its own answer cap and its thinking setting (off in the pilot).
+    /// </summary>
+    private JsonObject BuildGenerationConfig(bool structurer, int? thinkingBudget, JsonElement? responseJsonSchema)
+    {
+        var generationConfig = new JsonObject
+        {
+            ["responseMimeType"] = "application/json",
+            ["temperature"] = JsonValue.Create(_options.Temperature),
+            ["maxOutputTokens"] = structurer ? ResolveStructurerMaxOutputTokens() : _options.MaxTokens
+        };
+
+        if (responseJsonSchema.HasValue)
+        {
+            generationConfig["responseJsonSchema"] = JsonNode.Parse(responseJsonSchema.Value.GetRawText());
+        }
+
+        if (structurer)
+        {
+            // A level and a budget cannot both be sent. The level (Gemini 3 models) wins when set; a negative budget
+            // sends neither, which is the model's own default.
+            if (!string.IsNullOrWhiteSpace(_options.StructurerThinkingLevel))
+            {
+                generationConfig["thinkingConfig"] = new JsonObject
+                {
+                    ["thinkingLevel"] = _options.StructurerThinkingLevel.Trim().ToLowerInvariant()
+                };
+            }
+            else if (_options.StructurerThinkingBudget >= 0)
+            {
+                generationConfig["thinkingConfig"] = new JsonObject
+                {
+                    ["thinkingBudget"] = _options.StructurerThinkingBudget
+                };
+            }
+        }
+        else if (thinkingBudget.HasValue)
+        {
+            generationConfig["thinkingConfig"] = new JsonObject
+            {
+                ["thinkingBudget"] = thinkingBudget.Value
+            };
+        }
+
+        return generationConfig;
+    }
+
+    /// <summary>
+    /// One line per sorting call with the token counts Gemini reports, so the real-key check can SEE whether the fixed
+    /// prompt was served from Gemini's automatic (implicit) cache (<c>cachedContentTokenCount</c> above 0) and how many
+    /// thinking tokens were spent. Nothing here is estimated; a count the API did not send reads "n/a".
+    /// </summary>
+    private void LogUsage(string modelId, string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("usageMetadata", out var usage) ||
+                usage.ValueKind != JsonValueKind.Object)
+            {
+                logger.LogInformation("Gemini sorting call, model {Model}: the API sent no usage figures.", modelId);
+                return;
+            }
+
+            static string Count(JsonElement usageNode, string name) =>
+                usageNode.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.Number
+                    ? node.GetRawText()
+                    : "n/a";
+
+            logger.LogInformation(
+                "Gemini sorting call, model {Model}: promptTokens={PromptTokens} cachedTokens={CachedTokens} answerTokens={AnswerTokens} thinkingTokens={ThinkingTokens}.",
+                modelId,
+                Count(usage, "promptTokenCount"),
+                Count(usage, "cachedContentTokenCount"),
+                Count(usage, "candidatesTokenCount"),
+                Count(usage, "thoughtsTokenCount"));
+        }
+        catch (JsonException)
+        {
+            // Usage is a diagnostic only; a body that does not parse here is handled by ExtractGenerationResult.
+        }
     }
 
     private string BuildGenerateContentUrl(string model)
@@ -643,9 +734,18 @@ internal sealed class GeminiAiProvider : IAiProvider
         return ResolveModelId(_options.OcrModelId, GeminiOptions.DefaultOcrModelId);
     }
 
-    private string ResolveVoiceFallbackModelId()
+    private int ResolveStructurerMaxOutputTokens()
     {
-        return ResolveModelId(_options.VoiceFallbackModelId, GeminiOptions.DefaultVoiceFallbackModelId);
+        return _options.StructurerMaxOutputTokens <= 0
+            ? GeminiOptions.DefaultStructurerMaxOutputTokens
+            : Math.Min(_options.StructurerMaxOutputTokens, GeminiOptions.StructurerMaxOutputTokensCeiling);
+    }
+
+    private int ResolveStructurerTimeoutSeconds()
+    {
+        return _options.StructurerTimeoutSeconds <= 0
+            ? GeminiOptions.DefaultStructurerTimeoutSeconds
+            : _options.StructurerTimeoutSeconds;
     }
 
     private static string ResolveModelId(string? configured, string fallback)
@@ -655,9 +755,9 @@ internal sealed class GeminiAiProvider : IAiProvider
             : configured.Trim();
     }
 
-    private CancellationTokenSource CreateTimeoutToken(CancellationToken ct)
+    private CancellationTokenSource CreateTimeoutToken(CancellationToken ct, int? seconds = null)
     {
-        var timeoutSeconds = _options.TimeoutSeconds <= 0 ? 30 : _options.TimeoutSeconds;
+        var timeoutSeconds = seconds ?? (_options.TimeoutSeconds <= 0 ? 30 : _options.TimeoutSeconds);
         var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         return linked;

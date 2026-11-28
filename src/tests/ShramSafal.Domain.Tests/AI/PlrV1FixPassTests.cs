@@ -186,9 +186,13 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
     }
 
     [Fact]
-    public async Task Gemini_structures_a_long_typed_text_in_segments_too()
+    public async Task Gemini_sorts_a_long_transcript_in_ONE_call_not_in_segments()
     {
+        // 28 Nov 2026 (founder's sorting-model decision): Gemini takes the whole talk in one call (1M tokens in, 65K out), so
+        // the blind pieces that Sarvam's 4,096-token answer cap forces do not apply. The same ten-minute transcript that the
+        // 4,096-token plan cut into many segments (still the Sarvam rule above) is now one call.
         var transcript = TenMinuteTranscript();
+        Assert.True(ChunkedStructuring.Segment(transcript, new StructuringBudget(4096).SegmentTokens).Count > 1);
         var calls = 0;
         var provider = GeminiProvider(_ =>
         {
@@ -199,8 +203,8 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
         var result = await provider.ParseVoiceAsync(new MemoryStream(Encoding.UTF8.GetBytes(transcript)), "text/plain", "mr-IN", "system", CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
-        Assert.Equal(ChunkedStructuring.Segment(transcript, new StructuringBudget(new GeminiOptions().MaxTokens).SegmentTokens).Count, calls);
-        Assert.True(calls > 1);
+        Assert.Equal(1, calls);
+        Assert.Equal(1, result.StructuredParts);
     }
 
     [Fact]
@@ -426,28 +430,27 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
     }
 
     // =====================================================================================================
-    // B007 — a successful audio parse never stores an empty transcript
+    // B007 (replaced 28 Nov 2026) — Gemini has no audio parse at all: it is refused, never "parsed with a transcript"
     // =====================================================================================================
 
     [Fact]
-    public async Task A_gemini_audio_parse_without_a_transcript_is_a_visible_failure()
+    public async Task A_gemini_audio_parse_is_refused_whatever_the_model_would_have_answered()
     {
-        var provider = GeminiProvider(_ => GeminiAnswer("""{"dayOutcome":"WORK_RECORDED","irrigation":[{"durationHours":2}]}"""));
+        // B007 used to say: an audio parse that comes back without a transcript is a visible failure. Gemini now never
+        // receives a recording (founder's order 23 Nov, kept in the 28 Nov sorting decision), so there is no audio parse
+        // to judge: both old cases (with and without a transcript in the answer) end the same way, with no call made.
+        var calls = 0;
+        var provider = GeminiProvider(_ =>
+        {
+            Interlocked.Increment(ref calls);
+            return GeminiAnswer("""{"dayOutcome":"WORK_RECORDED","fullTranscript":"आज दोन तास पाणी दिलं"}""");
+        });
 
         var result = await provider.ParseVoiceAsync(new MemoryStream([1, 2, 3]), "audio/webm", "mr-IN", "system", CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Contains("no transcript", result.Error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task A_gemini_audio_parse_with_its_transcript_still_succeeds()
-    {
-        var provider = GeminiProvider(_ => GeminiAnswer("""{"dayOutcome":"WORK_RECORDED","fullTranscript":"आज दोन तास पाणी दिलं"}"""));
-
-        var result = await provider.ParseVoiceAsync(new MemoryStream([1, 2, 3]), "audio/webm", "mr-IN", "system", CancellationToken.None);
-
-        Assert.True(result.Success, result.Error);
+        Assert.Equal(0, calls);
+        Assert.Equal(GeminiAiProvider.AudioRefusedError, result.Error);
     }
 
     // =====================================================================================================

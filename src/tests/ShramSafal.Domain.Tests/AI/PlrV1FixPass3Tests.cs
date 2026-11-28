@@ -378,6 +378,9 @@ public sealed class PlrV1FixPass3Tests
             circuitBreakerResetSeconds: 60,
             voiceConfidenceThreshold: 0.60m,
             receiptConfidenceThreshold: 0.50m);
+        // 28 Nov 2026: typed text is sorted by the configured sorter (the row's structurer column, absent an Ai:Structurer
+        // setting). The row every environment holds names the same provider as the voice provider; model it.
+        config.SetProviderTuple(primaryType.ToString(), "codemix", primaryType.ToString(), null);
         return config;
     }
 

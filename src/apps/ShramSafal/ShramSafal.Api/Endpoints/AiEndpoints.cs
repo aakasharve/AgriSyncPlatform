@@ -1638,17 +1638,26 @@ public static class AiEndpoints
             Math.Max(measured.SttMs, 0),
             Math.Max(measured.StructMs, 0),
             Math.Max(Math.Max(measured.TotalMs, 0), handlerMs),
-            measured.Path);
+            measured.Path,
+            measured.StructProvider,
+            measured.StructModel,
+            measured.StructFallbackUsed);
 
         context.Response.Headers["Server-Timing"] = effective.ToServerTimingHeader();
+        // 28 Nov 2026 — the sorting stage names who answered: structProvider / structModel are "none" when no sorting
+        // stage ran (one-call path, repeated request, failed speech-to-text) and structFallback is true when the backup
+        // sorter answered after the first choice failed. Speech-to-text is always Sarvam Saaras, so it is not repeated.
         logger.LogInformation(
-            "[voice-timing] jobId={JobId} path={Path} s3Ms={S3Ms} sttMs={SttMs} structMs={StructMs} totalMs={TotalMs} rawDurationMs={RawDurationMs}",
+            "[voice-timing] jobId={JobId} path={Path} s3Ms={S3Ms} sttMs={SttMs} structMs={StructMs} totalMs={TotalMs} structProvider={StructProvider} structModel={StructModel} structFallback={StructFallback} rawDurationMs={RawDurationMs}",
             jobId,
             effective.Path,
             effective.S3Ms,
             effective.SttMs,
             effective.StructMs,
             effective.TotalMs,
+            effective.StructProvider ?? "none",
+            effective.StructModel ?? "none",
+            effective.StructFallbackUsed,
             rawDurationMs);
     }
 
