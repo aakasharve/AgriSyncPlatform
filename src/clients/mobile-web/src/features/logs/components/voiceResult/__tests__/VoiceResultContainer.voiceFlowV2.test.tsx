@@ -5,8 +5,8 @@
  *
  * spec: voice-flow-v2-2026-11-23 (Task 12; amendments H2, H3, M5) — the REAL container over a real Dexie (fake-indexeddb), with
  * the voice flow v2 flag ON:
- *   - the saved screen comes first; today's result screen (unchanged) is one tap away, its "मागे", the phone's back and the
- *     sticky back all return to the saved screen;
+ *   - the saved screen comes first, drawn as the final design (Part 03 B1): one way out ("झालं"), no detail button; a talk opened
+ *     from "आजची बोलणी" is an overlay the phone's back closes;
  *   - after 30 s untouched the screen closes itself once, with ONE toast whose claim follows the sync truth (P10);
  *   - it never closes itself while a log is not known to be on its way to the server, or while the sync needs a hand;
  *   - with the flag OFF the container renders exactly today's screen (the existing suites pin the rest).
@@ -114,39 +114,34 @@ const applied = async () => getDatabase().mutationQueue.add({
 } as never);
 
 describe('voice flow v2 — the saved screen first', () => {
-    it('shows the saved screen, not today\'s result screen', () => {
+    it('shows the saved screen (the final design: no saved-title card), not today\'s result screen', () => {
         mount(props());
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.getByTestId('vr2-talk')).toBeTruthy();
         expect(screen.queryByTestId('voice-result')).toBeNull();
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
+        expect(screen.queryByTestId('vr2-saved-title')).toBeNull();
         expect(screen.getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
     });
 
-    it('the blue button opens today\'s result screen unchanged, with the owner\'s "पक्कं आहे"; its मागे returns', () => {
-        mount(props());
-        fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        expect(screen.getByTestId('voice-result')).toBeTruthy();
-        expect(screen.getByTestId('vr-confirm')).toBeTruthy();
-        expect(screen.queryByTestId('vr2-saved-card')).toBeNull();
-        fireEvent.click(screen.getByTestId('vr-back'));
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
-        expect(screen.queryByTestId('voice-result')).toBeNull();
+    it('Part 03 B1 — one way out: no detail button; "झालं" finishes through the route\'s close, without the self-close\'s toast', () => {
+        const p = props();
+        mount(p);
+        expect(screen.queryByTestId('vr2-open-detail')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr2-finish'));
+        expect(p.onAutoClose).toHaveBeenCalledTimes(1);
+        expect(p.onBack).not.toHaveBeenCalled();
+        expect(toasts).toHaveLength(0);
     });
 
-    it('the phone\'s back (the back stack) and the sticky back return from the detail page to the saved screen', () => {
+    it('Part 03 B3 — a talk opened from "आजची बोलणी" is an overlay: the phone\'s back closes it, the sticky back has no step to take', () => {
         const p = props();
         mount(p);
         expect(openOverlayCount()).toBe(0);
-        fireEvent.click(screen.getByTestId('vr2-open-detail'));
+        fireEvent.click(screen.getByTestId(`vr2-talk-row-${NOW}`));
+        expect(screen.getByTestId('vr2-talk-view')).toBeTruthy();
         expect(openOverlayCount()).toBe(1);
         act(() => { expect(dismissTopOverlay()).toBe(true); });
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.queryByTestId('vr2-talk-view')).toBeNull();
         expect(openOverlayCount()).toBe(0);
-
-        fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        act(() => { expect(leaveDetailIfOpen()).toBe(true); });
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
-        // on the saved screen the sticky back has no step to take: it leaves the surface (the route's own reset)
         expect(leaveDetailIfOpen()).toBe(false);
         expect(p.onBack).not.toHaveBeenCalled();
     });
@@ -173,7 +168,7 @@ describe('voice flow v2 — the saved screen first', () => {
         mount(p);
         // the server's acknowledgement is read from the queue (Dexie); the DOM change is what is waited for
         await waitFor(() => expect(screen.getByTestId('vr2-claim-server').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं'));
-        fireEvent.pointerDown(screen.getByTestId('vr2-saved-card'));
+        fireEvent.pointerDown(screen.getByTestId('vr2-talk'));
         act(() => { vi.advanceTimersByTime(31_000); });
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
         expect(toasts[0]?.message).toBe('श्रम सफलमध्ये साठवून ठेवलं — परत बघायचं असेल तर शेतीचा आढावा मध्ये बघा');
@@ -216,13 +211,14 @@ describe('voice flow v2 — the saved screen first', () => {
         expect(p.onAutoClose).not.toHaveBeenCalled();
     });
 
-    it('a new recording starts on the saved screen again', () => {
+    it('a new recording starts on the saved screen again (no talk left open)', () => {
         const p = props();
         const view = mount(p);
-        fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        expect(screen.getByTestId('voice-result')).toBeTruthy();
+        fireEvent.click(screen.getByTestId(`vr2-talk-row-${NOW}`));
+        expect(screen.getByTestId('vr2-talk-view')).toBeTruthy();
         view.rerender(<VoiceResultContainer {...p} result={{ ...p.result, key: 'clip-next|T' }} />);
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.queryByTestId('vr2-talk-view')).toBeNull();
+        expect(screen.getByTestId('vr2-talk')).toBeTruthy();
     });
 });
 

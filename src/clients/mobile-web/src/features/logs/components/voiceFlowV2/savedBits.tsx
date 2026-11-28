@@ -55,3 +55,39 @@ export const MicGlyph: React.FC<{ size: number }> = ({ size }) => (
         <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
     </svg>
 );
+
+/** The final design's line glyphs (result-v12-final.html: `PEN`, `SAY`, `SPK`, `GO`, `TICK`, `RARR`). */
+const LINE: Record<'pen' | 'say' | 'speaker' | 'go' | 'tick' | 'right', React.ReactNode> = {
+    pen: <path d="M4 20h4L19 9l-4-4L4 16z" />,
+    say: <path d="M4 5h16v10H10l-5 4v-4H4z" />,
+    speaker: <><path d="M4 10v4h4l5 4V6L8 10z" /><path d="M16.5 9a4 4 0 0 1 0 6" /></>,
+    go: <path d="M9 6l6 6-6 6" />,
+    tick: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+    right: <path d="M5 12h14M13 6l6 6-6 6" />,
+};
+export const LineGlyph: React.FC<{ name: keyof typeof LINE; size: number; className?: string }> = ({ name, size, className }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={name === 'tick' ? 2.6 : 2.2}
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
+        {LINE[name]}
+    </svg>
+);
+
+/**
+ * His own words under a value (the final design's `.said`): a small speech mark, then each phrase in the part's tint, exactly as he
+ * said it. Nothing is drawn when there is no phrase (never an empty quote).
+ */
+export const SaidLine: React.FC<{ quotes: readonly string[]; tint: string; testId?: string; className?: string }> = ({ quotes, tint, testId, className = '' }) => {
+    const shown = [...new Set(quotes.map(q => q.trim()).filter(Boolean))];
+    if (shown.length === 0) return null;
+    return (
+        <span className={`flex items-start gap-1.5 ${className}`} data-testid={testId} style={{ fontFamily: SANS }}>
+            <span className="mt-[3px] grid h-[18px] w-[18px] flex-none place-items-center text-[#78716C]"><LineGlyph name="say" size={16} /></span>
+            <span className="flex min-w-0 flex-wrap gap-x-1.5 gap-y-1">
+                {shown.map((q, i) => (
+                    <span key={i} data-testid={testId ? `${testId}-q` : undefined}
+                        className="rounded px-[5px] text-[14px] font-medium leading-[1.6] text-[#44403C]" style={{ background: tint }}>{q}</span>
+                ))}
+            </span>
+        </span>
+    );
+};

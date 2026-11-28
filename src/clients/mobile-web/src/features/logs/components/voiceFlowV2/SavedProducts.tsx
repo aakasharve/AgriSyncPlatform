@@ -9,6 +9,9 @@
  * Every word is read from the record and the library exactly as the result screen's rows read them (`ProductRow`: identity, type,
  * ingredient, amount, the answer status line); nothing is worked out here (P4, P7). The status line ("मालक तपासतील", "… म्हणाले हो")
  * stays under the ingredient — the design's demo has none, the record does.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03, B1) — optional, for the final design: HIS words under each product
+ * (`said`), and the release drawn as a row of "यातून काय समजलं" with its tank count (`look="row"`, `words`). Without them: as before.
  */
 import React from 'react';
 import { Camera, CircleDot, CircleHelp, Clock, ShieldCheck, UserCheck, X } from 'lucide-react';
@@ -20,7 +23,13 @@ import { ingredientLine, type ProductAnswerKit } from '../voiceResult/ProductCar
 import { statusWords } from '../voiceResult/ProductRows';
 import { amountText, nameIsPhrase, productName, type ProductBox, type ProductItem, type ProductWater } from '../voiceResult/productModel';
 import { resultCopy, type ResultCopy } from '../voiceResult/resultCopy';
-import { SANS } from './savedBits';
+import { PartIcon } from '../voiceResult/HisWords';
+import { partMeta } from '../voiceResult/resultModel';
+import { finalResultWords } from './finalResultWords';
+import { SaidLine, SANS } from './savedBits';
+
+/** The औषध / खत part's tint (his words for a product are tinted like it, as in his words above). */
+const INPUTS_TINT = partMeta('inputs').tint;
 
 /** The design's pill text colours (`.ty-insecticide em` …), and the same family for the types the demo does not show. */
 const PILL_INK: Record<TypeKey, string> = {
@@ -49,10 +58,12 @@ export interface SavedProductRowProps {
     logId: string;
     kit: ProductAnswerKit;
     onOpen: (item: ProductItem, logId: string) => void;
+    /** His own words for this product, exactly as in his transcript (the final design's `.prod .said`). Absent / empty = none drawn. */
+    said?: readonly string[];
 }
 
 /** One product (`.prow`). Same reading of the record as `ProductRow`, same testids. */
-export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, kit, onOpen }) => {
+export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, kit, onOpen, said }) => {
     const language = useOptionalLanguage()?.language;
     const copy = resultCopy(language);
     const answers = answersOf(kit.logById.get(logId), item.ref);
@@ -84,6 +95,7 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
                         <Icon size={14} aria-hidden="true" />{status.text}
                     </span>
                 )}
+                {said && <SaidLine quotes={said} tint={INPUTS_TINT} className="mt-[3px]" testId={`vr-prow-said-${item.id}`} />}
             </span>
             {amount && <span className="flex-none text-[15px] font-extrabold text-[#44403C]" data-testid="vr-prow-amount">{amount}</span>}
             <span className="flex-none text-[22px] leading-none text-[#A8A29E]" aria-hidden="true">›</span>
@@ -92,17 +104,30 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
 };
 
 /** A product with nothing to answer with (no kit): the same row, not a button. */
-const PlainRow: React.FC<{ item: ProductItem }> = ({ item }) => {
+const PlainRow: React.FC<{ item: ProductItem; said?: readonly string[] }> = ({ item, said }) => {
     const language = useOptionalLanguage()?.language;
     const name = productName(item, language);
     const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);
     return (
         <div className="flex min-h-[56px] items-center gap-2.5 rounded-[14px] border-l-[6px] border-l-violet-400 bg-violet-50 px-2.5 py-2 text-[#1C1917]" data-testid="vr-product-row">
-            <b className="min-w-0 flex-1 text-[17px] font-extrabold">{name}</b>
+            <span className="min-w-0 flex-1">
+                <b className="block text-[17px] font-extrabold">{name}</b>
+                {said && <SaidLine quotes={said} tint={INPUTS_TINT} className="mt-[3px]" testId={`vr-prow-said-${item.id}`} />}
+            </span>
             {amount && <span className="flex-none text-[15px] font-extrabold text-[#44403C]" data-testid="vr-product-amount">{amount}</span>}
         </div>
     );
 };
+
+/** The final design's extras for one release (B1): its tank count and his words; absent = the release as before. */
+export interface TankWords {
+    /** The tank count the record or his words hold (`tankFacts.tankCountOf`); null = no count is drawn (never a made-up one). */
+    tanks: number | null;
+    /** His words for the release (its water, its tanks), exactly as in his transcript. */
+    said: readonly string[];
+    /** His words for each product. */
+    saidOf: (item: ProductItem) => readonly string[];
+}
 
 export interface SavedTankProps {
     box: ProductBox;
@@ -110,28 +135,57 @@ export interface SavedTankProps {
     logId: string;
     kit?: ProductAnswerKit;
     onOpen: SavedProductRowProps['onOpen'];
+    /**
+     * `box` (default): the violet release box, as before. `row` (the final design, result-v12-final.html `.ar2` under "यातून काय
+     * समजलं"): the emerald row, "औषध / खत" small, the release and its tank count big ("फवारणी · ३ टाक्या"), the water under it, his
+     * words, then the products.
+     */
+    look?: 'box' | 'row';
+    words?: TankWords;
 }
 
 /** One release (`.ptank`): its icon, its name and water once, then its products. */
-export const SavedTank: React.FC<SavedTankProps> = ({ box, logId, kit, onOpen }) => {
+export const SavedTank: React.FC<SavedTankProps> = ({ box, logId, kit, onOpen, look = 'box', words }) => {
     const language = useOptionalLanguage()?.language;
     const copy = resultCopy(language);
     const items = box.items.filter(i => productName(i, language) || amountText(i.amount, language, true));
     if (items.length === 0) return null;
     const water = box.water.map(w => waterText(w, copy, language)).filter(Boolean);
+    const kindName = box.kind === 'spray' ? copy.spray : box.kind === 'drip' ? copy.drip : copy.products;
+    const rows = items.map(i => (kit
+        ? <SavedProductRow key={i.id} item={i} logId={logId} kit={kit} onOpen={onOpen} said={words?.saidOf(i)} />
+        : <PlainRow key={i.id} item={i} said={words?.saidOf(i)} />));
+    if (look === 'row') {
+        const tanks = words?.tanks ?? null;
+        return (
+            <section className="flex flex-col gap-2 rounded-xl border-l-[6px] border-l-[#059669] bg-[#ECFDF5] p-2.5 text-[#1C1917]"
+                data-testid={kit ? `vr-tank-${box.id}` : `vr-product-box-${box.id}`} data-kind={box.kind} data-look="row" style={{ fontFamily: SANS }}>
+                <div className="flex items-center gap-2.5">
+                    <span className="grid h-10 w-10 flex-none place-items-center rounded-xl" style={{ background: INPUTS_TINT }}><PartIcon part="inputs" size={24} /></span>
+                    <span className="min-w-0 flex-1">
+                        <small className="block text-[13px] font-semibold leading-[1.3] text-[#57534E]">{copy.products}</small>
+                        <b className="block text-[22px] font-extrabold leading-[1.25] [overflow-wrap:anywhere]" data-testid="vr-tank-value">
+                            {kindName}{tanks !== null && <span data-testid="vr-tank-count" data-count={tanks}> · {finalResultWords(language).tanks(tanks)}</span>}
+                        </b>
+                        {water.length > 0 && <span className="block text-[14px] font-bold leading-[1.35] text-[#44403C]" data-testid="vr-product-water">{copy.water}: {water.join(' · ')}</span>}
+                    </span>
+                </div>
+                {words && <SaidLine quotes={words.said} tint={INPUTS_TINT} className="ml-[50px]" testId={`vr-tank-said-${box.id}`} />}
+                {rows}
+            </section>
+        );
+    }
     return (
         <section className="mt-1.5 flex flex-col gap-[7px] rounded-2xl border-2 border-[#C4B5FD] p-2" data-testid={kit ? `vr-tank-${box.id}` : `vr-product-box-${box.id}`}
             data-kind={box.kind} style={{ fontFamily: SANS }}>
             <div className="flex items-center gap-2.5">
                 <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-[#EDE9FE] text-[#5B21B6]"><KindIcon kind={box.kind} /></span>
                 <div className="min-w-0">
-                    <b className="block text-[15.5px] font-extrabold">{box.kind === 'spray' ? copy.spray : box.kind === 'drip' ? copy.drip : copy.products}</b>
+                    <b className="block text-[15.5px] font-extrabold">{kindName}</b>
                     {water.length > 0 && <small className="block text-[12.5px] font-bold text-[#5F6B63]" data-testid="vr-product-water">{copy.water}: {water.join(' · ')}</small>}
                 </div>
             </div>
-            {items.map(i => (kit
-                ? <SavedProductRow key={i.id} item={i} logId={logId} kit={kit} onOpen={onOpen} />
-                : <PlainRow key={i.id} item={i} />))}
+            {rows}
         </section>
     );
 };

@@ -263,6 +263,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             <>
             {bannersV2}
             <SavedScreen
+                // Part 03 B1 — a new recording starts the screen fresh (no talk left open, Sathi's "heard?" asked again for the new clip).
+                key={result.key}
                 audience={seenBy('')}
                 day={day}
                 recordingKey={result.key}
@@ -299,6 +301,15 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                     window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: closedToastOf(sync, language), type: 'success' } }));
                     (onAutoClose ?? onBack)();
                 })}
+                // Part 03 B1 — the final design's end button ("झालं — पूर्ण शेतीचा आढावा बघा"): the SAME close handler the self-close uses
+                // (wherever the route points it), without the self-close's toast: he chose to finish.
+                onFinish={leave(() => {
+                    logger.info('voice_v2.saved.finish', { component: 'SavedScreen', action: 'finish', sync, logCount: current.length });
+                    (onAutoClose ?? onBack)();
+                })}
+                history={history}
+                crops={crops}
+                heard={playback.heard}
             />
             {daySheet}
             </>

@@ -5,10 +5,11 @@
  *
  * spec: voice-flow-v2-2026-11-23 (Task 11; amendments H2, H3, M4) — the saved screen, built from the result screen's pieces, on
  * real `DailyLog` shapes (a spray of two products in 200 L, a drip of 19:19:19, two speakers, one earlier recording):
- *   - the sections come in the approved order, the red mix banner first;
- *   - the title claims only what the sync state says (P10): "लक्षात ठेवलं ✓" on the phone, the server's words only once applied;
- *   - his voice sits with his words (under the meter); a typed recording has the typed note and no player;
- *   - a product row opens the product card; a red part opens the mic for that part; the blue button opens the detail page;
+ *   - the sections come in the final design's order (Part 03 B1, result-v12-final.html), the red mix banner first;
+ *   - the talk card's badge claims only what the sync state says (P10): "लक्षात ठेवलं ✓" on the phone, the server's words only once applied;
+ *   - his voice sits under his words; a typed recording has the typed note and no player;
+ *   - a product row opens the product card; a red part opens the mic for that part; the end button is the one way out;
+ *   (the final design's own rules — streak, tank count, 24-hour line, the talks — are in SavedScreen.finalDesign.test.tsx)
  *   - the 30 s close is held while the product card is open, while a clip plays, while any overlay is open, and is off when the
  *     container says so; his touch starts it again from 30;
  *   - no "पक्कं आहे" here and no projected number (P4).
@@ -101,11 +102,11 @@ beforeEach(() => { __resetBackStackForTests(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('SavedScreen — what he sees first', () => {
-    it('the sections come in the founder\'s order: meter, his words, chemicals and nutrients, the other parts', () => {
+    it('the sections come in the final design\'s order (Part 03 B1): top card, his words, his voice, what was understood, the question, the talks, the end', () => {
         render(<SavedScreen {...props()} />);
-        // Founder 2026-11-23: "below the meter is text, below the text the chemical and nutrient, and then other parts".
-        const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-speaker-done', 'vr2-given', 'vr2-parts', 'vr2-words', 'vr2-question',
-            'extras-slot', 'vr2-edit', 'vr2-earlier', 'vr2-open-detail', 'vr2-idle-bar'];
+        // Founder 28 Nov (result-v12-final.html): his words, his voice, "यातून काय समजलं" (products first), the question, "आजची बोलणी", "झालं".
+        const order = ['vr2-head', 'vr2-speakers', 'vr2-speaker-done', 'vr2-talk', 'vr2-words', 'vr2-listen', 'vr2-understood', 'vr2-given', 'vr2-parts',
+            'vr2-edit', 'vr2-question', 'extras-slot', 'vr2-talks', 'vr2-finish', 'vr2-idle-bar'];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `${order[i - 1]} before ${order[i]}`).toBe(true);
     });
 
@@ -117,20 +118,16 @@ describe('SavedScreen — what he sees first', () => {
         expect(before('vr-mix-banner', 'vr2-head')).toBe(true);
     });
 
-    it('F6: the headline is "जतन झालं ✓" with who said it under it; on the phone only, the badge says "लक्षात ठेवलं" and no server claim', () => {
+    it('on the phone only, the talk card\'s badge says "लक्षात ठेवलं" and there is no server claim (P10); no saved-title card (final design)', () => {
         const { container } = render(<SavedScreen {...props()} />);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
-        expect(screen.getByTestId('vr2-saved-who').textContent).toBe('तुम्ही स्वतः सांगितलं');
-        expect(screen.getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
+        expect(screen.queryByTestId('vr2-saved-title')).toBeNull();
+        expect(within(screen.getByTestId('vr2-talk')).getByTestId('vr2-claim-phone').textContent).toBe('लक्षात ठेवलं ✓');
         expect(screen.queryByTestId('vr2-claim-server')).toBeNull();
-        // it must not repeat the old headline, which is a badge
-        expect(screen.getByTestId('vr2-saved-title').textContent).not.toContain('श्रम सफलमध्ये');
         expect(container.textContent).not.toContain('श्रम सफलमध्ये');
     });
 
     it('server-acknowledged: the badge says the server has it (P10)', () => {
         render(<SavedScreen {...props({ sync: 'onServer' })} />);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
         expect(screen.getByTestId('vr2-claim-server').textContent).toBe('श्रम सफलमध्ये साठवून ठेवलं');
     });
 
@@ -141,18 +138,15 @@ describe('SavedScreen — what he sees first', () => {
         expect(screen.getByTestId('vr2-needs-fix')).toBeTruthy();
     });
 
-    it('the card: the title, one quiet line (who, time, पक्कं नाही) and the meter; his voice sits with his words (founder 2026-11-23)', () => {
+    it('the talk card: पक्कं नाही, his words, then his voice under them (final design); no meter card without the meter flag or a pulled history', () => {
         render(<SavedScreen {...props()} />);
-        const card = within(screen.getByTestId('vr2-saved-card'));
-        expect(card.queryByTestId('vr2-remembered')).toBeNull();
-        expect(card.getByTestId('vr2-not-confirmed-badge')).toBeTruthy();
-        expect(card.getByTestId('vr2-latest-who').textContent).toContain('सुनील');
-        // F6: his voice is inside the card, big, right under the badges - no longer with his words
-        expect(card.getByTestId('vr2-play')).toBeTruthy();
-        expect(within(screen.getByTestId('vr2-words')).queryByTestId('vr2-play')).toBeNull();
-        expect(card.queryByTestId('vr-parts')).toBeNull();
-        // F3: the meter is the saved card's own dial, drawn only with the meter flag (as the result screen's meter is).
-        expect(card.queryByTestId('vr2-meter')).toBeNull();
+        const talk = within(screen.getByTestId('vr2-talk'));
+        expect(talk.getByTestId('vr2-not-confirmed-badge')).toBeTruthy();
+        expect(talk.getByTestId('vr2-play')).toBeTruthy();
+        expect(before('vr2-words', 'vr2-play')).toBe(true);
+        // F3: the meter is the cream card's own dial, drawn only with the meter flag (as the result screen's meter is).
+        expect(screen.queryByTestId('vr2-saved-card')).toBeNull();
+        expect(screen.queryByTestId('vr2-meter')).toBeNull();
     });
 
     it('with the meter flag the card holds the dial; no server score = the pending words, no needle, no number', () => {
@@ -181,9 +175,9 @@ describe('SavedScreen — what he sees first', () => {
         expect(screen.queryByTestId('vr2-play')).toBeNull();
     });
 
-    it('"तुम्ही काय दिलं": a product row opens the product card', () => {
+    it('"यातून काय समजलं": a product row opens the product card', () => {
         render(<SavedScreen {...props()} />);
-        expect(screen.getByTestId('vr2-given').textContent).toContain('तुम्ही काय दिलं');
+        expect(screen.getByTestId('vr2-understood').textContent).toContain('यातून काय समजलं');
         fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
         expect(screen.getByTestId('vr-product-card')).toBeTruthy();
         expect(screen.getByTestId('vr-card-name').textContent).toContain('कॉन्फिडॉर');
@@ -197,26 +191,28 @@ describe('SavedScreen — what he sees first', () => {
         expect(screen.getByTestId('vr2-part-labour').textContent).toContain('१० जण');
     });
 
-    it('his words are open, with the why-tiles and the unclear lines', () => {
+    it('his words are open with the unclear lines; his own words now sit under each value instead of the why-tiles (final design)', () => {
         render(<SavedScreen {...props()} />);
         const words = within(screen.getByTestId('vr2-words'));
         expect(words.getByTestId('vr2-words-text').textContent).toContain('दहा मजूर आले');
-        expect(words.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
+        expect(words.queryByTestId('vr-why-heading')).toBeNull();
         expect(words.getByTestId('vr2-unclear').textContent).toContain('मागच्या बाजूचं उद्या बघू');
+        expect(within(screen.getByTestId('vr2-part-labour')).getByTestId('vr2-part-said-labour').textContent).toContain('दहा मजूर आले');
     });
 
-    it('the blue button opens the detail page', () => {
+    it('one way out (final design): the end button, no blue detail button', () => {
         const p = props();
         render(<SavedScreen {...p} />);
-        expect(screen.getByTestId('vr2-open-detail').textContent).toContain('आजचा आढावा बघा');
-        fireEvent.click(screen.getByTestId('vr2-open-detail'));
-        expect(p.onOpenDetail).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('vr2-open-detail')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr2-finish'));
+        expect(p.onAutoClose).toHaveBeenCalledTimes(1);
     });
 
-    it('the earlier recordings are in one fold, counted', () => {
+    it('the earlier recordings are rows of "आजची बोलणी" (B3), after the talk he just made', () => {
         render(<SavedScreen {...props()} />);
-        expect(screen.getByTestId('vr2-earlier-title').textContent).toBe('आजची आधीची बोलणी (१)');
-        expect(screen.getByTestId(`vr-earlier-${EARLIER.id}`)).toBeTruthy();
+        expect(screen.queryByTestId('vr2-earlier')).toBeNull();
+        expect(before('vr2-talk-row-L-NOW', `vr2-talk-row-${EARLIER.id}`)).toBe(true);
+        expect(screen.getByTestId(`vr2-talk-who-${EARLIER.id}`).textContent).toBe('रमेश');
         expect(screen.getByTestId('vr2-speakers').textContent).toContain('रमेश');
     });
 
@@ -264,7 +260,7 @@ describe('SavedScreen — the 30 s close', () => {
         const p = props();
         render(<SavedScreen {...p} />);
         advance(20_000);
-        fireEvent.pointerDown(screen.getByTestId('vr2-saved-card'));
+        fireEvent.pointerDown(screen.getByTestId('vr2-talk'));
         advance(20_000);
         expect(p.onAutoClose).not.toHaveBeenCalled();
         advance(11_000);

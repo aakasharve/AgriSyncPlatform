@@ -103,18 +103,19 @@ beforeEach(async () => {
 afterEach(() => { cleanup(); clearAuthSession(); vi.useRealTimers(); });
 
 describe('R1-g 1b — the FIRST record\'s saved screen offers the setup hub', () => {
-    it('his line and the two buttons, under "जतन झालं"; the screen does not close by itself while it shows', async () => {
+    it('his line and the two buttons, under the top cards; the screen does not close by itself while it shows', async () => {
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
         const p = props();
         mount(p);
         const offer = await screen.findByTestId('vr2-first-record-offer', {}, DB_WAIT);
-        expect(screen.getByTestId('vr2-saved-title').textContent).toBe('जतन झालं ✓');
         expect(screen.getByTestId('vr2-first-record-line').textContent).toBe(LINE);
         expect(screen.getByTestId('vr2-first-record-fill').textContent).toBe('शेताची माहिती भरा');
         expect(screen.getByTestId('vr2-first-record-later').textContent).toBe('नंतर');
         expect(offer.textContent).not.toMatch(/[A-Za-z]/);
-        // It sits right under the saved card (the first thing after it), not over it: never a block.
-        expect(screen.getByTestId('vr2-saved-card').nextElementSibling).toBe(offer);
+        // It sits right under the top cards (Part 03 B1: the meter card when drawn, else the crop card), above his talk: never a block.
+        const above = screen.queryByTestId('vr2-saved-card') ?? screen.getByTestId('vr2-head');
+        expect(above.nextElementSibling).toBe(offer);
+        expect(!!(offer.compareDocumentPosition(screen.getByTestId('vr2-talk')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
         expect(screen.getByTestId('vr2-add-another')).toBeTruthy();
         // No self-close while the line shows.
         await waitFor(() => expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-state')).toBe('off'), DB_WAIT);
@@ -141,7 +142,7 @@ describe('R1-g 1b — the FIRST record\'s saved screen offers the setup hub', ()
         mount(p);
         fireEvent.click(await screen.findByTestId('vr2-first-record-later', {}, DB_WAIT));
         expect(screen.queryByTestId('vr2-first-record-offer')).toBeNull();
-        expect(screen.getByTestId('vr2-saved-card')).toBeTruthy();
+        expect(screen.getByTestId('vr2-talk')).toBeTruthy();
         expect(p.onOpenSetupHub).not.toHaveBeenCalled();
         await waitFor(async () => expect(await offerMark()).toBe('done'), DB_WAIT);
         expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-state')).toBe('running');
