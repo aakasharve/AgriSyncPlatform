@@ -143,7 +143,7 @@ public sealed class TrialSafetyDatabase : IAsyncLifetime
 
     // ── the host ──
 
-    public async Task<WebApplication> BuildHostAsync(IAiOrchestrator? orchestrator = null)
+    public async Task<WebApplication> BuildHostAsync(IAiOrchestrator? orchestrator = null, Action<IServiceCollection>? configureServices = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.WebHost.UseTestServer();
@@ -170,6 +170,8 @@ public sealed class TrialSafetyDatabase : IAsyncLifetime
         {
             builder.Services.AddSingleton(orchestrator);
         }
+
+        configureServices?.Invoke(builder.Services); // a test swaps one port for a fake (e.g. the live-words transcriber)
 
         var app = builder.Build();
         app.UseAuthentication();

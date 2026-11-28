@@ -142,8 +142,12 @@ public sealed class SelectiveDiarizationWorkerTests : IAsyncLifetime
         await _pg.DisposeAsync();
     }
 
+    // Voice AI review, 28 Nov 2026: Sarvam's REST speech-to-text has no speaker diarization (its documentation says Batch API
+    // only), so SarvamSttClient refuses a diarization request without making any request. The worker therefore makes NO Sarvam
+    // call, writes no diarized transcript and stamps no attempt; it logs the refusal per row and tries again on a later tick
+    // (it re-enters when the Batch API is wired). This replaces the earlier test that asserted `with_diarization=true` on the wire.
     [Fact]
-    public async Task RunTickAsync_diarizes_only_dispute_flagged_logs()
+    public async Task RunTickAsync_makes_no_Sarvam_request_while_REST_cannot_diarize()
     {
         var scopeFactory = _rootProvider.GetRequiredService<IServiceScopeFactory>();
         var options = _rootProvider.GetRequiredService<IOptions<SelectiveDiarizationOptions>>();
@@ -154,49 +158,27 @@ public sealed class SelectiveDiarizationWorkerTests : IAsyncLifetime
             NullLogger<SelectiveDiarizationWorker>.Instance);
 
         var processed = await worker.RunTickAsync(batchSize: 10, ct: CancellationToken.None);
-        processed.Should().Be(2,
-            "two daily_logs are in dispute states (Disputed + CorrectionPending); the Verified row must not be touched");
+        processed.Should().Be(0,
+            "the REST client refuses a diarization request, so no dispute-flagged row can be diarized");
 
-        _sarvamHandler.CallCount.Should().Be(2,
-            "Sarvam should be called exactly once per dispute-flagged row");
-
-        _sarvamHandler.RequestsObservedWithDiarization.Should().Be(2,
-            "every call must include with_diarization=true in the multipart form");
+        _sarvamHandler.CallCount.Should().Be(0,
+            "no request may reach Sarvam: a paid transcription that cannot return speaker labels is never bought");
 
         await using var raw = new NpgsqlConnection(_pg.GetConnectionString());
         await raw.OpenAsync();
 
-        var disputedJson = await ScalarStringAsync(raw,
-            "SELECT diarized_transcript_json::text FROM ssf.ai_jobs WHERE id = @id",
-            ("id", _jobIdDisputed));
-        disputedJson.Should().NotBeNullOrWhiteSpace();
-        disputedJson.Should().Contain("speaker_label", "the diarized payload must include Sarvam's speaker labels");
+        foreach (var jobId in new[] { _jobIdDisputed, _jobIdCorrectionPending, _jobIdVerified })
+        {
+            var json = await ScalarStringAsync(raw,
+                "SELECT diarized_transcript_json::text FROM ssf.ai_jobs WHERE id = @id",
+                ("id", jobId));
+            json.Should().BeNull("nothing was diarized, so nothing is written");
 
-        var correctionPendingJson = await ScalarStringAsync(raw,
-            "SELECT diarized_transcript_json::text FROM ssf.ai_jobs WHERE id = @id",
-            ("id", _jobIdCorrectionPending));
-        correctionPendingJson.Should().NotBeNullOrWhiteSpace();
-
-        var verifiedJson = await ScalarStringAsync(raw,
-            "SELECT diarized_transcript_json::text FROM ssf.ai_jobs WHERE id = @id",
-            ("id", _jobIdVerified));
-        verifiedJson.Should().BeNull(
-            "the Verified control row is NOT in a dispute state — worker must leave it untouched");
-
-        // Each processed job should have gained one new AiJobAttempt
-        // carrying the diarization cost line. Disputed seed row started
-        // with 1 attempt; we expect 2 after the tick.
-        var disputedAttempts = await ScalarIntAsync(raw,
-            "SELECT count(*) FROM ssf.ai_job_attempts WHERE ai_job_id = @id",
-            ("id", _jobIdDisputed));
-        disputedAttempts.Should().Be(2,
-            "the worker must stamp a new AiJobAttempt per Sarvam diarization call for the rollup aggregator");
-
-        var verifiedAttempts = await ScalarIntAsync(raw,
-            "SELECT count(*) FROM ssf.ai_job_attempts WHERE ai_job_id = @id",
-            ("id", _jobIdVerified));
-        verifiedAttempts.Should().Be(1,
-            "untouched control row has only its original seeded attempt");
+            var attempts = await ScalarIntAsync(raw,
+                "SELECT count(*) FROM ssf.ai_job_attempts WHERE ai_job_id = @id",
+                ("id", jobId));
+            attempts.Should().Be(1, "no diarization call was made, so no new attempt is stamped");
+        }
     }
 
     [Fact]
@@ -427,9 +409,8 @@ public sealed class SelectiveDiarizationWorkerTests : IAsyncLifetime
 
     /// <summary>
     /// In-test HTTP handler returning a canned diarized payload and
-    /// counting how many times Sarvam was called. Also asserts that
-    /// every observed multipart form carried <c>with_diarization=true</c>
-    /// (the Phase 2.11a wire contract added to SarvamSttClient).
+    /// counting how many times Sarvam was called (it must stay zero: see
+    /// <c>RunTickAsync_makes_no_Sarvam_request_while_REST_cannot_diarize</c>).
     /// </summary>
     private sealed class DiarizationHandler : HttpMessageHandler
     {

@@ -50,6 +50,11 @@ public static class DependencyInjection
         // PLR lane V-1 (register F67) — cuts a recording longer than 28 s into pieces Sarvam's
         // speech-to-text REST call can take (30 s each); used by SarvamSttClient.
         services.AddSingleton<AudioSplitter>();
+
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words, 28 Nov 2026) — the words shown while he speaks:
+        // one phrase at a time over the same REST call, from a ration (the gate) that sheds previews before real transcriptions.
+        services.AddSingleton<LiveWordsGate>();
+        services.AddScoped<ShramSafal.Application.Ports.External.ILiveWordsTranscriber, SarvamLiveWordsTranscriber>();
     }
 
     public static IServiceCollection AddShramSafalInfrastructure(this IServiceCollection services, IConfiguration configuration)

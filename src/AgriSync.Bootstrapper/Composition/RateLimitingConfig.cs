@@ -13,7 +13,7 @@ using ShramSafal.Api.Endpoints;
 namespace AgriSync.Bootstrapper.Composition;
 
 /// <summary>
-/// The HTTP rate-limit policies (<c>"auth"</c>, <c>"ai"</c>, <c>"join"</c>), moved verbatim out of
+/// The HTTP rate-limit policies (<c>"auth"</c>, <c>"ai"</c>, <c>"ai-live"</c>, <c>"join"</c>), moved verbatim out of
 /// <c>Program.cs</c> by spec: plr-d7-m1-multiuser-2026-10-26 (step 1) so a test host can register
 /// EXACTLY what production registers and prove the 429 (<c>JoinByCodeRealPostgresTests</c>);
 /// before the move no test could reach these policies at all.
@@ -58,6 +58,7 @@ public static class RateLimitingConfig
     {
         var authPermitLimit = e2eHarnessEnabled ? 100_000 : 10;
         var aiPermitLimit = e2eHarnessEnabled ? 100_000 : 30;
+        var aiLivePermitLimit = e2eHarnessEnabled ? 100_000 : 40;
         var joinPermitLimit = e2eHarnessEnabled ? 100_000 : JoinPermitLimit;
         var joinPerClientNetworkPermitLimit = e2eHarnessEnabled ? 100_000 : JoinPerClientNetworkPermitLimit;
         var joinAllCallersPermitLimit = e2eHarnessEnabled ? 100_000 : JoinAllCallersPermitLimit;
@@ -91,6 +92,21 @@ public static class RateLimitingConfig
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = aiPermitLimit,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    }));
+
+            // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words, 28 Nov 2026) - the live-words route has its OWN budget, per
+            // signed-in user (the same resolver as "ai"): a phrase every few seconds while he speaks must never use up the 30 a minute of
+            // "ai" that his real recording needs. 40 a minute is room for a phrase every 1.5 s; the server's own ration (LiveWordsGate)
+            // holds the real ceiling for all farmers together.
+            options.AddPolicy(ShramSafal.Api.Endpoints.AiLiveWordsEndpoints.RateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = aiLivePermitLimit,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true

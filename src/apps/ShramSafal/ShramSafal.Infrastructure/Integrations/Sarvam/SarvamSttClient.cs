@@ -14,7 +14,8 @@ namespace ShramSafal.Infrastructure.Integrations.Sarvam;
 /// longer clip is cut by <see cref="AudioSplitter"/> into pieces of at most 25 s, the pieces are transcribed (two at a
 /// time) and their words joined in order. ALL OR NOTHING: if any piece fails, the whole transcription fails through
 /// the existing failure / fallback path — a partial transcript is never returned as success. A clip of 28 s or less,
-/// one that cannot be decoded, and a diarization request go exactly as before (the original bytes, one request).
+/// one that cannot be decoded go exactly as before (the original bytes, one request). A diarization request is refused
+/// without any request (Sarvam's REST has no diarization; see <c>TranscribeAsync</c>).
 /// </summary>
 internal sealed class SarvamSttClient(
     IOptions<SarvamOptions> optionsAccessor,
@@ -23,6 +24,7 @@ internal sealed class SarvamSttClient(
     AudioSplitter? splitter = null)
 {
     private const string NoTranscriptError = "Sarvam STT did not return a transcript.";
+    internal const string DiarizationUnsupportedError = "Speaker diarization is not supported on Sarvam's REST speech-to-text (Batch API only); nothing was requested.";
     private const int PieceAttempts = 2;
     private static readonly TimeSpan PieceRetryDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PieceRetryDelayCap = TimeSpan.FromSeconds(5);
@@ -40,38 +42,20 @@ internal sealed class SarvamSttClient(
         await TranscribeAsync(audioStream, mimeType, languageHint, withDiarization: false, ct: ct).ConfigureAwait(false);
 
     /// <summary>
-    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.11a — extended
-    /// transcribe surface that lets callers request diarization as an
-    /// add-on capability. When <paramref name="withDiarization"/> is
-    /// <c>true</c> the multipart form carries a <c>with_diarization</c>
-    /// flag in addition to the existing <c>mode</c> field; the response
-    /// payload's <c>diarized_transcript</c> array is captured into
-    /// <see cref="SarvamSttResult.DiarizedTranscriptJson"/> as a raw
-    /// JSON string (no domain mapping — the worker persists it as
-    /// jsonb on <c>ssf.ai_jobs.diarized_transcript_json</c>).
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.11a - the extended transcribe surface that let a caller ask for
+    /// diarization (speaker labels).
     ///
     /// <para>
-    /// Per ADR-DS-014 / Task 1.5a, diarization is a separate capability
-    /// NOT a Sarvam STT mode — it is gated by
-    /// <c>ssf.diarization_policy</c>, billed against the existing
-    /// VoiceToStructuredLog rollup with a "+diarization" sentinel on
-    /// the attempt, and the field name on the wire here
-    /// (<c>with_diarization</c>) is the documented Sarvam parameter as
-    /// of 2026-05 — verify at execution time.
-    ///
-    /// WARNING (supervisor blocker — 2026-05-22): the <c>with_diarization</c>
-    /// form-field name is BEST-EFFORT against Sarvam's published docs and
-    /// has NOT been verified against a live Sarvam call. The
-    /// <see cref="SelectiveDiarizationWorker"/> ships disabled by default
-    /// (<c>Ai:SelectiveDiarization:Enabled</c> defaults <c>false</c>).
-    /// DO NOT enable the worker in any environment until a manual curl
-    /// against Sarvam's REST endpoint confirms the field name + response
-    /// shape. If Sarvam's actual field name differs, the worker will get
-    /// empty <c>diarized_transcript</c> responses and silently produce
-    /// zero diarized rows — failure mode is correct (no false data) but
-    /// invisible from outside the field-name validation. Pre-enable
-    /// runbook is logged in <c>_COFOUNDER/memory/corrections.md</c>
-    /// 2026-05-22 Slice D row.
+    /// <b>Diarization is refused here (voice AI review, 28 Nov 2026).</b> Sarvam's own documentation
+    /// (docs.sarvam.ai/api-reference-docs/speech-to-text/transcribe) lists no <c>with_diarization</c> field on the REST
+    /// <c>/speech-to-text</c> call and says speaker diarization is not supported on the REST API (it needs the Batch API,
+    /// priced separately). This client used to put the field on the wire anyway, "best effort" and never verified
+    /// (see the 2026-05-22 supervisor warning in <c>_COFOUNDER/memory/corrections.md</c>). What Sarvam does with an unknown
+    /// field (ignore it or answer an error) is not documented and was NOT tested (no live call is allowed in this lane), so
+    /// the field is no longer sent. A caller that asks for diarization now gets an immediate failure with no request made:
+    /// a paid transcription that cannot return what it was asked for is never bought. The only caller is
+    /// <see cref="SelectiveDiarizationWorker"/>, which ships disabled and logs the failure; it re-enters when the Batch API
+    /// is wired. The ordinary voice path never asked for diarization.
     /// </para>
     /// </summary>
     public async Task<SarvamSttResult> TranscribeAsync(
@@ -86,6 +70,12 @@ internal sealed class SarvamSttClient(
             return SarvamSttResult.Failure("Sarvam API subscription key is not configured.");
         }
 
+        if (withDiarization)
+        {
+            logger.LogWarning("Sarvam REST speech-to-text cannot diarize (Batch API only): no request was made.");
+            return SarvamSttResult.Failure(DiarizationUnsupportedError);
+        }
+
         try
         {
             var payload = await ReadPayloadAsync(audioStream, ct);
@@ -98,7 +88,7 @@ internal sealed class SarvamSttClient(
 
             // PLR lane V-1 — a clip longer than Sarvam's 30 s goes in pieces. Diarization keeps one request: speaker
             // labels from separate pieces cannot be joined (the worker that asks for it is off by default).
-            if (!withDiarization && splitter is not null)
+            if (splitter is not null)
             {
                 var split = await splitter.SplitAsync(payload, mimeType, ct).ConfigureAwait(false);
                 if (split.IsTooLong)
@@ -121,7 +111,7 @@ internal sealed class SarvamSttClient(
                 }
             }
 
-            var once = await SendOnceAsync(payload, mimeType, "audio.webm", language, withDiarization, ct).ConfigureAwait(false);
+            var once = await SendOnceAsync(payload, mimeType, "audio.webm", language, ct).ConfigureAwait(false);
             if (!once.IsSuccess)
             {
                 return SarvamSttResult.Failure(once.Error ?? "Sarvam STT call failed.");
@@ -129,13 +119,30 @@ internal sealed class SarvamSttClient(
 
             return string.IsNullOrWhiteSpace(once.Transcript)
                 ? SarvamSttResult.Failure(NoTranscriptError)
-                : SarvamSttResult.Success(once.Transcript, once.LanguageCode, once.DiarizedTranscriptJson);
+                : SarvamSttResult.Success(once.Transcript, once.LanguageCode, null);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Sarvam STT call failed.");
             return SarvamSttResult.Failure(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words) - ONE short WAV (a phrase of at most 12 s) in one
+    /// Sarvam call: no cutting into pieces (so no ffmpeg), no retry (a late preview is worthless; the next phrase is on its way),
+    /// a short timeout, and the same keyterms as the real call. The answer is display only and is never stored. A 200 with no
+    /// words is a quiet piece, not a failure.
+    /// </summary>
+    internal async Task<SttCallOutcome> TranscribeShortAsync(byte[] wav, string? languageHint, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiSubscriptionKey))
+        {
+            return SttCallOutcome.Failed("Sarvam API subscription key is not configured.", retryable: false);
+        }
+
+        var language = string.IsNullOrWhiteSpace(languageHint) ? _options.SttLanguage : languageHint.Trim();
+        return await SendOnceAsync(wav, "audio/wav", "live.wav", language, ct, _options.LiveWordsTimeoutSeconds).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -239,7 +246,7 @@ internal sealed class SarvamSttClient(
         SttCallOutcome outcome = SttCallOutcome.Failed("not attempted", retryable: false);
         for (var attempt = 1; attempt <= PieceAttempts; attempt++)
         {
-            outcome = await SendOnceAsync(piece.Wav, "audio/wav", "audio.wav", language, withDiarization: false, ct).ConfigureAwait(false);
+            outcome = await SendOnceAsync(piece.Wav, "audio/wav", "audio.wav", language, ct).ConfigureAwait(false);
             if (outcome.IsSuccess || !outcome.Retryable || attempt == PieceAttempts)
             {
                 break;
@@ -268,10 +275,10 @@ internal sealed class SarvamSttClient(
         string mimeType,
         string fileName,
         string language,
-        bool withDiarization,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? timeoutSeconds = null)
     {
-        using var timeout = CreateTimeoutToken(ct, _options.TimeoutSeconds);
+        using var timeout = CreateTimeoutToken(ct, timeoutSeconds ?? _options.TimeoutSeconds);
         try
         {
             var client = httpClientFactory.CreateClient("SarvamAiProvider");
@@ -288,13 +295,13 @@ internal sealed class SarvamSttClient(
             multipart.Add(new StringContent(language), "language_code");
             multipart.Add(new StringContent(_options.SttMode), "mode");
 
-            if (withDiarization)
+            // saaras:v4 keyterms (voice AI review, 28 Nov 2026): the English chemical and crop names that bias the answer toward
+            // their own spelling - ONE form field holding a JSON array text (SttKeyterms says which terms and why). Other models are
+            // sent none; a list that cannot be built is simply not sent (it only ever biases, it is never needed).
+            if (_options.SttKeytermsEnabled && SttKeyterms.ModelSupports(_options.SttModel)
+                && SttKeyterms.ToFormValue(SttKeyterms.Current) is { } keyterms)
             {
-                // Sarvam treats with_diarization as a stringified bool form-field
-                // (lowercase). The field name is independent of the mode dimension
-                // per ADR-DS-014 §C and Task 1.5a — diarization is a capability,
-                // not an STT mode.
-                multipart.Add(new StringContent("true"), "with_diarization");
+                multipart.Add(new StringContent(keyterms, System.Text.Encoding.UTF8), "keyterms");
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.SttEndpoint)
@@ -326,8 +333,7 @@ internal sealed class SarvamSttClient(
                     // The field is there and empty: no words heard.
                     return SttCallOutcome.Succeeded(string.Empty, languageCode, null);
                 default:
-                    var diarizedJson = withDiarization ? TryExtractDiarizedTranscriptJson(body) : null;
-                    return SttCallOutcome.Succeeded(transcript, languageCode, diarizedJson);
+                    return SttCallOutcome.Succeeded(transcript, languageCode, null);
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -338,40 +344,6 @@ internal sealed class SarvamSttClient(
         {
             logger.LogWarning(ex, "Sarvam STT call failed.");
             return SttCallOutcome.Failed(ex.Message, retryable: true);
-        }
-    }
-
-    /// <summary>
-    /// Extract Sarvam's <c>diarized_transcript</c> array from the response
-    /// envelope and return it as a serialized JSON string. The shape on
-    /// the wire is
-    /// <c>[{"speaker_label":"A","start_ms":120,"end_ms":2400,"text":"..."}, ...]</c>
-    /// per Sarvam's documented Phase 2 schema. We persist the raw array
-    /// verbatim so a future schema bump (e.g. word-level timings) is
-    /// non-destructive — the worker captures whatever Sarvam returns.
-    /// Returns <c>null</c> when the field is missing or malformed; the
-    /// caller treats a null payload as "diarization was requested but
-    /// the provider did not return one" and leaves the ai_jobs column
-    /// untouched.
-    /// </summary>
-    private static string? TryExtractDiarizedTranscriptJson(string responseBody)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(responseBody);
-            var root = document.RootElement;
-
-            if (!root.TryGetProperty("diarized_transcript", out var node) ||
-                node.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-
-            return node.GetRawText();
-        }
-        catch (JsonException)
-        {
-            return null;
         }
     }
 

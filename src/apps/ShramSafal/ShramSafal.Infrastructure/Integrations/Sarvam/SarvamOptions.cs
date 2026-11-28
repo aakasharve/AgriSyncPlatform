@@ -68,6 +68,26 @@ public sealed class SarvamOptions
 
     /// <summary>Speech-to-text (each piece) and every other Sarvam call except the structurer.</summary>
     public int TimeoutSeconds { get; set; } = 45;
+
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice AI, 28 Nov 2026) — saaras:v4's `keyterms`: up to 50 English chemical /
+    // brand and crop names that bias the answer toward the right spelling (SttKeyterms says which and why). Sent on the REST
+    // speech-to-text calls only while the model is saaras:v4. Off = the call goes as it did before.
+    public bool SttKeytermsEnabled { get; set; } = true;
+
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words) — the words shown while he speaks. Each live piece is ONE
+    // extra REST call (a second charge for the same seconds of audio, alongside the real transcription of the whole recording), and
+    // Sarvam's REST limit is shared (Starter plan: 60 requests a minute), so the live pieces are rationed hard and shed first.
+    /// <summary>The switch: false = the route answers "off" and no phone shows live words (the recording itself is unaffected).</summary>
+    public bool LiveWordsEnabled { get; set; } = true;
+
+    /// <summary>Live pieces being transcribed at the same moment, all farmers together.</summary>
+    public int LiveWordsMaxConcurrent { get; set; } = 3;
+
+    /// <summary>Live pieces sent to Sarvam per minute, all farmers together (half of the Starter limit stays free for the real transcriptions).</summary>
+    public int LiveWordsMaxPerMinute { get; set; } = 24;
+
+    /// <summary>A live piece that has not answered by then is dropped (the phrase after it is already on its way).</summary>
+    public int LiveWordsTimeoutSeconds { get; set; } = 8;
     public string DocIntelEndpoint { get; set; } = "https://api.sarvam.ai/doc-digitization/job/v1";
     public int DocIntelTimeoutSeconds { get; set; } = 120;
 }

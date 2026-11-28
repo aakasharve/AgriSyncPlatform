@@ -38,6 +38,8 @@ public static class ModuleEndpoints
         // MapAiStreamingEndpoints (parse-voice-stream) so it inherits the
         // same /shramsafal/ai/* prefix + auth + rate-limit posture.
         group.MapAiTranscribeStreamEndpoints();
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words, 28 Nov 2026) - the words shown while he speaks (display only).
+        group.MapAiLiveWordsEndpoints();
         // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.13) — three
         // routes under /shramsafal/voice-diary/* for persist + read.
         group.MapVoiceDiaryEndpoints();

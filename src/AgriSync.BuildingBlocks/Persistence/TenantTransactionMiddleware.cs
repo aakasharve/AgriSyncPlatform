@@ -314,6 +314,11 @@ public sealed class TenantTransactionMiddleware
         // global config is platform-shared, not tenant data, so no isolation
         // is lost. Confirmed root on prod 2026-06-10.
         "/shramsafal/ai/transcribe-stream",
+        // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words, 28 Nov 2026) - POST /shramsafal/ai/live-words: the words
+        // shown on the recording screen while he speaks. Same posture as transcribe-stream above: it reads NO farm table of its own and
+        // writes nothing; its one database question (the trial / plan check) opens its own short read-only transaction
+        // (AiStreamEntitlementCheck), because the farm scope is transaction-local.
+        "/shramsafal/ai/live-words",
         // POST /api/ai/eval-parse — non-Prod, ALLOW_EVAL_PARSE-gated
         // prompt-ops eval harness (AiEvalEndpoints). Structurally identical
         // to /shramsafal/ai/transcribe-stream above: it reads ONLY the global
