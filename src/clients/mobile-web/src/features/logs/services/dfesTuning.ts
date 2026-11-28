@@ -20,8 +20,10 @@ export const DFES_TUNING = {
   /** count(advancesBar) at which unlockStatus flips to "unlocked" (set-once). */
   unlockThreshold: 25,
   /** Stamped onto every aggregate row (ScoreEngineVersion). Backend source of
-   *  truth: ShramSafal.Domain.Dfes.DfesTuning.ScoreEngineVersion. */
-  scoreEngineVersion: 'dfes-5',
+   *  truth: ShramSafal.Domain.Dfes.DfesTuning.ScoreEngineVersion.
+   *  'dfes-6' (28 Nov, B4): a product's purpose answered for a record counts toward its score (server branch
+   *  task/plr-d10-sathi-product-q). dfesTuning.test.ts reads the server's DfesTuning.cs, so it passes only once that branch is merged. */
+  scoreEngineVersion: 'dfes-6',
   /** Max Shram points a single local date can earn after bonuses. */
   dailyPointCap: 15,
   /** Reward point values. */

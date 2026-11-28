@@ -27,6 +27,7 @@ import React from 'react';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import type { VoiceResultState } from '../../app/hooks/useVoiceAutoSave';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
+import { ProductPurposeSlot } from '../../features/logs/components/productPurpose/ProductPurposeSlot';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
 import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
 // The model's own rule for "the log that carries his words" (useVoiceAutoSave keeps the same one-liner): it keeps the
@@ -160,8 +161,13 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
                     onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}
                     questionPanel={savedLog ? (
+                        // Part 03 B4 — Sathi's product question ("… कोणत्या रोगासाठी मारलं?") takes the ONE question slot when the
+                        // server asks about a product of this record; the day's question waits meanwhile (same question switch).
+                        <ProductPurposeSlot key={`pq-${savedLog.id}`} enabled={FEATURE_FLAGS.stageQuestions} farmId={farmId} log={savedLog}>
+                        {holdOtherQuestion => (
                         <LedgerRecognitionPanel
                             key={savedLog.id}
+                            holdQuestion={holdOtherQuestion}
                             farmId={farmId}
                             plotId={selection?.selectedPlotIds?.[0] ?? null}
                             crop={selection?.cropName ?? ''}
@@ -184,6 +190,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                                 speakHere({ purpose: 'answerQuestion', context: { place: 'current', question: pending.selected.resolvedPromptMr } });
                             }}
                         />
+                        )}
+                        </ProductPurposeSlot>
                     ) : undefined}
                     extras={extras}
                 />

@@ -43,9 +43,14 @@ export interface SathiQuestionCardProps {
     sourceLabel?: string;
     /** plr-d10-final-polish: said under the question after a tap, only as far as it is true; absent = nothing tapped. */
     answerStatus?: AnswerStatus | null;
+    /**
+     * Part 03 B4 — the mic on the card BESIDE the chips (the product question: "a chip, or say it"). Absent/false = as before: the
+     * mic only for an open question. The caller passes it only when the mic can really listen (P5: no painted door).
+     */
+    speakToo?: boolean;
 }
 
-export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak, sourceLabel, answerStatus = null }) => {
+export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, options, onAnswer, onLater, onSpeak, sourceLabel, answerStatus = null, speakToo = false }) => {
     const copy = resultCopy(useOptionalLanguage()?.language);
     // Once the answer is queued or kept the buttons go (it is taken); while saving or after a failure they stay (a second tap is real).
     const taken = answerStatus === 'queued' || answerStatus === 'kept';
@@ -61,10 +66,18 @@ export const SathiQuestionCard: React.FC<SathiQuestionCardProps> = ({ prompt, op
                     role="status" data-testid="vr-answer-status" data-state={answerStatus}>{statusWords}</p>
             )}
             {taken ? null : choices.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                    {choices.map(o => <Chip key={o.value} testId="vr-answer-option" label={o.labelMr} onClick={() => onAnswer(o)} />)}
-                    <Chip testId="vr-later" label={copy.later} onClick={onLater} />
-                </div>
+                <>
+                    {speakToo && (
+                        <button type="button" onClick={onSpeak} data-testid="vr-answer-speak"
+                            className="mb-2 flex min-h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-lg font-extrabold text-white active:scale-[0.98]">
+                            <Mic size={22} aria-hidden="true" /> {copy.speakAnswer}
+                        </button>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                        {choices.map(o => <Chip key={o.value} testId="vr-answer-option" label={o.labelMr} onClick={() => onAnswer(o)} />)}
+                        <Chip testId="vr-later" label={copy.later} onClick={onLater} />
+                    </div>
+                </>
             ) : (
                 <>
                     <button type="button" onClick={onSpeak} data-testid="vr-answer-speak"

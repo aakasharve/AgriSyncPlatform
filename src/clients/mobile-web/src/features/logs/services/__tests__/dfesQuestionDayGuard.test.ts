@@ -72,3 +72,41 @@ describe('lane DFES-Q bug 2b - a log for a past day does not open a second quest
         expect(selectDailyQuestion({ ...base, todayLocalDate: '2026-11-21', recentEvents: [askedToday] })).toBeNull();
     });
 });
+
+describe('Part 03 B4 - a product\'s purpose answered today counts toward the one question a day (choice: COUNT)', () => {
+    const base: DailyQuestionInputs = {
+        crop: 'grapes',
+        todayLocalDate: '2026-11-21',
+        askedOnLocalDate: '2026-11-21',
+        engagement: { totalRichDays: 0, unlockStatus: 'locked' },
+        recentEvents: [],
+        openObservation: { summary: 'खालच्या पानांवर भुरी' },
+    };
+    const productAnswer = (day: string): RecentQuestionEvent => ({
+        questionKey: 'product.purpose:0:11111111-1111-4111-8111-111111111111', createdAtLocalDate: day, ageDays: 0, skipped: false, dailyLogId: 'log-1',
+    });
+
+    it('the setup asks a question when nothing was answered today', () => {
+        expect(selectDailyQuestion(base)).not.toBeNull();
+    });
+
+    it('a product purpose answered today shuts the day\'s question', () => {
+        expect(selectDailyQuestion({ ...base, recentEvents: [productAnswer('2026-11-21')] })).toBeNull();
+    });
+
+    it('one answered yesterday does not, and its key never puts a bank question on cooldown', () => {
+        const picked = selectDailyQuestion({ ...base, recentEvents: [{ ...productAnswer('2026-11-20'), ageDays: 1 }] });
+        expect(picked).not.toBeNull();
+        expect(picked?.question.questionKey.startsWith('product.purpose')).toBe(false);
+    });
+
+    it('the /recent read keeps the product row\'s key as the server sent it', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([
+            { questionKey: 'product.purpose:0:11111111-1111-4111-8111-111111111111', triggerType: 'Pattern', shownAtUtc: null, createdAtUtc: '2026-11-21T05:00:00Z', stageConfirmed: null, skipped: false, dailyLogId: 'log-1' },
+        ]), { status: 200 })));
+        const [event] = await fetchRecentQuestionEvents('farm-1');
+        expect(event?.questionKey).toBe('product.purpose:0:11111111-1111-4111-8111-111111111111');
+        expect(event?.createdAtLocalDate).toBe('2026-11-21');
+        vi.unstubAllGlobals();
+    });
+});

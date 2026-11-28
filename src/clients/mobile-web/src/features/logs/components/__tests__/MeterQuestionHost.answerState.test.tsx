@@ -120,3 +120,16 @@ describe('Sathi card after a tap', () => {
         await waitFor(() => expect(state(v)).toHaveAttribute('data-state', 'kept'));
     });
 });
+
+describe('Part 03 B4 - a product question holds the ONE question slot', () => {
+    it('held: the day\'s question engine is told it is off (nothing picked, nothing fetched); released: on again', async () => {
+        useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn(), shownAtUtc: '' });
+        const { MeterQuestionHost } = await import('../MeterQuestionHost');
+        const held = render(<MeterQuestionHost farmId={FARM} plotId={PLOT} questionInputs={inputs} look="sathi" holdQuestion />);
+        expect(useDfesQuestionMock.mock.calls.at(-1)?.[3]).toBe(false);
+        expect(held.queryByTestId('vr-question')).toBeNull();
+        held.unmount();
+        render(<MeterQuestionHost farmId={FARM} plotId={PLOT} questionInputs={inputs} look="sathi" />);
+        expect(useDfesQuestionMock.mock.calls.at(-1)?.[3]).toBe(true);
+    });
+});

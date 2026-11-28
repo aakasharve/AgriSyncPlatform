@@ -20,6 +20,8 @@ import { ingredientLine, type ProductAnswerKit } from '../voiceResult/ProductCar
 import { statusWords } from '../voiceResult/ProductRows';
 import { amountText, nameIsPhrase, productName, type ProductBox, type ProductItem, type ProductWater } from '../voiceResult/productModel';
 import { resultCopy, type ResultCopy } from '../voiceResult/resultCopy';
+import { useProductPurposeAnswer } from '../../services/productPurposeStore';
+import { PRODUCT_PURPOSE_MR, purposeAnswerText } from '../productPurpose/productPurposeWords';
 import { SANS } from './savedBits';
 
 /** The design's pill text colours (`.ty-insecticide em` …), and the same family for the types the demo does not show. */
@@ -69,6 +71,9 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
     const name = productName(item, language) || (item.matchName ?? '');
     const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);
     const ingredient = ingredientLine(identity, language);
+    // Part 03 B4 — what he said the product was for, exactly as the server last read it back (Marathi mode only: the question is too).
+    const purpose = useProductPurposeAnswer(logId, item.ref);
+    const purposeText = language !== 'en' && purpose ? purposeAnswerText(purpose) : null;
     return (
         <button type="button" onClick={() => onOpen(item, logId)} data-testid={`vr-prow-${item.id}`} data-type={key}
             className={`flex min-h-[64px] w-full items-center gap-2.5 rounded-[14px] border-l-[6px] ${style.edge} ${style.soft} px-2.5 py-2 text-left text-[#1C1917] active:scale-[0.99] ${key === 'unknown' ? 'border-2 border-dashed border-stone-300' : ''}`}>
@@ -78,6 +83,7 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
                     {key !== 'unknown' && <em className={`rounded-full bg-white px-[9px] py-px text-[12px] font-extrabold not-italic shadow-[inset_0_0_0_1px_currentColor] ${PILL_INK[key]}`} data-testid="vr-prow-type">{copy.typeNames[key]}</em>}
                 </span>
                 {ingredient && <span className="mt-px block text-[14px] font-bold text-[#44403C]" data-testid="vr-prow-ingredient">{ingredient}</span>}
+                {purposeText && <span className="mt-px block text-[13.5px] font-extrabold text-[#14532D]" data-testid="vr-prow-purpose">{PRODUCT_PURPOSE_MR.rowLabel}: {purposeText}</span>}
                 {status && Icon && (
                     <span className={`mt-px flex items-center gap-1 text-[12.5px] font-extrabold ${status.tone}`} data-testid="vr-prow-status"
                         data-status={rawStatus.kind} data-verdict={'verdict' in rawStatus ? rawStatus.verdict : undefined}>

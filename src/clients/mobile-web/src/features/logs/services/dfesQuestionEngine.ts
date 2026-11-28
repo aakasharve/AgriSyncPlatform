@@ -436,6 +436,9 @@ function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): Sel
 
 export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuestion | null {
     // ONE combined question/day — if any event already recorded today, stop.
+    // Part 03 B4 (choice: COUNT): a product's purpose he answered today (`/recent` key `product.purpose:{slot}:{eventId}`) is his one
+    // question for the day too, so it shuts this guard like any answer. A let-go is never sent, so it shuts nothing. Its key matches no
+    // bank question, so the per-question cooldowns below never see it.
     const askedOn = inputs.askedOnLocalDate ?? inputs.todayLocalDate;
     if (MAX_QUESTIONS_PER_DAY === 1
         && inputs.recentEvents.some(e => e.createdAtLocalDate === askedOn)) {

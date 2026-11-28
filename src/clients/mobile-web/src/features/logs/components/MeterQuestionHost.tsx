@@ -66,12 +66,14 @@ export interface MeterQuestionHostProps {
      * "केलं, पण नोंद केली नाही". Optional: without it the reason is still recorded, and no door is drawn that goes nowhere.
      */
     onTellPastDay?: (dateKey: string) => void;
+    /** Part 03 B4 — a product question holds the ONE question slot: no day's question is picked (nor fetched) meanwhile. */
+    holdQuestion?: boolean;
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking, look, onTellPastDay,
+    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking, look, onTellPastDay, holdQuestion = false,
 }: MeterQuestionHostProps): React.ReactElement | null {
-    const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
+    const enabled = FEATURE_FLAGS.stageQuestions && !!farmId && !holdQuestion;
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
     // understanding meter the moment the server has accepted the answer, so it
     // can refetch. See dfesAnswerSignal.ts for why this is a same-feature pub/sub

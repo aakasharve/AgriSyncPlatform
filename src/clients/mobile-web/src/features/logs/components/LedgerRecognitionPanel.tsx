@@ -153,6 +153,11 @@ export interface LedgerRecognitionPanelProps {
     mayPlanWork?: boolean;
     /** Lane DFES-Q - opens "त्या दिवसाचं काम सांगा" for a day; handed to the why-not card. */
     onTellPastDay?: (dateKey: string) => void;
+    /**
+     * Part 03 B4 — a product question holds the screen's ONE question slot (`ProductPurposeSlot`): the day's question waits (it is
+     * neither picked nor fetched). Everything else in this panel (the spoken-answer settle, the streak) is unchanged. Default false.
+     */
+    holdQuestion?: boolean;
 }
 
 export function LedgerRecognitionPanel({
@@ -168,6 +173,7 @@ export function LedgerRecognitionPanel({
     look = 'card',
     mayPlanWork = false,
     onTellPastDay,
+    holdQuestion = false,
 }: LedgerRecognitionPanelProps): React.ReactElement {
     const { engagement } = useFarmerEngagement(farmId);
     const resolvedDate = todayLocalDate ?? new Date().toISOString().slice(0, 10);
@@ -285,6 +291,7 @@ export function LedgerRecognitionPanel({
             onAnswerBySpeaking={onAnswerBySpeaking}
             look={look}
             onTellPastDay={onTellPastDay}
+            holdQuestion={holdQuestion}
             questionInputs={{
                 crop,
                 todayLocalDate: resolvedDate,
