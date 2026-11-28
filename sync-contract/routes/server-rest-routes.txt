@@ -129,6 +129,7 @@ POST /shramsafal/admin/pii-review/{id:guid}/reject
 POST /shramsafal/ai/cove-reverify
 POST /shramsafal/ai/document-sessions/patti
 POST /shramsafal/ai/document-sessions/receipt
+POST /shramsafal/ai/live-words
 POST /shramsafal/ai/parse-voice
 POST /shramsafal/ai/parse-voice-stream
 POST /shramsafal/ai/patti-extract
