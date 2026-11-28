@@ -21,7 +21,7 @@ import { PHONE_COLUMN } from '../phoneColumn';
 import { LegacyNote, TypedNote } from '../voiceResult/DayParts';
 import type { TankVerdict } from '../voiceResult/MixBox';
 import type { ProductAnswerKit } from '../voiceResult/ProductCard';
-import type { ProductItem } from '../voiceResult/productModel';
+import type { OpenProduct } from './SavedProducts';
 import type { DayView, PartKey, RecordingView } from '../voiceResult/resultModel';
 import { finalResultWords } from './finalResultWords';
 import { LineGlyph, SANS } from './savedBits';
@@ -62,7 +62,7 @@ export interface TalkBodyProps {
     kit?: ProductAnswerKit;
     /** The combination verdicts of THIS talk's logs only. */
     verdicts: readonly TankVerdict[];
-    onOpenProduct: (item: ProductItem, logId: string) => void;
+    onOpenProduct: OpenProduct;
     onTellMore?: (part: PartKey) => void;
     /** 'vr2' on the saved screen (its testids as before), 'vr2-tv' in the talk view. */
     idPrefix: string;

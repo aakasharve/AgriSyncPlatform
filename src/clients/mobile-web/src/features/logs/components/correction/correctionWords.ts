@@ -46,6 +46,10 @@ export interface CorrectionWords {
     versionNote: string;
     reconfirm: string;
     labourDoor: string;
+    /** Part 03 B5 — the talk's own speaker, after its 24 hours: his change doors on it are closed (the server would refuse them). */
+    windowClosed: string;
+    /** The same, for the farm's primary owner on his own talk (no "the owner can still change it": he is the owner). */
+    windowClosedOwner: string;
     openAttendance: string;
     confirmed: string;
     notConfirmed: string;
@@ -136,6 +140,8 @@ const mr: CorrectionWords = {
         // lane MU-4 — a write naming a plot outside his plots. PROPOSED (Marathi), in the rule's voice.
         plotClosed: 'श्रमसफलच्या नियमानुसार हे काम या प्लॉटवर नोंदवता आलं नाही. तुमचं काम या फोनवर ठेवलं आहे.',
         kindClosed: 'ही कामं तुम्हाला नोंदवता येत नाहीत. नोंद फोनवर राखून ठेवली आहे.', // PROPOSED (Marathi) - pilot lane PERM (contract §2.7)
+        // Part 03 B5 — a change of his that reached the server after the talk's 24 hours (made offline at hour 23, sent at hour 25).
+        windowClosed: 'हा बदल सर्व्हरपर्यंत पोहोचला तेव्हा २४ तास संपले होते, त्यामुळे उशीर झाला. नोंद होती तशीच राहिली.', // PROPOSED (Marathi)
         other: '',
     },
     // PROPOSED (Marathi) — lane OF-M. Each says what did not change (the money's amount) and why; none asks him to do
@@ -161,6 +167,8 @@ const mr: CorrectionWords = {
     versionNote: 'जतन केल्यावर नवीन आवृत्ती ठेवली जाते — आधीचं पण सर्व्हरवर राहतं.', // PROPOSED (Marathi) — screen 3's note
     reconfirm: 'हे आधी पक्कं केलं होतं. जतन केल्यावर नवीन आवृत्ती "पक्कं नाही" राहील, पुन्हा पक्कं होईपर्यंत.', // PROPOSED (Marathi)
     labourDoor: 'ही हजेरी "हजेरी" पानावरून घेतली आहे. ती तिथेच बदलता येते.', // PROPOSED (Marathi)
+    windowClosed: 'या बोलण्याचे २४ तास संपले, त्यामुळे आता तुम्हाला हे बदलता येत नाही. शेत मालक अजूनही बदलू शकतात.', // PROPOSED (Marathi)
+    windowClosedOwner: 'या बोलण्याचे २४ तास संपले, त्यामुळे आता हे बदलता येत नाही.', // PROPOSED (Marathi)
     openAttendance: 'हजेरी उघडा', // PROPOSED (Marathi)
     // REUSED — the result screen's status words, with its ✔.
     confirmed: `✔ ${RESULT_STR.confirmedBadge}`,
@@ -244,6 +252,7 @@ const en: CorrectionWords = {
         // lane MU-4. PROPOSED (English).
         plotClosed: "By ShramSafal's rules, this work could not be saved on this plot. Your work is kept on this phone.",
         kindClosed: 'You may not record these kinds of work. The record is kept on this phone.', // PROPOSED (English) - pilot lane PERM
+        windowClosed: 'This change reached the server after the 24 hours were over, so it was too late. The record stays as it was.', // PROPOSED (English)
         other: '',
     },
     // PROPOSED (English) — lane OF-M.
@@ -268,6 +277,8 @@ const en: CorrectionWords = {
     versionNote: 'Saving keeps a new version — the earlier one stays on the server too.', // PROPOSED (English)
     reconfirm: 'This was confirmed. After saving, the new version stays "Not confirmed" until it is confirmed again.', // PROPOSED (English)
     labourDoor: 'This attendance was taken on the attendance page. It can be changed there.', // PROPOSED (English)
+    windowClosed: 'The 24 hours of this talk are over, so you cannot change it now. The farm owner can still change it.', // PROPOSED (English)
+    windowClosedOwner: 'The 24 hours of this talk are over, so it cannot be changed now.', // PROPOSED (English)
     openAttendance: 'Open attendance', // PROPOSED (English)
     confirmed: '✔ Confirmed', // PROPOSED (English)
     notConfirmed: 'Not confirmed', // PROPOSED (English)

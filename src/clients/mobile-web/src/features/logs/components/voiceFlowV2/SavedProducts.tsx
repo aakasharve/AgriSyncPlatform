@@ -53,11 +53,23 @@ const KindIcon: React.FC<{ kind: ProductBox['kind'] }> = ({ kind }) => (
     </svg>
 );
 
+/** Where a row sits on screen (the product flash card grows out of it and snaps back into it). */
+export interface RowRect { left: number; top: number; width: number; height: number }
+
+/** Opens a product: its row's place on screen comes with it when known. */
+export type OpenProduct = (item: ProductItem, logId: string, from?: RowRect) => void;
+
+const rectOf = (el: Element): RowRect => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+
+/** A release's water, as he said it or as recorded (the row's own words); '' when none is tied to it. */
+export const releaseWaterOf = (box: ProductBox, language: string | undefined): string =>
+    box.water.map(w => waterText(w, resultCopy(language), language)).filter(Boolean).join(' · ');
+
 export interface SavedProductRowProps {
     item: ProductItem;
     logId: string;
     kit: ProductAnswerKit;
-    onOpen: (item: ProductItem, logId: string) => void;
+    onOpen: OpenProduct;
     /** His own words for this product, exactly as in his transcript (the final design's `.prod .said`). Absent / empty = none drawn. */
     said?: readonly string[];
 }
@@ -81,7 +93,7 @@ export const SavedProductRow: React.FC<SavedProductRowProps> = ({ item, logId, k
     const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);
     const ingredient = ingredientLine(identity, language);
     return (
-        <button type="button" onClick={() => onOpen(item, logId)} data-testid={`vr-prow-${item.id}`} data-type={key}
+        <button type="button" onClick={e => onOpen(item, logId, rectOf(e.currentTarget))} data-testid={`vr-prow-${item.id}`} data-type={key}
             className={`flex min-h-[64px] w-full items-center gap-2.5 rounded-[14px] border-l-[6px] ${style.edge} ${style.soft} px-2.5 py-2 text-left text-[#1C1917] active:scale-[0.99] ${key === 'unknown' ? 'border-2 border-dashed border-stone-300' : ''}`}>
             <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-1.5">

@@ -10,7 +10,7 @@
  *     "आजची बोलणी", the 24-hour line, the end button — and no "मागे" bar;
  *   - the 7 days come from the phone's own history, and only once it has pulled;
  *   - the tank count is the parse's, else his words', else none — never invented (P4);
- *   - the 24-hour line follows the SERVER's `editableUntil` only: absent, unreadable or past = no line (P10);
+ *   - the 24-hour line follows the SERVER's `editableUntilUtc` only, for the talk's own speaker; once it passed his edit doors close (P10);
  *   - a row of "आजची बोलणी" opens that whole talk (its words, its voice, its parts), and its own "मागे" closes it;
  *   - Sathi asks "तुम्ही तुमचा आवाज ऐकलात का?" once his clip played to its end.
  */
@@ -106,7 +106,7 @@ afterEach(() => { cleanup(); });
 
 describe('the final design — the order of the sections', () => {
     it('top card, his words, his voice, यातून काय समजलं (products first), the question, आजची बोलणी, the 24-hour line, the end button', () => {
-        render(<SavedScreen {...props(nowLog({ editableUntil: FUTURE }))} />);
+        render(<SavedScreen {...props(nowLog({ editableUntilUtc: FUTURE }), { viewerUserId: ME })} />);
         const order = ['vr2-head', 'vr2-talk', 'vr2-words', 'vr2-listen', 'vr2-understood', 'vr2-given', 'vr2-parts', 'vr2-edit',
             'vr2-question', 'extras-slot', 'vr2-talks', 'vr2-end-note', 'vr2-finish', 'vr2-idle-bar'];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `${order[i - 1]} before ${order[i]}`).toBe(true);
@@ -196,10 +196,17 @@ describe('यातून काय समजलं — products first, his own 
         expect(within(und).queryByTestId('vr2-part-inputs')).toBeNull();
     });
 
-    it('a product row still opens the existing product card', () => {
+    it('a library product row opens the product flash card (B2); a product the library does not know keeps the bottom card', () => {
         render(<SavedScreen {...props()} />);
         fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
+        expect(screen.getByTestId('vr2-product-flash').getAttribute('data-item')).toBe('m-conf');
+        expect(screen.queryByTestId('vr-product-card')).toBeNull();
+        cleanup();
+        const unknown = nowLog({ inputs: [spray({ mix: [{ id: 'm-x', productName: 'झेडएक्सक्यू', dose: 50, unit: 'ml' }] })] });
+        render(<SavedScreen {...props(unknown)} />);
+        fireEvent.click(screen.getByTestId('vr-prow-m-x'));
         expect(screen.getByTestId('vr-product-card')).toBeTruthy();
+        expect(screen.queryByTestId('vr2-product-flash')).toBeNull();
     });
 
     it('tank count: the parse\'s count when the record holds one (it wins over his words)', () => {
@@ -225,26 +232,68 @@ describe('यातून काय समजलं — products first, his own 
     });
 });
 
-describe('the 24-hour line follows the server\'s editableUntil only', () => {
+describe('the 24-hour line follows the server\'s editableUntilUtc only, for the talk\'s own speaker (B5)', () => {
+    const asSpeaker = (over: Partial<SavedScreenProps> = {}): Partial<SavedScreenProps> => ({ viewerUserId: ME, ...over });
+
     it('absent: no line anywhere (the phone never works out 24 hours itself)', () => {
-        render(<SavedScreen {...props()} />);
+        render(<SavedScreen {...props(NOW, asSpeaker())} />);
         expect(screen.queryByTestId('vr2-edit-window')).toBeNull();
         expect(screen.queryByTestId('vr2-end-note')).toBeNull();
+        expect(screen.getByTestId('vr2-edit')).toBeTruthy();
     });
 
-    it('in the past, or unreadable: no line', () => {
-        render(<SavedScreen {...props(nowLog({ editableUntil: PAST }))} />);
-        expect(screen.queryByTestId('vr2-edit-window')).toBeNull();
+    it('unreadable (no zone): no line, and nothing is closed by it', () => {
+        render(<SavedScreen {...props(nowLog({ editableUntilUtc: '2099-01-01T00:00:00' }), asSpeaker())} />);
         expect(screen.queryByTestId('vr2-end-note')).toBeNull();
-        cleanup();
-        render(<SavedScreen {...props(nowLog({ editableUntil: '2099-01-01T00:00:00' }))} />);
-        expect(screen.queryByTestId('vr2-end-note')).toBeNull();
+        expect(screen.queryByTestId('vr2-edit-closed')).toBeNull();
+        expect(screen.getByTestId('vr2-edit')).toBeTruthy();
     });
 
-    it('still ahead: "बदल करता येतो · २४ तास" in the talk card and the line above "झालं"', () => {
-        render(<SavedScreen {...props(nowLog({ editableUntil: FUTURE }))} />);
+    it('still ahead, for the speaker: "बदल करता येतो · २४ तास" in the talk card and the line above "झालं"', () => {
+        render(<SavedScreen {...props(nowLog({ editableUntilUtc: FUTURE }), asSpeaker())} />);
         expect(within(screen.getByTestId('vr2-talk')).getByTestId('vr2-edit-window').textContent).toBe('बदल करता येतो · २४ तास');
         expect(before('vr2-end-note', 'vr2-finish')).toBe(true);
+    });
+
+    it('someone else viewing the talk (the owner): no line — the window is not his', () => {
+        render(<SavedScreen {...props(nowLog({ editableUntilUtc: FUTURE }), { viewerUserId: 'op-owner' })} />);
+        expect(screen.queryByTestId('vr2-edit-window')).toBeNull();
+        expect(screen.queryByTestId('vr2-end-note')).toBeNull();
+    });
+});
+
+describe('after the 24 hours: the speaker\'s own edit doors on this talk close (B5)', () => {
+    const closedFor = (viewerUserId: string, over: Partial<SavedScreenProps> = {}) =>
+        props(nowLog({ editableUntilUtc: PAST }), { viewerUserId, onChangeDay: vi.fn(), ...over });
+
+    it('the speaker: the calm line in place of "बदला", no move by the day chip or the plot; answers and checks stay', () => {
+        render(<SavedScreen {...closedFor(ME)} />);
+        expect(screen.getByTestId('vr2-edit-closed').textContent).toBe('या बोलण्याचे २४ तास संपले, त्यामुळे आता तुम्हाला हे बदलता येत नाही. शेत मालक अजूनही बदलू शकतात.');
+        expect(screen.queryByTestId('vr2-edit')).toBeNull();
+        expect(screen.queryByTestId('vr2-edit-window')).toBeNull();
+        expect(screen.queryByTestId('vr2-end-note')).toBeNull();
+        expect(screen.queryByTestId('vr2-day')).toBeNull();
+        expect(screen.getByTestId('vr2-plot-select').tagName).not.toBe('BUTTON');
+        // never for product checks, answers or confirmations
+        expect(screen.getByTestId('vr-prow-m-conf').tagName).toBe('BUTTON');
+        expect(within(screen.getByTestId('vr2-question')).getByTestId('question-panel')).toBeTruthy();
+        expect(screen.getByTestId('vr2-finish')).toBeTruthy();
+    });
+
+    it('the primary owner on his own talk: the same doors close, and the line does not send him to the owner', () => {
+        render(<SavedScreen {...closedFor(ME, { viewerIsOwner: true })} />);
+        expect(screen.getByTestId('vr2-edit-closed').textContent).toBe('या बोलण्याचे २४ तास संपले, त्यामुळे आता हे बदलता येत नाही.');
+    });
+
+    it('the owner (or a grant holder) on someone else\'s talk: every door stays open', () => {
+        const p = closedFor('op-owner', { viewerIsOwner: true });
+        render(<SavedScreen {...p} />);
+        expect(screen.queryByTestId('vr2-edit-closed')).toBeNull();
+        fireEvent.click(screen.getByTestId('vr2-edit'));
+        expect(p.onEdit).toHaveBeenCalledWith('L-NOW');
+        fireEvent.click(screen.getByTestId('vr2-day'));
+        expect(p.onChangeDay).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('vr2-plot-select').tagName).toBe('BUTTON');
     });
 });
 

@@ -17,7 +17,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { dayLinesOf } from '../voiceResult/DaySummaryLines';
 import type { TankVerdict } from '../voiceResult/MixBox';
 import type { ProductAnswerKit } from '../voiceResult/ProductCard';
-import type { ProductItem } from '../voiceResult/productModel';
+import type { OpenProduct } from './SavedProducts';
 import type { DayView, PartKey } from '../voiceResult/resultModel';
 import { finalResultWords } from './finalResultWords';
 import SavedGiven from './SavedGiven';
@@ -28,7 +28,7 @@ export interface SavedUnderstoodProps {
     talk: DayView;
     kit?: ProductAnswerKit;
     verdicts: readonly TankVerdict[];
-    onOpenProduct: (item: ProductItem, logId: string) => void;
+    onOpenProduct: OpenProduct;
     /** Opens the ONE mic for an untold part; absent = untold parts are not drawn. */
     onTellMore?: (part: PartKey) => void;
     testId?: string;

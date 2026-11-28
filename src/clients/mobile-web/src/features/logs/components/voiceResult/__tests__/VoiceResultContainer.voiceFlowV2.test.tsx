@@ -237,3 +237,23 @@ describe('voice flow v2 OFF', () => {
         expect(openOverlayCount()).toBe(0);
     });
 });
+
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — the REAL container hands the signed-in user to the saved screen, so the
+// server's `editableUntilUtc` shows the 24-hour line to the talk's own speaker, and once it passed his day move is not offered at all.
+describe('Part 03 B5 — the 24-hour window through the real container', () => {
+    const withWindow = (editableUntilUtc: string) => [{ ...HISTORY[0], editableUntilUtc } as DailyLog];
+
+    it('inside the window: the line for him, and the day can still be moved', () => {
+        mount(props({ history: withWindow('2099-01-01T00:00:00Z'), onMoveDay: vi.fn(async () => undefined) }));
+        expect(screen.getByTestId('vr2-edit-window').textContent).toBe('बदल करता येतो · २४ तास');
+        expect(screen.getByTestId('vr2-day').tagName).toBe('BUTTON');
+        expect(screen.getByTestId('vr2-edit')).toBeTruthy();
+    });
+
+    it('after it: the calm line, no "बदला", no day move (the server would refuse them)', () => {
+        mount(props({ history: withWindow('2000-01-01T00:00:00Z'), onMoveDay: vi.fn(async () => undefined) }));
+        expect(screen.getByTestId('vr2-edit-closed').textContent).toBe('या बोलण्याचे २४ तास संपले, त्यामुळे आता हे बदलता येत नाही.');
+        expect(screen.queryByTestId('vr2-edit')).toBeNull();
+        expect(screen.queryByTestId('vr2-day')).toBeNull();
+    });
+});

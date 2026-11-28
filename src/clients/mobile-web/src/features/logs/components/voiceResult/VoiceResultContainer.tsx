@@ -58,6 +58,7 @@ import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
 import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
 import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
 import { holdDetailBack } from '../voiceFlowV2/detailBack';
+import { talkWindowFor } from '../voiceFlowV2/editWindow';
 
 /** The holder's own name from the session profile; the app's placeholder for "no name yet" is not a name. */
 const ownNameOf = (name: string | undefined): string | undefined => {
@@ -212,7 +213,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
 
     // A हजेरी-door record is changed in the हजेरी वही, never moved from here (none reaches this screen today: its save
     // goes to the saved card — this keeps it so).
-    const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
+    // Part 03 B5: nor once the talk's own speaker is past its 24 hours (the server would refuse his move; anyone else may still).
+    const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) && talkWindowFor(current, sessionUserId) !== 'closed' ? onMoveDay : undefined;
 
     // lane PRV (D-26) AMENDED by pilot lane PERM (S5.2; founder 27 Nov "Every log should not be asked"): no record asks who may see it. The
     // per-record row is gone; in its place ONE read-only line "हे दिसतं: …" from the server's seat summary (none stored = no line, P4), and
@@ -310,6 +312,9 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                 history={history}
                 crops={crops}
                 heard={playback.heard}
+                // Part 03 B5 — the 24-hour window binds only a talk's own speaker (the signed-in user), as the server rules it.
+                viewerUserId={sessionUserId}
+                viewerIsOwner={farmRole === 'PrimaryOwner'}
             />
             {daySheet}
             </>

@@ -795,3 +795,40 @@ describe.each(['mr', 'en'] as const)('lane OF-M fix pass 5 — a worker on the �
         expect(screen.queryByTestId('corr-toggle-in')).toBeNull();
     });
 });
+
+// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — the "बदला" screen is THE edit door for a talk from every page
+// (the result, आढावा, the feed): once the talk's own speaker is past its 24 hours (the server's `editableUntilUtc`), it says so calmly
+// and offers no change (the server would refuse each one: content, plot / day, worker count). Anyone else sees it as before.
+describe('Part 03 B5 — the speaker after the 24 hours', () => {
+    const PAST = { ...ENTRY, editableUntilUtc: '2000-01-01T00:00:00Z' } as DailyLog;
+    const OPEN = { ...ENTRY, editableUntilUtc: '2099-01-01T00:00:00Z' } as DailyLog;
+    const OTHERS = { ...PAST, meta: { ...ENTRY.meta, createdByOperatorId: 'a-worker' } } as DailyLog;
+
+    it('his own talk, window passed: the calm line, no mic, no typing, no plot / day, no save', () => {
+        render(<Harness start={[PAST]} save={realSave().deps} farmRole="Worker" />);
+        act(() => openCorrection('log-1'));
+        expect(screen.getByTestId('corr-window-closed')).toHaveTextContent('या बोलण्याचे २४ तास संपले, त्यामुळे आता तुम्हाला हे बदलता येत नाही. शेत मालक अजूनही बदलू शकतात.');
+        for (const id of ['corr-mic', 'corr-type', 'corr-change-plot', 'corr-change-day', 'corr-rows', 'corr-save']) expect(screen.queryByTestId(id), id).toBeNull();
+        expect(screen.getByTestId('corr-back')).toBeInTheDocument();
+    });
+
+    it('the primary owner on his own talk: closed too (the server binds the speaker), without pointing him to the owner', () => {
+        render(<Harness start={[PAST]} save={realSave().deps} farmRole="PrimaryOwner" />);
+        act(() => openCorrection('log-1'));
+        expect(screen.getByTestId('corr-window-closed')).toHaveTextContent('या बोलण्याचे २४ तास संपले, त्यामुळे आता हे बदलता येत नाही.');
+    });
+
+    it('inside the window, or someone else\'s talk after it (the owner): the screen as before', () => {
+        render(<Harness start={[OPEN]} save={realSave().deps} farmRole="Worker" />);
+        act(() => openCorrection('log-1'));
+        expect(screen.queryByTestId('corr-window-closed')).toBeNull();
+        expect(screen.getByTestId('corr-mic')).toBeInTheDocument();
+        expect(screen.getByTestId('corr-save')).toBeInTheDocument();
+        cleanup();
+        resetSpeakStoreForTests();
+        render(<Harness start={[OTHERS]} save={realSave().deps} farmRole="PrimaryOwner" />);
+        act(() => openCorrection('log-1'));
+        expect(screen.queryByTestId('corr-window-closed')).toBeNull();
+        expect(screen.getByTestId('corr-mic')).toBeInTheDocument();
+    });
+});

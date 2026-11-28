@@ -46,6 +46,13 @@ export interface DailyLogServerState {
     wordsWithheldForMoney?: boolean;
 
     /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — the server's end of the talk's 24-hour change window
+     * (`DailyLogDto.editableUntilUtc`, ISO UTC), read by `voiceFlowV2/editWindow.ts`. It binds only the talk's own speaker. Absent =
+     * not a voice talk, or the server has not told this phone yet (a talk made here gets it with its first pull): no window shown.
+     */
+    editableUntilUtc?: string;
+
+    /**
      * spec: plr-d10 lane PRV (founder D-26) — who may see this record, when the farm's primary account holder narrowed
      * it: `Selected` (him, the person who made it, and the people he chose) or `OnlyMe` (him and the person who made it).
      * The server tells ONLY the holder (his picker and lock chip read it). Absent = the normal team.

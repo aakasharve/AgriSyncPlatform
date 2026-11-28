@@ -669,6 +669,9 @@ function toDailyLog(
         // lane MU-3 fix 1 (F8 / F3) — what this copy was sent WITHOUT, as the server's own projection says.
         ...(source.content?.amountsWithheld === true && { amountsWithheld: true }),
         ...(source.wordsWithheldForMoney === true && { wordsWithheldForMoney: true }),
+        // Part 03 B5 — the talk's 24-hour change window, the server's own (P10). Absent on the wire = no window: it is never
+        // carried over from an older copy, so a record the server no longer calls a talk shows none.
+        ...(typeof source.editableUntilUtc === 'string' && source.editableUntilUtc.trim() !== '' && { editableUntilUtc: source.editableUntilUtc }),
         // lane PRV (D-26) — who may see it, as the server tells the farm's primary account holder (absent = the team).
         ...((source.audience === 'Selected' || source.audience === 'OnlyMe') && { audience: source.audience, audienceUserIds: source.audienceUserIds ?? [] }),
         legacyPartial: !statedDetails,

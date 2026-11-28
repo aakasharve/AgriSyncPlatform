@@ -175,12 +175,12 @@ describe('SavedScreen — what he sees first', () => {
         expect(screen.queryByTestId('vr2-play')).toBeNull();
     });
 
-    it('"यातून काय समजलं": a product row opens the product card', () => {
+    it('"यातून काय समजलं": a library product row opens its flash card (Part 03 B2)', () => {
         render(<SavedScreen {...props()} />);
         expect(screen.getByTestId('vr2-understood').textContent).toContain('यातून काय समजलं');
         fireEvent.click(screen.getByTestId('vr-prow-m-conf'));
-        expect(screen.getByTestId('vr-product-card')).toBeTruthy();
-        expect(screen.getByTestId('vr-card-name').textContent).toContain('कॉन्फिडॉर');
+        expect(screen.getByTestId('vr2-product-flash')).toBeTruthy();
+        expect(screen.getByTestId('vr2-pf-m-conf-name').textContent).toContain('कॉन्फिडॉर');
     });
 
     it('a red part opens the mic for THAT part', () => {

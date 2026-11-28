@@ -52,7 +52,7 @@ export const SavedScreenLower: React.FC<SavedScreenLowerProps> = (p) => {
             )}
 
             <button type="button" data-testid="vr2-finish" style={{ fontFamily: SANS }}
-                onClick={() => { hapticFeedback.success(); p.onFinish(); }}
+                onClick={() => { hapticFeedback.medium(); p.onFinish(); }}
                 className="mt-1.5 flex min-h-[76px] w-full items-center gap-3 rounded-[22px] bg-[#0F6B3A] px-4 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,107,58,0.3)] active:scale-[0.99]">
                 <LineGlyph name="tick" size={30} className="flex-none" />
                 <span className="min-w-0 flex-1">

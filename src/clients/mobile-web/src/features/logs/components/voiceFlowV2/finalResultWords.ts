@@ -45,7 +45,120 @@ export interface FinalResultWords {
     weekdays: readonly string[];
     /** "३ टाक्या" / "१ टाकी" — only for a count the record or his words hold. */
     tanks: (n: number) => string;
+    /** B2 — the product flash card and the check card (result-v12-final.html `prodBlock()`, `openCheck()`). */
+    flash: FlashWords;
 }
+
+export interface FlashWords {
+    gaveYou: string;
+    gaveBy: (name: string) => string;
+    forPests: string;
+    forDiseases: string;
+    forWeeds: string;
+    forCrop: string;
+    howItWorks: string;
+    inside: string;
+    ingredient: string;
+    form: string;
+    method: string;
+    group: string;
+    otherNames: (kind: string) => string;
+    kindMedicine: string;
+    kindFertiliser: string;
+    sameTank: string;
+    restOfTalk: string;
+    endTitle: string;
+    endSub: string;
+    fromLibrary: string;
+    libraryPending: string;
+    notInLibrary: string;
+    close: string;
+    checkRow: string;
+    checkRowSub: string;
+    checkChange: string;
+    checkOwner: string;
+    checkQuestion: string;
+    checkHeard: string;
+    checkYes: string;
+    checkPhoto: string;
+    checkedYes: string;
+    checkedPhoto: string;
+    checkedNo: string;
+}
+
+const FLASH_MR: FlashWords = {
+    gaveYou: 'तुम्ही दिलं', // PROPOSED (Marathi) — the design's own
+    gaveBy: (name: string) => `${name} यांनी दिलं`, // PROPOSED (Marathi)
+    forPests: 'या किडींवर काम करतं', // PROPOSED (Marathi) — the design's own
+    forDiseases: 'या रोगांवर काम करतं', // PROPOSED (Marathi) — the design's own
+    forWeeds: 'या तणांवर काम करतं', // PROPOSED (Marathi)
+    forCrop: 'यासाठी वापरतात', // PROPOSED (Marathi)
+    howItWorks: 'कसं काम करतं', // PROPOSED (Marathi) — the design's own
+    inside: 'यात काय आहे', // PROPOSED (Marathi) — the design's own
+    ingredient: 'घटक', // PROPOSED (Marathi) — the design's own
+    form: 'प्रकार', // PROPOSED (Marathi) — the design's own
+    method: 'कसं देतात', // PROPOSED (Marathi) — the design's own
+    group: 'गट', // PROPOSED (Marathi) — the design's own
+    otherNames: (kind: string) => `हेच ${kind} दुसऱ्या नावाने`, // PROPOSED (Marathi) — the design's own
+    kindMedicine: 'औषध', // PROPOSED (Marathi)
+    kindFertiliser: 'खत', // PROPOSED (Marathi)
+    sameTank: 'याच टाकीत', // PROPOSED (Marathi) — the design's own
+    restOfTalk: 'या बोलण्यातले बाकी भाग', // PROPOSED (Marathi) — the design's own
+    endTitle: 'सगळं पाहिलं', // PROPOSED (Marathi) — the design's own
+    endSub: 'परत जागेवर जातंय…', // PROPOSED (Marathi) — the design's own
+    fromLibrary: 'माहिती: श्रमसफल लायब्ररी', // PROPOSED (Marathi) — the design's own
+    libraryPending: 'तज्ज्ञांची तपासणी बाकी', // PROPOSED (Marathi) — the design's own
+    notInLibrary: 'हे नाव लायब्ररीत सापडलं नाही', // PROPOSED (Marathi)
+    close: 'बंद करा', // EXISTING (resultCopy.close)
+    checkRow: 'तपासायची', // PROPOSED (Marathi) — the design's own
+    checkRowSub: 'साथीने नाव बरोबर ऐकलं का?', // PROPOSED (Marathi) — the design's own
+    checkChange: 'बदलायचं असेल तर दाबा', // PROPOSED (Marathi) — the design's own
+    checkOwner: 'शेत मालक बघतील', // PROPOSED (Marathi) — the design's own
+    checkQuestion: 'हे बरोबर आहे का?', // PROPOSED (Marathi) — the design's own
+    checkHeard: 'साथीला समजलं', // PROPOSED (Marathi) — the design's own
+    checkYes: 'हो, बरोबर', // PROPOSED (Marathi) — the design's own
+    checkPhoto: 'नाही — फोटो काढा', // PROPOSED (Marathi) — the design's own
+    checkedYes: 'तपासलं: बरोबर', // PROPOSED (Marathi) — the design's own
+    checkedPhoto: 'फोटो काढला · तपासणी बाकी', // PROPOSED (Marathi) — the design's own
+    checkedNo: 'हे नाही, असं सांगितलं', // PROPOSED (Marathi) — an older "नाही" answer from the bottom card
+};
+
+const FLASH_EN: FlashWords = {
+    gaveYou: 'You gave', // PROPOSED (English)
+    gaveBy: (name: string) => `${name} gave`, // PROPOSED (English)
+    forPests: 'Works on these pests', // PROPOSED (English)
+    forDiseases: 'Works on these diseases', // PROPOSED (English)
+    forWeeds: 'Works on these weeds', // PROPOSED (English)
+    forCrop: 'Used for', // PROPOSED (English)
+    howItWorks: 'How it works', // PROPOSED (English)
+    inside: 'What is in it', // PROPOSED (English)
+    ingredient: 'Ingredient', // PROPOSED (English)
+    form: 'Form', // PROPOSED (English)
+    method: 'How it is given', // PROPOSED (English)
+    group: 'Group', // PROPOSED (English)
+    otherNames: (kind: string) => `The same ${kind} by other names`, // PROPOSED (English)
+    kindMedicine: 'product', // PROPOSED (English)
+    kindFertiliser: 'fertiliser', // PROPOSED (English)
+    sameTank: 'In the same tank', // PROPOSED (English)
+    restOfTalk: 'The rest of this talk', // PROPOSED (English)
+    endTitle: 'Seen it all', // PROPOSED (English)
+    endSub: 'Going back to its place…', // PROPOSED (English)
+    fromLibrary: 'Information: ShramSafal library', // PROPOSED (English)
+    libraryPending: 'expert check pending', // PROPOSED (English)
+    notInLibrary: 'This name was not found in the library', // PROPOSED (English)
+    close: 'Close', // EXISTING (resultCopy.close)
+    checkRow: 'To check', // PROPOSED (English)
+    checkRowSub: 'Did Sathi hear the name right?', // PROPOSED (English)
+    checkChange: 'Tap to change it', // PROPOSED (English)
+    checkOwner: 'The farm owner will check', // PROPOSED (English)
+    checkQuestion: 'Is this right?', // PROPOSED (English)
+    checkHeard: 'Sathi understood', // PROPOSED (English)
+    checkYes: 'Yes, right', // PROPOSED (English)
+    checkPhoto: 'No — take a photo', // PROPOSED (English)
+    checkedYes: 'Checked: right', // PROPOSED (English)
+    checkedPhoto: 'Photo taken · check pending', // PROPOSED (English)
+    checkedNo: 'Said it was not this', // PROPOSED (English)
+};
 
 export const FINAL_MR: FinalResultWords = {
     nowTalk: 'आत्ताचं बोलणं', // PROPOSED (Marathi) — the design's own
@@ -75,6 +188,7 @@ export const FINAL_MR: FinalResultWords = {
     streakSub: 'भरलेले = बोललेले दिवस', // PROPOSED (Marathi)
     weekdays: ['र', 'सो', 'मं', 'बु', 'गु', 'शु', 'श'], // PROPOSED (Marathi) — रविवार … शनिवार
     tanks: (n: number) => `${digitsFor(String(n), 'mr')} ${n === 1 ? 'टाकी' : 'टाक्या'}`, // PROPOSED (Marathi)
+    flash: FLASH_MR,
 };
 
 export const FINAL_EN: FinalResultWords = {
@@ -105,6 +219,7 @@ export const FINAL_EN: FinalResultWords = {
     streakSub: 'Filled = days you talked', // PROPOSED (English)
     weekdays: ['S', 'M', 'T', 'W', 'T', 'F', 'S'], // PROPOSED (English)
     tanks: (n: number) => `${n} ${n === 1 ? 'tank' : 'tanks'}`, // PROPOSED (English)
+    flash: FLASH_EN,
 };
 
 /** The words in the screen's language (Marathi unless English is chosen). */

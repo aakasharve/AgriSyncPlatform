@@ -41,7 +41,9 @@ export type RefusedReason =
     // lane MU-4 — the change names a plot outside his plots (or acts on a record there): kept here, the rule says why.
     | 'plotClosed'
     // pilot lane PERM — it holds a kind of work he may not record on that farm (a limit this phone had not heard of yet).
-    | 'kindClosed';
+    | 'kindClosed'
+    // Part 03 B5 — his change of his own talk reached the server after its 24 hours (made offline at hour 23, sent at hour 25).
+    | 'windowClosed';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -52,9 +54,17 @@ const KIND_OF: Readonly<Record<string, RefusedKind>> = {
     [SyncMutationName.CorrectLabourAssignment]: 'workers',
 };
 
-/** The server's full refusal code → the reason he is told (lane OF-S codes; `ShramSafalErrors`). */
-export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
+/** Part 03 B5 — the reason key the server puts at the end of its message (`TalkEditWindow.ReasonKey`). */
+const WINDOW_REASON = '[reason:editWindowClosed]';
+
+/**
+ * The server's full refusal code → the reason he is told (lane OF-S codes; `ShramSafalErrors`). `message`: the server's own words, read
+ * only for its machine-readable reason key when the code says nothing this phone knows (`[reason:editWindowClosed]`).
+ */
+export function refusalReasonOf(errorCode: string | undefined, message?: string): RefusedReason {
     switch (errorCode) {
+        case 'ShramSafal.LogEditWindow.Conflict':
+            return 'windowClosed';
         case 'ShramSafal.LogMove.Conflict':
         case 'ShramSafal.LabourCorrection.Conflict':
         case 'ShramSafal.LogContent.Conflict':
@@ -84,7 +94,7 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
         case 'ShramSafal.WorkKind.Forbidden':
             return 'kindClosed';
         default:
-            return 'other';
+            return typeof message === 'string' && message.includes(WINDOW_REASON) ? 'windowClosed' : 'other';
     }
 }
 
@@ -96,6 +106,13 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
 export function refusalLines(refused: RefusedChange, language: string | null | undefined): string[] {
     const words = correctionWords(language);
     // A content change keeps its screen words; a price change refused (lane OF-M fix pass 3) also says who may.
+    // Part 03 B5 — too late: say so plainly, and that the record stays as the server has it (a move and a count were put back;
+    // a content change was never applied there, and his copy of it is only on this phone).
+    if (refused.reason === 'windowClosed') {
+        return refused.kind === 'revision'
+            ? [words.refusedReason.windowClosed, words.serverRefused]
+            : [refused.kind === 'move' ? words.refusedMove : words.refusedWorkers, words.refusedReason.windowClosed];
+    }
     if (refused.kind === 'revision') {
         return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed' || refused.reason === 'plotClosed' || refused.reason === 'kindClosed'
             ? [words.serverRefused, words.refusedReason[refused.reason]]
@@ -110,8 +127,8 @@ export function refusalLines(refused: RefusedChange, language: string | null | u
  * this module has nothing to add (the page keeps its own hints). Covers a move, a worker count and a create refused
  * because its day has not come.
  */
-export function refusalHint(mutationType: string, errorCode: string | undefined, language: string | null | undefined): string | undefined {
-    const reason = refusalReasonOf(errorCode);
+export function refusalHint(mutationType: string, errorCode: string | undefined, language: string | null | undefined, message?: string): string | undefined {
+    const reason = refusalReasonOf(errorCode, message);
     // lane PRV — any change parked because the record's audience no longer includes him: the rule's words ALONE (fix
     // pass 1, M6). Never "kept as the server has it": there is no server version of a record kept from him.
     if (reason === 'recordClosed') return correctionWords(language).refusedReason.recordClosed;
@@ -121,6 +138,7 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     // pilot lane PERM (S4.4) — a kind of work he may not record: the rule's words alone, parked (P10: kept until he discards it).
     if (reason === 'kindClosed') return correctionWords(language).refusedReason.kindClosed;
     const kind = KIND_OF[mutationType];
+    if (kind && reason === 'windowClosed') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;
     if (mutationType === SyncMutationName.CreateDailyLog && reason === 'futureDay') {
@@ -144,7 +162,7 @@ interface RefusedRow { mutationType: string; errorCode?: string; payload: unknow
  *   - otherwise the server's own words.
  */
 export async function refusalReasonForRow(row: RefusedRow): Promise<RefusedReason> {
-    const reason = refusalReasonOf(row.errorCode);
+    const reason = refusalReasonOf(row.errorCode, row.lastError);
     if (reason !== 'moneyNotFound' || row.mutationType !== SyncMutationName.MoveDailyLog) return reason;
     const dailyLogId = String((row.payload as { dailyLogId?: unknown } | null)?.dailyLogId ?? '');
     if (!dailyLogId) return reason;
@@ -169,7 +187,7 @@ export async function refusalReasonForRow(row: RefusedRow): Promise<RefusedReaso
 /** `refusalHint` for one refused row, its reason read as it really stands (`refusalReasonForRow`). */
 export async function refusalHintForRow(row: RefusedRow, language: string | null | undefined): Promise<string | undefined> {
     const kind = KIND_OF[row.mutationType];
-    if (kind !== 'move' || refusalReasonOf(row.errorCode) === 'recordClosed') return refusalHint(row.mutationType, row.errorCode, language);
+    if (kind !== 'move' || refusalReasonOf(row.errorCode, row.lastError) === 'recordClosed') return refusalHint(row.mutationType, row.errorCode, language, row.lastError);
     return refusalLines({ kind, reason: await refusalReasonForRow(row) }, language).join(' ');
 }
 

@@ -37,6 +37,7 @@ import { AddKindSheet, TapEditSheet, TypeChangeSheet } from '../../features/logs
 import { canMoveSavedEntry, canQueueLabourCountOffline, isSamePlace, queueSavedEntryMove, type SavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
 import { placeWords } from '../../shared/names/placeWords';
 import { isConfirmed } from '../../features/logs/components/voiceResult/resultModel';
+import { talkWindowFor } from '../../features/logs/components/voiceFlowV2/editWindow';
 import { useLastSyncAt } from '../../features/logs/components/voiceResult/useRecordingTrust';
 import { dayFull } from '../../features/logs/components/dayPick/dayWords';
 import { DayPickSheet } from '../../features/logs/components/dayPick/DayPickSheet';
@@ -268,6 +269,10 @@ export const CorrectionHost: React.FC<{
                 changed={changed}
                 keepOne={keepOne}
                 refused={isLabourDoorLog(log)}
+                // Part 03 B5 — the server's 24-hour window binds only the talk's own speaker: once it passed, his changes would all be
+                // refused, so none is offered; anyone else (the owner, a grant holder) sees this screen as before.
+                windowClosedLine={talkWindowFor([log], sessionUserId) === 'closed'
+                    ? (ctx.farmRole === 'PrimaryOwner' ? words.windowClosedOwner : words.windowClosed) : undefined}
                 saving={saving}
                 saveFailed={failed !== null}
                 saveFailedReason={failed ?? undefined}

@@ -42,13 +42,15 @@ import type { RingNodeData } from '../shramsathi/understandingRing';
 import { dayLinesOf, lineKeyOfVerdict } from '../voiceResult/DaySummaryLines';
 import { MixBanner, tankVerdictsOf, type TankVerdict } from '../voiceResult/MixBox';
 import type { ProductAnswerKit } from '../voiceResult/ProductCard';
-import type { ProductItem } from '../voiceResult/productModel';
+import { productBoxesOf, type ProductItem } from '../voiceResult/productModel';
+import { answersOf, identityOf } from '../voiceResult/inputIdentityModel';
 import { resultCopy } from '../voiceResult/resultCopy';
 import type { DayView, PartKey, RecordingView } from '../voiceResult/resultModel';
 import { resultDayStr, resultStr, useResultStr, type ResultStr } from '../voiceResult/resultStrings';
 import { scrollBelowHeader } from '../voiceResult/scrollBelowHeader';
 import type { LogSyncState } from '../voiceResult/useRecordingTrust';
-import { talkEditableAt } from './editWindow';
+import { talkWindowFor } from './editWindow';
+import { correctionWords } from '../correction/correctionWords';
 import { finalResultWords } from './finalResultWords';
 import IdleCloseBar from './IdleCloseBar';
 import ResultHead from './ResultHead';
@@ -56,6 +58,9 @@ import { Bd, LineGlyph, SANS } from './savedBits';
 import { savedWords } from './savedCopy';
 import SavedMeterGauge from './SavedMeterGauge';
 import SavedProductCard from './SavedProductCard';
+import ProductFlashCard from './ProductFlashCard';
+import { tankWordsOf } from './SavedGiven';
+import type { OpenProduct, RowRect } from './SavedProducts';
 import SavedScreenLower from './SavedScreenLower';
 import StreakDots from './StreakDots';
 import { useStreakWeek } from './streakWeek';
@@ -115,6 +120,10 @@ export interface SavedScreenProps {
     heard?: ReadonlySet<string>;
     /** "झालं — पूर्ण शेतीचा आढावा बघा". Absent = the screen's close handler (`onAutoClose`). */
     onFinish?: () => void;
+    /** The signed-in user (the 24-hour window binds only a talk's own speaker). Absent = no window is shown or applied. */
+    viewerUserId?: string | null;
+    /** He is the farm's primary owner (the closed-window line then does not point him to the owner). */
+    viewerIsOwner?: boolean;
 }
 
 /** The title's claim: only what the sync state says (P10). */
@@ -144,7 +153,7 @@ const addTo = (set: ReadonlySet<string>, id: string): ReadonlySet<string> => new
 export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const { day } = p;
     const primary: RecordingView | undefined = day.current.find(r => !!r.transcript) ?? day.current[0];
-    const [card, setCard] = useState<{ item: ProductItem; logId: string } | null>(null);
+    const [card, setCard] = useState<{ item: ProductItem; logId: string; from?: RowRect } | null>(null);
     const [openTalk, setOpenTalk] = useState<string | null>(null);
     // Sathi's "heard?" question: asked once per clip that played to its end; "हो, ऐकला" marks the clip.
     const [heardYes, setHeardYes] = useState<ReadonlySet<string>>(() => new Set());
@@ -170,6 +179,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const DS = resultDayStr(language);
     const FW = finalResultWords(language);
     const SW = savedWords(language);
+    const CW = correctionWords(language);
     const nd = (text: string): string => digitsFor(text, language);
     const onDay = primary.log.date && primary.log.date !== getDateKey() ? nd(dayShort(primary.log.date, language)) : null;
     const severalPlots = day.current.length > 1;
@@ -181,8 +191,12 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     const verdictsOf = (logs: readonly DailyLog[]): TankVerdict[] => { const ids = new Set(logs.map(l => l.id)); return verdicts.filter(v => ids.has(v.logId)); };
     const nowLogs = logsOfTalk(day.current, logById);
     const nowTalk = talkDayOf(day.current, nowLogs, day.missing);
-    const editableNow = talkEditableAt(nowLogs);
-    const openProduct = kit ? (item: ProductItem, logId: string) => setCard({ item, logId }) : () => undefined;
+    // Part 03 B5: the SERVER's window, for this viewer only — the line while it is open for the talk's own speaker; once it
+    // passed, HIS edit doors on this talk close (the server would refuse them). Nobody else's doors, and never an answer or a check.
+    const nowWindow = talkWindowFor(nowLogs, p.viewerUserId);
+    const editableNow = nowWindow === 'open';
+    const closedNow = nowWindow === 'closed';
+    const openProduct: OpenProduct = kit ? (item, logId, from) => setCard({ item, logId, from }) : () => undefined;
 
     const redHint = (() => {
         const v = reds[0];
@@ -201,7 +215,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
     };
     const pauseReason = p.playingId ? 'clip' : card ? 'product' : p.pickingDay ? 'day' : null;
     const dayText = nd(dayRel(primary.log.date, getDateKey(), language));
-    const dayChip = p.onChangeDay ? (
+    const dayChip = p.onChangeDay && !closedNow ? (
         <button type="button" onClick={p.onChangeDay} data-testid="vr2-day" className={`${CHIP} border-[#94A3B8]`}><CalendarDays size={14} className="mr-1 text-[#0F6B3A]" aria-hidden="true" />{dayText} ▾</button>
     ) : onDay ? (
         <span className={CHIP} data-testid="vr2-day"><CalendarDays size={14} className="mr-1 text-[#0F6B3A]" aria-hidden="true" />{dayText}</span>
@@ -230,7 +244,7 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
         <div ref={root} className="space-y-3 pt-2" style={{ fontFamily: SANS }} data-testid="vr2-saved">
             <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
             <ResultHead logs={nowLogs} crops={p.crops} placeLabel={placeText} speakers={day.speakers} whoLabel={onDay ? DS.who(onDay) : RS.todayWho}
-                onChangePlot={!severalPlots && canMoveSavedEntry() ? () => p.onEdit(primary.id) : undefined} dayChip={dayChip} />
+                onChangePlot={!severalPlots && !closedNow && canMoveSavedEntry() ? () => p.onEdit(primary.id) : undefined} dayChip={dayChip} />
 
             {(showMeter || streak) && (
                 <section className="flex flex-col items-center gap-1.5 rounded-[22px] border-[1.5px] border-[#F0DFA6] p-3" data-testid="vr2-saved-card"
@@ -265,7 +279,11 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                     clip={p.clips.get(primary.id)} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id}
                     onTogglePlay={() => p.onTogglePlay(primary.id)} heard={heardYes.has(primary.id)} kit={kit} verdicts={verdictsOf(nowLogs)}
                     onOpenProduct={openProduct} onTellMore={p.onTellMore} idPrefix="vr2" />
-                {severalPlots ? (
+                {closedNow ? (
+                    <p className="m-0 flex items-start gap-2 rounded-2xl border border-[#E7E5E4] bg-[#FAFAF9] p-3 text-[15px] font-bold leading-snug text-[#44403C]" data-testid="vr2-edit-closed">
+                        <LineGlyph name="pen" size={16} className="mt-0.5 flex-none" />{p.viewerIsOwner ? CW.windowClosedOwner : CW.windowClosed}
+                    </p>
+                ) : severalPlots ? (
                     // He named several plots: one log each. Each can be fixed, and each says if it will not reach the server.
                     <div className="flex flex-col gap-1.5" data-testid="vr2-plots">
                         <div className="text-[13px] font-extrabold text-[#5F6B63]">{SW.plotsEach(digitsFor(day.current.length, language))}</div>
@@ -296,12 +314,26 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
             <div aria-hidden="true" data-testid="vr2-end-room" style={{ height: inLayer ? 8 : BOTTOM_BAR_CLEARANCE }} />
             {opened && (
                 <TalkView recs={opened.recs} primary={opened.rec} now={opened.now} talk={opened.now ? nowTalk : talkDayOf(opened.recs, openedLogs)}
-                    editable={talkEditableAt(openedLogs)} unclear={opened.now ? p.unclear : []} clip={p.clips.get(opened.rec.id)}
+                    editable={talkWindowFor(openedLogs, p.viewerUserId) === 'open'} unclear={opened.now ? p.unclear : []} clip={p.clips.get(opened.rec.id)}
                     durationSec={p.lengthOf(opened.rec.id)} playing={p.playingId === opened.rec.id} onTogglePlay={() => p.onTogglePlay(opened.rec.id)}
                     heard={heardYes.has(opened.rec.id)} kit={kit} verdicts={verdictsOf(openedLogs)} onOpenProduct={openProduct}
                     onClose={() => setOpenTalk(null)} />
             )}
-            {card && kit && <SavedProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
+            {card && kit && (() => {
+                // Part 03 B2: a library product opens the flash card, grown out of its row; a product the library does not know keeps the
+                // existing bottom card (its photo and "did you mean" names).
+                const log = kit.logById.get(card.logId);
+                const close = () => setCard(null);
+                if (identityOf(card.item, answersOf(log, card.item.ref)).state !== 'found') return <SavedProductCard item={card.item} logId={card.logId} kit={kit} onClose={close} />;
+                const box = log ? productBoxesOf(log).find(b => b.items.some(i => i.id === card.item.id)) : undefined;
+                const rec = [...day.current, ...day.earlier].find(r => r.logIds.includes(card.logId));
+                const now = !!rec && day.current.includes(rec);
+                const talk = now ? nowTalk : rec ? talkDayOf([rec], logsOfTalk([rec], logById)) : undefined;
+                return (
+                    <ProductFlashCard item={card.item} logId={card.logId} kit={kit} box={box} words={box ? tankWordsOf(day, kit, card.logId, box) : undefined}
+                        talk={talk} speaker={(now ? primary : rec)?.who} from={card.from} onClose={close} />
+                );
+            })()}
             {asking && (
                 <HeardSheet mine={asking.who.you} onYes={() => answerHeard(asking.id, true)} onClose={() => answerHeard(asking.id, false)}
                     onAgain={() => { answerHeard(asking.id, false); p.onTogglePlay(asking.id); }} />

@@ -294,6 +294,12 @@ export interface DailyLogDto extends RecordAudienceFields {
     captureScope?: string | null;
     /** lane MU-3 fix 1 (F3) — `true` = its words and voice are withheld by the money rule (D-66). */
     wordsWithheldForMoney?: boolean | null;
+    /**
+     * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — until when the talk's OWN speaker (`operatorUserId`) may
+     * change what he said in it: the server's clock at the create + 24 h (`DailyLog.EditableUntilUtc`), ISO UTC like `createdAtUtc`.
+     * ABSENT when the record is not a voice talk (no window). It binds only the speaker; for everyone else it is information.
+     */
+    editableUntilUtc?: string | null;
 }
 
 /** spec: plr-d10 (lane F1) — one stored content row (`ShramSafal…LogContentDto`). */

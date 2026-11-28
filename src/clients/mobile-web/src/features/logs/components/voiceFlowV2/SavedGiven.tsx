@@ -19,17 +19,17 @@ import { voiceFlowWords } from '../../../voice/flowV2/voiceFlowWords';
 import { dayLinesOf, lineKeyOfVerdict } from '../voiceResult/DaySummaryLines';
 import { MixBox, type TankVerdict } from '../voiceResult/MixBox';
 import type { ProductAnswerKit } from '../voiceResult/ProductCard';
-import type { ProductBox, ProductItem } from '../voiceResult/productModel';
+import type { ProductBox } from '../voiceResult/productModel';
 import type { DayView } from '../voiceResult/resultModel';
 import { RbSec } from './savedBits';
-import { SavedTank, type TankWords } from './SavedProducts';
+import { SavedTank, type OpenProduct, type TankWords } from './SavedProducts';
 import { productWordsOf, tankCountOf, waterWordsOf } from './tankFacts';
 
 export interface SavedGivenProps {
     day: DayView;
     kit?: ProductAnswerKit;
     verdicts: readonly TankVerdict[];
-    onOpen: (item: ProductItem, logId: string) => void;
+    onOpen: OpenProduct;
     /** `box` (default): its own white section, as before. `row`: the releases only, as rows of "यातून काय समजलं" (the final design). */
     look?: 'box' | 'row';
 }
@@ -45,7 +45,8 @@ const transcriptOf = (day: DayView, logId: string): string => {
 const logOf = (day: DayView, kit: ProductAnswerKit | undefined, logId: string): DailyLog | undefined =>
     kit?.logById.get(logId) ?? [...day.current, ...day.earlier].find(r => r.log.id === logId)?.log;
 
-const wordsFor = (day: DayView, kit: ProductAnswerKit | undefined, logId: string, box: ProductBox): TankWords => {
+/** The release's tank count and his words (the final design's row and the product flash card read the same). */
+export const tankWordsOf = (day: DayView, kit: ProductAnswerKit | undefined, logId: string, box: ProductBox): TankWords => {
     const transcript = transcriptOf(day, logId);
     const tanks = tankCountOf(logOf(day, kit, logId), box.id, transcript);
     return {
@@ -69,7 +70,7 @@ export const SavedGiven: React.FC<SavedGivenProps> = ({ day, kit, verdicts, onOp
         return (
             <div key={line.key} className="space-y-1.5" data-testid={`vr2-given-${line.key}`}>
                 <SavedTank box={box} logId={entry.logId} kit={kit} onOpen={onOpen}
-                    {...(look === 'row' ? { look: 'row' as const, words: wordsFor(day, kit, entry.logId, box) } : {})} />
+                    {...(look === 'row' ? { look: 'row' as const, words: tankWordsOf(day, kit, entry.logId, box) } : {})} />
                 {mine.map((v, i) => <MixBox key={`${v.logId}:${v.hostEventId}:${i}`} verdict={v} />)}
             </div>
         );

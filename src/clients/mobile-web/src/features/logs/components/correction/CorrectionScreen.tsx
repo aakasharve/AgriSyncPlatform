@@ -19,7 +19,7 @@
  * access the screen says where it can be changed.
  */
 import React from 'react';
-import { ArrowLeft, CalendarDays, Keyboard, MapPin, Mic, Pencil, Plus, RotateCcw, Users, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, Keyboard, MapPin, Mic, Pencil, Plus, RotateCcw, Users, X } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { PHONE_COLUMN } from '../phoneColumn';
 import { BlockerRow, TypedTag } from '../voiceResult/DayParts';
@@ -51,6 +51,11 @@ export interface CorrectionScreenProps {
     keepOne: boolean;
     /** A हजेरी-door record and no हजेरी access: not changed here. */
     refused: boolean;
+    /**
+     * Part 03 B5 — he is this talk's own speaker and its 24 hours are over: the calm line saying so, and no change controls (the
+     * server would refuse every one). Absent = the window does not close this screen for him.
+     */
+    windowClosedLine?: string;
     saving: boolean;
     saveFailed: boolean;
     saveFailedReason?: 'labour' | 'other';
@@ -149,7 +154,11 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                         </div>
                     )}
 
-                    {p.refused ? (
+                    {p.windowClosedLine ? (
+                        <p className="m-0 flex items-start gap-2 rounded-2xl border border-stone-300 bg-white p-3 text-[15px] font-bold leading-snug text-stone-800" data-testid="corr-window-closed" role="status">
+                            <Clock size={20} className="mt-0.5 shrink-0 text-stone-500" aria-hidden="true" />{p.windowClosedLine}
+                        </p>
+                    ) : p.refused ? (
                         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold leading-snug text-amber-950" data-testid="corr-refused">
                             <p className="m-0 flex items-start gap-2"><Users size={20} className="mt-0.5 shrink-0" aria-hidden="true" />{words.labourDoor}</p>
                             {p.onOpenAttendance && (
