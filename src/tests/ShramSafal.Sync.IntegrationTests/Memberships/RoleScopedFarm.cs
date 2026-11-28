@@ -574,6 +574,13 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
     {
     }
 
+    /// <summary>
+    /// spec: plr-d10 pilot lane NO-TRIAL — <c>Pilot:TrialEnforcementEnabled</c> for this host. TRUE by default, so every suite written
+    /// before the switch existed (the schedule trial rules, SCH-GATE) still proves them unchanged; a pilot suite overrides it to false
+    /// (the shipped default).
+    /// </summary>
+    protected virtual bool TrialEnforcementEnabled => true;
+
     private async Task<WebApplication> BuildHostAsync(string appConn)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
@@ -590,6 +597,7 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
             ["ConnectionStrings:ShramSafalDb_ReadOnly"] = appConn,
             ["ConnectionStrings:UserDb_ReadOnly"] = appConn,
             ["ShramSafal:Storage:DataDirectory"] = storageDir,
+            ["Pilot:TrialEnforcementEnabled"] = TrialEnforcementEnabled ? "true" : "false",
         });
 
         builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });

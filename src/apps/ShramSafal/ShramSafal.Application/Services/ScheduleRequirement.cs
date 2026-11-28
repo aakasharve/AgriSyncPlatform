@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -20,8 +21,11 @@ public sealed record PlanningSeason(Guid CycleId, string CropName, DateOnly Star
 /// <summary>
 /// The owner account's subscription as ShramSafal may read it (<c>ssf.subscription_projections</c>): is it Trialing, when the trial
 /// ends (null = the row carries no trial end), and when its validity ends.
+/// <para>spec: plr-d10 pilot lane NO-TRIAL — <paramref name="IsActive"/>: the row is a PAID subscription (status Active), the one
+/// standing whose schedule requirement has nothing to do with a trial. Optional and last (false), so earlier constructions keep
+/// compiling; read only while the trial rules are off.</para>
 /// </summary>
-public sealed record TrialStanding(bool IsTrialing, DateTime? TrialEndsAtUtc, DateTime ValidUntilUtc);
+public sealed record TrialStanding(bool IsTrialing, DateTime? TrialEndsAtUtc, DateTime ValidUntilUtc, bool IsActive = false);
 
 /// <summary>
 /// Everything <see cref="ScheduleRequirement.Decide"/> reads about ONE plot; no I/O happens after this is built.
@@ -43,7 +47,11 @@ public sealed record PlanningFacts(
     Guid? PlotFarmOwnerUserId,
     // spec: plr-d10 schedule slice 3 (SM-7 = yes, from one work) - the plot's CURRENT season holds at least one active work of his own schedule still being built
     // (ssf.own_schedule_items). Such a schedule satisfies "a schedule is needed after the trial" (D-76) and is NEVER main by being saved (review focus 2).
-    bool HasOwnWork = false);
+    bool HasOwnWork = false,
+    // spec: plr-d10 pilot lane NO-TRIAL - Pilot:TrialEnforcementEnabled as the loader read it. False (the pilot) = no trial rule applies: no plot
+    // is in its trial (every stage open, no today-only stage), and the trial's end never asks for a schedule. Last and true by default, so a
+    // construction written before the switch decides exactly as before; every loader in ScheduleRequirement passes it by name.
+    bool TrialRulesApply = true);
 
 /// <summary>
 /// What the planning gate says about one plot (the plan's record, plus the season it was judged on - open point 6).
@@ -65,7 +73,7 @@ public sealed record PlotPlanningState(
 
 /// <summary>
 /// spec: plr-d10 lane SCH-GATE-a (founder D-76, D-83 = 1) - does this plot need a schedule chosen before NEW planning, the शेड्यूल page
-/// and तुलना? Only these rules are built; there is no switch.
+/// and तुलना? Only these rules are built; the one switch is the pilot's (below).
 /// <list type="bullet">
 /// <item><see cref="PlotPlanningState.InTrial"/> (R9): the owner account's subscription is Trialing AND now is before its trial end
 /// (else its valid-until) - the daily expiry job can lag a day, so the clock decides first - AND no pilot access extension is on (an
@@ -82,6 +90,11 @@ public sealed record PlotPlanningState(
 /// <b>Read only by the pull and by <see cref="ScheduleStagePlan"/>.</b> A record door (daily log, attendance, cost entry), a planned-work
 /// write or any /sync/push case never asks it: the server never refuses, parks or hides a record because of a schedule (D-83 = 1). A
 /// source-scan test pins that.
+/// <para>spec: plr-d10 pilot lane NO-TRIAL (CTO ruling, 28 Nov 2026: nothing about the trial applies during the pilot) - while
+/// <see cref="PilotOptions.TrialEnforcementEnabled"/> is false (<see cref="PlanningFacts.TrialRulesApply"/>): <c>InTrial</c> is false and
+/// there is no <c>TrialStage</c> (every stage open), and <c>NeedsSchedule</c> is asked ONLY of a farm on a paid subscription (Active, before
+/// its valid-until) - the one standing whose requirement is not the trial's end. <c>FollowsAllowed</c> and <c>CanFollowSomething</c> are
+/// facts, unchanged. With the switch on, every answer is the one this class gave before it existed.</para>
 /// </summary>
 public sealed class ScheduleRequirement(
     IShramSafalRepository repository,
@@ -89,8 +102,12 @@ public sealed class ScheduleRequirement(
     GetScheduleTemplatesHandler templates,
     IClock clock,
     // spec: plr-d10 schedule slice 3 - the works of his own schedule still being built (the planning gate counts one, SM-7).
-    IOwnScheduleStore ownWork)
+    IOwnScheduleStore ownWork,
+    // spec: plr-d10 pilot lane NO-TRIAL - Pilot:TrialEnforcementEnabled, carried into every PlanningFacts this class builds.
+    IOptions<PilotOptions> pilotOptions)
 {
+    private bool TrialRulesApply => pilotOptions.Value.TrialEnforcementEnabled;
+
     // ---- the decision (pure) ---------------------------------------------------------------------------------
 
     public static PlotPlanningState Decide(PlanningFacts facts)
@@ -124,10 +141,16 @@ public sealed class ScheduleRequirement(
                 checkedCrops.Contains(ScheduleLibrary.CropGroupKey(t.CropType))));
 
         var trialStage = inTrial ? TrialStageOf(facts, season, followed, byId) : null;
+        // The trial rules on: "after the trial" asks (as before). Off (the pilot): only a paid farm is asked; the trial's end asks nothing.
+        var asks = facts.TrialRulesApply ? !inTrial : IsPaidNow(facts);
         return new PlotPlanningState(
             facts.PlotId, season.CycleId, inTrial, followsAllowed, canFollowSomething, trialStage,
-            NeedsSchedule: !inTrial && !followsAllowed && canFollowSomething);
+            NeedsSchedule: asks && !followsAllowed && canFollowSomething);
     }
+
+    /// <summary>spec: plr-d10 pilot lane NO-TRIAL - a paid subscription (Active) still inside its paid period.</summary>
+    private static bool IsPaidNow(PlanningFacts facts) =>
+        facts.Standing is { IsActive: true } standing && facts.NowUtc < standing.ValidUntilUtc;
 
     /// <summary>The plot's Active subscriptions on its CURRENT season (anything else is ignored).</summary>
     public static IReadOnlyList<ScheduleSubscription> FollowedNow(PlanningFacts facts, PlanningSeason season) =>
@@ -137,7 +160,8 @@ public sealed class ScheduleRequirement(
 
     private static bool IsInTrial(PlanningFacts facts)
     {
-        if (facts.Standing is not { IsTrialing: true } standing || facts.HasAccessExtension)
+        // spec: plr-d10 pilot lane NO-TRIAL - with the trial rules off no plot is in its trial.
+        if (!facts.TrialRulesApply || facts.Standing is not { IsTrialing: true } standing || facts.HasAccessExtension)
         {
             return false;
         }
@@ -186,7 +210,7 @@ public sealed class ScheduleRequirement(
         var plot = await repository.GetPlotByIdAsync(plotId, ct);
         if (farm is null || plot is null || (Guid)plot.FarmId != farmId)
         {
-            return Result.Success(new PlanningFacts(plotId, null, now, null, false, [], [], _ => null, null));
+            return Result.Success(new PlanningFacts(plotId, null, now, null, false, [], [], _ => null, null, TrialRulesApply: TrialRulesApply));
         }
 
         var season = CurrentSeason(await repository.GetCropCyclesByPlotIdAsync(plotId, ct));
@@ -204,7 +228,8 @@ public sealed class ScheduleRequirement(
         var originFor = await OriginsAsync(library, callerUserId, ct);
         var hasOwnWork = season is not null && (await ownWork.SeasonsWithWorkAsync([farmId], ct)).Contains((plotId, season.CycleId));
         return Result.Success(new PlanningFacts(
-            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value, hasOwnWork));
+            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value, hasOwnWork,
+            TrialRulesApply: TrialRulesApply));
     }
 
     /// <summary>
@@ -224,7 +249,7 @@ public sealed class ScheduleRequirement(
         {
             foreach (var id in plotIds)
             {
-                result[id] = new PlanningFacts(id, null, now, null, false, [], [], _ => null, null);
+                result[id] = new PlanningFacts(id, null, now, null, false, [], [], _ => null, null, TrialRulesApply: TrialRulesApply);
             }
 
             return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
@@ -266,7 +291,8 @@ public sealed class ScheduleRequirement(
         {
             result[id] = new PlanningFacts(
                 id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor, farm.OwnerUserId.Value,
-                seasonOf[id] is { } s && withOwnWork.Contains((id, s.CycleId)));
+                seasonOf[id] is { } s && withOwnWork.Contains((id, s.CycleId)),
+                TrialRulesApply: TrialRulesApply);
         }
 
         return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
@@ -335,7 +361,8 @@ public sealed class ScheduleRequirement(
             states.Add(Decide(new PlanningFacts(
                 plot.Id, season, now, standing.Standing, standing.Extension,
                 followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value,
-                season is not null && withOwnWork.Contains((plot.Id, season.CycleId)))));
+                season is not null && withOwnWork.Contains((plot.Id, season.CycleId)),
+                TrialRulesApply: TrialRulesApply)));
         }
 
         return states;
@@ -354,7 +381,7 @@ public sealed class ScheduleRequirement(
             return (null, false);
         }
 
-        var standing = new TrialStanding(row.IsTrialing, row.TrialEndsAtUtc, row.ValidUntilUtc);
+        var standing = new TrialStanding(row.IsTrialing, row.TrialEndsAtUtc, row.ValidUntilUtc, IsActive: row.IsActive);
         // An extension only matters to a farm that would otherwise read as IN its trial (R9: it then counts as after it); for every
         // other farm the answer is "after the trial" already, so the extension is not asked (one read less per account per pull).
         var wouldBeInTrial = row.IsTrialing && now < (row.TrialEndsAtUtc ?? row.ValidUntilUtc);

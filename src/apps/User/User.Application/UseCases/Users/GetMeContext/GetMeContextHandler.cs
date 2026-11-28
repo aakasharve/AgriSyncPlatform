@@ -21,7 +21,10 @@ public sealed class GetMeContextHandler(
     // no invitations listed, never a guess.
     IMeInvitationSnapshotReader? invitationReader = null,
     // spec: plr-d10 pilot lane IDENT (S1) — optional the same way: his own identity card, for his names in both scripts.
-    IUserIdentityProfileStore? identityProfiles = null)
+    IUserIdentityProfileStore? identityProfiles = null,
+    // spec: plr-d10 pilot lane NO-TRIAL — optional the same way: absent = the plan alerts as before. The production composition
+    // supplies it (Program.cs); while it says the time limit is off (the pilot) no plan alert is sent.
+    ITrialEnforcementReader? trialEnforcement = null)
 {
     private const int PlanExpiringWindowDays = 7;
 
@@ -71,7 +74,7 @@ public sealed class GetMeContextHandler(
         var activeFarms = farmDtos
             .Where(f => string.Equals(f.Status, ActiveSeatStatus, StringComparison.Ordinal))
             .ToList();
-        var alerts = BuildAlerts(user.PhoneVerifiedAtUtc, activeFarms, utcNow);
+        var alerts = BuildAlerts(user.PhoneVerifiedAtUtc, activeFarms, utcNow, planAlerts: trialEnforcement?.TrialEnforcementEnabled ?? true);
 
         // spec: plr-d10 lane MU-2 — his waiting invitations (one read model with the invitee routes). Only for this
         // release's phone (includePending); an older app keeps today's exact body.
@@ -227,10 +230,13 @@ public sealed class GetMeContextHandler(
             CanSeeBilling: canSeeBilling);
     }
 
+    /// <param name="planAlerts">spec: plr-d10 pilot lane NO-TRIAL — false (the pilot: no time limit) = no <c>plan_expiring</c> /
+    /// <c>plan_expired</c> alert. Every other alert, and the farms' own plan fields, are unchanged.</param>
     private static IReadOnlyList<MeAlertDto> BuildAlerts(
         DateTime? phoneVerifiedAtUtc,
         IReadOnlyList<MeFarmDto> farms,
-        DateTime utcNow)
+        DateTime utcNow,
+        bool planAlerts)
     {
         var alerts = new List<MeAlertDto>();
 
@@ -242,6 +248,11 @@ public sealed class GetMeContextHandler(
         if (farms.Count == 0)
         {
             alerts.Add(new MeAlertDto("no_farms_yet", "info", null, null));
+            return alerts;
+        }
+
+        if (!planAlerts)
+        {
             return alerts;
         }
 

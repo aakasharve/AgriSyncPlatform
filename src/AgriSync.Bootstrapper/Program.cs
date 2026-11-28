@@ -360,6 +360,9 @@ try
     // spec: plr-d10 pilot lane IDENT (S3) — his own face for his identity card (ShramSafal's ssf.pictures, read under his own user scope).
     builder.Services.AddScoped<User.Application.Ports.IMePictureSnapshotReader,
         AgriSync.Bootstrapper.Adapters.MePictureSnapshotReader>();
+    // spec: plr-d10 pilot lane NO-TRIAL — /me/context's plan alerts follow Pilot:TrialEnforcementEnabled (off = none).
+    builder.Services.AddSingleton<User.Application.Ports.ITrialEnforcementReader,
+        AgriSync.Bootstrapper.Adapters.PilotTrialEnforcementReader>();
 
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")
