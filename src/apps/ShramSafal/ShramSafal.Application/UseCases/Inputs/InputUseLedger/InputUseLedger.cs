@@ -69,7 +69,9 @@ public sealed class GetInputUseLedgerHandler(IInputUseStore store, IShramSafalRe
             return Result.Failure<InputUseLedgerDto>(ShramSafalErrors.Forbidden);
         }
 
-        var today = DateOnly.FromDateTime(clock.UtcNow);
+        // The farm's India day, as every record's date is (LogDayRule). The UTC date is the day BEFORE from 00:00 to 05:30 IST, and the
+        // default window then left out every use he recorded today (found by the real-Postgres ledger tests run at 02:26 IST, 28 Nov).
+        var today = ShramSafal.Domain.Logs.LogDayRule.FarmToday(clock.UtcNow);
         var last = to ?? today;
         var first = from ?? last.AddYears(-1);
         if (first > last)
