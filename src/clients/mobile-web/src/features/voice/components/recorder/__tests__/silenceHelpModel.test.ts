@@ -7,8 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    AUTO_SILENT_CANCEL_MS, COACH_MS, LONG_TALK_MS, QUIET_DONE_MS, SPEECH_LEVEL, SPEECH_MIN_MS, ZERO_UNMEASURABLE_MS,
-    silenceStage, silenceStart, silenceStep, silenceUnmeasurable, type SilenceState,
+    AUTO_SILENT_CANCEL_MS, COACH_MS, LONG_TALK_MS, QUIET_DONE_MS, QUIET_STOP_MS, QUIET_STOP_SHOW_MS, QUIET_STOP_SPEECH_MS, SPEECH_LEVEL,
+    SPEECH_MIN_MS, ZERO_UNMEASURABLE_MS, quietStopDue, quietStopSince, silenceStage, silenceStart, silenceStep, silenceUnmeasurable,
+    speechHeldMs, type SilenceState,
 } from '../silenceHelpModel';
 
 const T0 = 1_000_000;
@@ -91,5 +92,68 @@ describe('silenceHelpModel', () => {
         expect(silenceStage(s, T0 + LONG_TALK_MS - 1)).toBe('none');
         expect(silenceStage(s, T0 + LONG_TALK_MS)).toBe('doneAsk');
         expect(silenceStage(s, T0 + 75_000)).toBe('none');
+    });
+});
+
+describe('silenceHelpModel — the quiet stop (A2)', () => {
+    it('keeps the founder\'s numbers: 3 s of quiet, after at least 1 s of speech, shown from 0.6 s', () => {
+        expect(QUIET_STOP_MS).toBe(3000);
+        expect(QUIET_STOP_SPEECH_MS).toBe(1000);
+        expect(QUIET_STOP_SHOW_MS).toBe(600);
+    });
+
+    it('2 s of speech, then quiet: due at exactly 3 s of quiet, measured from the first quiet reading', () => {
+        let s = feed(silenceStart(T0), 0.02, 0, 500);
+        s = feed(s, 0.3, 500, 2600);                   // above from 500 to 2500 (the last reading)
+        s = silenceStep(s, 0.02, T0 + 2600);           // the first quiet reading
+        expect(speechHeldMs(s)).toBe(2000);
+        expect(quietStopSince(s)).toBe(T0 + 2600);
+        s = feed(s, 0.02, 2700, 6000);
+        expect(quietStopDue(s, T0 + 2600 + QUIET_STOP_MS - 1)).toBe(false);
+        expect(quietStopDue(s, T0 + 2600 + QUIET_STOP_MS)).toBe(true);
+    });
+
+    it('less than 1 s of speech is never stopped by itself: it keeps listening, and "finished?" still comes at 5 s', () => {
+        let s = feed(silenceStart(T0), 0.3, 0, 800);   // 700 ms of speech
+        s = feed(s, 0.02, 800, 20_000);
+        expect(speechHeldMs(s)).toBe(700);
+        expect(quietStopSince(s)).toBeNull();
+        expect(quietStopDue(s, T0 + 20_000)).toBe(false);
+        expect(silenceStage(s, (s.lastSpeechAt as number) + QUIET_DONE_MS)).toBe('doneAsk');
+    });
+
+    it('two short runs add up: 600 ms + 600 ms of speech passes the 1 s floor', () => {
+        let s = feed(silenceStart(T0), 0.3, 0, 700);   // 600 ms
+        s = feed(s, 0.02, 700, 1500);
+        expect(quietStopSince(s)).toBeNull();
+        s = feed(s, 0.3, 1500, 2200);                  // 600 ms more
+        s = feed(s, 0.02, 2200, 2300);
+        expect(speechHeldMs(s)).toBe(1200);
+        expect(quietStopSince(s)).toBe(T0 + 2200);
+    });
+
+    it('blips shorter than speech do not count as speech, but they do start the quiet again', () => {
+        let s = feed(silenceStart(T0), 0.3, 0, 1600);  // 1.5 s of speech
+        s = feed(s, 0.02, 1600, 3600);                 // 2 s quiet
+        s = feed(s, 0.4, 3600, 3800);                  // a 100 ms blip (a cough)
+        s = feed(s, 0.02, 3800, 3900);
+        expect(speechHeldMs(s)).toBe(1500);
+        expect(quietStopSince(s)).toBe(T0 + 3800);
+        expect(quietStopDue(s, T0 + 4700)).toBe(false); // 3.1 s after the first quiet, but only 0.9 s after the blip
+        expect(quietStopDue(s, T0 + 6800)).toBe(true);
+    });
+
+    it('while he speaks it is never due, however long the talk', () => {
+        const s = feed(silenceStart(T0), 0.3, 0, 30_000);
+        expect(speechHeldMs(s)).toBeGreaterThan(QUIET_STOP_SPEECH_MS);
+        expect(quietStopSince(s)).toBeNull();
+        expect(quietStopDue(s, T0 + 60_000)).toBe(false);
+    });
+
+    it('no level, or a level stuck at 0: never due (P5)', () => {
+        const none = feed(silenceStart(T0), undefined, 0, 30_000);
+        expect(quietStopDue(none, T0 + 30_000)).toBe(false);
+        const zero = feed(silenceStart(T0), 0, 0, 30_000);
+        expect(quietStopDue(zero, T0 + 30_000)).toBe(false);
     });
 });

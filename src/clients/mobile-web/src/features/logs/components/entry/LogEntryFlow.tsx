@@ -20,8 +20,17 @@
  * Back is ONE step on a big labelled "मागे" and never leaves the app: mic/plots -> crop -> home
  * (the हजेरी arrival goes back to हजेरी, where it came from). Android hardware Back follows the same
  * steps (`useBackDismiss`). Tapping the आजची कामे tab again (`homeRequested`) returns here, fresh.
+ *
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (part 03, A1; the founder's final design, 28 Nov) — on the log tab's full-screen
+ * flow (flag on, not the हजेरी door) the plot page and the mic page are TWO pages (`MicPage.tsx`): he chooses the plot(s), then one
+ * swipe up or a tap on the green bar opens the mic page, which arms the 3 s countdown (`armSeq` bumps on each opening, never on a plot
+ * tap). A farm with ONE plot has nothing to choose on the plot page: the crop tap that picks it (`cropSelection.toggleCrop`) opens
+ * the mic page straight away. Arriving with a place already chosen (back from the result, an error, the whole farm chosen for him)
+ * opens the mic page unarmed (spec V2-5). "प्लॉट बदला" and Back go from the mic page to the plot page. Elsewhere (the ONE mic's
+ * in-page flow, the flag off) the mic stays under the plots, as before.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { hapticFeedback } from '../../../../shared/utils/haptics';
 import type { CropProfile, DailyLog } from '../../../../types';
 import type { LogScope, LogSegment } from '../../../../domain/types/log.types';
 import CropSelector from '../../../context/components/CropSelector';
@@ -41,6 +50,7 @@ import { placeLabelOf } from '../../../../core/navigation/placeLabel';
 import { resultStr } from '../voiceResult/resultStrings';
 import { VoiceLayer } from '../voiceFlowV2/VoiceLayer';
 import { clearEntryOpening, peekEntryOpening } from './entryOpening';
+import { MicPage, MicPageBar, useSwipeUp } from './MicPage';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -108,6 +118,13 @@ export function plotsByCrop(crops: CropProfile[], scope: LogScope): Record<strin
     return map;
 }
 
+/**
+ * spec plr-d10 (part 03, A1) — the farm on this screen has exactly ONE plot: the crop tap already picks it (a crop with a single plot has
+ * that plot chosen for him, `cropSelection.toggleCrop`), so the plot page would hold no choice and the mic page opens at once.
+ */
+export const hasOnlyOnePlot = (crops: readonly { plots: readonly unknown[] }[]): boolean =>
+    crops.reduce((n, c) => n + c.plots.length, 0) === 1;
+
 export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
@@ -126,15 +143,26 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     // spec voice-flow-v2-2026-11-23 (H7) — only with the flag on does a plot tap change any new state.
     const micCountdown = FEATURE_FLAGS.voiceFlowV2 === true && !labourIntent;
     const [armSeq, setArmSeq] = useState(0);
+    // spec plr-d10 (part 03, A1) — the plot page and the mic page, two pages, on the log tab's full-screen flow only.
+    const twoPages = micCountdown && fullScreen;
+    const [micPage, setMicPage] = useState(() => twoPages && step === 'entry' && entryStep === 'plot');
+    /** He opened the mic page (the green bar, a swipe up, or a farm with one plot): its countdown is armed by this opening. */
+    const openMicPage = () => {
+        hapticFeedback.light();
+        setMicPage(true);
+        setArmSeq(n => n + 1);
+    };
 
     const goHome = () => {
         setLogScope(EMPTY_SCOPE);
         setEntryStep('crop');
+        setMicPage(false);
         setStep('home');
         if (labourIntent) onClearLabourIntent();
     };
     const backFromCrop = () => (onExit ? onExit() : labourIntent ? onBackToLabour() : goHome());
     const backOneStep = () => {
+        if (micPage) { setMicPage(false); return; }
         if (entryStep === 'plot') { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); return; }
         backFromCrop();
     };
@@ -161,8 +189,19 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         micAnchor.current?.scrollIntoView?.({ block: recording ? 'start' : 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     }, [step, ready, recording]);
+    // A1 — one swipe up on the plot page, once a place is chosen, opens the mic page (as the green bar does).
+    const plotPage = useRef<HTMLDivElement | null>(null);
+    useSwipeUp(plotPage, twoPages && !micPage && step === 'entry' && ready, openMicPage);
 
     const hooks: RecorderHooks = micCountdown ? { onRecordingChange: setRecording, armSeq } : { onRecordingChange: setRecording };
+    const placeOf = (language: string | undefined) => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm);
+    const monthOf = { history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null };
+    const pinned = pinnedQuestion ? (
+        <div data-testid="shramsathi-pinned-question" className="mb-3 rounded-xl border px-4 py-3 text-[16px] font-medium"
+            style={{ fontFamily: SANS, backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F' }}>
+            {pinnedQuestion}
+        </div>
+    ) : null;
 
     if (recordingSegment) {
         return (
@@ -184,8 +223,23 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         );
     }
 
+    if (twoPages && micPage) {
+        // A1 — the mic page: "प्लॉट बदला", then THE recorder; its card counts 3 s down when this opening armed it.
+        return (
+            <VoiceLayer step="mic" monthOf={monthOf} placeLabel={placeOf}>
+                <div data-testid="log-entry-flow" data-step="mic" data-recording={recording ? 'yes' : 'no'}>
+                    <MicPage recording={recording} onChangePlot={() => setMicPage(false)}>
+                        {micLead}
+                        {pinned}
+                        {renderRecorder(hooks)}
+                    </MicPage>
+                </div>
+            </VoiceLayer>
+        );
+    }
+
     const entry = (
-        <div data-testid="log-entry-flow" data-step={entryStep} data-recording={recording ? 'yes' : 'no'}>
+        <div ref={plotPage} data-testid="log-entry-flow" data-step={entryStep} data-recording={recording ? 'yes' : 'no'}>
             {entryStep === 'crop' && (
                 <div className="flex items-center gap-2 px-3 pt-2">
                     <FlowBackButton onClick={backFromCrop} testId="entry-back-home" />
@@ -201,7 +255,9 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                         setLogScope({ selectedCropIds: newCrops, selectedPlotIds: plots, mode: plots.length > 1 ? 'multi' : 'single', applyPolicy: 'broadcast' });
                         if (plots.length > 0 || newCrops.includes('FARM_GLOBAL')) {
                             onChooseVoice();
-                            if (micCountdown) setArmSeq(n => n + 1);
+                            // A1 — two pages: a plot tap never arms the countdown (opening the mic page does); a one-plot farm opens it now.
+                            if (twoPages) { if (plots.length > 0 && hasOnlyOnePlot(crops)) openMicPage(); }
+                            else if (micCountdown) setArmSeq(n => n + 1);
                         }
                     }}
                     stepper={{
@@ -210,19 +266,16 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                         lead: ctx => <SathiAskBand {...ctx} labour={labourIntent} forDay={forDay} />,
                         labels: STEPPER_LABELS,
                         focusFooter: recording,
-                        footer: () => (
-                            // scroll margins keep the card clear of the bottom bar (its whole room, lane FX-1) and of the top edge
-                            <div ref={micAnchor} className="scroll-mt-2" style={{ scrollMarginBottom: BOTTOM_BAR_CLEARANCE }} data-testid="flow-mic-anchor">
-                                {micLead}
-                                {pinnedQuestion && (
-                                    <div data-testid="shramsathi-pinned-question" className="mb-3 rounded-xl border px-4 py-3 text-[16px] font-medium"
-                                        style={{ fontFamily: SANS, backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F' }}>
-                                        {pinnedQuestion}
-                                    </div>
-                                )}
-                                {renderRecorder(hooks)}
-                            </div>
-                        ),
+                        footer: twoPages
+                            ? () => <MicPageBar placeOf={placeOf} onOpen={openMicPage} />
+                            : () => (
+                                // scroll margins keep the card clear of the bottom bar (its whole room, lane FX-1) and of the top edge
+                                <div ref={micAnchor} className="scroll-mt-2" style={{ scrollMarginBottom: BOTTOM_BAR_CLEARANCE }} data-testid="flow-mic-anchor">
+                                    {micLead}
+                                    {pinned}
+                                    {renderRecorder(hooks)}
+                                </div>
+                            ),
                     }}
                 />
             </div>
@@ -232,7 +285,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     // F2: from the green door on, the whole step is one full-screen layer (no farm header, tabs or bottom bar); the place chip is
     // drawn once a place is chosen. The right-hand chip is left out: the app holds no "days logged this month" number to show.
     return (
-        <VoiceLayer step={entryStep} monthOf={{ history, plotId: logScope.selectedPlotIds.length === 1 ? logScope.selectedPlotIds[0] : null }} placeLabel={language => placeLabelOf(logScope, crops, language, resultStr(language).wholeFarm)}>
+        <VoiceLayer step={entryStep} monthOf={monthOf} placeLabel={placeOf}>
             {entry}
         </VoiceLayer>
     );

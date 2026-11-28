@@ -3,9 +3,11 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: voice-flow-v2-2026-11-23 (Task 10, amendments H3 / M4) — the saved screen's 30-second self-close clock. Deadline-based
- * (the phone may sleep), reset by his touch (pointer, touch, key, focus — never a scroll), frozen while something is open or a
+ * spec: voice-flow-v2-2026-11-23 (Task 10, amendments H3 / M4) — the saved screen's self-close clock. Deadline-based
+ * (the phone may sleep), reset by his touch (pointer, touch, key, focus), frozen while something is open or a
  * clip plays or the page is hidden (and it starts again from 30), and off entirely when the caller says so.
+ * spec: plr-d10 (part 03, B6) — a scroll resets it too (the founder: "any touch or scroll restarts the wait"); `totalMs` sets the
+ * wait; `noteMs` holds a note up before the close, timed by the same deadline check.
  */
 import React, { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,12 +17,13 @@ import { useIdleClose, type IdleCloseOptions } from '../useIdleClose';
 type HarnessProps = Omit<IdleCloseOptions, 'rootRef'>;
 const Harness: React.FC<HarnessProps> = (p) => {
     const root = useRef<HTMLDivElement>(null);
-    const { secondsLeft, paused } = useIdleClose({ ...p, rootRef: root });
+    const { secondsLeft, paused, noting } = useIdleClose({ ...p, rootRef: root });
     return (
         <div ref={root} data-testid="root">
             <button type="button" data-testid="inside">x</button>
             <span data-testid="left">{secondsLeft}</span>
             <span data-testid="paused">{paused ? 'yes' : 'no'}</span>
+            <span data-testid="noting">{noting ? 'yes' : 'no'}</span>
         </div>
     );
 };
@@ -67,7 +70,7 @@ describe('useIdleClose — the 30 s clock', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('a key, a touch and a focus reset it too; a scroll does not', () => {
+    it('a key, a touch, a focus, a wheel and a scroll reset it too (B6: "any touch or scroll restarts the wait")', () => {
         const onClose = vi.fn();
         render(<Harness pauseReason={null} onClose={onClose} />);
         advance(20_000);
@@ -80,8 +83,45 @@ describe('useIdleClose — the 30 s clock', () => {
         fireEvent.focusIn(screen.getByTestId('inside'));
         expect(screen.getByTestId('left').textContent).toBe('30');
         advance(10_000);
+        fireEvent.wheel(screen.getByTestId('inside'), { deltaY: 40 });
+        expect(screen.getByTestId('left').textContent).toBe('30');
+        advance(10_000);
         fireEvent.scroll(screen.getByTestId('root'));
+        expect(screen.getByTestId('left').textContent).toBe('30');
+        advance(29_500);
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a scroll of what holds the screen (the layer\'s body) resets it; a scroll elsewhere does not', () => {
+        const onClose = vi.fn();
+        const holder = document.createElement('div');
+        const elsewhere = document.createElement('div');
+        document.body.append(holder, elsewhere);
+        render(<Harness pauseReason={null} onClose={onClose} />, { container: holder });
+        advance(20_000);
+        fireEvent.scroll(holder);
+        expect(screen.getByTestId('left').textContent).toBe('30');
+        advance(10_000);
+        fireEvent.scroll(elsewhere);
         expect(screen.getByTestId('left').textContent).toBe('20');
+        holder.remove();
+        elsewhere.remove();
+    });
+
+    it('totalMs sets the wait; noteMs holds the note up before the close', () => {
+        const onClose = vi.fn();
+        render(<Harness pauseReason={null} totalMs={6400} noteMs={2400} onClose={onClose} />);
+        expect(screen.getByTestId('left').textContent).toBe('7');
+        advance(6250);
+        expect(screen.getByTestId('noting').textContent).toBe('no');
+        advance(250);
+        expect(screen.getByTestId('noting').textContent).toBe('yes');
+        // during the note a touch does not hold the move: it was announced
+        fireEvent.pointerDown(screen.getByTestId('inside'));
+        advance(2250);
+        expect(onClose).not.toHaveBeenCalled();
+        advance(250);
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('paused from 10 s to 40 s closes at 70 s (it starts again from 30)', () => {

@@ -20,8 +20,11 @@
  * Its "किती जण होते ते सांगा" opens the ONE mic on the crop question first, then the plot (rule CTX-1).
  *
  * spec: voice-flow-v2-2026-11-23 (Task 12; amendment M5) — behind `FEATURE_FLAGS.voiceFlowV2` only: the sticky back first takes
- * the one step inside the surface (the detail page → the saved screen), and the saved screen's 30-second self-close lands on the
- * WORK HOME (the reset, with no plot chosen: the entry flow opens on its home, so the mic is never armed by it — spec V2-5).
+ * the one step inside the surface (the detail page → the saved screen).
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (part 03, B6; the founder's final design, 28 Nov) — the saved screen's self-move
+ * (after his reading time) and its end button "झालं — पूर्ण शेतीचा आढावा बघा" both open पूर्ण शेतीचा आढावा (`setMainView('reflect')`),
+ * after the same reset as before, with no plot chosen: back on the log tab the entry flow opens on its home, so the mic is never
+ * armed by it (spec V2-5).
  */
 import React from 'react';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
@@ -132,6 +135,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
     ) : undefined;
 
     const backBar = <SavedScreenBack onBack={ctx.handleReset} onStepBack={FEATURE_FLAGS.voiceFlowV2 ? leaveDetailIfOpen : undefined} variant={FEATURE_FLAGS.voiceFlowV2 ? 'chip' : 'bar'} />;
+    // B6 — the recording is done: the log tab is put back on its work home, and पूर्ण शेतीचा आढावा opens.
+    const toFarmReview = () => { ctx.handleReset(); ctx.setLogScope(WORK_HOME_SCOPE); ctx.setMainView('reflect'); };
     const container = (
         <>
             {/* Loaded on first show (lazyComponents); the brief wait shows nothing rather than an English "Loading...". */}
@@ -149,7 +154,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     onEdit={ctx.handleEditLog}
                     onMoveDay={ctx.moveSavedDay}
                     onBack={ctx.handleReset}
-                    onAutoClose={FEATURE_FLAGS.voiceFlowV2 ? () => { ctx.handleReset(); ctx.setLogScope(WORK_HOME_SCOPE); } : undefined}
+                    onAutoClose={FEATURE_FLAGS.voiceFlowV2 ? toFarmReview : undefined}
+                    onFinish={FEATURE_FLAGS.voiceFlowV2 ? toFarmReview : undefined}
                     // Repair R1-g 1b (ruling 3) — "शेताची माहिती भरा" on the farm's first record: the सेट-अप केंद्र place, with the
                     // log tab put back on its work home behind it (the self-close's own reset), so its मागे lands Home.
                     onOpenSetupHub={() => {

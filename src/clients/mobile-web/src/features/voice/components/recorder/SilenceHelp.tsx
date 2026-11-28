@@ -7,7 +7,9 @@
  *   - before he speaks: one example at 4 s, three prompts at 9 s, the stop note at 16 s;
  *   - after he spoke and went quiet (or once at 60 s): "काम सांगून झालं? तर खालचं लाल बटण दाबा", with the stop pulsing;
  *   - an AUTO-started recording opens with "आता बोला — मी ऐकतोय" (until speech or 4 s), and is cancelled silently when it
- *     hears no speech in 20 s or the level cannot be measured (nothing is saved).
+ *     hears no speech in 20 s or the level cannot be measured (nothing is saved);
+ *   - spec plr-d10 (part 03, A2): with `onQuietStop`, after at least 1 s of real speech, 3 s of quiet ends the recording by itself
+ *     (`quietStopDue`); from 0.6 s of that quiet the view carries `quietSince`, for the ring round the red stop.
  *
  * ONE fixed-height slot, drawn from t=0 and only its content swapped, sits in the flow ABOVE the stop: the stop never
  * moves and nothing ever covers it (the lane L6b lesson). Never blocks a tap (`pointer-events-none`). No live region
@@ -24,8 +26,8 @@ import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
 import { CategoryIcon } from '../../../logs/components/shramsathi/understandingRing/CategoryIcon';
 import type { IconName } from '../../../logs/components/shramsathi/understandingRing/icons';
 import {
-    AUTO_SILENT_CANCEL_MS, COACH_MS, ZERO_UNMEASURABLE_MS, silenceStage, silenceStart, silenceStep, silenceUnmeasurable,
-    type SilenceStage, type SilenceState,
+    AUTO_SILENT_CANCEL_MS, COACH_MS, QUIET_STOP_MS, QUIET_STOP_SHOW_MS, ZERO_UNMEASURABLE_MS, quietStopSince, silenceStage, silenceStart,
+    silenceStep, silenceUnmeasurable, speechHeldMs, type SilenceStage, type SilenceState,
 } from './silenceHelpModel';
 
 /** How often silence is re-read when the level does not change. */
@@ -33,11 +35,18 @@ const STEP_MS = 500;
 
 export type AutoCancelReason = 'silent' | 'unmeasurable';
 
-export interface SilenceHelpView { stage: SilenceStage; listening: boolean }
+export interface SilenceHelpView {
+    stage: SilenceStage;
+    listening: boolean;
+    /** The quiet that will end the recording began here (shown from QUIET_STOP_SHOW_MS of it); null = no quiet stop under way. */
+    quietSince?: number | null;
+}
 
 /** Steps the silence model with the live level (and every 500 ms, so a steady level still advances). */
-export function useSilenceHelp({ on, level, autoStarted, onAutoCancel }: {
+export function useSilenceHelp({ on, level, autoStarted, onAutoCancel, onQuietStop }: {
     on: boolean; level: number | undefined; autoStarted: boolean; onAutoCancel?: (reason: AutoCancelReason) => void;
+    /** Present = the quiet stop is on: called ONCE when the quiet after enough speech has lasted QUIET_STOP_MS. */
+    onQuietStop?: () => void;
 }): SilenceHelpView {
     const stateRef = useRef<SilenceState | null>(null);
     const levelRef = useRef(level);
@@ -46,9 +55,12 @@ export function useSilenceHelp({ on, level, autoStarted, onAutoCancel }: {
     autoRef.current = autoStarted;
     const cancelRef = useRef(onAutoCancel);
     cancelRef.current = onAutoCancel;
+    const quietStopRef = useRef(onQuietStop);
+    quietStopRef.current = onQuietStop;
     const cancelledRef = useRef(false);
+    const stoppedRef = useRef(false);
     const lastStageRef = useRef<SilenceStage>('none');
-    const [view, setView] = useState<SilenceHelpView>({ stage: 'none', listening: autoStarted });
+    const [view, setView] = useState<SilenceHelpView>({ stage: 'none', listening: autoStarted, quietSince: null });
 
     const evaluate = useCallback(() => {
         const now = Date.now();
@@ -61,11 +73,18 @@ export function useSilenceHelp({ on, level, autoStarted, onAutoCancel }: {
             lastStageRef.current = stage;
             if (stage !== 'none') logger.info('voice_v2.mic.hint', { stage, elapsedMs: elapsed });
         }
-        setView(v => (v.stage === stage && v.listening === listening ? v : { stage, listening }));
+        const since = quietStopRef.current ? quietStopSince(s) : null;
+        const quietSince = since !== null && now - since >= QUIET_STOP_SHOW_MS ? since : null;
+        setView(v => (v.stage === stage && v.listening === listening && (v.quietSince ?? null) === quietSince ? v : { stage, listening, quietSince }));
         if (autoRef.current && !cancelledRef.current && !s.spoke) {
             const reason: AutoCancelReason | null = elapsed >= ZERO_UNMEASURABLE_MS && silenceUnmeasurable(s, now) ? 'unmeasurable'
                 : elapsed >= AUTO_SILENT_CANCEL_MS ? 'silent' : null;
             if (reason) { cancelledRef.current = true; cancelRef.current?.(reason); }
+        }
+        if (since !== null && !stoppedRef.current && now - since >= QUIET_STOP_MS) {
+            stoppedRef.current = true;
+            logger.info('voice_v2.mic.quiet_stop', { speechMs: speechHeldMs(s), quietMs: now - since, elapsedMs: elapsed });
+            quietStopRef.current?.();
         }
     }, []);
 

@@ -62,7 +62,7 @@ describe('VoiceLayer', () => {
     it('F3: the "आणखी सांगा" bar is drawn in the layer\'s bottom slot, not inside the scrolling body', () => {
         const Saved: React.FC = () => {
             const root = useRef<HTMLDivElement>(null);
-            return <div ref={root}><IdleCloseBar rootRef={root} pauseReason={null} offReason={null} onClose={() => undefined} onAddAnother={() => undefined} /></div>;
+            return <div ref={root}><IdleCloseBar rootRef={root} waitMs={5000} pauseReason={null} offReason={null} onClose={() => undefined} onAddAnother={() => undefined} /></div>;
         };
         render(<VoiceLayer step="saved"><Saved /></VoiceLayer>);
         const bar = screen.getByTestId('vr2-idle-bar');

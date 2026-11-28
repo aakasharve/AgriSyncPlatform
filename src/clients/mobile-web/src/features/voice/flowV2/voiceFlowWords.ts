@@ -80,12 +80,33 @@ export interface VoiceFlowWords {
     paused: string;
     pausedSub: string;
     closedToast: string;
+    // spec plr-d10 (part 03, A1 / A2 / B6; the founder's final design, 28 Nov 2026) — the plot page, the mic page, the quiet stop, the end
+    /** The mic card's line under the ring while it waits (the prototype's `cdT`). */
+    sathiReady: string;
+    /** The same line once the countdown has run out and the mic is opening. */
+    sathiHearing: string;
+    /** The plot page's green bar: the place chosen. */
+    barChosen: (place: string) => string;
+    /** The plot page's green bar: how to open the mic page. */
+    barSwipe: string;
+    /** On the mic page: back to the plot page. */
+    changePlot: string;
+    /** Sathi's bubble while the quiet ring runs. */
+    moreAsk: string;
+    moreAskSub: string;
+    /** Beside the red stop while the quiet ring runs (instead of `stopLabel`). */
+    quietStopping: string;
+    /** The result's end button. */
+    finishTitle: string;
+    finishSub: string;
+    /** The short note shown just before the result moves to पूर्ण शेतीचा आढावा by itself. */
+    movingToReview: string;
 }
 
 export const VOICE_FLOW_MR: VoiceFlowWords = {
     cardTitle: 'आता बोला', // PROPOSED (Marathi)
     tapToStart: 'माइक दाबा आणि बोला', // PROPOSED (Marathi)
-    autoIn: (n: number) => `दाबलं नाही तरी ${digitsFor(String(n), 'mr')} सेकंदात साथी ऐकायला सुरुवात करेल`, // PROPOSED (Marathi)
+    autoIn: (n: number) => `${digitsFor(String(n), 'mr')} सेकंदात साथी ऐकायला सुरुवात करेल`, // FOUNDER final design 28 Nov (the mic page's countdown line)
     exampleLabel: 'असं सांगा', // PROPOSED (Marathi)
     example: '“आज पाच मजूर होते, चार तास फवारणी केली, कॉन्फिडॉर अडीचशे एमएल.”', // PROPOSED (Marathi)
     holdLink: 'थांबा, अजून प्लॉट निवडायचे आहेत', // PROPOSED (Marathi)
@@ -147,12 +168,24 @@ export const VOICE_FLOW_MR: VoiceFlowWords = {
     paused: 'थांबवलं', // PROPOSED (Marathi)
     pausedSub: 'बघून झालं की परत वेळ सुरू होईल', // PROPOSED (Marathi)
     closedToast: 'आजचं काम जतन झालं ✓ — परत बघायचं असेल तर शेतीचा आढावा मध्ये बघा', // PROPOSED (Marathi)
+    // FOUNDER final design 28 Nov 2026 (result-v12-final), word for word
+    sathiReady: 'साथी ऐकायला तयार',
+    sathiHearing: 'साथी ऐकतोय…',
+    barChosen: (place: string) => `${place} — निवडले`,
+    barSwipe: 'वर सरका — बोलायला सुरुवात',
+    changePlot: 'प्लॉट बदला',
+    moreAsk: 'अजून काही?',
+    moreAskSub: 'नसेल तर साथी आपोआप थांबेल',
+    quietStopping: 'शांत आहे… आपोआप थांबतोय',
+    finishTitle: 'झालं',
+    finishSub: 'पूर्ण शेतीचा आढावा बघा',
+    movingToReview: 'आजच्या शेतीचा आढावा बघा',
 };
 
 export const VOICE_FLOW_EN: VoiceFlowWords = {
     cardTitle: 'Speak now', // PROPOSED (English)
     tapToStart: 'Press the mic and speak', // PROPOSED (English)
-    autoIn: (n: number) => `If you do not press, Sathi starts listening in ${n} seconds`, // PROPOSED (English)
+    autoIn: (n: number) => `Sathi starts listening in ${n} seconds`, // PROPOSED (English)
     exampleLabel: 'Say it like this', // PROPOSED (English)
     example: '"Five workers today, sprayed for four hours, Confidor 250 ml."', // PROPOSED (English)
     holdLink: 'Wait, I want to choose more plots', // PROPOSED (English)
@@ -214,6 +247,17 @@ export const VOICE_FLOW_EN: VoiceFlowWords = {
     paused: 'Paused', // PROPOSED (English)
     pausedSub: 'The time starts again when you are done', // PROPOSED (English)
     closedToast: 'Today\'s work is saved ✓ — to see it again, open the farm review', // PROPOSED (English)
+    sathiReady: 'Sathi is ready to listen', // PROPOSED (English)
+    sathiHearing: 'Sathi is listening…', // PROPOSED (English)
+    barChosen: (place: string) => `${place} — chosen`, // PROPOSED (English)
+    barSwipe: 'Swipe up — start speaking', // PROPOSED (English)
+    changePlot: 'Change plot', // PROPOSED (English)
+    moreAsk: 'Anything more?', // PROPOSED (English)
+    moreAskSub: 'If not, Sathi stops by itself', // PROPOSED (English)
+    quietStopping: 'Quiet… stopping by itself', // PROPOSED (English)
+    finishTitle: 'Done', // PROPOSED (English)
+    finishSub: 'See the whole farm review', // PROPOSED (English)
+    movingToReview: 'See today\'s farm review', // PROPOSED (English)
 };
 
 /** The words in the screen's language (Marathi unless English is chosen). */

@@ -2,26 +2,32 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: voice-flow-v2-2026-11-23 (Task 4, amendments B1 / Verifier 3 / H1 / L3) — the mic card's 7-second ring.
+ * spec: voice-flow-v2-2026-11-23 (Task 4, amendments B1 / Verifier 3 / H1 / L3) — the mic card's countdown ring.
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (part 03, A1; the founder's final design, 28 Nov) — 3 seconds, on the mic page
+ * he opened himself (one swipe up or a tap on the green bar), and the microphone is asked for THERE when it is not granted yet.
  *
- * It fires ONCE per plot tap (`armSeq`), and only when all of this holds:
- *   - he tapped a plot on this screen (`armSeq > 0`; arriving with a plot already chosen never arms);
- *   - the microphone is ALREADY granted: read without prompting (`readDevicePermission`), or the mic already opened in
- *     this session. The read is async: no ring until it answers, and the 7 s start at the answer. Prompt / denied /
- *     unknown = no ring, the card waits for a tap (no permission prompt ever appears by itself);
+ * It fires ONCE per opening of the mic page (`armSeq`), and only when all of this holds:
+ *   - he opened the mic page (`armSeq > 0`; arriving on it with a plot already chosen never arms);
+ *   - the microphone is granted: read without prompting (`readDevicePermission`), or the mic already opened in this session.
+ *     Not granted yet (`prompt`, or a phone that cannot say): it is asked for now (`requestDevicePermission`, the OS question):
+ *     he has just invoked the feature that needs it. A refusal (`denied`, read or answered) is never asked again here: no ring,
+ *     the card waits for a tap, and the recorder's own refusal path offers typing. The answer is async: no ring until it comes,
+ *     and the 3 s start at the answer;
  *   - the level could be measured in this session (an auto-start that cannot hear speech is not started at all);
- *   - nothing blocks it: the typing sheet, a recording, no plot. Blocked once, it stays held until the next plot tap
- *     (closing the typing sheet without sending does NOT restart it); so does a hidden page and `hold()`.
+ *   - nothing blocks it: the typing sheet, a recording, no plot. Blocked once, it stays held until the next opening (closing the
+ *     typing sheet without sending does NOT restart it); so does a hidden page and `hold()`. The OS permission question may
+ *     hide the page for a moment: that is not him leaving, so it does not hold it.
  * Deadline-based (P11): a late timer still fires against `Date.now()`, never by counting ticks.
  *
  * The consumed `armSeq` lives in a ref of the component that calls this — `RecorderFace`, above its recording branch —
- * so a cancel, a mic error or any recording holds the ring until the NEXT plot tap.
+ * so a cancel, a mic error or any recording holds the ring until the NEXT opening.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { readDevicePermission } from '../../../consent/separation/devicePermissions';
+import { readDevicePermission, requestDevicePermission } from '../../../consent/separation/devicePermissions';
 import { logger } from '../../../../infrastructure/observability/Logger';
 
-export const AUTO_START_SEC = 7;
+/** The founder's final design: one big number, ३ २ १, then it listens by itself. */
+export const AUTO_START_SEC = 3;
 const TICK_MS = 250;
 
 let micGranted = false;
@@ -32,6 +38,23 @@ export const micGrantedThisSession = (): boolean => micGranted;
 /** The level could not be measured: no auto-start for the rest of the session (it could not tell speech from silence). */
 export const noteLevelUnmeasurable = (): void => { levelUnmeasurable = true; };
 export function resetAutoStartForTests(): void { micGranted = false; levelUnmeasurable = false; }
+
+/**
+ * May the microphone be used now? Read first (no prompt); only when the phone has not been answered yet, ask (the OS question).
+ * Never throws: any failure is "no" (no ring; a tap on the mic still tries, and the recorder says what went wrong).
+ */
+async function microphoneAllowed(): Promise<boolean> {
+    try {
+        const read = await readDevicePermission('microphone');
+        if (read === 'granted') return true;
+        if (read === 'denied') return false;
+        const asked = await requestDevicePermission('microphone');
+        logger.info('voice_v2.mic.permission_asked', { read, answer: asked });
+        return asked === 'granted';
+    } catch {
+        return false;
+    }
+}
 
 export interface AutoStartOptions {
     /** Bumps on every plot tap; 0 = never armed. */
@@ -81,13 +104,12 @@ export function useAutoStartCountdown({ armSeq, blocked, seconds = AUTO_START_SE
         if (permRef.current.seq !== armSeq) {
             permRef.current = { seq: armSeq, ok: micGranted ? true : null };
             if (!micGranted) {
-                void readDevicePermission('microphone')
-                    .then((answer) => answer === 'granted', () => false)
-                    .then((ok) => {
-                        if (permRef.current.seq !== armSeq) return;
-                        permRef.current = { seq: armSeq, ok: ok || micGranted };
-                        setPermVersion((v) => v + 1);
-                    });
+                void microphoneAllowed().then((ok) => {
+                    if (ok) micGranted = true;
+                    if (permRef.current.seq !== armSeq) return;
+                    permRef.current = { seq: armSeq, ok: ok || micGranted };
+                    setPermVersion((v) => v + 1);
+                });
             }
         }
         if (permRef.current.ok !== true) return;
@@ -115,7 +137,12 @@ export function useAutoStartCountdown({ armSeq, blocked, seconds = AUTO_START_SE
 
     useEffect(() => {
         if (armSeq <= 0 || typeof document === 'undefined') return undefined;
-        const onVisibility = () => { if (document.hidden) hold('hidden'); };
+        const onVisibility = () => {
+            if (!document.hidden) return;
+            // The OS permission question can cover the page while it is asked: his answer is awaited, he has not left.
+            if (permRef.current.seq === armRef.current && permRef.current.ok === null) return;
+            hold('hidden');
+        };
         document.addEventListener('visibilitychange', onVisibility);
         return () => document.removeEventListener('visibilitychange', onVisibility);
     }, [armSeq, hold]);

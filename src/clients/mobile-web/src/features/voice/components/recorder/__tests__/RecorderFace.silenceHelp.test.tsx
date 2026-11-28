@@ -102,3 +102,88 @@ describe('RecorderFace — silence help (flowV2.silenceHelp)', () => {
         expect(screen.getByTestId('mic-stop-attention')).toBeInTheDocument();
     });
 });
+
+/**
+ * spec plr-d10 (part 03, A2) — 3 s of quiet after at least 1 s of real speech ends the recording by itself; the ring fills round the
+ * red stop while it runs. The model is stepped on every level change and every 500 ms, so the times below land on those steps.
+ */
+describe('RecorderFace — the quiet stop (A2)', () => {
+    /** Speaks at 0.3 for `ms`, then goes quiet (0.02). */
+    const speakThenQuiet = (ms: number) => {
+        const f = face({ level: 0.02 });
+        f.rerender({ level: 0.3 });
+        advance(ms);
+        f.rerender({ level: 0.02 });
+        return f;
+    };
+
+    it('1.5 s of speech, then 3 s of quiet: it stops by itself, ONCE, with the ring and the design\'s words while it runs', () => {
+        const { props } = speakThenQuiet(1500);
+        expect(screen.queryByTestId('mic-stop-quiet')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mic-stop-instruction')).toHaveTextContent(VOICE_FLOW_MR.stopLabel);
+        advance(1000);                                     // 1 s of quiet: the ring and its words are up
+        expect(screen.getByTestId('mic-stop-quiet')).toBeInTheDocument();
+        expect(screen.getByTestId('mic-stop')).toContainElement(screen.getByTestId('mic-stop-quiet'));
+        expect(screen.getByTestId('mic-stop-instruction')).toHaveTextContent('शांत आहे… आपोआप थांबतोय');
+        expect(screen.getByTestId('mic-listening')).toHaveTextContent('अजून काही?');
+        expect(screen.getByTestId('sathi-bubble')).toHaveTextContent('नसेल तर साथी आपोआप थांबेल');
+        advance(1500);                                     // 2.5 s of quiet: still listening
+        expect(props.onStop).not.toHaveBeenCalled();
+        advance(500);                                      // 3 s of quiet
+        expect(props.onStop).toHaveBeenCalledTimes(1);
+        expect(props.onCancel).not.toHaveBeenCalled();
+        advance(10_000);
+        expect(props.onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it('under 1 s of speech it never stops by itself: it keeps listening and asks "finished?" at 5 s', () => {
+        const { props } = speakThenQuiet(500);
+        advance(4000);
+        expect(screen.queryByTestId('mic-stop-quiet')).not.toBeInTheDocument();
+        expect(props.onStop).not.toHaveBeenCalled();
+        advance(1500);
+        expect(screen.getByTestId('mic-hint-doneAsk')).toBeInTheDocument();
+        advance(30_000);
+        expect(props.onStop).not.toHaveBeenCalled();
+    });
+
+    it('speaking again takes the ring away and the stop does not come while he speaks', () => {
+        const { props, rerender } = speakThenQuiet(1500);
+        advance(2000);
+        expect(screen.getByTestId('mic-stop-quiet')).toBeInTheDocument();
+        rerender({ level: 0.3 });
+        expect(screen.queryByTestId('mic-stop-quiet')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mic-stop-instruction')).toHaveTextContent(VOICE_FLOW_MR.stopLabel);
+        advance(10_000);
+        expect(props.onStop).not.toHaveBeenCalled();
+        rerender({ level: 0.02 });                         // quiet again: a fresh 3 s
+        advance(2500);
+        expect(props.onStop).not.toHaveBeenCalled();
+        advance(500);
+        expect(props.onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it('a tap on the red stop during the ring stops once; the quiet stop does not add a second', () => {
+        const { props } = speakThenQuiet(1500);
+        advance(1000);
+        fireEvent.click(screen.getByTestId('mic-stop'));
+        expect(props.onStop).toHaveBeenCalledTimes(1);
+        advance(5000);
+        expect(props.onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it('no level (the phone cannot measure): never stops by itself (P5)', () => {
+        const { props } = face({ level: undefined });
+        advance(60_000);
+        expect(props.onStop).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('mic-stop-quiet')).not.toBeInTheDocument();
+    });
+
+    it('without flowV2 (today\'s recorder) it never stops by itself', () => {
+        const { props, rerender } = face({ flowV2: undefined, level: 0.3 });
+        advance(2000);
+        rerender({ level: 0.02 });
+        advance(10_000);
+        expect(props.onStop).not.toHaveBeenCalled();
+    });
+});

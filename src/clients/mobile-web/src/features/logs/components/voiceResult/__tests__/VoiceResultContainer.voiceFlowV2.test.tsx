@@ -7,7 +7,8 @@
  * the voice flow v2 flag ON:
  *   - the saved screen comes first; today's result screen (unchanged) is one tap away, its "मागे", the phone's back and the
  *     sticky back all return to the saved screen;
- *   - after 30 s untouched the screen closes itself once, with ONE toast whose claim follows the sync truth (P10);
+ *   - after his reading time untouched the screen shows the note "आजच्या शेतीचा आढावा बघा" and moves once (plr-d10 B6: no toast after it);
+ *   - the end button "झालं — पूर्ण शेतीचा आढावा बघा" finishes it;
  *   - it never closes itself while a log is not known to be on its way to the server, or while the sync needs a hand;
  *   - with the flag OFF the container renders exactly today's screen (the existing suites pin the rest).
  */
@@ -151,22 +152,24 @@ describe('voice flow v2 — the saved screen first', () => {
         expect(p.onBack).not.toHaveBeenCalled();
     });
 
-    it('after 30 s untouched: closes once, with ONE toast that claims only the phone ("लक्षात ठेवलं ✓")', async () => {
+    it('B6: after his reading time (4 words = the 5 s floor) the note shows, then it moves once; no toast after the note', async () => {
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
         const p = props();
         mount(p);
-        act(() => { vi.advanceTimersByTime(29_000); });
+        act(() => { vi.advanceTimersByTime(4_900); });
+        expect(screen.queryByTestId('vr2-move-note')).toBeNull();
+        act(() => { vi.advanceTimersByTime(200); });
+        expect(screen.getByTestId('vr2-move-note').textContent).toBe('आजच्या शेतीचा आढावा बघा');
         expect(p.onAutoClose).not.toHaveBeenCalled();
-        act(() => { vi.advanceTimersByTime(2_000); });
+        act(() => { vi.advanceTimersByTime(2_500); });
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
         expect(p.onBack).not.toHaveBeenCalled();
-        expect(toasts).toEqual([{ message: 'लक्षात ठेवलं ✓ — परत बघायचं असेल तर शेतीचा आढावा मध्ये बघा', type: 'success' }]);
+        expect(toasts).toHaveLength(0);
         act(() => { vi.advanceTimersByTime(60_000); });
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
-        expect(toasts).toHaveLength(1);
     });
 
-    it('server-acknowledged: the badge and the closing toast name the server', async () => {
+    it('server-acknowledged: the badge names the server, and the screen still moves by itself once', async () => {
         await applied();
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
         const p = props();
@@ -176,7 +179,22 @@ describe('voice flow v2 — the saved screen first', () => {
         fireEvent.pointerDown(screen.getByTestId('vr2-saved-card'));
         act(() => { vi.advanceTimersByTime(31_000); });
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
-        expect(toasts[0]?.message).toBe('श्रम सफलमध्ये साठवून ठेवलं — परत बघायचं असेल तर शेतीचा आढावा मध्ये बघा');
+        expect(toasts).toHaveLength(0);
+    });
+
+    it('B6: the end button "झालं — पूर्ण शेतीचा आढावा बघा" finishes once (the caller opens पूर्ण शेतीचा आढावा)', () => {
+        const onFinish = vi.fn();
+        const p = props({ onFinish });
+        mount(p);
+        fireEvent.click(screen.getByTestId('vr2-finish'));
+        expect(onFinish).toHaveBeenCalledTimes(1);
+        expect(p.onAutoClose).not.toHaveBeenCalled();
+        expect(p.onBack).not.toHaveBeenCalled();
+    });
+
+    it('no onFinish given: no end button', () => {
+        mount(props());
+        expect(screen.queryByTestId('vr2-finish')).toBeNull();
     });
 
     it('no onAutoClose given: the close is the screen\'s own "मागे"', () => {

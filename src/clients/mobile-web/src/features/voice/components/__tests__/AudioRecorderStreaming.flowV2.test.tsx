@@ -5,6 +5,7 @@
  *
  * spec: voice-flow-v2-2026-11-23 (Task 4 + amendments H1, M1) — through the REAL streaming recorder: the ring opens ONE
  * recorder, and an auto-started recording that hears no speech in 20 s is cancelled with nothing sent.
+ * spec: plr-d10 (part 03, A1) — the countdown is 3 s (`AUTO_START_SEC`).
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -16,6 +17,7 @@ const h = vi.hoisted(() => ({
     start: vi.fn(),
     stop: vi.fn(),
     perm: vi.fn(),
+    ask: vi.fn(),
 }));
 
 vi.mock('../../../../i18n/LanguageContext', () => ({
@@ -23,7 +25,7 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
     useOptionalLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
     LanguageProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('../../../consent/separation/devicePermissions', () => ({ readDevicePermission: h.perm }));
+vi.mock('../../../consent/separation/devicePermissions', () => ({ readDevicePermission: h.perm, requestDevicePermission: h.ask }));
 vi.mock('../../../../infrastructure/voice/StreamingPcmRecorder', () => ({
     StreamingPcmRecorder: class {
         liveStream: MediaStream | null = null;
@@ -33,7 +35,7 @@ vi.mock('../../../../infrastructure/voice/StreamingPcmRecorder', () => ({
 }));
 
 import AudioRecorderStreaming from '../AudioRecorderStreaming';
-import { resetAutoStartForTests } from '../recorder/useAutoStartCountdown';
+import { AUTO_START_SEC, resetAutoStartForTests } from '../recorder/useAutoStartCountdown';
 import { VOICE_FLOW_MR } from '../../flowV2/voiceFlowWords';
 
 /** A quiet room: a real, non-zero level well under speech (≈0.05). */
@@ -52,6 +54,7 @@ beforeEach(() => {
     h.start.mockReset().mockResolvedValue(undefined);
     h.stop.mockReset();
     h.perm.mockReset().mockResolvedValue('granted');
+    h.ask.mockReset().mockResolvedValue('granted');
     vi.stubGlobal('AudioContext', QuietAudioContext);
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -61,7 +64,7 @@ describe('AudioRecorderStreaming — voice flow v2 mic card', () => {
         const onAudioCaptured = vi.fn();
         render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} flowV2={flowV2} />);
         await flush();
-        await act(async () => { vi.advanceTimersByTime(7000); });
+        await act(async () => { vi.advanceTimersByTime(AUTO_START_SEC * 1000); });
         expect(h.start).toHaveBeenCalledTimes(1);
         expect(screen.getByTestId('mic-ui')).toHaveAttribute('data-recording', 'yes');
         await act(async () => { vi.advanceTimersByTime(20_000); });
@@ -77,7 +80,7 @@ describe('AudioRecorderStreaming — voice flow v2 mic card', () => {
         h.start.mockReturnValue(new Promise<void>((r) => { open = r; }));
         render(<AudioRecorderStreaming onAudioCaptured={vi.fn()} flowV2={flowV2} />);
         await flush();
-        act(() => { vi.advanceTimersByTime(7000); });
+        act(() => { vi.advanceTimersByTime(AUTO_START_SEC * 1000); });
         fireEvent.click(screen.getByTestId('mic-button'));
         await act(async () => { open(); await Promise.resolve(); });
         expect(h.start).toHaveBeenCalledTimes(1);

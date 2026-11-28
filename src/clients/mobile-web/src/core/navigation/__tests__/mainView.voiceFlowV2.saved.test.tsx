@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: voice-flow-v2-2026-11-23 (Task 12; amendment M5) — the log tab around the saved screen, flag ON:
- *   - the saved screen's 30-second close resets the flow with NO plot chosen, so the log tab opens on the work home (the mic is
- *     never armed by it — spec V2-5);
+ *   - the saved screen's self-move and its end button reset the flow with NO plot chosen and open पूर्ण शेतीचा आढावा (plr-d10 B6);
+ *     back on the log tab it opens on the work home (the mic is never armed by it — spec V2-5);
  *   - the sticky back first takes the step from the detail page to the saved screen (tap and browser back), and leaves the
  *     surface only when there is no such step;
  *   - flag OFF: no close is handed to the screen and the sticky back is the reset, as before.
@@ -82,20 +82,33 @@ function ctx(over: Partial<AppRouterContext> = {}): AppRouterContext {
 afterEach(() => { cleanup(); vi.resetModules(); seen.props = null; });
 
 describe('voice flow v2 — around the saved screen', { timeout: 60_000 }, () => {
-    it('the 30 s close resets with no plot chosen, and the log tab then opens on the work home', async () => {
+    it('B6: the self-move opens पूर्ण शेतीचा आढावा after the reset with no plot chosen; the log tab then opens on the work home', async () => {
         const { renderLogView } = await load(true);
-        const c = ctx();
+        const c = ctx({ setMainView: vi.fn() });
         render(<>{renderLogView(c)}</>);
         await screen.findByTestId('voice-result-stub');
         (seen.props?.onAutoClose as () => void)();
         expect(c.handleReset).toHaveBeenCalledTimes(1);
         expect(c.setMode).toHaveBeenCalledWith('voice');
+        expect(c.setMainView).toHaveBeenCalledTimes(1);
+        expect(c.setMainView).toHaveBeenCalledWith('reflect');
         const scope = (c.setLogScope as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as LogScope;
         expect(scope).toMatchObject({ selectedCropIds: [], selectedPlotIds: [] });
 
         cleanup();
         render(<>{renderLogView(ctx({ status: 'idle', logScope: scope, hasActiveLogContext: false, voiceResult: undefined, lastSavedLogIds: [] }))}</>);
         expect(screen.getByTestId('log-entry-flow').getAttribute('data-step')).toBe('home');
+    });
+
+    it('B6: the end button does the same: reset, no plot chosen, पूर्ण शेतीचा आढावा', async () => {
+        const { renderLogView } = await load(true);
+        const c = ctx({ setMainView: vi.fn() });
+        render(<>{renderLogView(c)}</>);
+        await screen.findByTestId('voice-result-stub');
+        (seen.props?.onFinish as () => void)();
+        expect(c.handleReset).toHaveBeenCalledTimes(1);
+        expect(c.setMainView).toHaveBeenCalledWith('reflect');
+        expect((c.setLogScope as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({ selectedCropIds: [], selectedPlotIds: [] });
     });
 
     it('the sticky back takes the step from the detail page first, then leaves the surface', async () => {
@@ -137,6 +150,7 @@ describe('voice flow v2 — around the saved screen', { timeout: 60_000 }, () =>
         render(<>{renderLogView(c)}</>);
         await screen.findByTestId('voice-result-stub');
         expect(seen.props?.onAutoClose).toBeUndefined();
+        expect(seen.props?.onFinish).toBeUndefined();
         const leave = vi.fn();
         back.holdDetailBack(leave);
         fireEvent.click(screen.getByTestId('saved-back'));

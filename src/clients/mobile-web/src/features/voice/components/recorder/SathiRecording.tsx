@@ -16,6 +16,12 @@
  *
  * The bottom area (silence hints, timer, stop, cancel) is drawn into the voice layer's bottom slot, so the stop never moves and
  * never scrolls away; outside a layer it is drawn in the flow, as before.
+ *
+ * spec plr-d10 (part 03, A2; the founder's final design, 28 Nov): when he has gone quiet after speaking (`help.quietSince`), a red ring
+ * fills round the red stop over the 3 s of quiet that end the recording by itself, the line beside the stop says "शांत आहे… आपोआप
+ * थांबतोय" and Sathi's bubble asks "अजून काही?" / "नसेल तर साथी आपोआप थांबेल". The red stop stays, and one tap on it still stops.
+ * The ring is drawn by a CSS animation started at the quiet's real start (no per-frame re-render); under reduced motion it is not
+ * drawn and the words say it.
  */
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -27,6 +33,7 @@ import { ringNodesV2 } from '../../../logs/components/voiceResult/resultModel';
 import { useVoiceLayerBottom } from '../../../logs/components/voiceFlowV2/VoiceLayer';
 import { voiceFlowWords } from '../../flowV2/voiceFlowWords';
 import { HintSlot, type SilenceHelpView } from './SilenceHelp';
+import { QUIET_STOP_MS } from './silenceHelpModel';
 import { AUTO_STOP_SEC, AUTO_STOP_WARN_SEC, REC_WORDS, autoStoppingIn, formatClock } from './recorderWords';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -35,6 +42,23 @@ const SATHI = '/images/sathi/sathi-points-down-both.png';
 const ALL: readonly CategoryId[] = ['work', 'labour', 'inputs', 'water', 'machinery', 'expenses', 'observations', 'reminders'];
 const BOX = 288;
 const RADIUS = 104;
+/** The quiet ring round the 72 px stop: 9 px outside it (the design's `.sring`), r 41, a 5 px stroke. */
+const QUIET_R = 41;
+const QUIET_C = 2 * Math.PI * QUIET_R;
+const QUIET_CSS = `@keyframes vfQuietFill{from{stroke-dashoffset:${QUIET_C.toFixed(2)}}to{stroke-dashoffset:0}}`;
+
+/** The design's `.sring`: a red ring that fills over the quiet; started where the quiet really began (`since`). */
+const QuietRing: React.FC<{ since: number }> = ({ since }) => {
+    const elapsed = Math.max(0, Math.min(QUIET_STOP_MS, Date.now() - since));
+    return (
+        <svg data-testid="mic-stop-quiet" aria-hidden="true" viewBox="0 0 90 90" className="pointer-events-none absolute -inset-[9px] h-[90px] w-[90px] motion-reduce:hidden">
+            <style>{QUIET_CSS}</style>
+            <circle cx="45" cy="45" r={QUIET_R} fill="none" stroke="rgba(229,72,77,.18)" strokeWidth="5" />
+            <circle cx="45" cy="45" r={QUIET_R} fill="none" stroke="#E5484D" strokeWidth="5" strokeLinecap="round" strokeDasharray={QUIET_C} transform="rotate(-90 45 45)"
+                style={{ strokeDashoffset: 0, animation: `vfQuietFill ${QUIET_STOP_MS}ms linear ${-elapsed}ms both` }} />
+        </svg>
+    );
+};
 
 /** The ring of the parts, in the app's own v2 order and names. While he speaks every part stays quiet (P4). */
 const PartsRing: React.FC<{ labels: Readonly<Record<string, string>> }> = ({ labels }) => {
@@ -87,7 +111,8 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
     const language = useOptionalLanguage()?.language;
     const W = voiceFlowWords(language);
     const slot = useVoiceLayerBottom();
-    const bubble = { t: W.sathiListening, s: W.sathiListeningSub };
+    const quietSince = help.quietSince ?? null;
+    const bubble = quietSince !== null ? { t: W.moreAsk, s: W.moreAskSub } : { t: W.sathiListening, s: W.sathiListeningSub };
     const heard = liveWords?.trim() ?? '';
     const body = (
         <div className="flex w-full flex-col gap-2.5 pb-2" style={{ fontFamily: SANS }} data-testid="mic-ui" data-recording="yes">
@@ -117,9 +142,12 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
                     className="relative grid h-[72px] w-[72px] shrink-0 place-items-center rounded-full bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-[0_8px_22px_rgba(244,63,94,0.45)] outline-none active:scale-95 focus-visible:ring-4 focus-visible:ring-red-200"
                     style={level != null ? { boxShadow: `0 0 0 ${Math.round(2 + level * 12)}px rgba(244,63,94,${(0.12 + level * 0.25).toFixed(2)}), 0 8px 22px rgba(244,63,94,0.45)` } : undefined}>
                     {help.stage === 'doneAsk' && <span aria-hidden="true" data-testid="mic-stop-attention" className="absolute inset-0 rounded-full bg-red-400/50 motion-safe:animate-ping" style={{ animationDuration: '1.4s' }} />}
+                    {quietSince !== null && <QuietRing key={quietSince} since={quietSince} />}
                     <Square size={30} fill="currentColor" className="relative" />
                 </button>
-                <span className="min-w-[84px] text-right text-[13px] font-extrabold leading-tight text-[#5F6B63]" data-testid="mic-stop-instruction">{W.stopLabel}</span>
+                <span className="min-w-[84px] text-right text-[13px] font-extrabold leading-tight text-[#5F6B63]" data-testid="mic-stop-instruction" data-quiet={quietSince !== null ? 'yes' : 'no'}>
+                    {quietSince !== null ? W.quietStopping : W.stopLabel}
+                </span>
             </div>
             {seconds >= AUTO_STOP_WARN_SEC && (
                 <p className="m-0 text-[14px] font-bold text-amber-700" data-testid="mic-auto-stop">{autoStoppingIn(Math.max(0, AUTO_STOP_SEC - seconds), language)}</p>

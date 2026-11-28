@@ -3,16 +3,18 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: voice-flow-v2-2026-11-23 (Task 4 + amendments B1, Verifier 3, H1, M1, M2, L3) — the mic card after a plot
- * tap: it starts listening by itself after 7 s, ONCE per plot tap, never twice, never while held or typing.
+ * spec: voice-flow-v2-2026-11-23 (Task 4 + amendments B1, Verifier 3, H1, M1, M2, L3) — the mic card starts listening by itself, ONCE
+ * per arming, never twice, never while typing.
+ * spec: plr-d10 (part 03, A1; the founder's final design, 28 Nov) — on the mic page: 3 s, ONE big number (३ २ १) in the green mic,
+ * "साथी ऐकायला तयार" with "N सेकंदात साथी ऐकायला सुरुवात करेल"; the microphone is asked for here when not granted yet.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const perm = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock('../../../../consent/separation/devicePermissions', () => ({ readDevicePermission: perm.read }));
+const perm = vi.hoisted(() => ({ read: vi.fn(), request: vi.fn() }));
+vi.mock('../../../../consent/separation/devicePermissions', () => ({ readDevicePermission: perm.read, requestDevicePermission: perm.request }));
 
 import { RecorderFace, type RecorderFaceProps } from '../RecorderFace';
 import { MIC_INSTRUCTION } from '../recorderWords';
@@ -20,7 +22,7 @@ import { VOICE_FLOW_MR } from '../../../flowV2/voiceFlowWords';
 import { resetAutoStartForTests } from '../useAutoStartCountdown';
 import { hapticFeedback } from '../../../../../shared/utils/haptics';
 
-const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
+const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); });
 const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 const card = (armSeq = 1) => ({ silenceHelp: true, card: { armSeq, placeLabel: () => 'द्राक्ष · प्लॉट २' } });
 
@@ -39,44 +41,78 @@ beforeEach(() => {
     vi.useFakeTimers();
     resetAutoStartForTests();
     perm.read.mockReset().mockResolvedValue('granted');
+    perm.request.mockReset().mockResolvedValue('granted');
     selection = vi.spyOn(hapticFeedback, 'selection');
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-describe('RecorderFace — the mic card', () => {
-    it('shows the title, the place, the example and the hold link, with the 7 s ring', async () => {
+describe('RecorderFace — the mic card on the mic page', () => {
+    it('shows the design\'s words: "आता बोला", the place, "साथी ऐकायला तयार", the 3 s line and the example; no hold link', async () => {
         face();
         await flush();
         const c = screen.getByTestId('mic-card');
         expect(c).toHaveTextContent(VOICE_FLOW_MR.cardTitle);
         expect(screen.getByTestId('mic-card-place')).toHaveTextContent('द्राक्ष · प्लॉट २');
-        expect(c).toHaveTextContent(VOICE_FLOW_MR.tapToStart);
-        expect(c).toHaveTextContent(VOICE_FLOW_MR.example);
-        expect(screen.getByTestId('mic-card-hold')).toHaveTextContent(VOICE_FLOW_MR.holdLink);
-        expect(screen.getByTestId('mic-card-ring')).toBeInTheDocument();
-        expect(screen.getByTestId('mic-card-auto')).toHaveTextContent('७ सेकंदात');
+        expect(screen.getByTestId('mic-card-status')).toHaveTextContent('साथी ऐकायला तयार');
+        expect(screen.getByTestId('mic-card-auto')).toHaveTextContent('३ सेकंदात साथी ऐकायला सुरुवात करेल');
         expect(screen.getByTestId('mic-card-auto')).toHaveAttribute('aria-hidden', 'true');
+        expect(c).toHaveTextContent(VOICE_FLOW_MR.example);
+        expect(screen.getByTestId('mic-card-ring')).toBeInTheDocument();
+        expect(screen.getByTestId('mic-button')).toHaveAttribute('aria-label', VOICE_FLOW_MR.tapToStart);
+        expect(screen.queryByTestId('mic-card-hold')).not.toBeInTheDocument();
+        expect(c).not.toHaveTextContent('थांबा, अजून प्लॉट निवडायचे आहेत');
         expect(screen.getAllByRole('status')).toHaveLength(1);
         expect(screen.getByTestId('typed-link')).toBeInTheDocument();
     });
 
-    it('after 7 s it starts by itself, once, with one selection buzz', async () => {
+    it('ONE big number counts ३, २, १ inside the mic, and the line follows it', async () => {
+        face();
+        await flush();
+        expect(screen.getByTestId('mic-card-number')).toHaveTextContent('३');
+        expect(screen.getByTestId('mic-card-number')).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.getAllByTestId('mic-card-number')).toHaveLength(1);
+        expect(screen.getByTestId('mic-card')).toHaveAttribute('data-state', 'counting');
+        advance(1000);
+        expect(screen.getByTestId('mic-card-number')).toHaveTextContent('२');
+        expect(screen.getByTestId('mic-card-auto')).toHaveTextContent('२ सेकंदात');
+        advance(1000);
+        expect(screen.getByTestId('mic-card-number')).toHaveTextContent('१');
+    });
+
+    it('after 3 s it starts by itself, once, with one selection buzz; the mic turns to "साथी ऐकतोय…" while it opens', async () => {
         const { props } = face();
         await flush();
-        advance(6999);
+        advance(2999);
         expect(props.onStart).not.toHaveBeenCalled();
         advance(1);
         expect(props.onStart).toHaveBeenCalledTimes(1);
         expect(selection).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('mic-card-number')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mic-card')).toHaveAttribute('data-state', 'live');
+        expect(screen.getByTestId('mic-card-status')).toHaveTextContent('साथी ऐकतोय…');
+        advance(10_000);
+        expect(props.onStart).toHaveBeenCalledTimes(1);
     });
 
-    it('no ring and no start without the permission granted (the card waits for a tap)', async () => {
+    it('not granted yet: the microphone is asked for on this page, and the 3 s count from his yes', async () => {
         perm.read.mockResolvedValue('prompt');
+        const { props } = face();
+        await flush();
+        expect(perm.request).toHaveBeenCalledWith('microphone');
+        expect(screen.getByTestId('mic-card-number')).toHaveTextContent('३');
+        advance(3000);
+        expect(props.onStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('he says no to the question: no number, no start; the card says to press the mic', async () => {
+        perm.read.mockResolvedValue('prompt');
+        perm.request.mockResolvedValue('denied');
         const { props } = face();
         await flush();
         advance(10_000);
         expect(screen.queryByTestId('mic-card-ring')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('mic-card-auto')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('mic-card-number')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mic-card-tap')).toHaveTextContent(VOICE_FLOW_MR.tapToStart);
         expect(props.onStart).not.toHaveBeenCalled();
     });
 
@@ -89,48 +125,47 @@ describe('RecorderFace — the mic card', () => {
         expect(props.onStart).not.toHaveBeenCalled();
     });
 
-    it('a tap at 2 s starts once and the ring does not start again at 7 s', async () => {
+    it('arriving unarmed (armSeq 0): the mic waits for a tap, nothing is asked', async () => {
+        const { props } = face({ flowV2: card(0) });
+        await flush();
+        advance(10_000);
+        expect(screen.queryByTestId('mic-card-number')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mic-card-tap')).toHaveTextContent(VOICE_FLOW_MR.tapToStart);
+        expect(perm.read).not.toHaveBeenCalled();
+        expect(perm.request).not.toHaveBeenCalled();
+        expect(props.onStart).not.toHaveBeenCalled();
+    });
+
+    it('a tap at 1 s starts once and the countdown does not start again at 3 s', async () => {
         const { props } = face();
         await flush();
-        advance(2000);
+        advance(1000);
         fireEvent.click(screen.getByTestId('mic-button'));
         advance(10_000);
         expect(props.onStart).toHaveBeenCalledTimes(1);
     });
 
-    it('a tap at 6.9 s and the 7 s timer open ONE recorder', async () => {
+    it('a tap at 2.9 s and the 3 s timer open ONE recorder', async () => {
         const { props } = face();
         await flush();
-        advance(6900);
+        advance(2900);
         fireEvent.click(screen.getByTestId('mic-button'));
         advance(200);
         expect(props.onStart).toHaveBeenCalledTimes(1);
     });
 
-    it('the timer at 7 s, then a tap while the mic is still opening: still ONE recorder', async () => {
+    it('the timer at 3 s, then a tap while the mic is still opening: still ONE recorder', async () => {
         const { props } = face();
         await flush();
-        advance(7000);
+        advance(3000);
         fireEvent.click(screen.getByTestId('mic-button'));
         expect(props.onStart).toHaveBeenCalledTimes(1);
     });
 
-    it('the hold link stops it and never starts recording', async () => {
+    it('opening the typing sheet at 1 s holds it, and closing without sending keeps it held', async () => {
         const { props } = face();
         await flush();
-        advance(2000);
-        fireEvent.click(screen.getByTestId('mic-card-hold'));
-        expect(props.onStart).not.toHaveBeenCalled();
-        expect(screen.getByTestId('mic-card-held')).toHaveTextContent(VOICE_FLOW_MR.held);
-        fireEvent.click(screen.getByTestId('mic-card'));
-        advance(10_000);
-        expect(props.onStart).not.toHaveBeenCalled();
-    });
-
-    it('opening the typing sheet at 3 s holds it, and closing without sending keeps it held', async () => {
-        const { props } = face();
-        await flush();
-        advance(3000);
+        advance(1000);
         fireEvent.click(screen.getByTestId('typed-link'));
         advance(5000);
         fireEvent.click(screen.getByTestId('typed-close'));
@@ -138,10 +173,10 @@ describe('RecorderFace — the mic card', () => {
         expect(props.onStart).not.toHaveBeenCalled();
     });
 
-    it('a plot deselected at 5 s: no start at 7 s', async () => {
+    it('a plot deselected at 2 s: no start at 3 s', async () => {
         const { props, rerender } = face();
         await flush();
-        advance(5000);
+        advance(2000);
         rerender({ disabled: true });
         advance(5000);
         expect(props.onStart).not.toHaveBeenCalled();
@@ -160,7 +195,7 @@ describe('RecorderFace — the mic card', () => {
     it('cancel after the auto start: no restart', async () => {
         const { props, rerender } = face();
         await flush();
-        advance(7000);
+        advance(3000);
         rerender({ isRecording: true, level: 0.3 });
         advance(1000);
         fireEvent.click(screen.getByTestId('mic-cancel'));
@@ -170,14 +205,15 @@ describe('RecorderFace — the mic card', () => {
         expect(props.onStart).toHaveBeenCalledTimes(1);
     });
 
-    it('a mic error after the auto start: no loop', async () => {
+    it('a mic error after the auto start: no loop, and a tap starts again', async () => {
         const { props, rerender } = face();
         await flush();
-        advance(7000);
+        advance(3000);
         rerender({ error: 'माइक सुरू झाला नाही' });
         await flush();
         advance(20_000);
         expect(props.onStart).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('mic-card')).toHaveAttribute('data-state', 'ready');
         fireEvent.click(screen.getByTestId('mic-button'));
         expect(props.onStart).toHaveBeenCalledTimes(2);
     });
@@ -185,7 +221,7 @@ describe('RecorderFace — the mic card', () => {
     it('an auto-started recording that hears no speech in 20 s is cancelled silently and the card says it waits for a tap', async () => {
         const { props, rerender } = face();
         await flush();
-        advance(7000);
+        advance(3000);
         rerender({ isRecording: true, level: 0.05 });
         expect(screen.getByTestId('mic-hint-listening')).toHaveTextContent(VOICE_FLOW_MR.sathiListening);
         advance(19_400);
@@ -197,10 +233,10 @@ describe('RecorderFace — the mic card', () => {
         expect(screen.getByTestId('mic-card-held')).toHaveTextContent(VOICE_FLOW_MR.held);
     });
 
-    it('an auto-started recording whose level is stuck at 0 is cancelled, and the next plot tap shows no ring', async () => {
+    it('an auto-started recording whose level is stuck at 0 is cancelled, and the next opening shows no ring', async () => {
         const { props, rerender } = face();
         await flush();
-        advance(7000);
+        advance(3000);
         rerender({ isRecording: true, level: 0 });
         advance(3000);
         expect(props.onCancel).toHaveBeenCalledTimes(1);

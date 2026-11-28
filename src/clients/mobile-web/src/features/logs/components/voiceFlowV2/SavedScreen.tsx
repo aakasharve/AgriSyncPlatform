@@ -14,8 +14,11 @@
  *      (`SavedPartsGrid`), what stopped the work;
  *   4. his words and why Sathi understood them, the question, the extras, "बदला", the earlier recordings, the detail button
  *      (`SavedScreenLower`);
- *   5. the bottom bar: the big mic and the 30-second self-close (`IdleCloseBar`), held while a clip plays, the product card or
- *      the day sheet or any overlay is open, and off when the container says so.
+ *   5. the bottom bar: the big mic and the self-move (`IdleCloseBar`), held while a clip plays, the product card or the day sheet or
+ *      any overlay is open, and off when the container says so.
+ * spec plr-d10 (part 03, B6; the founder's final design, 28 Nov): the self-move waits his reading time — 3 s + 0.17 s a word of his
+ * words shown here (none when they are withheld), 5 to 20 s — and the screen ends with the big green "झालं — पूर्ण शेतीचा आढावा
+ * बघा" (`onFinish`); both go to पूर्ण शेतीचा आढावा (the caller's move).
  * No "पक्कं आहे" here (it stays on the detail page), no projected number, no save call.
  */
 import React, { useMemo, useRef, useState } from 'react';
@@ -39,11 +42,13 @@ import type { ProductAnswerKit } from '../voiceResult/ProductCard';
 import type { ProductItem } from '../voiceResult/productModel';
 import { resultCopy } from '../voiceResult/resultCopy';
 import type { DayView, PartKey, RecordingView } from '../voiceResult/resultModel';
-import { resultDayStr, resultStr, useResultStr } from '../voiceResult/resultStrings';
+import { resultDayStr, useResultStr } from '../voiceResult/resultStrings';
 import { scrollBelowHeader } from '../voiceResult/scrollBelowHeader';
 import type { LogSyncState } from '../voiceResult/useRecordingTrust';
 import { CalendarDays, MapPin } from 'lucide-react';
+import { hapticFeedback } from '../../../../shared/utils/haptics';
 import IdleCloseBar from './IdleCloseBar';
+import { readingTimeMs, wordCount } from './readingTime';
 import { useVoiceLayerBottom } from './VoiceLayer';
 import { Bd, SANS, Tick } from './savedBits';
 import SavedClip from './SavedClip';
@@ -87,25 +92,25 @@ export interface SavedScreenProps {
     mixRules?: readonly MixRule[];
     /** Repair R1-g 1b — the FIRST record's setup-hub offer, drawn right under the saved card; absent = not offered. */
     firstRecordOffer?: React.ReactNode;
-    /** Why this screen must NOT close itself (the container's honesty rules); null = it closes after 30 s untouched. */
+    /** Why this screen must NOT close itself (the container's honesty rules); null = it moves after his reading time untouched. */
     autoCloseOff: string | null;
     onOpenDetail: () => void;
     onAutoClose: () => void;
+    /** The end button "झालं — पूर्ण शेतीचा आढावा बघा"; absent = not drawn. */
+    onFinish?: () => void;
 }
 
-/** The title's claim: only what the sync state says (P10). */
-export const savedClaimOf = (sync: LogSyncState, RS: { remembered: string; onServer: string }): string =>
-    (sync === 'onServer' ? RS.onServer : RS.remembered);
-
-/**
- * The closing toast: the title's claim, then where to see it again (the tail of `closedToast`; its own head "आजचं काम जतन झालं ✓"
- * would claim more than the phone knows while the record is only on it — H2).
- */
-export const closedToastOf = (sync: LogSyncState, language: string | null | undefined): string => {
-    const full = voiceFlowWords(language).closedToast;
-    const at = full.indexOf(' — ');
-    return `${savedClaimOf(sync, resultStr(language))} — ${at >= 0 ? full.slice(at + 3) : full}`;
-};
+/** The design's `.endbtn` tick and right arrow. */
+const EndTick: React.FC = () => (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="h-[30px] w-[30px] flex-none">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+);
+const EndArrow: React.FC = () => (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-[30px] w-[30px] flex-none">
+        <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+);
 
 const overlayOpen = (): boolean => openOverlayCount() > 0;
 
@@ -152,6 +157,8 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
         if (el) scrollBelowHeader(el); else p.onOpenDetail();
     };
     const pauseReason = p.playingId ? 'clip' : card ? 'product' : p.pickingDay ? 'day' : null;
+    // B6 — his reading time: the words of his talk this screen shows (`SavedWords`); withheld words are not shown, so they do not count.
+    const waitMs = readingTimeMs(primary.wordsWithheld ? 0 : wordCount(primary.transcript));
     const dayText = nd(dayRel(primary.log.date, getDateKey(), language));
 
     const severalNote = severalPlots ? null : <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />;
@@ -231,7 +238,20 @@ export const SavedScreen: React.FC<SavedScreenProps> = (p) => {
                 lengthOf={p.lengthOf} onTogglePlay={p.onTogglePlay} syncQueuedOf={p.syncQueuedOf} onEdit={p.onEdit}
                 questionPanel={p.questionPanel} extras={p.extras} audience={p.audience} onOpenDetail={p.onOpenDetail} />
 
-            <IdleCloseBar key={p.recordingKey} rootRef={root} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
+            {p.onFinish && (
+                // The design's `.endbtn`: the last thing on the screen; it finishes the log and opens पूर्ण शेतीचा आढावा.
+                <button type="button" data-testid="vr2-finish" aria-label={`${W.finishTitle} — ${W.finishSub}`}
+                    onClick={() => { hapticFeedback.medium(); p.onFinish?.(); }}
+                    className="mt-1.5 flex min-h-[76px] w-full items-center gap-3 rounded-[22px] border-0 bg-[#0F6B3A] px-4 py-3 text-left text-white shadow-[0_10px_24px_rgba(15,107,58,0.3)] active:scale-[0.99]">
+                    <EndTick />
+                    <span className="min-w-0 flex-1">
+                        <b className="block text-[24px] font-bold leading-[1.2]" style={{ fontFamily: "'Noto Serif Devanagari', serif" }}>{W.finishTitle}</b>
+                        <small className="block text-[15px] font-bold text-[#D1FAE5]">{W.finishSub}</small>
+                    </span>
+                    <EndArrow />
+                </button>
+            )}
+            <IdleCloseBar key={p.recordingKey} rootRef={root} waitMs={waitMs} pauseReason={pauseReason} overlayOpen={overlayOpen} offReason={p.autoCloseOff}
                 onClose={p.onAutoClose} onAddAnother={p.onAddAnother} />
             {/* Room under the sticky bar: at the very end of the page the bar rests here, so "आजचा आढावा बघा" and the last
                 rows scroll fully above it and above the app's bottom bar (seen on localhost: they sat under both). */}

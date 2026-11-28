@@ -9,10 +9,13 @@
  *   - the title claims only what the sync state says (P10): "लक्षात ठेवलं ✓" on the phone, the server's words only once applied;
  *   - his voice sits with his words (under the meter); a typed recording has the typed note and no player;
  *   - a product row opens the product card; a red part opens the mic for that part; the blue button opens the detail page;
- *   - the 30 s close is held while the product card is open, while a clip plays, while any overlay is open, and is off when the
- *     container says so; his touch starts it again from 30;
+ *   - the self-move is held while the product card is open, while a clip plays, while any overlay is open, and is off when the
+ *     container says so; his touch starts it again;
  *   - no "पक्कं आहे" here and no projected number (P4).
+ * spec: plr-d10 (part 03, B6) — the self-move waits his reading time (3 s + 0.17 s a word of his words shown, 5 to 20 s), then the note
+ * "आजच्या शेतीचा आढावा बघा" for 2.4 s; the end button "झालं — पूर्ण शेतीचा आढावा बघा" is the screen's last part.
  */
+import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -39,6 +42,7 @@ import type { VoiceClipCacheRecord } from '../../../../../infrastructure/storage
 import type { DailyLog } from '../../../../../types';
 import type { ProductAnswerKit } from '../../voiceResult/ProductCard';
 import { buildDayView, type WhoDeps } from '../../voiceResult/resultModel';
+import { MOVE_NOTE_MS, readingTimeMs } from '../readingTime';
 import SavedScreen, { type SavedScreenProps } from '../SavedScreen';
 
 const ME = 'op-me';
@@ -90,7 +94,7 @@ const props = (over: Partial<SavedScreenProps> = {}): SavedScreenProps => ({
     onEdit: vi.fn(), onAddAnother: vi.fn(), onTellMore: vi.fn(),
     questionPanel: <div data-testid="question-panel" />, extras: <div data-testid="extras-slot" />,
     answerKit: kitOf([NOW, EARLIER], false),
-    autoCloseOff: null, onOpenDetail: vi.fn(), onAutoClose: vi.fn(),
+    autoCloseOff: null, onOpenDetail: vi.fn(), onAutoClose: vi.fn(), onFinish: vi.fn(),
     ...over,
 });
 
@@ -105,7 +109,7 @@ describe('SavedScreen — what he sees first', () => {
         render(<SavedScreen {...props()} />);
         // Founder 2026-11-23: "below the meter is text, below the text the chemical and nutrient, and then other parts".
         const order = ['vr2-head', 'vr2-speakers', 'vr2-saved-card', 'vr2-speaker-done', 'vr2-given', 'vr2-parts', 'vr2-words', 'vr2-question',
-            'extras-slot', 'vr2-edit', 'vr2-earlier', 'vr2-open-detail', 'vr2-idle-bar'];
+            'extras-slot', 'vr2-edit', 'vr2-earlier', 'vr2-open-detail', 'vr2-finish', 'vr2-idle-bar'];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `${order[i - 1]} before ${order[i]}`).toBe(true);
     });
 
@@ -248,26 +252,52 @@ describe('SavedScreen — what he sees first', () => {
     });
 });
 
-describe('SavedScreen — the 30 s close', () => {
+describe('SavedScreen — the reading-time move (B6)', () => {
     beforeEach(() => { vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] }); vi.setSystemTime(new Date('2026-10-26T10:01:00.000Z')); });
     const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
     const state = () => screen.getByTestId('vr2-idle-bar').getAttribute('data-state');
+    /** His 22 words: 3 s + 22 × 0.17 s = 6.74 s. */
+    const WAIT = readingTimeMs(22);
 
-    it('closes itself after 30 s untouched', () => {
+    it('waits his reading time, from the words shown: 22 words = 6.74 s', () => {
+        render(<SavedScreen {...props()} />);
+        expect(WAIT).toBe(6740);
+        expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-wait-ms')).toBe('6740');
+    });
+
+    it('then the note "आजच्या शेतीचा आढावा बघा" for 2.4 s, then it moves once', () => {
         const p = props();
         render(<SavedScreen {...p} />);
-        advance(31_000);
+        advance(WAIT - 300);
+        expect(screen.queryByTestId('vr2-move-note')).toBeNull();
+        advance(600);
+        expect(screen.getByTestId('vr2-move-note')).toHaveTextContent('आजच्या शेतीचा आढावा बघा');
+        expect(p.onAutoClose).not.toHaveBeenCalled();
+        advance(MOVE_NOTE_MS + 300);
+        expect(p.onAutoClose).toHaveBeenCalledTimes(1);
+        advance(60_000);
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
     });
 
-    it('his touch starts it again from 30', () => {
+    it('a shorter talk waits less, never under 5 s; a very long one never over 20 s', () => {
+        const short = log('L-NOW', { ...NOW, fullTranscript: 'दोन तास पाणी दिलं' });
+        render(<SavedScreen {...props({ day: dayOf([short], [short, EARLIER]) })} />);
+        expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-wait-ms')).toBe('5000');
+        cleanup();
+        const long = log('L-NOW', { ...NOW, fullTranscript: Array.from({ length: 150 }, () => 'शब्द').join(' ') });
+        render(<SavedScreen {...props({ day: dayOf([long], [long, EARLIER]) })} />);
+        expect(screen.getByTestId('vr2-idle-bar').getAttribute('data-wait-ms')).toBe('20000');
+    });
+
+    it('his touch starts the wait again', () => {
         const p = props();
         render(<SavedScreen {...p} />);
-        advance(20_000);
+        advance(5000);
         fireEvent.pointerDown(screen.getByTestId('vr2-saved-card'));
-        advance(20_000);
+        advance(WAIT - 300);
+        expect(screen.queryByTestId('vr2-move-note')).toBeNull();
         expect(p.onAutoClose).not.toHaveBeenCalled();
-        advance(11_000);
+        advance(600 + MOVE_NOTE_MS + 300);
         expect(p.onAutoClose).toHaveBeenCalledTimes(1);
     });
 
@@ -285,7 +315,7 @@ describe('SavedScreen — the 30 s close', () => {
         render(<SavedScreen {...p} />);
         advance(60_000);
         expect(state()).toBe('paused');
-        expect(screen.getByTestId('vr2-idle-left').textContent).toContain('थांबवलं');
+        expect(screen.queryByTestId('vr2-move-note')).toBeNull();
         expect(p.onAutoClose).not.toHaveBeenCalled();
     });
 
@@ -314,5 +344,32 @@ describe('SavedScreen — the 30 s close', () => {
         advance(120_000);
         expect(state()).toBe('off');
         expect(p.onAutoClose).not.toHaveBeenCalled();
+    });
+});
+
+describe('SavedScreen — the end button (B6)', () => {
+    it('"झालं — पूर्ण शेतीचा आढावा बघा" is the last part of the screen and finishes once per tap', () => {
+        const p = props();
+        render(<SavedScreen {...p} />);
+        const end = screen.getByTestId('vr2-finish');
+        expect(end).toHaveTextContent('झालं');
+        expect(end).toHaveTextContent('पूर्ण शेतीचा आढावा बघा');
+        expect(end.getAttribute('aria-label')).toBe('झालं — पूर्ण शेतीचा आढावा बघा');
+        expect(before('vr2-open-detail', 'vr2-finish')).toBe(true);
+        fireEvent.click(end);
+        expect(p.onFinish).toHaveBeenCalledTimes(1);
+        expect(p.onAutoClose).not.toHaveBeenCalled();
+    });
+
+    it('is shown even when the self-move is off (he can always finish)', () => {
+        const p = props({ autoCloseOff: 'not_queued' });
+        render(<SavedScreen {...p} />);
+        fireEvent.click(screen.getByTestId('vr2-finish'));
+        expect(p.onFinish).toHaveBeenCalledTimes(1);
+    });
+
+    it('not drawn when the caller gives no finish', () => {
+        render(<SavedScreen {...props({ onFinish: undefined })} />);
+        expect(screen.queryByTestId('vr2-finish')).toBeNull();
     });
 });

@@ -54,7 +54,7 @@ import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { kindsNotSavedOf } from '../../../workKinds/closedKinds';
 import { KindsNotSavedNote } from '../../../workKinds/KindsNotSavedNote';
 import { SeenByLine } from '../../../recordAudience/SeenByLine';
-import SavedScreen, { closedToastOf } from '../voiceFlowV2/SavedScreen';
+import SavedScreen from '../voiceFlowV2/SavedScreen';
 import { FirstRecordOffer } from '../voiceFlowV2/FirstRecordOffer';
 import { useFirstRecordOffer } from '../voiceFlowV2/useFirstRecordOffer';
 import { holdDetailBack } from '../voiceFlowV2/detailBack';
@@ -94,8 +94,13 @@ export interface VoiceResultContainerProps {
     onMoveDay?: (logs: readonly DailyLog[], dateKey: string) => Promise<void>;
     /** Lane IT4 - the mixing rules the combination boxes use. Default: the shippable list (no red rule is reviewed yet, D-96). Test seam. */
     mixRules?: readonly MixRule[];
-    /** spec voice-flow-v2-2026-11-23 — where the saved screen goes when it closes itself (the work home). Absent = `onBack`. */
+    /**
+     * spec voice-flow-v2-2026-11-23 — where the saved screen goes when it moves by itself. Absent = `onBack`.
+     * spec plr-d10 (part 03, B6): पूर्ण शेतीचा आढावा, after his reading time and the short note (the note replaces the old toast).
+     */
     onAutoClose?: () => void;
+    /** spec plr-d10 (part 03, B6) — the saved screen's end button "झालं — पूर्ण शेतीचा आढावा बघा". Absent = not drawn. */
+    onFinish?: () => void;
     /**
      * Repair R1-g 1b (CTO ruling 3) — "शेताची माहिती भरा" on the FIRST record's saved screen: the setup hub. Absent = the offer
      * is never drawn (and nothing about it is read or written).
@@ -105,7 +110,7 @@ export interface VoiceResultContainerProps {
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, crops, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules, onAutoClose, onOpenSetupHub,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules, onAutoClose, onOpenSetupHub, onFinish,
 }) => {
     const [pickingDay, setPickingDay] = useState(false);
     // spec voice-flow-v2 (M5): the recording whose detail page is open (null = the saved screen). Keyed by the recording, so a new
@@ -295,10 +300,13 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
                 }}
                 onAutoClose={leave(() => {
                     logger.info('voice_v2.saved.auto_close', { component: 'SavedScreen', action: 'auto_close', sync, logCount: current.length });
-                    // The app's own toast event (`app/compositionRoot.ts`), with the same honest claim as the title.
-                    window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: closedToastOf(sync, language), type: 'success' } }));
+                    // B6 — the screen's own note "आजच्या शेतीचा आढावा बघा" (IdleCloseBar) has just said where it goes: no toast after it.
                     (onAutoClose ?? onBack)();
                 })}
+                onFinish={onFinish ? leave(() => {
+                    logger.info('voice_v2.saved.finish', { component: 'SavedScreen', action: 'finish', sync, logCount: current.length });
+                    onFinish();
+                }) : undefined}
             />
             {daySheet}
             </>
