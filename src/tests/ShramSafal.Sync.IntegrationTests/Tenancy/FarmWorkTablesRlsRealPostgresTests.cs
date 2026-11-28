@@ -251,8 +251,11 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         // Active schedule subscriptions (the steps a followed schedule asks), whose columns (e.g. check_state_at_adopt) a LATER migration added, so
         // on this base schema it cannot answer at all, with or without this lane's wall. The boards are compared with the walled answers on the head
         // schema, before the Down and after each Up (`AnswersAsync` below carries both).
-        var onBase = await BaseAnswersAsync();
-        onBase.OwnerSummary.Should().Be(walled.OwnerSummary, "the wall changes no answer for the owner (P11)");
+        // spec: plr-d10 pilot lane PERM (test only) - the money summary left the base comparison for the same reason: its access read now maps each
+        // seat's kinds of work (ssf.farm_memberships.allowed_work_kinds), a column a LATER migration (20261127031000_AddMemberWorkKinds) added, so on
+        // this base schema it cannot answer at all, with or without this lane's wall. It is compared with the walled answer on the head schema, before
+        // the Down and after each Up. The base proof (no answer changed by this wall) was made when this lane landed (7 Nov) and is not lost by the
+        // later column; on the base this test now proves the Down / Up only: every table out of the policy, and every row kept.
 
         // Up again on a database holding rows in every table: nothing lost, all walled again; and once more round.
         await MigrateSsfToAsync(null);
@@ -271,12 +274,6 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         string OwnerLedgers, string OwnerPlanned, string OwnerTasks,
         string MemberLedgers, string MemberPlanned, string MemberTasks,
         string OwnerSummary, string OwnerBoard, string MemberBoard);
-
-    /// <summary>F204 / ATT-W: the reads that exist on the base schema (the money summary), no pull and no attention board.</summary>
-    private sealed record BaseAnswers(string OwnerSummary);
-
-    private async Task<BaseAnswers> BaseAnswersAsync() => new(
-        await BodyAsync(Owner, "/shramsafal/finance/summary?groupBy=plot&fromDate=2026-01-01&toDate=2026-12-31"));
 
     private async Task<Answers> AnswersAsync()
     {

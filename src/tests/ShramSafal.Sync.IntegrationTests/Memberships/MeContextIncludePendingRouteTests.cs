@@ -79,6 +79,8 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
         builder.Services.AddSingleton<IFarmMembershipSnapshotReader>(_memberships);
         builder.Services.AddSingleton<IMeInvitationSnapshotReader>(_invitations);
         builder.Services.AddSingleton<IClock, SystemClockFake>();
+        // pilot lane IDENT (S1): the handler now also reads his own identity card. He never saved one here.
+        builder.Services.AddScoped<IUserIdentityProfileStore, NoIdentityCard>();
 
         _app = builder.Build();
         _app.UseAuthentication();
@@ -222,6 +224,15 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
     private sealed class SystemClockFake : IClock
     {
         public DateTime UtcNow => DateTime.UtcNow;
+    }
+
+    private sealed class NoIdentityCard : IUserIdentityProfileStore
+    {
+        public Task<global::User.Domain.Identity.UserIdentityProfile?> GetAsync(UserId userId, bool track, CancellationToken ct = default)
+            => Task.FromResult<global::User.Domain.Identity.UserIdentityProfile?>(null);
+        public void Add(global::User.Domain.Identity.UserIdentityProfile profile) => throw new NotSupportedException();
+        public Task<int> CurrentVersionAsync(UserId userId, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<bool> TrySaveAsync(CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class SingleUserRepository(DomainUser user) : IUserRepository
