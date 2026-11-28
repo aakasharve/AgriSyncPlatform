@@ -42,6 +42,13 @@ const focusRecorder = () => {
     }
 };
 
+/**
+ * spec plr-d10 (voice live words, 28 Nov 2026) — the farm of this recording, as `useVoiceRecorder.resolveFarmId` finds it (the first
+ * selection that names one); undefined when none does. The live words need it for the server's trial / plan check.
+ */
+export const liveWordsFarmIdOf = (selection: ReadonlyArray<{ farmId?: string }> | undefined): string | undefined =>
+    selection?.find(s => typeof s.farmId === 'string' && s.farmId.trim().length > 0)?.farmId?.trim();
+
 /** THE log recorder (and its live caption), bound to the app's one voice pipeline. */
 export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, armSeq }: LogRecorderHooks = {}): React.ReactNode => {
     const { handleAudioReady, handleTextReady, setStatus, isContextReady, error, errorTranscript, liveCaption, voiceStreamingPhase } = ctx;
@@ -66,6 +73,7 @@ export const renderLogRecorder = (ctx: AppRouterContext, { onRecordingChange, ar
                     onRequestContextSelection={focusRecorder}
                     onRecordingChange={onRecordingChange}
                     flowV2={flowV2}
+                    liveWordsFarmId={flowV2 ? liveWordsFarmIdOf(ctx.currentLogContext?.selection) : undefined}
                 />
             ) : (
                 <AudioRecorder

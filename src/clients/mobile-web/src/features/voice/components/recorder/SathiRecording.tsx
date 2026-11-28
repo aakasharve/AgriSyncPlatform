@@ -6,8 +6,10 @@
  * centre of the ring of the parts, his bubble "आता बोला - मी ऐकतोय", the status line, the calm field picture, the words strip, and at
  * the bottom the timer, the red stop and "झालं की थांबवा".
  *
- * Truth rules (doctrine): there is no live transcript today, so no words appear while he speaks, and NO part lights while he speaks
- * (P4: a part lights only from the server's real answer, which comes after stop, on the saved screen). The status line counts the
+ * Truth rules (doctrine): the words strip shows the words the speech service has heard so far (voice live words, 28 Nov 2026: a phrase
+ * at a time, from the server, display only; until the first phrase arrives, or when none can, it keeps its calm "बोला... साथी ऐकतोय"),
+ * and NO part lights while he speaks (P4: a part lights only from the server's real answer, which comes after stop, on the saved
+ * screen: the ring never sorts live words). The final words are always the batch answer's own. The status line counts the
  * real seconds of audio held on the PHONE and says "फोनवर", never "सर्व्हरवर" (P10). The field picture is a still picture of his plot
  * with its name; nothing in it is drawn "from his voice".
  * Reduced motion: no pulse, no ring animation (P11). The stop is a 72 px target; the cancel keeps its place and its words.
@@ -77,13 +79,16 @@ export interface SathiRecordingProps {
     help: SilenceHelpView;
     /** "द्राक्ष · प्लॉट १" - absent when the recorder does not know the place. */
     place?: string;
+    /** The words heard so far in what he is saying (plain text, newest at the end). Empty/absent = the calm placeholder line. */
+    liveWords?: string;
 }
 
-export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, onStop, onCancel, help, place }) => {
+export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, onStop, onCancel, help, place, liveWords }) => {
     const language = useOptionalLanguage()?.language;
     const W = voiceFlowWords(language);
     const slot = useVoiceLayerBottom();
     const bubble = { t: W.sathiListening, s: W.sathiListeningSub };
+    const heard = liveWords?.trim() ?? '';
     const body = (
         <div className="flex w-full flex-col gap-2.5 pb-2" style={{ fontFamily: SANS }} data-testid="mic-ui" data-recording="yes">
             <div className="relative mx-auto mt-1 max-w-full rounded-2xl border border-[#9ACBAD] bg-white px-4 py-2 text-center shadow-[0_2px_10px_rgba(20,60,40,0.07)]" data-testid="sathi-bubble">
@@ -96,7 +101,8 @@ export const SathiRecording: React.FC<SathiRecordingProps> = ({ seconds, level, 
             <p className="m-0 text-center text-[13px] font-extrabold text-[#0F6B3A]" data-testid="sathi-status" aria-live="off">
                 {seconds >= 1 ? W.recOnPhone(seconds) : ' '}
             </p>
-            <p className="m-0 rounded-2xl border border-[#DDE3DA] bg-white px-3.5 py-2.5 text-[15px] font-semibold text-[#5F6B63]" data-testid="sathi-words-strip">{W.wordsStrip}</p>
+            <p className={`m-0 max-h-[104px] overflow-hidden rounded-2xl border border-[#DDE3DA] bg-white px-3.5 py-2.5 text-[15px] font-semibold leading-[1.45] [overflow-wrap:anywhere] ${heard ? 'text-[#1C1917]' : 'text-[#5F6B63]'}`}
+                data-testid="sathi-words-strip" data-live={heard ? 'yes' : 'no'} aria-live="off">{heard || W.wordsStrip}</p>
         </div>
     );
     const bottom = (

@@ -67,6 +67,8 @@ export interface RecorderFaceProps {
     onTextCaptured?: (text: string) => void;
     /** spec voice-flow-v2-2026-11-23 — the v2 mic card and silence help. Absent = today's recorder, unchanged. */
     flowV2?: RecorderFlowV2;
+    /** spec plr-d10 (voice live words) — the words heard so far in what he is saying; the v2 recording screen's words strip shows them. Empty = none yet. */
+    liveWords?: string;
 }
 
 interface RecordingProps {
@@ -81,15 +83,17 @@ interface RecordingProps {
     onAutoCancel?: (reason: AutoCancelReason) => void;
     /** F4: "द्राक्ष · प्लॉट १", for the field picture of the v2 recording screen. */
     place?: string;
+    /** The words heard so far (v2 recording screen only). */
+    liveWords?: string;
 }
 
-const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel, place }) => {
+const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel, silenceHelp = false, autoStarted = false, onAutoCancel, place, liveWords }) => {
     const [hintDismissed, setHintDismissed] = useState(false);
     const language = useOptionalLanguage()?.language;
     const help = useSilenceHelp({ on: silenceHelp || autoStarted, level, autoStarted, onAutoCancel });
     const hintOn = !silenceHelp && !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
     // spec voice-flow-v2-2026-11-23 (F4): with the flow on, the recording screen is Sathi's (ring of the parts, bubble, field, bottom stop).
-    if (silenceHelp) return <SathiRecording seconds={seconds} level={level} onStop={onStop} onCancel={onCancel} help={help} place={place} />;
+    if (silenceHelp) return <SathiRecording seconds={seconds} level={level} onStop={onStop} onCancel={onCancel} help={help} place={place} liveWords={liveWords} />;
     return (
         <div data-testid="mic-ui" data-recording="yes" style={{ fontFamily: SANS }}
             className="relative flex w-full flex-col items-center overflow-hidden rounded-[28px] border border-emerald-200 bg-[#FCFCFC] px-3 pb-3 pt-3 text-stone-800 shadow-[0_8px_30px_rgba(16,185,129,0.12)]">
@@ -134,7 +138,7 @@ const Recording: React.FC<RecordingProps> = ({ seconds, level, onStop, onCancel,
 
 export const RecorderFace: React.FC<RecorderFaceProps> = ({
     isRecording, seconds, level, disabled, suggest, error, keptNote, errorCode, transcript, lastInputTyped, micRefused,
-    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2,
+    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, flowV2, liveWords,
 }) => {
     const language = useOptionalLanguage()?.language;
     const [typedOpen, setTypedOpen] = useState(false);
@@ -193,7 +197,7 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
         return (
             <Recording seconds={seconds} level={level} onStop={onStop} onCancel={cancel}
                 silenceHelp={!!flowV2?.silenceHelp} autoStarted={v2On && autoStarted} onAutoCancel={autoCancel}
-                place={card?.placeLabel(language)} />
+                place={card?.placeLabel(language)} liveWords={liveWords} />
         );
     }
     const instruction = disabled ? REC_WORDS.selectCropFirst : MIC_INSTRUCTION;

@@ -34,6 +34,7 @@ import { VoicePreprocessor } from '../../../infrastructure/voice/VoicePreprocess
 import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency';
 import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
+import { LiveWordsSession } from '../liveWords/liveWordsSession';
 
 interface AudioRecorderStreamingProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -51,6 +52,11 @@ interface AudioRecorderStreamingProps {
   onRecordingChange?: (recording: boolean) => void;
   /** spec voice-flow-v2-2026-11-23 — handed to RecorderFace as is. */
   flowV2?: RecorderFlowV2;
+  /**
+   * spec plr-d10 (voice live words, 28 Nov 2026) — the farm this recording belongs to. With it AND the v2 flow on, the words he is
+   * saying appear on the recording screen while he speaks (a phrase at a time). Absent = no live words, today's recorder.
+   */
+  liveWordsFarmId?: string;
 }
 
 async function blobToBase64NoPrefix(blob: Blob): Promise<string> {
@@ -81,6 +87,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   onProcessingStart,
   onRecordingChange,
   flowV2,
+  liveWordsFarmId,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -93,6 +100,15 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   const [micRefused, setMicRefused] = useState(false);
   const [lastInputTyped, setLastInputTyped] = useState(false);
   const level = useMicLevel(isRecording ? liveStream : null);
+  // Voice live words: the words heard so far in what he is saying (display only; his recording and its parse never depend on it).
+  const [liveWords, setLiveWords] = useState('');
+  const liveWordsRef = useRef<LiveWordsSession | null>(null);
+  const liveWordsOn = flowV2?.silenceHelp === true && !!liveWordsFarmId && liveWordsFarmId !== 'unknown-farm';
+  const endLiveWords = () => {
+    liveWordsRef.current?.stop();
+    liveWordsRef.current = null;
+    setLiveWords('');
+  };
 
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
   const language = useOptionalLanguage()?.language;
@@ -139,7 +155,16 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       await recorder.start((frame) => {
         trimmer.feed(frame);
         hasher.feed(frame);
+        liveWordsRef.current?.feed(frame); // a COPY is read; what is recorded is untouched
       });
+
+      // Voice live words (display only, never blocks): the session cuts his speech into phrases and shows each one's words.
+      liveWordsRef.current?.stop();
+      liveWordsRef.current = null;
+      const rate = recorder.sampleRate;
+      if (liveWordsOn && liveWordsFarmId && rate) {
+        liveWordsRef.current = new LiveWordsSession({ farmId: liveWordsFarmId, sampleRate: rate, onWords: setLiveWords });
+      }
 
       setIsRecording(true);
       setLastInputTyped(false);
@@ -172,7 +197,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       setInternalErrorCode(name);
       setIsRecording(false);
     }
-  }, []);
+  }, [liveWordsOn, liveWordsFarmId]);
 
   const stopRecording = useCallback(async () => {
     if (!recorderRef.current || !isRecording) return;
@@ -180,6 +205,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — streaming path entry mark.
     markVoice('stop'); // also the `voice:stop` performance mark; starts this recording's timing (voice_timing)
 
+    endLiveWords(); // no more phrases leave the phone once he has stopped; the words shown go away with the screen
     setIsRecording(false);
     setLiveStream(null);
     if (timerRef.current) {
@@ -295,6 +321,8 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      liveWordsRef.current?.stop();
+      liveWordsRef.current = null;
       void liveEncoderRef.current?.stop();
       liveEncoderRef.current = null;
       // Best-effort cleanup; recorder.stop() is async and we don't await on unmount.
@@ -329,6 +357,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       onRequestContextSelection={onRequestContextSelection}
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
       flowV2={flowV2}
+      liveWords={liveWords}
     />
   );
 };

@@ -46,6 +46,14 @@ export class StreamingPcmRecorder {
         return this.mediaStream;
     }
 
+    /**
+     * The sound's own sample rate while recording (the AudioContext's: 16000 asked, a phone may give 44100 or 48000), else null.
+     * READ-ONLY, like `liveStream`: the live words (voice live words, 28 Nov 2026) cut their phrases at the rate the frames really have.
+     */
+    get sampleRate(): number | null {
+        return this.audioContext?.sampleRate ?? null;
+    }
+
     static isSupported(): boolean {
         if (typeof window === 'undefined') return false;
         const ctor = StreamingPcmRecorder.resolveAudioContextCtor();
