@@ -186,7 +186,18 @@ public sealed record DailyLogDto(
     /// record without its money and with the existing withheld flags, and no key at all. LEFT OUT when null (P11: an old phone's bytes are unchanged).
     /// </summary>
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    string? MoneyAudience = null);
+    string? MoneyAudience = null,
+
+    /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5, "बदल करता येतो · २४ तास") — until when the record's
+    /// OWN speaker (<see cref="OperatorUserId"/>) may change what he said in this talk: the server's clock when it first
+    /// stored the talk plus 24 hours (<c>DailyLog.EditableUntilUtc</c>), so the phone never computes it. A change of his
+    /// is open while the server's now is BEFORE it, and refused at or after it (<c>ShramSafal.LogEditWindow.Conflict</c>).
+    /// It binds ONLY the speaker: for every other reader it is information, never a lock on him. LEFT OUT when null = the
+    /// record is not a talk and has no window (P11: every record an older phone can make; their bytes are unchanged).
+    /// </summary>
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? EditableUntilUtc = null);
 
 /// <summary>
 /// spec: plr-d10 (lane F1) — one stored content row on the wire.

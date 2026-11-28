@@ -229,6 +229,9 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
 
         builder.Ignore(x => x.CurrentVerificationStatus);
         builder.Ignore(x => x.LastVerificationStatus);
+        // spec: plr-d10 (Part 03 B5) — the talk's change window is a rule over created_at_utc and the auto-save marker,
+        // never a column.
+        builder.Ignore(x => x.EditableUntilUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

@@ -226,6 +226,21 @@ public sealed class CorrectLabourHandler(
             }
         }
 
+        // ── 4a. spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — the speaker's own change of what he SAID
+        // in a talk (its headcount or hours), after the talk's 24 hours (server clock): refused, nothing staged. After the
+        // replay above on purpose, so a correction applied inside the window still answers as applied when it is re-sent.
+        // Naming people on the work is an overlay that never changes the reported number (P7): it stays open, and so does
+        // every correction by anyone but the speaker. A record that is not a talk has no window (P11: 1.0.17 sends every
+        // count edit to the online route, and none of its records is a talk).
+        if ((quantity is not null || command.DurationHours is not null)
+            && Services.LogEditGate.EditWindowRefusal(dailyLog, command.CallerUserId.Value, clock.UtcNow) is { } windowClosed)
+        {
+            logger.LogInformation(
+                "Labour correction for assignment {LabourAssignmentId} refused: the speaker's change arrived after the talk's window closed at {EditableUntil:o}.",
+                assignment.Id, dailyLog.EditableUntilUtc);
+            return Result.Failure<CorrectLabourResult>(windowClosed);
+        }
+
         // ── 4b. spec: plr-d10 (lane OF-S) — never over a newer correction. When the reviewer says what he
         // saw, a section he corrects must still say that; otherwise someone changed it meanwhile and his
         // change is refused (the phone puts the entry back and says why). Only the sections he corrects are

@@ -776,6 +776,25 @@ public sealed class DailyLog : Entity<Guid>
     public bool WasAutoSavedFromVoice => AutoSavedFromVoiceMarker is not null;
 
     /// <summary>
+    /// spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — until when this record's OWN speaker may change
+    /// what he said in it (<see cref="TalkEditWindow"/>): <see cref="CreatedAtUtc"/> (the server's clock when it first
+    /// stored the record) plus <see cref="TalkEditWindow.Length"/>, for a talk (<see cref="WasAutoSavedFromVoice"/>).
+    /// <c>null</c> = no window: not a talk, so nothing here limits a change (P11). The change is open while the server's
+    /// now is BEFORE this instant.
+    /// </summary>
+    public DateTime? EditableUntilUtc => WasAutoSavedFromVoice ? CreatedAtUtc + TalkEditWindow.Length : null;
+
+    /// <summary>
+    /// spec: plr-d10 (Part 03 B5) — true when <paramref name="actorUserId"/> is this talk's speaker and its window has
+    /// closed at <paramref name="nowUtc"/> (the server's clock). Always false for anyone else and for a record with no
+    /// window. Which changes it guards is the caller's rule (only his changes of what he said).
+    /// </summary>
+    public bool IsEditWindowClosedFor(Guid actorUserId, DateTime nowUtc) =>
+        actorUserId == OperatorUserId.Value
+        && EditableUntilUtc is { } editableUntil
+        && nowUtc >= editableUntil;
+
+    /// <summary>
     /// spec: plr-d10 (I13) — records, at creation, that the phone saved this log straight
     /// from a voice parse. Writes ONE <see cref="VerificationStatus.Draft"/> event carrying
     /// <see cref="AutoSavedFromVoiceReason"/>, credited to the log's own operator (it is his

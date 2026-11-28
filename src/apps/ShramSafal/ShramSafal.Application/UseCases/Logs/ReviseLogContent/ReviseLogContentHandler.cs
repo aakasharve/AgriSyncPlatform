@@ -22,7 +22,8 @@ namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 /// <list type="bullet">
 /// <item><b>Who may.</b> The person who recorded the log, or anyone the ONE labour permission
 /// system allows (<see cref="LabourManagementGate"/>: owner tier by role, जबाबदारी grant holders).
-/// No second permission system. Anyone else: Forbidden, nothing written.</item>
+/// No second permission system. Anyone else: Forbidden, nothing written. The person who recorded a TALK
+/// changes it only within its 24 hours (Part 03 B5, <see cref="LogEditGate"/>); everyone else stays open.</item>
 /// <item><b>Never at the हजेरी door (review N12).</b> A record saved there holds labour only
 /// (B002): its details are refused with a three-segment <c>.InvalidCommand</c>, so the phone parks
 /// the queued edit where the farmer sees it instead of dropping it.</item>
@@ -143,6 +144,13 @@ public sealed class ReviseLogContentHandler(
             {
                 logger.LogWarning(
                     "revise_log_content for {LogId} refused: the record was saved at the labour door (B002).", log.Id);
+            }
+            else if (refusal.Code == ShramSafalErrors.LogEditWindowClosed.Code)
+            {
+                // Part 03 B5 — said, never silent (E9): the speaker's change arrived after the talk's window closed.
+                logger.LogInformation(
+                    "revise_log_content for {LogId} refused: the speaker's change arrived after the talk's window closed at {EditableUntil:o}.",
+                    log.Id, log.EditableUntilUtc);
             }
 
             return Result.Failure<ReviseLogContentResultDto>(refusal);

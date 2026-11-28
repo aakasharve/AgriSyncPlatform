@@ -19,11 +19,25 @@ namespace ShramSafal.Application.Services;
 /// (<see cref="LabourManagementGate"/>: owner tier by role, जबाबदारी grant holders).</item>
 /// <item>A record saved at the हजेरी door holds labour only (B002): it is changed in the हजेरी वही, never here —
 /// refused with a three-segment <c>.InvalidCommand</c> so the phone parks the queued change where the farmer sees it.</item>
+/// <item>spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5) — a TALK's own speaker changes what he said only
+/// within its 24 hours (<see cref="TalkEditWindow"/>, the server's clock): after that his change is refused with
+/// <see cref="ShramSafalErrors.LogEditWindowClosed"/>. Anyone else this rule allows (the owner tier, a जबाबदारी grant
+/// holder) is never stopped by it, and a record that is not a talk has no window.</item>
 /// </list>
 /// Every refusal comes back BEFORE anything is staged.
 /// </summary>
 public static class LogEditGate
 {
+    /// <summary>
+    /// spec: plr-d10 (Part 03 B5) — the ONE window rule for the speaker's change of what he said, shared by this gate and
+    /// by the headcount / hours correction (<c>CorrectLabourHandler</c>). <c>null</c> = open.
+    /// </summary>
+    public static Error? EditWindowRefusal(DailyLog log, Guid actorUserId, DateTime nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        return log.IsEditWindowClosedFor(actorUserId, nowUtc) ? ShramSafalErrors.LogEditWindowClosed : null;
+    }
+
     /// <summary>The refusal, or <c>null</c> when <paramref name="actorUserId"/> may change <paramref name="log"/>.</summary>
     public static async Task<Error?> CheckAsync(
         IShramSafalRepository repository,
@@ -55,6 +69,11 @@ public static class LogEditGate
             return ShramSafalErrors.Forbidden;
         }
 
-        return log.WasCapturedAtLabourDoor ? ShramSafalErrors.LabourDoorLogContent : null;
+        if (log.WasCapturedAtLabourDoor)
+        {
+            return ShramSafalErrors.LabourDoorLogContent;
+        }
+
+        return EditWindowRefusal(log, actorUserId, nowUtc);
     }
 }

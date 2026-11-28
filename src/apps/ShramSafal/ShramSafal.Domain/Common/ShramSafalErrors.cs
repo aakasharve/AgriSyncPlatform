@@ -193,6 +193,17 @@ public static class ShramSafalErrors
         "ShramSafal.LogContentPrices.Conflict",
         "Only the person who made this entry, or someone who checks money entries, can change its prices. Nothing was saved.");
 
+    // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (Part 03 B5; founder 28 Nov: "If there is any change, you can do it
+    // within 24 hours") — the speaker's own change of what he said in a TALK, made after its 24 hours (Domain.Logs.TalkEditWindow,
+    // server clock). Refused WHOLE, before anything is staged; nobody else's change is ever refused by it. THREE SEGMENTS, tail
+    // CONFLICT: every phone that can send such a change (revise_log_content, move_daily_log and correct_labour_assignment are
+    // this build's; the online count correction answers 409) parks it where he sees it and never retries it (P10, P11). The
+    // phone says the reason in its own words by this code, or by the reason key at the end of the message.
+    public static readonly Error LogEditWindowClosed = Error.Conflict(
+        "ShramSafal.LogEditWindow.Conflict",
+        "This talk could be changed for 24 hours after it was saved, and that time has passed. Nothing was changed. [reason:"
+        + Logs.TalkEditWindow.ReasonKey + "]");
+
     // spec: plr-d10 lane BILL-1b (founder D-105 (b), answered 2026-11-08: "Only you, the main owner, can change an approved
     // bill's price. The bill then shows 'changed by owner' to everyone, you included."). A bill that carries a मंजूर stamp
     // keeps its price: a change to it from anyone but the farm's primary account holder is refused and nothing is saved.

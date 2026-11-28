@@ -23,7 +23,8 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 ///
 /// <list type="bullet">
 /// <item><b>Who may</b> — the ONE rule for changing a saved record (<see cref="LogEditGate"/>, the rule
-/// <c>revise_log_content</c> uses). Anyone else: refused, nothing written.</item>
+/// <c>revise_log_content</c> uses). Anyone else: refused, nothing written. That rule also holds a TALK's own speaker
+/// to its 24 hours (Part 03 B5).</item>
 /// <item><b>Where it may go</b> — every plot is read under the farm's tenant scope AND checked against the record's
 /// farm in this code (E4: an FK or RLS alone proves nothing); a foreign plot is <c>Forbidden</c>, never NotFound. A
 /// single-plot record carries its crop season: the season on the target plot that covers the target day, or the

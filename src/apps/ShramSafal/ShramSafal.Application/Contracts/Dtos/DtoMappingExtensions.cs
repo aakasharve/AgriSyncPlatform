@@ -144,7 +144,9 @@ internal static class DtoMappingExtensions
             log.CaptureScope,
             // pilot lane PERM — the record's money stamp (null = its normal readers). ReadScopeProjection.Record keeps it only for the farm's
             // registrant and the record's maker, and serves everyone else the record without its money.
-            MoneyAudience: log.MoneyAudience?.ToString());
+            MoneyAudience: log.MoneyAudience?.ToString(),
+            // Part 03 B5 — the talk's change window, as the server's rule states it (null = not a talk, no key on the wire).
+            EditableUntilUtc: log.EditableUntilUtc);
 
     /// <summary>
     /// spec: plr-d10 (lane F1) — a stored content row on the wire, the document VERBATIM. Nothing
