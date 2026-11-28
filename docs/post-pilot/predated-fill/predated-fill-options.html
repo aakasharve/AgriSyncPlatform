@@ -1,0 +1,406 @@
+<title>Pre-dated Fill Options</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Serif+Devanagari:wght@400;600;700&display=swap');
+:root{
+  --bg:#F3F4EF; --paper:#FFFFFF; --ink:#1C1917; --muted:#5B655E; --line:#DCE2D9; --soft:#EEF2EC;
+  --accent:#0F6B3A; --accent-ink:#FFFFFF; --warn-bg:#FFF1C9; --warn-line:#F3D27A; --warn-ink:#7A5800; --focus:#2D7FF9;
+  --f-mr:'Noto Sans Devanagari','Mukta',system-ui,sans-serif; --f-mrs:'Noto Serif Devanagari','Noto Sans Devanagari',serif; --f-en:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1412; --paper:#171E1B; --ink:#ECF1EB; --muted:#A5B1A9; --line:#2B3631; --soft:#1E2824;
+  --accent:#7EE0A6; --accent-ink:#0F1412; --warn-bg:#3A3010; --warn-line:#6B5A1C; --warn-ink:#F3D27A; --focus:#7FB0FF; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0F1412; --paper:#171E1B; --ink:#ECF1EB; --muted:#A5B1A9; --line:#2B3631; --soft:#1E2824;
+  --accent:#7EE0A6; --accent-ink:#0F1412; --warn-bg:#3A3010; --warn-line:#6B5A1C; --warn-ink:#F3D27A; --focus:#7FB0FF; color-scheme:dark }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-en);font-size:15px;line-height:1.5;overflow-x:hidden}
+.wrap{max-width:1180px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-right,0px)) 64px max(16px,env(safe-area-inset-left,0px))}
+h1{font-size:clamp(22px,4vw,30px);line-height:1.2;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:20px;margin:0 0 6px}
+h3{font-size:15px;margin:0 0 4px}
+p{margin:0 0 8px}
+.lede{color:var(--muted);max-width:78ch}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;background:var(--soft);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+.quote{margin:14px 0 0;background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:10px 14px;font-size:14px;max-width:900px}
+.quote small{display:block;color:var(--muted);margin-top:4px}
+section.opt{margin-top:40px;padding-top:18px;border-top:2px solid var(--line)}
+.k{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.04em;border-radius:6px;padding:1px 8px;margin-right:6px;background:var(--accent);color:var(--accent-ink);vertical-align:2px}
+.row{margin-top:14px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.fr{margin:0;width:236px;max-width:100%}
+.fr figcaption{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4}
+.fr figcaption .n{display:inline-block;background:var(--ink);color:var(--bg);border-radius:50%;width:19px;height:19px;text-align:center;font-weight:800;font-size:11px;line-height:19px;margin-right:6px}
+.grid2{margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.bx{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:13.5px;min-width:0}
+.bx ul{margin:6px 0 0;padding-left:18px}
+.bx li{margin:3px 0}
+.bx.rec{border-left:4px solid var(--accent)}
+.tag{display:inline-block;font-size:11px;font-weight:800;color:var(--warn-ink);background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:6px;padding:0 6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted)}
+.tw{overflow-x:auto;max-width:100%}
+.ev li{margin:5px 0;overflow-wrap:anywhere}
+/* ===== phone (stays light, like the app) ===== */
+.scr{position:relative;width:236px;height:470px;overflow:hidden;border-radius:26px;border:7px solid #0E1512;background:#FAFAF7;color:#1C1917;font-family:var(--f-mr);font-size:12px;line-height:1.4;
+  --g:#1E9E5A;--gd:#0F6B3A;--line:#E5E7E1;--muted:#5F6B63}
+.scr *{box-sizing:border-box}
+.tb{position:absolute;left:0;right:0;top:0;height:40px;display:flex;align-items:center;gap:6px;padding:6px 8px;z-index:5;background:#FAFAF7}
+.tb .back{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 9px;font-weight:800;font-size:11.5px}
+.tb .back svg{width:12px;height:12px}
+.tb .days{margin-left:auto;font-size:10.5px;font-weight:800;color:var(--gd);background:#E3F3E8;border-radius:999px;padding:3px 8px}
+.svpill{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;color:#0F6B3A;background:#E9F8EE;border:1.5px solid #9FD9B5;border-radius:999px;padding:2px 8px}
+.svpill i{width:14px;height:14px;border-radius:50%;background:#1E9E5A;display:grid;place-items:center}
+.svpill i svg{width:9px;height:9px}
+.body{position:absolute;left:0;right:0;top:40px;bottom:0;overflow:hidden}
+.body.dim{opacity:.35}
+.rs{position:absolute;inset:0;padding:4px 10px 14px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.h1{font-family:var(--f-mrs);font-size:16px;font-weight:700;line-height:1.25}
+.h2{font-family:var(--f-mrs);font-size:15px;font-weight:700;margin:4px 0 8px}
+.plot{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:9px 11px}
+.plot b{font-size:13px}.plot span{font-size:10.5px;color:var(--gd);font-weight:800;background:#E3F3E8;border-radius:999px;padding:1px 8px}
+.plot.on{border-color:#059669;background:#F0FBF4}
+.bigmic{display:flex;align-items:center;justify-content:center;gap:7px;background:#0F6B3A;color:#fff;border-radius:16px;padding:12px;font-weight:800;font-size:14px;flex-wrap:wrap}
+.bigmic svg{width:19px;height:19px}
+.bigmic.alt{background:#fff;color:#0F6B3A;border:2px solid #0F6B3A}
+.bigmic em,.linkrow em{font-style:normal;font-size:10px;font-weight:800;border-radius:999px;padding:0 7px;background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+.linkrow{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px;color:#0F6B3A;padding:8px;border-radius:12px;border:1.5px dashed #94A3B8;flex-wrap:wrap}
+.linkrow svg{width:15px;height:15px}
+.linkrow.hl{border:2px solid #0F6B3A;background:#F0FBF4}
+.linkrow.dis{opacity:.5;color:#5F6B63}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -6px 22px rgba(0,0,0,.18);padding:6px 10px 12px;z-index:8}
+.grab{width:34px;height:4px;border-radius:2px;background:#CBD5CF;margin:0 auto 4px}
+.chips{display:flex;gap:6px}
+.chip{flex:1;text-align:center;font-weight:800;font-size:12px;border:1.5px solid var(--line);border-radius:12px;padding:5px 2px;background:#fff}
+.chip small{display:block;font-size:9.5px;font-weight:700;color:var(--muted)}
+.chip.on{border-color:#059669;background:#E9F8EE;color:#0F6B3A}
+.cal{margin:8px 0}
+.cm{font-size:10px;font-weight:800;color:var(--muted);margin-bottom:3px}
+.cg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.cg s{text-decoration:none;font-size:9px;color:var(--muted);font-weight:800}
+.cg u{text-decoration:none;font-size:11px;font-weight:700;padding:3px 0;border-radius:8px}
+.cg u.off{color:#B6BFB9}
+.cg u.sel{background:#0F6B3A;color:#fff}
+.pbtn{display:block;text-align:center;background:#0F6B3A;color:#fff;font-weight:800;border-radius:13px;padding:9px 12px;font-size:13px}
+.pbtn.wide{margin-top:4px}
+.gbtn{display:block;text-align:center;background:#fff;border:2px solid #0F6B3A;color:#0F6B3A;font-weight:800;border-radius:13px;padding:7px 12px;font-size:13px}
+.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.datebar{display:flex;align-items:center;gap:8px;background:var(--warn-bg);border:1.5px solid var(--warn-line);color:var(--warn-ink);border-radius:14px;padding:7px 10px;margin:4px 10px 0}
+.rs .datebar{margin:0}
+.datebar i{width:22px;height:22px;display:block}
+.datebar b{display:block;font-size:13px}.datebar span{font-size:11px;font-weight:700}
+.micwrap{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:30px;text-align:center;padding:0 10px}
+.micbtn{width:84px;height:84px;border-radius:50%;background:#0F6B3A;color:#fff;display:grid;place-items:center;box-shadow:0 0 0 10px #E3F3E8}
+.micbtn svg{width:38px;height:38px}
+.mt{font-family:var(--f-mrs);font-size:20px;font-weight:700;margin-top:12px}
+.ms{font-size:12px;color:var(--muted);font-weight:600}
+.mh{margin-top:6px;font-size:11.5px;font-weight:800;border:1.5px solid #94A3B8;border-radius:999px;padding:3px 11px;background:#fff}
+.note{margin:0 10px;font-size:10.5px;color:var(--muted);line-height:1.4}
+.rs .note{margin:0}
+.body > .note{position:absolute;left:0;right:0;bottom:14px}
+.band{display:flex;gap:8px;align-items:flex-start;background:var(--warn-bg);border:1.5px solid var(--warn-line);color:var(--warn-ink);border-radius:14px;padding:8px 10px}
+.band i{width:20px;height:20px;flex:none;margin-top:1px}
+.band b{display:block;font-size:13px;line-height:1.25}
+.band span{display:block;font-size:11px;font-weight:700}
+.bandsm{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);font-size:10px;font-weight:800;border-radius:7px;padding:0 6px;margin-top:2px}
+.bandsm svg{width:11px;height:11px}
+.when{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:9px 11px}
+.card.ok{background:#F3F8F4;border-color:#CFE5D6}
+.card.ok b{display:block;font-size:12.5px;color:#0F6B3A}
+.card.ok span{font-size:10.5px;color:var(--muted)}
+.slab{font-size:10.5px;font-weight:800;color:#065F46;margin-bottom:2px}
+.wd{margin:0;font-family:var(--f-mrs);font-size:13.5px;line-height:1.7;color:#292524}
+.wd.small{font-size:12px;line-height:1.5;margin-top:4px}
+.wd mark{background:#D8F0E0;color:inherit;border-radius:4px;padding:0 2px}
+.lrow{display:flex;gap:8px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:7px 9px}
+.lrow.pre{border-color:var(--warn-line);background:#FFFCF0}
+.ld{width:52px;flex:none;font-size:11px;line-height:1.2}
+.lb b{display:block;font-size:12px}.lb span{font-size:10.5px;color:var(--muted)}
+.lb{display:flex;flex-direction:column}
+.strip{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.sd{display:flex;flex-direction:column;align-items:center;gap:1px;border-radius:10px;padding:3px 0;background:#fff;border:1px solid var(--line)}
+.sd span{font-size:9px;color:var(--muted);font-weight:800}.sd b{font-size:12px}
+.sd.pick{border:2px solid #0F6B3A}
+.sd.today{background:#E3F3E8}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;border:2px solid #94A3B8;background:#fff}
+.dot.d1,.dot.d3{background:#1E9E5A;border-color:#1E9E5A}
+.dot.d2{background:var(--warn-bg);border-color:#C79A12}
+.legend{display:flex;gap:12px;font-size:10px;color:var(--muted);font-weight:700}
+.legend .dot{margin-right:4px;vertical-align:-1px}
+.foot{margin-top:30px;font-size:12.5px;color:var(--muted)}
+</style>
+<div class="wrap">
+<h1>Pre-dated fill: two screen options</h1>
+<p class="lede">The farm owner records work from earlier days, using the same voice-log system. No verification step. Every such record is clearly marked as filled later, by the owner. Screens are Marathi (as the farmer sees them); captions are English for the founder. Nothing here is built yet. Pick V-A or V-B.</p>
+<div class="quote"><b>Founder decision, 27 Nov (verbatim):</b> "A - there should be separate pre dated fill up flow same but for pre fill same system will work but it will update the previous work but that doesn't require any verification or cross verification and it must flagged as pre dated took this input from owner"<small>Confirmed in the pilot on 28 Nov. Owner only.</small></div>
+
+<div class="grid2">
+<div class="bx rec"><h3>How a pre-dated record stays honest</h3>
+<ul>
+<li><b>Work date</b> = the past day (the owner picked it). <b>Entry time</b> = the real moment he filled it (today). Both are kept and shown; neither replaces the other (doctrine P8: provenance over precision).</li>
+<li>The band reads <b>"आधीची नोंद · मालकाने भरली"</b> with both dates. It is never shown as if recorded on the work day (P1: the farmer asserted this later; the record must not impersonate a same-day record).</li>
+<li>No "मालकाकडून खात्री" (verified) stamp. Nobody checked it, so it is not shown as checked (P4/P5: no fake proof). "तपासणी लागत नाही" says why.</li>
+<li>Later corrections follow P3: a correction states "was X, is now Y"; the band stays.</li>
+<li>It is stored on the server like any log (P10: not only on the phone).</li>
+</ul></div>
+<div class="bx"><h3>Who may use it, and limits <span class="tag">CTO proposal, founder may change</span></h3>
+<ul>
+<li><b>Owner only</b> (primary owner; co-owner only if he holds the confirm-records grant). Workers and mukadams see the record and the band. They never see the fill link or button.</li>
+<li><b>How far back:</b> 30 days. Never before the plot's start date. Never today (today uses the normal mic) and never a future day.</li>
+<li><b>Same day twice:</b> allowed; each fill is its own entry with its own filled-at time.</li>
+<li><b>Mixed day:</b> a day that already has a normal same-day record gets the pre-dated fill added beside it, not merged into it.</li>
+<li>Server must enforce owner-only. Hiding the link is not enough (today the server only checks farm membership, see evidence below).</li>
+</ul></div>
+</div>
+
+<section class="opt">
+<h2><span class="k">V-A</span>Start from the plot page: "आधीचं काम भरा"</h2>
+<p class="lede">The link sits on the log flow's plot page, below the normal "आजचं काम सांगा" mic. It opens a past-date picker, then the normal mic page, then the result.</p>
+<div class="row">
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">कोणत्या प्लॉटचं काम?</div>
+  <div class="plot on"><b>द्राक्ष · प्लॉट १</b><span>६० दिवस</span></div>
+  <div class="plot"><b>डाळिंब · प्लॉट २</b><span>३० दिवस</span></div>
+  <div class="bigmic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>आजचं काम सांगा</div>
+  <div class="linkrow hl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>आधीचं काम भरा<em>फक्त मालक</em></div>
+</div></div></div><figcaption><span class="n">1</span>Entry point: small link on the plot page, tagged "फक्त मालक". The big mic stays for today.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span></div>
+<div class="body dim">
+  <div class="h1">कोणत्या प्लॉटचं काम?</div>
+</div>
+<div class="sheet">
+  <div class="grab"></div>
+  <div class="h2">कोणत्या दिवसाचं काम?</div>
+  <div class="chips"><span class="chip">काल<small>२७ नोव्हें</small></span><span class="chip">परवा<small>२६ नोव्हें</small></span><span class="chip on">३ दिवस आधी<small>२५ नोव्हें</small></span></div>
+  <div class="cal">
+    <div class="cm">नोव्हेंबर २०२६ · मागे ३० दिवस पर्यंत</div>
+    <div class="cg"><s>सो</s><s>मं</s><s>बु</s><s>गु</s><s>शु</s><s>श</s><s>र</s>
+    <u></u><u></u><u></u><u></u><u></u><u></u><u class="">१</u><u class="">२</u><u class="">३</u><u class="">४</u><u class="">५</u><u class="">६</u><u class="">७</u><u class="">८</u><u class="">९</u><u class="">१०</u><u class="">११</u><u class="">१२</u><u class="">१३</u><u class="">१४</u><u class="">१५</u><u class="">१६</u><u class="">१७</u><u class="">१८</u><u class="">१९</u><u class="">२०</u><u class="">२१</u><u class="">२२</u><u class="">२३</u><u class="">२४</u><u class="sel">२५</u><u class="">२६</u><u class="">२७</u><u class="off">२८</u><u class="off">२९</u><u class="off">३०</u></div>
+  </div>
+  <div class="pbtn wide">पुढे · २५ नोव्हें</div>
+</div></div><figcaption><span class="n">2</span>Date choice: quick chips (काल, परवा, ३ दिवस आधी) and a calendar up to 30 days back. Later days are greyed.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span></div>
+<div class="body">
+  <div class="datebar"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></i><div><b>२५ नोव्हें साठी</b><span>आधीची नोंद</span></div></div>
+  <div class="micwrap">
+    <div class="micbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+    <div class="mt">बोला</div>
+    <div class="ms">त्या दिवशी काय काम झालं ते सांगा</div>
+    <div class="mh">द्राक्ष · प्लॉट १</div>
+  </div>
+  <div class="note">ही नोंद आज भरली म्हणून दिसेल. कामाचा दिवस २५ नोव्हें राहील.</div>
+</div></div><figcaption><span class="n">3</span>Recording: same mic page. A warm strip says which day, so he cannot forget it is not today.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="svpill"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></i>जतन झालं</span></div>
+<div class="body"><div class="rs">
+  <div class="band big"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></i><div><b>आधीची नोंद · मालकाने भरली</b><span>कामाचा दिवस: २५ नोव्हें</span><span>भरले: २८ नोव्हें, सायं ६:१०</span></div></div>
+  <div class="card"><div class="slab">तुम्ही सांगितलेलं</div>
+    <p class="wd">आज <mark>४ मजूर</mark> आले, <mark>द्राक्ष प्लॉट १</mark> मध्ये फवारणी झाली, <mark>२ तास</mark>.</p></div>
+  <div class="card ok"><b>तपासणी लागत नाही</b><span>मालकाने भरलेली आधीची नोंद आहे. पुष्टी किंवा खात्रीचे बटण येथे नाही.</span></div>
+  <div class="btnrow"><span class="pbtn">आणखी सांगा</span><span class="gbtn">पूर्ण</span></div>
+</div></div></div><figcaption><span class="n">4</span>Saved result: the "आधीची नोंद" band on top, no verify or confirm step.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">नोंदी</div>
+  <div class="lrow"><div class="ld"><b>२८ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span></div></div>
+  <div class="lrow"><div class="ld"><b>२७ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span></div></div>
+  <div class="lrow pre"><div class="ld"><b>२५ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span><span class="bandsm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>आधीची नोंद · मालकाने भरली</span><span class="when">भरले २८ नोव्हें · मालक</span></div></div>
+  <div class="lrow"><div class="ld"><b>२४ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span></div></div>
+  <div class="note">आधीची नोंद ही २५ तारखेला नोंदवली अशी कधीच दाखवली जात नाही.</div>
+</div></div></div><figcaption><span class="n">5</span>Later, in the notes list (owner): the 25 Nov row carries a small band and "भरले २८ नोव्हें".</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">नोंदी</div>
+  <div class="lrow"><div class="ld"><b>२८ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span></div></div>
+  <div class="lrow pre"><div class="ld"><b>२५ नोव्हें</b></div><div class="lb"><b>द्राक्ष · प्लॉट १</b><span>फवारणी · ४ मजूर</span><span class="bandsm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>आधीची नोंद · मालकाने भरली</span><span class="when">भरले २८ नोव्हें · मालक</span></div></div>
+  <div class="linkrow dis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>आधीचं काम भरा<em>फक्त मालक</em></div>
+  <div class="note">कामगार आणि मुकादम: नोंद दिसते, पट्टी दिसते. भरण्याचा दुवा दिसत नाही.</div>
+</div></div></div><figcaption><span class="n">6</span>Worker or mukadam: sees the same row and band. The fill link is locked.</figcaption></figure>
+</div>
+<div class="grid2">
+<div class="bx"><h3>What changes in the app (V-A)</h3>
+<b>Phone:</b>
+<ul>
+<li>New link on the plot page, shown to owner role only; new date-picker sheet (reuses the existing day-pick words and farm-day rules).</li>
+<li>The mic page and result screen get the date strip and the band; the verify and confirm controls are hidden for this kind of entry.</li>
+<li>Band shown on list rows, the day view and the log detail; worker view shows it read-only.</li>
+</ul>
+<b>Server:</b>
+<ul>
+<li>New field on the log: "entered later by owner" (a kind value plus the owner's id; entry time already exists as the created-at time). New database column and migration; sent through sync push, pull and the log DTO.</li>
+<li>Create handler: if the kind is set, require the owner role, reject beyond 30 days or before plot start, and write no review events of its own kind (see the open point on status below).</li>
+<li>Verification queues and "तपासायची" lists skip these entries; reports label them.</li>
+</ul></div>
+<div class="bx"><h3>Why V-A may suit, and its weakness</h3>
+<ul>
+<li>One new tap on a screen he already uses daily. Smallest build.</li>
+<li>He picks the date before he sees which days are empty, so he may fill a day that already has a record. Mitigation: the date sheet greys out days with records only if he wants to avoid doubles (proposal: show a small dot on filled days).</li>
+<li>The link on the plot page is one more thing on the busiest screen. Kept small and dashed on purpose so it does not compete with today's mic.</li>
+</ul></div>
+</div>
+</section>
+
+<section class="opt">
+<h2><span class="k">V-B</span>Start from पूर्ण शेतीचा आढावा: tap an empty day</h2>
+<p class="lede">The owner sees the week strip on the farm overview. A day with no record has a hollow dot. He taps it and presses "या दिवसाचं काम भरा". Same plot step, mic and result after that.</p>
+<div class="row">
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">पूर्ण शेतीचा आढावा</div>
+  <div class="strip"><div class="sd"><span>सो</span><b>२२</b><i class="dot d1"></i></div><div class="sd"><span>मं</span><b>२३</b><i class="dot d1"></i></div><div class="sd"><span>बु</span><b>२४</b><i class="dot d1"></i></div><div class="sd pick"><span>गु</span><b>२५</b><i class="dot d0"></i></div><div class="sd"><span>शु</span><b>२६</b><i class="dot d1"></i></div><div class="sd"><span>श</span><b>२७</b><i class="dot d1"></i></div><div class="sd today"><span>र</span><b>२८</b><i class="dot d3"></i></div></div>
+  <div class="legend"><span><i class="dot d1"></i>नोंद आहे</span><span><i class="dot d0"></i>नोंद नाही</span></div>
+  <div class="card"><div class="slab">गुरुवार, २५ नोव्हें</div><p class="wd small">या दिवशी कोणतीही नोंद नाही.</p></div>
+  <div class="bigmic alt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>या दिवसाचं काम भरा<em>फक्त मालक</em></div>
+</div></div></div><figcaption><span class="n">1</span>Entry point: overview day strip. 25 Nov is hollow (no record), so the fill button appears for it.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span></div>
+<div class="body"><div class="rs">
+  <div class="datebar"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></i><div><b>२५ नोव्हें साठी</b><span>आधीची नोंद</span></div></div>
+  <div class="h1">कोणत्या प्लॉटचं काम?</div>
+  <div class="plot on"><b>द्राक्ष · प्लॉट १</b><span>६० दिवस</span></div>
+  <div class="plot"><b>डाळिंब · प्लॉट २</b><span>३० दिवस</span></div>
+  <div class="note">तारीख आढाव्यातून आली आहे. बदलायची असेल तर मागे जा.</div>
+</div></div></div><figcaption><span class="n">2</span>Date choice is already made by the tap. The plot step carries the date. Nothing to pick twice.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span></div>
+<div class="body">
+  <div class="datebar"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></i><div><b>२५ नोव्हें साठी</b><span>आधीची नोंद</span></div></div>
+  <div class="micwrap">
+    <div class="micbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+    <div class="mt">बोला</div>
+    <div class="ms">त्या दिवशी काय काम झालं ते सांगा</div>
+    <div class="mh">द्राक्ष · प्लॉट १</div>
+  </div>
+  <div class="note">ही नोंद आज भरली म्हणून दिसेल. कामाचा दिवस २५ नोव्हें राहील.</div>
+</div></div><figcaption><span class="n">3</span>Recording: the same mic page as V-A.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="svpill"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></i>जतन झालं</span></div>
+<div class="body"><div class="rs">
+  <div class="band big"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></i><div><b>आधीची नोंद · मालकाने भरली</b><span>कामाचा दिवस: २५ नोव्हें</span><span>भरले: २८ नोव्हें, सायं ६:१०</span></div></div>
+  <div class="card"><div class="slab">तुम्ही सांगितलेलं</div>
+    <p class="wd">आज <mark>४ मजूर</mark> आले, <mark>द्राक्ष प्लॉट १</mark> मध्ये फवारणी झाली, <mark>२ तास</mark>.</p></div>
+  <div class="card ok"><b>तपासणी लागत नाही</b><span>मालकाने भरलेली आधीची नोंद आहे. पुष्टी किंवा खात्रीचे बटण येथे नाही.</span></div>
+  <div class="btnrow"><span class="pbtn">आणखी सांगा</span><span class="gbtn">पूर्ण</span></div>
+</div></div></div><figcaption><span class="n">4</span>Saved result: the same "आधीची नोंद" band, no verification step.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">पूर्ण शेतीचा आढावा</div>
+  <div class="strip"><div class="sd"><span>सो</span><b>२२</b><i class="dot d1"></i></div><div class="sd"><span>मं</span><b>२३</b><i class="dot d1"></i></div><div class="sd"><span>बु</span><b>२४</b><i class="dot d1"></i></div><div class="sd pick"><span>गु</span><b>२५</b><i class="dot d2"></i></div><div class="sd"><span>शु</span><b>२६</b><i class="dot d1"></i></div><div class="sd"><span>श</span><b>२७</b><i class="dot d1"></i></div><div class="sd today"><span>र</span><b>२८</b><i class="dot d3"></i></div></div>
+  <div class="legend"><span><i class="dot d1"></i>नोंद आहे</span><span><i class="dot d2"></i>आधी भरलेली</span></div>
+  <div class="card"><div class="slab">गुरुवार, २५ नोव्हें</div>
+    <span class="bandsm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>आधीची नोंद · मालकाने भरली</span>
+    <p class="wd small">फवारणी · ४ मजूर · २ तास</p><span class="when">भरले २८ नोव्हें, सायं ६:१० · मालक</span></div>
+</div></div></div><figcaption><span class="n">5</span>Later (owner): the overview dot for 25 Nov turns amber ("आधी भरलेली"), and the day card shows the band and filled-at time.</figcaption></figure>
+<figure class="fr"><div class="scr">
+<div class="tb"><span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>मागे</span><span class="days">दिवस ८४</span></div>
+<div class="body"><div class="rs">
+  <div class="h1">पूर्ण शेतीचा आढावा</div>
+  <div class="strip"><div class="sd"><span>सो</span><b>२२</b><i class="dot d1"></i></div><div class="sd"><span>मं</span><b>२३</b><i class="dot d1"></i></div><div class="sd"><span>बु</span><b>२४</b><i class="dot d1"></i></div><div class="sd pick"><span>गु</span><b>२५</b><i class="dot d2"></i></div><div class="sd"><span>शु</span><b>२६</b><i class="dot d1"></i></div><div class="sd"><span>श</span><b>२७</b><i class="dot d1"></i></div><div class="sd today"><span>र</span><b>२८</b><i class="dot d3"></i></div></div>
+  <div class="card"><div class="slab">गुरुवार, २५ नोव्हें</div>
+    <span class="bandsm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>आधीची नोंद · मालकाने भरली</span>
+    <p class="wd small">फवारणी · ४ मजूर · २ तास</p><span class="when">भरले २८ नोव्हें · मालक</span></div>
+  <div class="linkrow dis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>या दिवसाचं काम भरा<em>फक्त मालक</em></div>
+  <div class="note">कामगारांसाठी रिकाम्या दिवशीही भरण्याचे बटण दिसत नाही.</div>
+</div></div></div><figcaption><span class="n">6</span>Worker or mukadam: sees the band; no fill button, even on an empty day.</figcaption></figure>
+</div>
+<div class="grid2">
+<div class="bx"><h3>What changes in the app (V-B)</h3>
+<b>Phone:</b>
+<ul>
+<li>Overview day strip gets three dot states: record, no record, filled later (amber). The existing day bar already steps over past days and has a date picker.</li>
+<li>The existing "त्या दिवसाचं काम सांगा" button on a past day is replaced for owners by "या दिवसाचं काम भरा", and is removed for everyone else (see evidence: today it is open to every member).</li>
+<li>Same band and no-verification result as V-A; the day card shows the band.</li>
+</ul>
+<b>Server:</b>
+<ul>
+<li>Same server change as V-A (new kind field, owner-only, limits, migration, sync, DTO).</li>
+<li>Overview data: the day-understanding read must report "filled later" per day so the strip can colour the dot.</li>
+</ul></div>
+<div class="bx"><h3>Why V-B may suit, and its weakness</h3>
+<ul>
+<li>He sees which days are missing before he fills. This fits the farm-overview habit and prevents doubles naturally.</li>
+<li>The fill path is built on the page that already has the past-day button, so the date handling exists.</li>
+<li>Only works well once he opens the overview. A farmer who never opens it will not find the fill. Larger build than V-A because the strip and read model change.</li>
+</ul></div>
+</div>
+</section>
+
+<section class="opt">
+<h2>Recommendation</h2>
+<div class="bx rec"><b>Build V-B, and add V-A's small link later if owners ask.</b>
+<p>Reason: the owner's real problem is "which days did I miss?". V-B shows the gaps first, so it avoids double entries, and it reuses the overview's day bar and past-day button already in the code. V-A is quicker to build but asks him to remember dates from memory, and it adds a link to the plot page he uses every day, which the founder wants calm. Both need the same server work (new field, owner-only, limits), which is the bigger half of the job. If time before the 3 Dec APK is the deciding factor, V-A fits in less time.</p>
+<p><b>Open point for the founder:</b> what status does the record carry? Proposal: it is stored as settled (no queue, no verify button) but with its own marker, never the "मालकाकडून खात्री" stamp. Today an owner's own new log is stamped "self-attested at creation" (see evidence); a pre-dated entry must not reuse that stamp because it would claim the owner attested it on the day.</p></div>
+<div class="tw" style="margin-top:12px"><table>
+<tr><th>Build estimate</th><th>V-A</th><th>V-B</th></tr>
+<tr><td>Server: field, migration, owner-only, limits, sync push and pull, DTO, tests</td><td>2 to 2.5 days</td><td>2 to 2.5 days</td></tr>
+<tr><td>Phone: entry, picker or strip, band, hide verify, lists, worker view, Dexie field, tests</td><td>1.5 to 2 days</td><td>2.5 to 3 days</td></tr>
+<tr><td>Overview read model (filled-later per day)</td><td>not needed</td><td>0.5 to 1 day</td></tr>
+<tr><td>Real-phone drive and fixes</td><td>0.5 day</td><td>0.5 day</td></tr>
+<tr><td><b>Total (one builder, CTO estimate)</b></td><td><b>about 4.5 to 5 days</b></td><td><b>about 6 to 7 days</b></td></tr>
+</table></div>
+</section>
+
+<section class="opt">
+<h2>What the code supports today</h2>
+<p class="lede">Read from the test branch x1, head <code>1b611750</code>. Paths are under <code>src/</code>. Nothing was changed.</p>
+<div class="grid2">
+<div class="bx"><h3>1. A log for a past date: yes, already possible</h3>
+<ul class="ev">
+<li><code>apps/ShramSafal/ShramSafal.Application/UseCases/Logs/CreateDailyLog/CreateDailyLogCommand.cs:19</code> takes a free <code>LogDate</code>.</li>
+<li><code>.../CreateDailyLogHandler.cs:333-337</code> refuses only a date after the farm's tomorrow. No lower limit, so any past day is accepted.</li>
+<li><code>apps/ShramSafal/ShramSafal.Domain/Logs/LogDayRule.cs:26,29</code>: the future rules.</li>
+<li><code>.../MoveDailyLog/MoveDailyLogHandler.cs:158-162</code>: moving a saved log to another day is refused only if the day is after farm today. Moving can also change the day of an owner's record without any band.</li>
+<li>Phone: <code>clients/mobile-web/src/features/reflect/ReflectPage.tsx:328-331</code> and <code>:370</code> show "त्या दिवसाचं काम सांगा" on any past day; <code>features/reflect/overview/PastDayTell.tsx</code>; <code>core/speak/speakStore.ts:27</code> purpose <code>addToDay</code>; <code>app/helpers/onDay.ts:19-20</code> puts the log on the chosen day and keeps the real recording time.</li>
+<li>Date pickers: <code>features/reflect/overview/DayBar.tsx:28</code> (any past day, max = today).</li>
+</ul></div>
+<div class="bx"><h3>2. A flag for "entered later": no</h3>
+<ul class="ev">
+<li><code>apps/ShramSafal/ShramSafal.Domain/Logs/DailyLog.cs:87,89</code>: <code>LogDate</code> (work day) and <code>CreatedAtUtc</code> (entry time) both exist and are kept apart. <code>CreatedAtUtc</code> also reaches the phone via <code>Application/Contracts/Dtos/DailyLogDto.cs:100</code>. So "work date versus entry time" is already true; only the label is missing.</li>
+<li><code>apps/ShramSafal/ShramSafal.Domain/Common/Source.cs:12-30</code>: sources are voice, manual, receipt, patti, import, pre_spine. None means pre-dated.</li>
+<li><code>apps/ShramSafal/ShramSafal.Domain/Common/Provenance.cs:16-53</code>: source, model, prompt, app version. No who-entered-for-which-day field.</li>
+<li>Searched the phone for any "entered later", "pre-dated" or "backfill" field: only the Dexie storage upgrade note in <code>domain/ai/LogProvenance.ts:13</code>. Nothing for this feature.</li>
+<li>A same-day record and a pre-dated one are today identical in the database, except that created-at falls on a later day.</li>
+</ul></div>
+<div class="bx"><h3>3. Who may do it: any farm member</h3>
+<ul class="ev">
+<li><code>.../CreateDailyLog/CreateDailyLogAuthorizer.cs:50</code>: the only check is farm membership. No owner check, no limit on how far back.</li>
+<li>So a worker's phone could also send a past-date log. The owner-only rule needs new server code.</li>
+</ul></div>
+<div class="bx"><h3>4. How verification works today</h3>
+<ul class="ev">
+<li><code>apps/ShramSafal/ShramSafal.Domain/Logs/VerificationStatus.cs:5-9</code>: Draft, Confirmed, Verified, Disputed, CorrectionPending.</li>
+<li><code>.../CreateDailyLogHandler.cs:651-656</code>: an owner-role creator's log is self-verified at creation (Draft to Confirmed to Verified) with reason <code>self-attested-at-creation</code> (<code>DailyLog.cs:688</code>, method at <code>:1124</code>). A voice auto-save stays Draft (<code>:637-646</code>, reason at <code>DailyLog.cs:737</code>).</li>
+<li><code>.../VerifyLog/VerifyLogHandler.cs:121-182</code>: owner decisions need the confirm-records authority; others only leave a mark.</li>
+<li><code>DailyLog.cs:715</code>: an earlier "self-attested-backfilled" reason exists for a one-time repair. It is a weaker claim and must not be reused here.</li>
+<li>Meaning of "no verification needed": the entry is not put in any verification queue and shows no confirm or verify control. Plain Verified would be wrong, since an owner's same-day "self-attested" stamp says he vouched on the day.</li>
+</ul></div>
+<div class="bx"><h3>5. Doctrine check (docs/AGRISYNC-DOCTRINE.md)</h3>
+<ul class="ev">
+<li><code>:59-67</code> P1 Phase Rule: the owner's later statement is farmer-asserted truth stored with the log in the same save; not inferred, not a side-car.</li>
+<li><code>:79-83</code> P3: no silent change. Moving a pre-dated entry to another day must keep the band and the original filled-at time.</li>
+<li><code>:95-97</code> P6: the owner is the creator; the worker names inside remain the workers' data.</li>
+<li><code>:103-107</code> P8: store which date is work date and which is entry time, as one fact together with the "owner filled later" marker.</li>
+<li><code>:113-119</code> P10: the filled-later marker lives on the server, so it survives a lost phone.</li>
+</ul></div>
+<div class="bx"><h3>6. Gaps to close in any option</h3>
+<ul class="ev">
+<li>Add a server field and the owner-only, 30-day and plot-start checks.</li>
+<li>Stop the existing open past-day button from creating unmarked records for non-owners.</li>
+<li>Decide the status of the entry (open point above).</li>
+<li>Moving a log's day (<code>MoveDailyLogHandler.cs:158</code>) must not turn a same-day record into a pre-dated one, or hide the band.</li>
+</ul></div>
+</div>
+<p class="foot">Colours and shapes follow the founder's final result design (result-v12-final). Marathi lines on screens are proposed.</p>
+</section>
+</div>
