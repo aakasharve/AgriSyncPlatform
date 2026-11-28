@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const billing = vi.hoisted(() => ({ on: false }));
 vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 import { cleanup, render, screen } from '@testing-library/react';
-import { WizardSummaryRoleTrial } from '../FirstFarmWizard';
+import { WizardDonePlanLine, WizardSummaryRoleTrial } from '../FirstFarmWizard';
 
 afterEach(() => { cleanup(); billing.on = false; });
 
@@ -29,5 +29,29 @@ describe('add-a-farm wizard summary', () => {
         render(<WizardSummaryRoleTrial />);
         expect(screen.getByText('21 days free')).toBeInTheDocument();
         expect(screen.getByText('21 दिवस मोफत')).toBeInTheDocument();
+    });
+});
+
+describe('add-a-farm wizard "तयार आहे!" screen: the server\'s plan line', () => {
+    const trialing = {
+        subscriptionId: 'sub-1', status: 'Trialing', planCode: 'shramsafal_pro', validUntilUtc: '2026-12-19T00:00:00Z', allowsOwnerWrites: true,
+    };
+
+    it('switch OFF (every pilot phone): no "Trialing", no plan code', () => {
+        const { container } = render(<WizardDonePlanLine subscription={trialing} />);
+        expect(container.textContent ?? '').toBe('');
+        expect(screen.queryByTestId('wizard-done-plan')).not.toBeInTheDocument();
+    });
+
+    it('switch ON: the status and the plan show as before', () => {
+        billing.on = true;
+        render(<WizardDonePlanLine subscription={trialing} />);
+        expect(screen.getByTestId('wizard-done-plan')).toHaveTextContent('Trialing · shramsafal_pro');
+    });
+
+    it('no subscription from the server: nothing, with the switch on too', () => {
+        billing.on = true;
+        const { container } = render(<WizardDonePlanLine subscription={null} />);
+        expect(container.textContent ?? '').toBe('');
     });
 });

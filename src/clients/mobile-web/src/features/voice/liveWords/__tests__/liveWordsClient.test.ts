@@ -6,8 +6,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+const h = vi.hoisted(() => ({ apiFetch: vi.fn(), liveWordsOn: true }));
 vi.mock('../../../../infrastructure/api/apiFetch', () => ({ apiFetch: h.apiFetch }));
+// The live-words build switch (VITE_LIVE_WORDS_ENABLED, default off; founder 28 Nov: none for the pilot). featureFlags.ts reads its
+// env in a form vi.stubEnv does not reach in this repo, so the switch is turned through the module. ON for the cases that pin the
+// request as built; OFF has its own case.
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isLiveWordsEnabled: () => h.liveWordsOn }));
 
 import { sendLiveWords, type LiveWordsRequest } from '../liveWordsClient';
 
@@ -21,8 +25,20 @@ const request = (over: Partial<LiveWordsRequest> = {}): LiveWordsRequest => ({
     wav: new Blob([new Uint8Array(100)], { type: 'audio/wav' }), farmId: 'farm-9', seq: 3, signal: new AbortController().signal, ...over,
 });
 
-beforeEach(() => { h.apiFetch.mockReset(); });
+beforeEach(() => { h.apiFetch.mockReset(); h.liveWordsOn = true; });
 afterEach(() => { vi.useRealTimers(); });
+
+describe('sendLiveWords with the live-words switch OFF (the pilot)', () => {
+    it('sends nothing at all and answers "off", so a session that somehow started stops', async () => {
+        h.liveWordsOn = false;
+        h.apiFetch.mockResolvedValue(reply(200, { text: 'आज पाच मजूर' }));
+
+        const answer = await sendLiveWords(request());
+
+        expect(answer).toEqual({ kind: 'off' });
+        expect(h.apiFetch).not.toHaveBeenCalled();
+    });
+});
 
 describe('sendLiveWords', () => {
     it('posts the phrase to the live-words route with the farm, the number and the language', async () => {

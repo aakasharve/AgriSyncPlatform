@@ -55,6 +55,7 @@ import { ScheduleAsk } from '../features/scheduler/schedulePage/ScheduleAsk';
 import { defaultScheduleForCrop } from '../features/scheduler/planning/followableDefault';
 import { SCHEDULE_GATE_WORDS } from '../features/scheduler/schedulePage/scheduleGateCopy';
 import { useScheduleGate } from '../features/scheduler/schedulePage/useScheduleGate';
+import { isBillingVisible } from '../app/featureFlags';
 import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
@@ -414,7 +415,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                 <PlotScheduleHome plotId={plot.id} cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
                     onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
-                    trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
+                    // Pilot (founder 27-28 Nov: "the 21-day trial is for the commercial purposes"): the trial view and its words
+                    // ("चाचणी", "during the trial") only behind the default-off billing switch; off, the plot shows as outside the trial.
+                    trial={isBillingVisible() && gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
                     mayMakeOwn={makeOwn} onMakeOwn={openMaker} take={takeHost} voiceHost={voiceHost} onChangePlot={() => setPickerOpen(true)}
                     crop={crop} plot={plot} onPlan={mayPlanWork && onOpenPlanning ? onOpenPlanning : undefined}
                     plotLists={<div ref={plotListsRef} data-testid="plot-lists">{placeMap}</div>}

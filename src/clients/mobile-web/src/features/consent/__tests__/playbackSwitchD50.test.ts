@@ -168,22 +168,27 @@ describe('WORD-1 (founder D-109) - "don\'t use recording but understanding": the
     });
 
     it('a pure wording change does not move the notice version (that would ask every farmer again)', () => {
-        expect(NOTICE_VERSION).toBe('notice-2026-11-06.1');
+        // WORD-1 itself did not move it (it stayed notice-2026-11-06.1). It moved later only for a MATERIAL change: the AI-service
+        // line (28 Nov), in both editions at once.
+        expect(NOTICE_VERSION).toBe('notice-2026-11-28.1');
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A): the permissions page is a SECOND edition
-        // with its own version and text; it counts beside this one and asks nobody again.
-        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual(['notice-2026-11-06.1', 'notice-2026-11-27.1']);
+        // with its own version and text; it counts beside this one.
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual(['notice-2026-11-28.1', 'notice-2026-11-28.2']);
     });
 });
 
 describe('D-50 - material: the notice version moved and the one-time sheet asks once', () => {
     it('the notice version moved and only it (and, since lane JOIN V6c-A, the permissions page edition) counts as accepted', () => {
-        expect(NOTICE_VERSION).toBe('notice-2026-11-06.1');
+        expect(NOTICE_VERSION).toBe('notice-2026-11-28.1');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION, PAGE_NOTICE_VERSION]);
     });
 
-    it('a farmer who accepted the previous notice (11-02.2 or 11-05.1) is asked; one who accepted this is not', () => {
+    it('a farmer who accepted an earlier notice (11-02.2, 11-05.1, D-50\'s 11-06.1, the page\'s 11-27.1) is asked; one who accepted this is not', () => {
         expect(isStillCurrentNoticeVersion('notice-2026-11-02.2')).toBe(false);
         expect(isStillCurrentNoticeVersion('notice-2026-11-05.1')).toBe(false);
+        expect(isStillCurrentNoticeVersion('notice-2026-11-06.1')).toBe(false);
+        expect(isStillCurrentNoticeVersion('notice-2026-11-27.1')).toBe(false);
         expect(isStillCurrentNoticeVersion(NOTICE_VERSION)).toBe(true);
+        expect(isStillCurrentNoticeVersion(PAGE_NOTICE_VERSION)).toBe(true);
     });
 });

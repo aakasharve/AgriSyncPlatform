@@ -6,6 +6,7 @@
  * (`POST /shramsafal/ai/live-words`). Never throws: every way it can go wrong is an answer, so a caller cannot be hurt by it (P9).
  */
 import { apiFetch } from '../../../infrastructure/api/apiFetch';
+import { isLiveWordsEnabled } from '../../../app/featureFlags';
 
 export type LiveWordsAnswer =
     /** The words heard in this phrase (may be empty: a pause). */
@@ -30,6 +31,9 @@ export interface LiveWordsRequest {
 export const LIVE_WORDS_TIMEOUT_MS = 9000;
 
 export async function sendLiveWords(req: LiveWordsRequest): Promise<LiveWordsAnswer> {
+    // Founder 28 Nov: no live words for the pilot. The second lock (the recorder already starts no session): with the build
+    // switch off nothing is sent, and 'off' ends any session that somehow started.
+    if (!isLiveWordsEnabled()) return { kind: 'off' };
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), req.timeoutMs ?? LIVE_WORDS_TIMEOUT_MS);
     const stop = () => timeout.abort();

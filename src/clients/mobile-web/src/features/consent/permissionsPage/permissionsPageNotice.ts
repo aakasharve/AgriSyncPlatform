@@ -8,7 +8,7 @@
 // describe a notice the farmer was never shown.
 //
 // ITS OWN NOTICE VERSION (`PAGE_NOTICE_VERSION`, declared beside `NOTICE_VERSION` in `consentNotice.ts`). The tick
-// edition (`canonicalNoticeText`, `notice-2026-11-06.1`) is still the text of the one-time notice sheet a signed-in
+// edition (`canonicalNoticeText`, `NOTICE_VERSION`) is still the text of the one-time notice sheet a signed-in
 // farmer may meet (`features/consent/reask`), so it keeps its version and its text; this page is a second edition with a
 // second version, and one version string still names exactly one text. Both count as an acceptance in force
 // (`ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT`): what happens to a farmer's data did not change, only how he is told and asked.

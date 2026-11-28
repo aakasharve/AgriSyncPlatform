@@ -28,6 +28,11 @@ vi.mock('../../../finance/components/MoneyLensDrawer', () => ({ MoneyLensDrawer:
 vi.mock('../../../finance/financeSelectors', () => ({ financeSelectors: { getTotalCost: () => 0 } }));
 vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn(async () => undefined) } }));
 vi.mock('../../../../app/state/RootStore', () => ({ getRootStore: () => ({ sync: { send: vi.fn() } }) }));
+// The billing switch (VITE_BILLING_VISIBLE, default off). Pilot (founder 27-28 Nov): the trial view and its words only behind it.
+// featureFlags.ts reads its env in a form vi.stubEnv does not reach in this repo, so the switch is turned through the module.
+// ON for the R10 cases below (they pin the trial view as built); the pilot's OFF is its own describe at the end.
+const billing = vi.hoisted(() => ({ on: true }));
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
 
 import SchedulerPage from '../../../../pages/SchedulerPage';
 import { setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
@@ -86,7 +91,7 @@ beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-26T06:00:00Z'));
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); billing.on = true; });
 
 describe('the trial view (R10)', () => {
     it('Today_in_full_others_greyed: the stage the server names is the one in full; the other stage shows its name and days only', async () => {
@@ -171,5 +176,26 @@ describe('the trial view (R10)', () => {
         const view = await screen.findByTestId('trial-stages');
         expect(view.textContent ?? '').not.toMatch(/[A-Za-z]/);
         expect(view.textContent ?? '').not.toMatch(/\p{Extended_Pictographic}/u);
+    });
+});
+
+describe('pilot: billing switch OFF (every pilot phone) — no trial view, no trial words', () => {
+    it.each(['mr', 'en'] as const)('[%s] the server says the plot is in its trial: the page shows it as outside the trial', async (lang) => {
+        billing.on = false;
+        language.current = lang;
+        await seedFollowing();
+        await saveStates(inTrial());
+        mount();
+        await screen.findByTestId('stage-ribbon');
+        expect(screen.queryByTestId('trial-stages')).toBeNull();
+        expect(screen.queryByTestId('trial-heading')).toBeNull();
+        expect(screen.queryByTestId('trial-rule')).toBeNull();
+        const page = document.body.textContent ?? '';
+        expect(page).not.toContain('चाचणीच्या काळात');
+        expect(page).not.toContain('आजची स्टेज — वर पूर्ण दिसते');
+        expect(page).not.toMatch(/during the trial|shown in full above/i);
+        // the whole ahead list, as outside the trial
+        const ahead = await screen.findByTestId('ahead');
+        expect(within(ahead).queryByTestId(`ahead-${dayKeyOf(15)}`)).not.toBeNull();
     });
 });

@@ -17,6 +17,8 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT,
+    AI_SERVICE_EN,
+    AI_SERVICE_MR,
     CONSENT_NOTICE,
     DATA_FIDUCIARY,
     NOTICE_DATA_CATEGORY_CODES,
@@ -80,7 +82,12 @@ describe('NOTICE_VERSION — the words moved, so the version moved', () => {
     it('is a new version, never the one the old full-screen gate recorded', () => {
         expect(NOTICE_VERSION).not.toBe('notice-2026-10-13.2');
         // D-36 replaced the voice promise: a material change, so the version moved again.
-        expect(NOTICE_VERSION).toBe('notice-2026-11-06.1');
+        // 28 Nov: the AI-service line (CTO-approved) is material too, so it moved once more, and the page moved with it.
+        expect(NOTICE_VERSION).toBe('notice-2026-11-28.1');
+        expect(PAGE_NOTICE_VERSION).toBe('notice-2026-11-28.2');
+        expect(NOTICE_VERSION).not.toBe(PAGE_NOTICE_VERSION);
+        expect(NOTICE_VERSION).not.toBe('notice-2026-11-06.1');
+        expect(PAGE_NOTICE_VERSION).not.toBe('notice-2026-11-27.1');
         expect(NOTICE_VERSION).not.toBe('notice-2026-10-25.1');
     });
 
@@ -92,6 +99,10 @@ describe('NOTICE_VERSION — the words moved, so the version moved', () => {
         // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (lane JOIN, V6c-A): the permissions page is a second EDITION
         // (its own version and hashed text), not a change to this one - it counts beside it and re-asks nobody.
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION, PAGE_NOTICE_VERSION]);
+        // 28 Nov, the AI-service line (material): both editions' earlier versions are asked once.
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual(['notice-2026-11-28.1', 'notice-2026-11-28.2']);
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-11-06.1');
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-11-27.1');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-11-02.2');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-30.1');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-25.1');
@@ -319,13 +330,39 @@ describe('notice content invariants carried over from the deleted gate test', ()
         }
     });
 
-    it("carries no नोंद in the Marathi copy except the founder's own D-36 sentence (founder decision 13)", () => {
+    it("carries no नोंद in the Marathi copy except the founder's own D-36 sentence and the CTO-approved AI-service sentence (founder decision 13)", () => {
         // D-36 (2026-10-27) gave this one sentence verbatim and it says "आवाजाच्या नोंदी".
-        // The later, specific ruling is used as written; nothing else may use the word.
+        // The later, specific ruling is used as written. 28 Nov: the CTO-approved AI-service sentence says "नोंद तयार करते" and
+        // is used exactly as approved (parked for the founder). Nothing else may use the word.
         const d36 = 'तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता सुधारण्यासाठी वापरल्या जाणार नाहीत.';
         const text = canonicalNoticeText('mr');
         expect(text).toContain(d36);
-        expect(text.split(d36).join('')).not.toContain('नोंद');
+        expect(text).toContain(AI_SERVICE_MR);
+        expect(text.split(d36).join('').split(AI_SERVICE_MR).join('')).not.toContain('नोंद');
+    });
+
+    it('28 Nov — the processors line says an AI service reads his words and bill photos and may run outside India, word for word', () => {
+        expect(AI_SERVICE_MR).toBe(
+            'तुमचा आवाज आधी मजकूर होतो. मग तो मजकूर आणि बिलाचे फोटो एक AI सेवा वाचते व नोंद तयार करते. ही सेवा भारताबाहेर सर्व्हरवर काम करू शकते. आम्ही फक्त गरजेपुरती माहिती पाठवतो.',
+        );
+        expect(CONSENT_NOTICE.mr.processors.startsWith(`${AI_SERVICE_MR} `)).toBe(true);
+        expect(CONSENT_NOTICE.en.processors.startsWith(`${AI_SERVICE_EN} `)).toBe(true);
+        expect(AI_SERVICE_EN).toMatch(/AI service/);
+        expect(AI_SERVICE_EN).toMatch(/bill photos/);
+        expect(AI_SERVICE_EN).toMatch(/outside India/);
+        expect(AI_SERVICE_EN).not.toMatch(/[ऀ-ॿ]/);
+        // The other categories stay, word for word.
+        expect(CONSENT_NOTICE.mr.processors).toContain('OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत');
+        expect(CONSENT_NOTICE.en.processors).toContain('OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support');
+        for (const language of LANGUAGES) {
+            expect(canonicalNoticeText(language)).toContain(CONSENT_NOTICE[language].processors);
+        }
+    });
+
+    it('names no company behind the AI service, in either language', () => {
+        for (const language of LANGUAGES) {
+            expect(canonicalNoticeText(language)).not.toMatch(/google|gemini|sarvam|गूगल|सर्वम/i);
+        }
     });
 
     it('still has the five purposes, the Board-complaint right and the one AI promise', () => {

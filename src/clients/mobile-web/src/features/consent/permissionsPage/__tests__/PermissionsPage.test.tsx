@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import PermissionsPage from '../PermissionsPage';
 import { permissionsPageWords } from '../permissionsPageWords';
 import { canonicalPermissionsPageText } from '../permissionsPageNotice';
+import { AI_SERVICE_EN, AI_SERVICE_MR, PAGE_NOTICE_VERSION } from '../../gate/consentNotice';
 
 vi.mock('../../../legal/LegalDocumentView', () => ({
     default: ({ doc }: { doc: string }) => <div data-testid={`legal-${doc}`}>doc</div>,
@@ -165,6 +166,21 @@ describe('one language at a time, and the hash covers exactly what is drawn', ()
             expect(canonical).toContain((screen.getByTestId(`permissions-page-${id}`).textContent ?? '').trim());
         }
     });
+
+    it.each([['mr', AI_SERVICE_MR], ['en', AI_SERVICE_EN]] as const)(
+        '28 Nov — [%s] the page says an AI service reads his words and bill photos and may run outside India, and hashes it under the new version',
+        (language, sentence) => {
+            renderPage({ language });
+            expect(screen.getByTestId('permissions-page-text')).toHaveTextContent(sentence);
+            const canonical = canonicalPermissionsPageText(language);
+            expect(canonical).toContain(sentence);
+            expect(canonical).toContain(`notice-version:${PAGE_NOTICE_VERSION}`);
+            expect(PAGE_NOTICE_VERSION).toBe('notice-2026-11-28.2');
+            expect(canonical).not.toContain('notice-2026-11-27.1');
+            // the other categories stay
+            expect(canonical).toContain(language === 'mr' ? 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल' : 'OTP, secure cloud hosting, speech processing, weather, file storage');
+            expect(canonical).not.toMatch(/google|gemini|sarvam|गूगल|सर्वम/i);
+        });
 
     it('the Terms and the Privacy Policy open in place and come back to the page', async () => {
         renderPage();

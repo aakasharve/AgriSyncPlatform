@@ -28,6 +28,7 @@ import NoticeChangeSheet from '../NoticeChangeSheet';
 import { agriSyncClient } from '../../../../infrastructure/api/AgriSyncClient';
 import { flushNoticeReacceptance, needsNoticeReacceptance, recordNoticeReacceptance } from '../noticeReacceptance';
 import { IMPROVEMENT_COPY, IMPROVEMENT_WORDING_VERSION } from '../../improvement/improvementPermissionCopy';
+import { AI_SERVICE_EN } from '../../gate/consentNotice';
 
 const client = agriSyncClient as unknown as {
     getConsent: ReturnType<typeof vi.fn>;
@@ -116,6 +117,25 @@ describe('NoticeChangeSheet', () => {
         expect(screen.getByTestId('notice-change-proof').textContent ?? '').not.toContain('रेकॉर्डिंग');
         expect(screen.queryByTestId('notice-change-promise')).toBeNull();
         expect(screen.queryByTestId('notice-change-erasure')).toBeNull();
+    });
+
+    it.each(['notice-2026-11-06.1', 'notice-2026-11-27.1'])(
+        'someone who accepted %s (the tick or the page before 28 Nov) is shown ONLY the AI-service line, word for word',
+        async (accepted) => {
+            await openAskedHaving(accepted);
+            expect(screen.getByTestId('notice-change-ai')).toHaveTextContent(
+                'तुमचा आवाज आधी मजकूर होतो. मग तो मजकूर आणि बिलाचे फोटो एक AI सेवा वाचते व नोंद तयार करते. ही सेवा भारताबाहेर सर्व्हरवर काम करू शकते. आम्ही फक्त गरजेपुरती माहिती पाठवतो.');
+            expect(screen.queryByTestId('notice-change-proof')).toBeNull();
+            expect(screen.queryByTestId('notice-change-erasure')).toBeNull();
+            expect(screen.queryByTestId('notice-change-promise')).toBeNull();
+            expect(screen.getByTestId('notice-change-sheet').textContent ?? '').not.toMatch(/google|gemini|sarvam/i);
+        });
+
+    it('English mode shows the AI-service line in English only', async () => {
+        mockLanguage = 'en';
+        await openAskedHaving('notice-2026-11-06.1');
+        expect(screen.getByTestId('notice-change-ai')).toHaveTextContent(AI_SERVICE_EN);
+        expect(screen.getByTestId('notice-change-sheet').textContent ?? '').not.toMatch(/[ऀ-ॿ]/);
     });
 
     it('someone who accepted notice-2026-10-30.1 is shown the erasure change and the D-50 line', async () => {

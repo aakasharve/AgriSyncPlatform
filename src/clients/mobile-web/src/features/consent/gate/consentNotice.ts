@@ -82,8 +82,9 @@
 // Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. ONE
 // exception, and it is the founder's own: his D-36 sentence (2026-10-27, given verbatim for
 // this notice) says "...आवाजाच्या नोंदी..." and is used exactly as he wrote it. The later,
-// specific ruling is followed; the overlap is parked for him in the L5 report. Nothing else in
-// the copy below uses the word.
+// specific ruling is followed; the overlap is parked for him in the L5 report. The only other use
+// is the CTO-approved AI-service sentence (`AI_SERVICE_MR`, 28 Nov: "...व नोंद तयार करते."), used
+// exactly as approved and parked for the founder beside D-36. Nothing else in the copy uses the word.
 
 import {
     CORE_DATA_CATEGORY_CODES,
@@ -215,8 +216,17 @@ import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_MR, PROOF_KEPT_EN, PROOF_KEPT_MR } 
  *       person is told happens to his voice does, so this is MATERIAL (orchestrator call, F99 fix-pass-2 rules).
  * Because (b) is material, the accepted list stands alone again: `notice-2026-11-02.2` and older are asked ONCE
  * (the one-time notice sheet). `notice-2026-11-05.1` was never released.
+ *
+ * `notice-2026-11-28.1` - the AI-SERVICE pass (spec plr-d10-schedule-mechanism-pilot-2026-11-22; CTO-approved Marathi, 28 Nov;
+ * the founder may change it). The processors line said "speech processing" but never that an AI service reads his words and his
+ * bill photos and writes the record, or that it may run on servers outside India - and the speech service's terms require users
+ * to be told that AI is involved. `AI_SERVICE_MR` / `AI_SERVICE_EN` now lead the processors line in BOTH editions (this one and
+ * the permissions page, `PAGE_NOTICE_VERSION` `notice-2026-11-28.2`); every other category stays word for word. MATERIAL (a new
+ * statement about who reads his data and where), so the accepted list holds the two new versions only: `notice-2026-11-06.1` and
+ * the page's `notice-2026-11-27.1` are asked ONCE (the one-time sheet shows this line). No company is named. The Privacy Notice
+ * already names the processors and the leg outside India (§4, §5), so `PRIVACY_POLICY_VERSION` and `TERMS_VERSION` do not move.
  */
-export const NOTICE_VERSION = 'notice-2026-11-06.1';
+export const NOTICE_VERSION = 'notice-2026-11-28.1';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-06.1';
 export const TERMS_VERSION = 'terms-2026-11-06.1';
 
@@ -231,6 +241,8 @@ export const TERMS_VERSION = 'terms-2026-11-06.1';
  * version alone. `notice-2026-11-02.2` (the 30-day erasure wait, D-71) is material, so it stood
  * alone: an acceptance of `notice-2026-10-30.1` or older is asked once more. `notice-2026-11-06.1` (D-50, the
  * evidence copy is always kept / the switch renamed) is material too, so it stands alone: `.11-02.2` is asked once.
+ * `notice-2026-11-28.1` (the AI-service line) is material: both editions moved together, and `.11-06.1` and the page's
+ * `.11-27.1` are asked once.
  */
 /**
  * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (pilot lane JOIN, V6c-A) - the notice as the ONE long permissions
@@ -240,8 +252,12 @@ export const TERMS_VERSION = 'terms-2026-11-06.1';
  * do" promises are the same statements, only laid out as one page, with the phone permissions and who-sees-what added
  * as plain disclosure. So BOTH editions count as an acceptance in force, and nobody already signed in is re-asked for
  * it. LEGAL CHECK NEEDED before release (the page, and its two optional switches ON by default).
+ *
+ * `notice-2026-11-28.2` - the page's text with the AI-service line (see `notice-2026-11-28.1` above): the page reads the
+ * processors line from this notice, so it moved in the same commit. `.2`, not `.1`, because one version string names exactly
+ * one text and `.1` is the tick edition's. `notice-2026-11-27.1` no longer counts: he is asked once.
  */
-export const PAGE_NOTICE_VERSION = 'notice-2026-11-27.1';
+export const PAGE_NOTICE_VERSION = 'notice-2026-11-28.2';
 
 export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION, PAGE_NOTICE_VERSION];
 
@@ -354,6 +370,16 @@ export interface NoticeCopy {
     links: { terms: string; privacy: string };
 }
 
+/**
+ * What reads his words and his bill photos, and where (`notice-2026-11-28.1`). The Marathi is the CTO-approved sentence, word
+ * for word (28 Nov; the founder may change it); the English is its PROPOSED twin. It leads the processors line in both editions
+ * and is the one-time sheet's change line for this version (`reask/noticeChanges.ts`). "AI" appears here because this is the
+ * legal notice, not a work screen; no company is named.
+ */
+export const AI_SERVICE_MR = 'तुमचा आवाज आधी मजकूर होतो. मग तो मजकूर आणि बिलाचे फोटो एक AI सेवा वाचते व नोंद तयार करते. ही सेवा भारताबाहेर सर्व्हरवर काम करू शकते. आम्ही फक्त गरजेपुरती माहिती पाठवतो.';
+// PROPOSED (English) rendering of the CTO-approved Marathi sentence above.
+export const AI_SERVICE_EN = 'Your voice is first turned into text. Then an AI service reads that text and your bill photos and prepares the record. This service may run on servers outside India. We send only the information that is needed.';
+
 // ── मराठी ───────────────────────────────────────────────────────────────────────────
 const mr: NoticeCopy = {
     title: 'सुरू करण्याआधी',
@@ -413,7 +439,8 @@ const mr: NoticeCopy = {
             'तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू.',
         ],
     },
-    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.',
+    // notice-2026-11-28.1: the AI-service sentence first, then every category as before, word for word.
+    processors: AI_SERVICE_MR + ' OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.',
     rights: {
         heading: 'तुमचे हक्क',
         // lane F99 fix pass 2 (N-7, D-71): the in-app place by its Marathi name; one erasing verb; the 30 days. PROPOSED.
@@ -504,7 +531,8 @@ const en: NoticeCopy = {
             'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
-    processors: 'Service providers may handle limited information for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support. We send them only what that task needs. Their own terms apply to what they hold.',
+    // notice-2026-11-28.1: the AI-service sentence first, then every category as before, word for word.
+    processors: AI_SERVICE_EN + ' Service providers may handle limited information for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support. We send them only what that task needs. Their own terms apply to what they hold.',
     rights: {
         heading: 'Your rights',
         where: 'In Privacy and consent (गोपनीयता व संमती) in the app, or by writing to arvesystems@gmail.com:',

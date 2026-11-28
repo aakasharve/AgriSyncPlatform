@@ -5,7 +5,13 @@
  * spec R-11 (c) — the one plain Marathi line, for the owner AND a worker.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+
+// The billing switch (VITE_BILLING_VISIBLE, default off). featureFlags.ts reads its env in a form vi.stubEnv does not reach in
+// this repo (see MeterQuestionHost.test.tsx), so the switch is turned through the module.
+const billing = vi.hoisted(() => ({ on: true }));
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isBillingVisible: () => billing.on }));
+
 import { heldWorkLine, HELD_WORK_COPY } from '../HeldWorkNotice';
 import { countHeldRows } from '../../../sync/hooks/useHeldWorkCount';
 import { evaluateEntitlement } from '../../../../core/entitlement/useEntitlement';
@@ -22,6 +28,24 @@ const trial: SubscriptionSnapshotDto = {
     statusCode: 1, status: 'Trialing', planCode: 'shramsafal_pro',
     validUntilUtc: '2099-01-01T00:00:00Z', allowsOwnerWrites: true,
 };
+
+afterEach(() => { billing.on = true; });
+
+describe('heldWorkLine — billing switch OFF (every pilot phone): only a real refusal speaks', () => {
+    it('says nothing from the snapshot alone, for any role, even when it says the plan has ended', () => {
+        billing.on = false;
+        for (const role of ['PrimaryOwner', 'SecondaryOwner', 'Mukadam', 'Worker']) {
+            expect(heldWorkLine(0, { role, subscription: expired })).toBeNull();
+            expect(heldWorkLine(0, { role, subscription: trial })).toBeNull();
+        }
+    });
+
+    it('still tells him when the server really refused his records (entitlement.*): the work waits on the phone', () => {
+        billing.on = false;
+        expect(heldWorkLine(2, { role: 'Worker', subscription: expired })).toBe(HELD_WORK_COPY.held(2));
+        expect(heldWorkLine(1, { role: 'PrimaryOwner', subscription: null })).toBe(HELD_WORK_COPY.held(1));
+    });
+});
 
 describe('heldWorkLine', () => {
     it('tells anyone holding refused work how many records are safe on the phone (Marathi digits)', () => {

@@ -26,9 +26,23 @@ export const isVoiceDoomLoopDetectorEnabled = (): boolean =>
  * "बिलिंग" row and the card it opens (`SubscriptionCard`), the trial banner (`EntitlementBanner`) and the server's plan alerts
  * (`MeAlertRail`). Off, none of them is drawn and none leaves a gap. Default OFF (env VITE_BILLING_VISIBLE absent -> false); no
  * env file and no release workflow sets it. Read at render time (a runtime gate, like the two above).
+ * 28 Nov (founder: "the 21-day trial is for the commercial purposes... When pilot testing completes, then that is going to
+ * happen"): also the "शेताची मुदत संपली" line read from the farm's snapshot alone (`HeldWorkNotice`; a real server refusal still
+ * speaks), the add-a-farm "तयार आहे!" plan line (`WizardDonePlanLine`) and the schedule page's trial view (`SchedulerPage` ->
+ * `TrialStages`, "चाचणी").
  */
 export const isBillingVisible = (): boolean =>
     isEnabled('VITE_BILLING_VISIBLE');
+
+/**
+ * spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words) — founder 28 Nov: NO live words for the pilot. Off, the
+ * recorder never starts a live-words session and the phone never sends a piece of his sound to `/shramsafal/ai/live-words`
+ * (`AudioRecorderStreaming`, and `sendLiveWords` refuses on its own as a second lock), so it costs no data and no money; the
+ * recording screen shows its calm line as it does when no words arrive. The local phrase cutter (`liveWords/phraseChunker.ts`)
+ * needs no network and stays. Default OFF (env VITE_LIVE_WORDS_ENABLED absent -> false). Read at use time, like the billing switch.
+ */
+export const isLiveWordsEnabled = (): boolean =>
+    isEnabled('VITE_LIVE_WORDS_ENABLED');
 
 // Direct literal-comparison form so Vite can constant-fold this at build
 // time and tree-shake the gated `React.lazy(() => import('../pages/TestE2EPage'))`

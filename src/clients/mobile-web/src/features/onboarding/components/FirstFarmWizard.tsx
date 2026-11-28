@@ -59,6 +59,19 @@ export const WizardSummaryRoleTrial: React.FC = () => {
     );
 };
 
+/**
+ * The "तयार आहे!" screen's plan line (the server's `status · planCode`, e.g. "Trialing · shramsafal_pro"). Pilot (founder 27-28 Nov:
+ * no trial or plan words; "the 21-day trial is for the commercial purposes"): drawn only behind the default-off billing switch.
+ */
+export const WizardDonePlanLine: React.FC<{ subscription: BootstrapFirstFarmResponse['subscription'] }> = ({ subscription }) => {
+    if (!subscription || !isBillingVisible()) return null;
+    return (
+        <div className="mt-0.5 text-xs font-semibold text-emerald-700" data-testid="wizard-done-plan">
+            {subscription.status} · {subscription.planCode}
+        </div>
+    );
+};
+
 interface FirstFarmWizardProps {
     isOpen: boolean;
     /** Called when the wizard is fully finished and the caller should refresh the farm list. */
@@ -340,11 +353,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                 <div className="truncate font-display text-xl font-black text-stone-900">
                                     {result.farmName}
                                 </div>
-                                {result.subscription && (
-                                    <div className="mt-0.5 text-xs font-semibold text-emerald-700">
-                                        {result.subscription.status} · {result.subscription.planCode}
-                                    </div>
-                                )}
+                                <WizardDonePlanLine subscription={result.subscription} />
 
                                 <button
                                     type="button"

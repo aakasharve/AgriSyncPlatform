@@ -18,7 +18,25 @@ const h = vi.hoisted(() => ({
     liveStream: null as MediaStream | null,
     send: vi.fn(),
     sampleRate: 16000 as number | null,
+    liveWordsOn: true,
+    sessions: 0,
 }));
+
+// The live-words build switch (VITE_LIVE_WORDS_ENABLED, default off; founder 28 Nov: no live words for the pilot). featureFlags.ts
+// reads its env in a form vi.stubEnv does not reach in this repo, so the switch is turned through the module. ON for the cases that
+// pin the behaviour as built; the pilot's OFF is its own describe at the end.
+vi.mock('../../../../app/featureFlags', async (orig) => ({ ...(await orig<typeof import('../../../../app/featureFlags')>()), isLiveWordsEnabled: () => h.liveWordsOn }));
+// The real session, counted: "the session never starts" is asserted on the constructor, not inferred from silence.
+vi.mock('../../liveWords/liveWordsSession', async (orig) => {
+    const real = await orig<typeof import('../../liveWords/liveWordsSession')>();
+    class CountedLiveWordsSession extends real.LiveWordsSession {
+        constructor(options: ConstructorParameters<typeof real.LiveWordsSession>[0]) {
+            super(options);
+            h.sessions++;
+        }
+    }
+    return { ...real, LiveWordsSession: CountedLiveWordsSession };
+});
 
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
@@ -68,6 +86,8 @@ beforeEach(() => {
     h.onFrame = undefined;
     h.pcmStops = 0;
     h.sampleRate = 16000;
+    h.liveWordsOn = true;
+    h.sessions = 0;
     h.liveStream = { getTracks: () => [] } as unknown as MediaStream;
     h.send.mockReset().mockResolvedValue({ kind: 'words', text: 'आज पाच मजूर होते' });
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
@@ -83,6 +103,7 @@ describe('AudioRecorderStreaming — live words while he speaks', () => {
 
         await speak();
 
+        expect(h.sessions).toBe(1); // switch ON: the session starts, as built
         expect(h.send).toHaveBeenCalledTimes(1);
         expect(h.send.mock.calls[0][0]).toMatchObject({ farmId: 'farm-1', seq: 1 });
         expect(screen.getByTestId('sathi-words-strip')).toHaveTextContent('आज पाच मजूर होते');
@@ -177,6 +198,41 @@ describe('AudioRecorderStreaming — live words while he speaks', () => {
         await start();
         await speak();
 
+        expect(h.send).not.toHaveBeenCalled();
+    });
+});
+
+describe('AudioRecorderStreaming — live-words switch OFF (founder 28 Nov: none for the pilot)', () => {
+    it('the session never starts and no phrase is sent, however long he speaks; the strip keeps its calm line', async () => {
+        h.liveWordsOn = false;
+        render(<AudioRecorderStreaming onAudioCaptured={vi.fn()} flowV2={flowV2} liveWordsFarmId="farm-1" />);
+        await start();
+        await speak();
+        await speak();
+        await speak();
+
+        expect(h.sessions).toBe(0);
+        expect(h.send).not.toHaveBeenCalled();
+        const strip = screen.getByTestId('sathi-words-strip');
+        expect(strip).toHaveTextContent(VOICE_FLOW_MR.wordsStrip);
+        expect(strip).toHaveAttribute('data-live', 'no');
+        expect(screen.getByTestId('mic-ui')).toHaveAttribute('data-recording', 'yes');
+    });
+
+    it('recording and saving go on exactly as before: stop sends his recording once', async () => {
+        h.liveWordsOn = false;
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} flowV2={flowV2} liveWordsFarmId="farm-1" />);
+        await start();
+        await speak();
+        await act(async () => { vi.advanceTimersByTime(12_000); });
+        await act(async () => { fireEvent.click(screen.getByTestId('mic-stop')); });
+        await act(async () => { await vi.runAllTimersAsync(); });
+
+        expect(onAudioCaptured).toHaveBeenCalledTimes(1);
+        expect(onAudioCaptured.mock.calls[0][0].encodedLive).toBe(true);
+        expect(h.pcmStops).toBe(1);
+        expect(h.sessions).toBe(0);
         expect(h.send).not.toHaveBeenCalled();
     });
 });

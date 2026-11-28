@@ -35,6 +35,7 @@ import { VoiceIdempotency } from '../../../infrastructure/voice/VoiceIdempotency
 import { markVoice } from '../../../infrastructure/voice/voiceTiming';
 import type { RecorderFlowV2 } from './recorder/flowV2Types';
 import { LiveWordsSession } from '../liveWords/liveWordsSession';
+import { isLiveWordsEnabled } from '../../../app/featureFlags';
 
 interface AudioRecorderStreamingProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -103,7 +104,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   // Voice live words: the words heard so far in what he is saying (display only; his recording and its parse never depend on it).
   const [liveWords, setLiveWords] = useState('');
   const liveWordsRef = useRef<LiveWordsSession | null>(null);
-  const liveWordsOn = flowV2?.silenceHelp === true && !!liveWordsFarmId && liveWordsFarmId !== 'unknown-farm';
+  // Founder 28 Nov: no live words for the pilot. With the build switch off (unset = off) no session starts, so no piece of his
+  // sound leaves the phone for live words and the strip keeps its calm line.
+  const liveWordsOn = isLiveWordsEnabled() && flowV2?.silenceHelp === true && !!liveWordsFarmId && liveWordsFarmId !== 'unknown-farm';
   const endLiveWords = () => {
     liveWordsRef.current?.stop();
     liveWordsRef.current = null;

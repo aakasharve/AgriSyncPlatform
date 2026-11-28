@@ -8,14 +8,14 @@
 // Versions compare as strings: they are `notice-YYYY-MM-DD.n`, which sorts by date then number.
 //
 // When a new MATERIAL notice version ships, add its line here (and nowhere else).
-import { CONSENT_NOTICE, type NoticeLanguage } from '../gate/consentNotice';
+import { AI_SERVICE_EN, AI_SERVICE_MR, CONSENT_NOTICE, type NoticeLanguage } from '../gate/consentNotice';
 import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_MR, PROOF_KEPT_EN, PROOF_KEPT_MR } from '../../../i18n/voiceSwitchWords';
 
 export interface NoticeChangeLine {
     /** The notice version that introduced this change: a farmer who accepted an OLDER version has not seen it. */
     since: string;
     /** Stable id for tests. */
-    id: 'improvement' | 'erasure' | 'proof';
+    id: 'improvement' | 'erasure' | 'proof' | 'ai';
     text: (language: NoticeLanguage) => string;
 }
 
@@ -30,6 +30,9 @@ export const NOTICE_CHANGE_LINES: readonly NoticeChangeLine[] = [
         id: 'proof',
         text: (l) => (l === 'en' ? `${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN}` : `${PROOF_KEPT_MR} ${OFF_CONSEQUENCE_MR}`),
     },
+    // The AI-service line (CTO-approved Marathi, 28 Nov): the notice's own sentence. It came into both editions at once, so a
+    // farmer who accepted the tick's 11-06.1 or the page's 11-27.1 is shown it (both sort before 11-28.1).
+    { since: 'notice-2026-11-28.1', id: 'ai', text: (l) => (l === 'en' ? AI_SERVICE_EN : AI_SERVICE_MR) },
 ];
 
 /**

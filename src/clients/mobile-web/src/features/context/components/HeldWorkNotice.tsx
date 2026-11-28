@@ -11,7 +11,8 @@
  *     (`useHeldWorkCount` — read from the queue, i.e. what actually happened; another farm's held
  *     records are not counted here), or
  *   - the open farm's own snapshot says new work is not allowed right now
- *     (`evaluateEntitlement`, which folds in a server-managed access extension).
+ *     (`evaluateEntitlement`, which folds in a server-managed access extension) - ONLY with the default-off
+ *     billing switch on (`isBillingVisible`; pilot: no trial or plan words unless a record was really refused).
  * It says the work is safe on the phone and will go by itself — which is true: held rows are kept,
  * never charged, and re-sent with their own ids once the server allows the farm again.
  *
@@ -22,6 +23,7 @@
  */
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { isBillingVisible } from '../../../app/featureFlags';
 import { evaluateEntitlement } from '../../../core/entitlement/useEntitlement';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { useHeldWorkCount } from '../../sync/hooks/useHeldWorkCount';
@@ -47,6 +49,13 @@ export function heldWorkLine(
     }
 
     if (!farm?.subscription) {
+        return null;
+    }
+
+    // Pilot (founder 27-28 Nov: "the 21-day trial is for the commercial purposes"): the SNAPSHOT alone (no record refused) is the
+    // plan talking, so this line shows only behind the default-off billing switch. A real refusal still speaks above, because
+    // the work truly waits on the phone then.
+    if (!isBillingVisible()) {
         return null;
     }
 
