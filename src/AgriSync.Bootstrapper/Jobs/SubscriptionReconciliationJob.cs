@@ -4,6 +4,8 @@ using AgriSync.BuildingBlocks.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ShramSafal.Application.Ports;
 
 namespace AgriSync.Bootstrapper.Jobs;
 
@@ -22,9 +24,14 @@ namespace AgriSync.Bootstrapper.Jobs;
 /// provider API) lands when a provider is chosen. The table-driven scan
 /// here is the deterministic fallback that keeps the DB consistent even
 /// if a webhook was missed.
+///
+/// spec: plr-d10 pilot lane NO-TRIAL — while <see cref="PilotOptions.TrialEnforcementEnabled"/> is false (the default) a pass
+/// expires NOTHING: Expired is one-way (<c>Subscription.Activate</c> refuses it), so no pilot farm's subscription may reach it.
+/// The pass only counts the rows it would have expired and says so in the log; nothing is changed or saved.
 /// </summary>
 public sealed class SubscriptionReconciliationJob(
     IServiceScopeFactory scopeFactory,
+    IOptions<PilotOptions> pilotOptions,
     ILogger<SubscriptionReconciliationJob> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -57,7 +64,8 @@ public sealed class SubscriptionReconciliationJob(
         logger.LogInformation("SubscriptionReconciliationJob stopping.");
     }
 
-    private async Task RunReconciliationPassAsync(CancellationToken ct)
+    /// <summary>One nightly pass. Public so a test runs exactly this code (spec: plr-d10 pilot lane NO-TRIAL).</summary>
+    public async Task RunReconciliationPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var subscriptionRepo = scope.ServiceProvider.GetRequiredService<ISubscriptionRepository>();
@@ -71,6 +79,15 @@ public sealed class SubscriptionReconciliationJob(
             if (expired.Count == 0)
             {
                 logger.LogDebug("Reconciliation pass: no expired subscriptions found.");
+                return;
+            }
+
+            if (!pilotOptions.Value.TrialEnforcementEnabled)
+            {
+                // The pilot: no Expire(), no SaveChanges. Warning so the line is kept by the production log level.
+                logger.LogWarning(
+                    "Reconciliation pass: pilot mode (Pilot:TrialEnforcementEnabled=false) - {Count} subscriptions are past their end; none was expired.",
+                    expired.Count);
                 return;
             }
 

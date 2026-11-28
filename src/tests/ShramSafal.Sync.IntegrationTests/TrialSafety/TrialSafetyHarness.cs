@@ -143,7 +143,13 @@ public sealed class TrialSafetyDatabase : IAsyncLifetime
 
     // ── the host ──
 
-    public async Task<WebApplication> BuildHostAsync(IAiOrchestrator? orchestrator = null, Action<IServiceCollection>? configureServices = null)
+    /// <param name="trialEnforcementEnabled">spec: plr-d10 pilot lane NO-TRIAL — <c>Pilot:TrialEnforcementEnabled</c>. TRUE here by
+    /// default, so every trial-safety test written before the switch existed still proves the commercial rules unchanged; the
+    /// pilot tests pass false (the shipped default).</param>
+    public async Task<WebApplication> BuildHostAsync(
+        IAiOrchestrator? orchestrator = null,
+        Action<IServiceCollection>? configureServices = null,
+        bool trialEnforcementEnabled = true)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.WebHost.UseTestServer();
@@ -156,6 +162,7 @@ public sealed class TrialSafetyDatabase : IAsyncLifetime
             // The privileged role the admin cross-tenant factory uses (the startup backfill), as in production.
             ["ConnectionStrings:ShramSafalDb_Migration"] = SuperuserConn,
             ["ShramSafal:Storage:DataDirectory"] = storageDir,
+            ["Pilot:TrialEnforcementEnabled"] = trialEnforcementEnabled ? "true" : "false",
         });
 
         builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, JoinByCodeTestAuthHandler>("Test", _ => { });

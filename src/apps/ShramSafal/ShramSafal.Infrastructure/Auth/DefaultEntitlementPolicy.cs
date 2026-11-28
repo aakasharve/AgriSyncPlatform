@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 
@@ -33,11 +34,18 @@ namespace ShramSafal.Infrastructure.Auth;
 /// granted by) is allowed whatever its subscription status says, including no subscription row.
 /// The decision reports <see cref="EntitlementReason.Allowed"/> with the subscription's real status,
 /// so nothing pretends the subscription itself is current.
+///
+/// spec: plr-d10 pilot lane NO-TRIAL — while <see cref="PilotOptions.TrialEnforcementEnabled"/> is false (the default), after step 3
+/// the pilot has no time limit: no subscription row, PastDue or Expired is allowed with <see cref="EntitlementReason.Pilot"/>, and a
+/// Trialing/Active row past its own end (which the nightly job no longer ends) reports <see cref="EntitlementReason.Pilot"/> too,
+/// so a log or metric can tell the pilot is what keeps the farm open. Steps 1–2, a farm with no owner account, and a Canceled or
+/// Suspended account are decided exactly as before. With enforcement on, nothing in this class behaves differently from before.
 /// </summary>
 internal sealed class DefaultEntitlementPolicy(
     IShramSafalRepository farmRepository,
     ISubscriptionReader subscriptionReader,
-    IClock clock) : IEntitlementPolicy
+    IClock clock,
+    IOptions<PilotOptions> pilotOptions) : IEntitlementPolicy
 {
     public async Task<EntitlementDecision> EvaluateAsync(
         UserId userId,
@@ -76,10 +84,23 @@ internal sealed class DefaultEntitlementPolicy(
             return new EntitlementDecision(false, EntitlementReason.SubscriptionMissing, null);
         }
 
+        var pilot = pilotOptions.Value;
         var subscription = await subscriptionReader.GetByOwnerAccountAsync(farm.OwnerAccountId, ct);
         if (subscription is not null && subscription.AllowsOwnerWrites)
         {
-            return new EntitlementDecision(true, EntitlementReason.Allowed, subscription.Status);
+            // spec: plr-d10 pilot lane NO-TRIAL — the row the nightly job would have expired (ValidUntilUtc before now) is open
+            // only because of the pilot; say so. Enforcement on: Allowed, as before.
+            var openOnlyByThePilot = !pilot.TrialEnforcementEnabled && subscription.ValidUntilUtc < clock.UtcNow;
+            return new EntitlementDecision(
+                true, openOnlyByThePilot ? EntitlementReason.Pilot : EntitlementReason.Allowed, subscription.Status);
+        }
+
+        // spec: plr-d10 pilot lane NO-TRIAL — no time limit in the pilot: no row, PastDue or Expired stays open without any
+        // extension, so neither a missing extension nor its end date (31 Dec 2026) can close a farm. Canceled / Suspended fall
+        // through to the unchanged rules below.
+        if (pilot.KeepsOpen(subscription?.Status))
+        {
+            return new EntitlementDecision(true, EntitlementReason.Pilot, subscription?.Status);
         }
 
         // spec R-11 (b) — the explicit, recorded pilot extension keeps the farm working.

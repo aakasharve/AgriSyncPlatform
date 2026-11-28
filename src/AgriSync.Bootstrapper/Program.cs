@@ -563,6 +563,11 @@ try
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(typeof(AgriSync.BuildingBlocks.Security.RegionGuard).FullName!));
 
+    // spec: plr-d10 pilot lane NO-TRIAL — say once, at start, whether the trial / access-extension time limit is enforced.
+    PilotModeStartupLog.Write(
+        app.Services.GetRequiredService<IOptions<ShramSafal.Application.Ports.PilotOptions>>().Value,
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AgriSync.Pilot"));
+
     // The client IP every per-IP rate limit keys on. One definition, shared with the rate-limit
     // tests (spec: plr-d7-m1-multiuser-2026-10-26, step 1 — SEC-1); unchanged behaviour.
     app.UseForwardedHeaders(RateLimitingConfig.CreateForwardedHeadersOptions());

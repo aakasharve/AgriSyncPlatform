@@ -266,7 +266,7 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
     {
         var calls = 0;
         IReadOnlyDictionary<string, string>? fields = null;
-        var transcriber = Transcriber(new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt" }, request =>
+        var transcriber = Transcriber(LiveWordsOn(), request =>
         {
             calls++;
             fields = FormFieldsOf(request);
@@ -286,7 +286,7 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
     [Fact]
     public async Task LiveWords_AQuietPiece_IsNotAFailure()
     {
-        var transcriber = Transcriber(new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt" }, _ => Answer("{\"transcript\":\"\",\"language_code\":\"mr-IN\"}"));
+        var transcriber = Transcriber(LiveWordsOn(), _ => Answer("{\"transcript\":\"\",\"language_code\":\"mr-IN\"}"));
 
         var result = await transcriber.TranscribeAsync(Wav(seconds: 2), "mr-IN", CancellationToken.None);
 
@@ -301,7 +301,7 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
     public async Task LiveWords_ASarvamFailure_IsNeverRetried_AndNeverThrown(HttpStatusCode status, LiveWordsOutcome expected)
     {
         var calls = 0;
-        var transcriber = Transcriber(new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt" }, _ =>
+        var transcriber = Transcriber(LiveWordsOn(), _ =>
         {
             calls++;
             return new HttpResponseMessage(status) { Content = new StringContent("{\"error\":\"x\"}", Encoding.UTF8, "application/json") };
@@ -321,7 +321,12 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
         Assert.False(off.Enabled);
         Assert.Equal(LiveWordsOutcome.Unavailable, (await off.TranscribeAsync(Wav(seconds: 2), null, CancellationToken.None)).Outcome);
 
-        var options = new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt", LiveWordsMaxConcurrent = 1 };
+        // founder 28 Nov 2026 (no live words for the pilot): left unset, the switch is OFF — nothing is sent.
+        var unset = Transcriber(new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt" }, _ => { calls++; return Answer("{\"transcript\":\"x\"}"); });
+        Assert.False(unset.Enabled);
+        Assert.Equal(LiveWordsOutcome.Unavailable, (await unset.TranscribeAsync(Wav(seconds: 2), null, CancellationToken.None)).Outcome);
+
+        var options = new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt", LiveWordsEnabled = true, LiveWordsMaxConcurrent = 1 };
         var gate = new LiveWordsGate(Options.Create(options));
         using var held = gate.TryEnter(); // another farmer's piece is in flight
         var busy = Transcriber(options, _ => { calls++; return Answer("{\"transcript\":\"x\"}"); }, gate);
@@ -333,7 +338,7 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
     [Fact]
     public async Task LiveWords_ALostConnection_IsAnAnswerNotAnException()
     {
-        var transcriber = Transcriber(new SarvamOptions { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt" }, _ => throw new HttpRequestException("network down"));
+        var transcriber = Transcriber(LiveWordsOn(), _ => throw new HttpRequestException("network down"));
 
         var result = await transcriber.TranscribeAsync(Wav(seconds: 2), null, CancellationToken.None);
 
@@ -349,6 +354,10 @@ public sealed class PlrVoiceLiveWordsAndKeytermsTests(Xunit.Abstractions.ITestOu
             null,
             (brands ?? []).Select(b => new CatalogBrand(b, null, null, null)).ToList(),
             [], [], [], [], null, [], aliases ?? [], [], []);
+
+    /// <summary>The live-words switch turned ON explicitly (its default is off: founder, 28 Nov 2026, no live words for the pilot).</summary>
+    private static SarvamOptions LiveWordsOn() =>
+        new() { ApiSubscriptionKey = "k", SttEndpoint = "https://unit.test/stt", LiveWordsEnabled = true };
 
     private static HttpResponseMessage Answer(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };

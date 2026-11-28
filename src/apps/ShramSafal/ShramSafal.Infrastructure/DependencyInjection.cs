@@ -348,6 +348,13 @@ public static class DependencyInjection
                 options.DocIntelTimeoutSeconds = docIntelTimeout;
             }
 
+            // spec: plr-d10 voice live words (founder 28 Nov 2026: none for the pilot) — the switch the settings files now carry
+            // explicitly (false). Absent or unreadable = the code default (false).
+            if (bool.TryParse(section["LiveWordsEnabled"], out var liveWordsEnabled))
+            {
+                options.LiveWordsEnabled = liveWordsEnabled;
+            }
+
         });
 
         services.PostConfigure<SarvamOptions>(options =>
@@ -444,6 +451,8 @@ public static class DependencyInjection
             ShramSafal.Infrastructure.Admin.ResponseRedactor>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();
         services.AddScoped<ISubscriptionReader, SubscriptionReader>();
+        // spec: plr-d10 pilot lane NO-TRIAL — Pilot:TrialEnforcementEnabled (absent = false = the pilot, no time limit).
+        services.Configure<PilotOptions>(configuration.GetSection(PilotOptions.SectionName));
         services.AddScoped<IEntitlementPolicy, DefaultEntitlementPolicy>();
         services.AddScoped<IDocumentExtractionSessionRepository, DocumentExtractionSessionRepository>();
         services.AddScoped<IReportExportService, PdfReportExportService>();

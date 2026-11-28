@@ -77,8 +77,10 @@ public sealed class SarvamOptions
     // spec: plr-d10-schedule-mechanism-pilot-2026-11-22 (voice live words) — the words shown while he speaks. Each live piece is ONE
     // extra REST call (a second charge for the same seconds of audio, alongside the real transcription of the whole recording), and
     // Sarvam's REST limit is shared (Starter plan: 60 requests a minute), so the live pieces are rationed hard and shed first.
-    /// <summary>The switch: false = the route answers "off" and no phone shows live words (the recording itself is unaffected).</summary>
-    public bool LiveWordsEnabled { get; set; } = true;
+    /// <summary>The switch: false = the route answers "off" and no phone shows live words (the recording itself is unaffected).
+    /// Default FALSE (founder, 28 Nov 2026: no live words for the pilot) and false in every shipped settings file; read from
+    /// <c>Sarvam:LiveWordsEnabled</c>, so <c>Sarvam__LiveWordsEnabled=true</c> turns it on without a code change.</summary>
+    public bool LiveWordsEnabled { get; set; }
 
     /// <summary>Live pieces being transcribed at the same moment, all farmers together.</summary>
     public int LiveWordsMaxConcurrent { get; set; } = 3;

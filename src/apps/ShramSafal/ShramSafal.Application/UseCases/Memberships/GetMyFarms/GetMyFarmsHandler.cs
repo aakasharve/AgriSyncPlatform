@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.Farms;
@@ -18,7 +19,8 @@ public sealed record GetMyFarmsCommand(UserId CallerUserId, bool IncludePending 
 
 /// <param name="AllowsOwnerWrites">What the server's entitlement gate will do for paid writes: true
 /// for a Trialing/Active subscription, and (spec R-11 b) also true while the account has an active
-/// server-managed access extension.</param>
+/// server-managed access extension, and (spec: plr-d10 pilot lane NO-TRIAL) also true for a PastDue or
+/// Expired one while the pilot has no time limit (<see cref="PilotOptions.KeepsOpen"/>).</param>
 /// <param name="AccessExtendedUntilUtc">spec R-11 (b) — ADDITIVE, last (older apps ignore it): the end
 /// of the active access extension, or null when none is active. Lets a screen say the truth — the
 /// subscription's own status is unchanged, access continues because of the extension.</param>
@@ -69,7 +71,8 @@ public sealed record MyFarmsResult(IReadOnlyList<MyFarmDto> Farms);
 public sealed class GetMyFarmsHandler(
     IShramSafalRepository repository,
     ISubscriptionReader subscriptionReader,
-    IClock clock)
+    IClock clock,
+    IOptions<PilotOptions> pilotOptions)
 {
     public async Task<Result<MyFarmsResult>> HandleAsync(GetMyFarmsCommand command, CancellationToken ct = default)
     {
@@ -128,7 +131,10 @@ public sealed class GetMyFarmsHandler(
                         Status: MapStatus(sub.Status),
                         PlanCode: sub.PlanCode,
                         ValidUntilUtc: sub.ValidUntilUtc,
-                        AllowsOwnerWrites: sub.AllowsOwnerWrites || extension is not null,
+                        // spec: plr-d10 pilot lane NO-TRIAL — the same rule as DefaultEntitlementPolicy again: in the pilot an
+                        // Expired / PastDue farm is accepted, so the phone must not say "मुदत संपली" (HeldWorkNotice). The status
+                        // itself is reported as it is.
+                        AllowsOwnerWrites: sub.AllowsOwnerWrites || extension is not null || pilotOptions.Value.KeepsOpen(sub.Status),
                         AccessExtendedUntilUtc: extension?.EndsAtUtc);
                 }
             }

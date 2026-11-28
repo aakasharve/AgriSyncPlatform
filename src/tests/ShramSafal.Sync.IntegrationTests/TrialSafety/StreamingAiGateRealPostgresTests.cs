@@ -139,7 +139,8 @@ public sealed class StreamingAiGateRealPostgresTests(TrialSafetyDatabase db, ITe
         return TrialSafetyDatabase.SendAsync(client, HttpMethod.Post, "/shramsafal/ai/transcribe-stream", who, content: form);
     }
 
-    private sealed class CountingOrchestrator : IAiOrchestrator
+    // internal (not private): PilotNoTrialRealPostgresTests counts the same AI calls.
+    internal sealed class CountingOrchestrator : IAiOrchestrator
     {
         public int Calls { get; private set; }
 

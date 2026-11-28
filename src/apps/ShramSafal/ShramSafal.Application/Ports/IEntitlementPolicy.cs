@@ -13,6 +13,9 @@ namespace ShramSafal.Application.Ports;
 ///     finance, AI, owner sync-push) → require Trialing/Active.
 ///   - PastDue → read-allow, write-deny for owner features.
 ///   - Expired/Canceled/Suspended → deny for paid features.
+///
+/// spec: plr-d10 pilot lane NO-TRIAL — while <see cref="PilotOptions.TrialEnforcementEnabled"/> is false (the default) no time
+/// limit applies: see <see cref="PilotOptions"/>.
 /// </summary>
 public interface IEntitlementPolicy
 {
@@ -45,6 +48,14 @@ public enum EntitlementReason
     SubscriptionExpired,
     SubscriptionCanceled,
     SubscriptionSuspended,
+
+    /// <summary>
+    /// spec: plr-d10 pilot lane NO-TRIAL — ALLOWED only because the pilot has no time limit
+    /// (<see cref="PilotOptions.TrialEnforcementEnabled"/> = false): with enforcement on, this farm's trial, subscription or access
+    /// extension would not allow it. Appended last, so every earlier value keeps its number; it is never sent to a phone (only a
+    /// refusal becomes an <c>entitlement.&lt;reason&gt;</c> code).
+    /// </summary>
+    Pilot,
 }
 
 public sealed record EntitlementDecision(

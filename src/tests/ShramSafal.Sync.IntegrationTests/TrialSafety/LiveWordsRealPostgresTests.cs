@@ -140,6 +140,26 @@ public sealed class LiveWordsRealPostgresTests(TrialSafetyDatabase db) : IClassF
         fake.Calls.Should().Be(0);
     }
 
+    /// <summary>
+    /// Founder, 28 Nov 2026: no live words for the pilot. The REAL transcriber (no fake) with the shipped default
+    /// (<c>Sarvam:LiveWordsEnabled</c> absent = false): the route says "off" before any farm or audio is read, so no speech-to-text
+    /// runs. The "on" behaviour above is proven with a fake that is switched on explicitly (<see cref="FakeLiveWords.IsEnabled"/>).
+    /// </summary>
+    [Fact]
+    public async Task By_default_the_real_server_has_live_words_switched_off()
+    {
+        await db.AssertAppRoleIsNotVacuousAsync();
+        var (farm, account, owner) = await SeedExpiredFarmAsync();
+        await db.SeedExtensionAsync(account, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddDays(10)); // the farm itself is open
+        await using var app = await db.BuildHostAsync();
+        using var client = app.GetTestClient();
+
+        using var response = await PostAsync(client, owner, farm, Wav(2));
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("ShramSafal.LiveWordsOff");
+    }
+
     [Fact]
     public async Task Nobody_signed_in_is_refused()
     {
