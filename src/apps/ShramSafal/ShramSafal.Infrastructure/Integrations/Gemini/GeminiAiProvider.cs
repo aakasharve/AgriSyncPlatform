@@ -195,6 +195,12 @@ internal sealed class GeminiAiProvider : IAiProvider
 
             // A correction ("बदला") is never split: its block asks for whole buckets, which pieces would repeat.
             var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
+            // 28 Nov 2026 (CTO scope add): a sorting prompt asks for a dayOutcome. Only then is a day outcome required of the
+            // answer and the enforced response schema sent (the verification prompt has its own, different answer).
+            var isSortingPrompt = AiAnswerInspector.PromptAsksForDayOutcome(systemPrompt);
+            JsonElement? responseSchema = isSortingPrompt && _options.StructurerResponseSchema
+                ? StructurerResponseSchema.Json
+                : null;
             var geminiCalls = 0;
             var structured = await ChunkedStructuring.StructureAsync(
                 rawTranscript,
@@ -208,14 +214,19 @@ internal sealed class GeminiAiProvider : IAiProvider
                         [new { text = segment }],
                         modelId,
                         segmentCt,
+                        responseSchema,
                         structurer: true);
                     if (part.Success)
                     {
-                        // JSON mode makes an invalid answer rare, not impossible. An answer that is not a JSON object is a
-                        // failed call: it gets the one more try below, and after that the backup sorter.
-                        return LooksLikeJsonObject(part.Content)
-                            ? SegmentAnswer.Ok(part.Content)
-                            : SegmentAnswer.Failed("Gemini returned an answer that is not a JSON object (parse failure).", retryable: true);
+                        // The enforced schema makes a broken answer rare, not impossible. An answer that cannot be used (not
+                        // JSON, empty, a key repeated with a different value, no day outcome) is a FAILED call, never a day:
+                        // it gets the one more try below, and after that the backup sorter. A key repeated with the same
+                        // value is dropped. Both are logged with the provider name so they can be counted.
+                        var inspection = AiAnswerInspector.Inspect(GeminiJsonCleaner.Clean(part.Content ?? string.Empty), isSortingPrompt);
+                        AiAnswerInspector.Log(logger, "Gemini", modelId, inspection);
+                        return inspection.IsUsable
+                            ? SegmentAnswer.Ok(inspection.Text)
+                            : SegmentAnswer.Failed(inspection.ErrorText, retryable: true);
                     }
 
                     // A truncated answer is split in half (fix pass 2); anything else gets one more try.
@@ -242,7 +253,11 @@ internal sealed class GeminiAiProvider : IAiProvider
             var cleaned = GeminiJsonCleaner.Clean(structured.Content!);
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
             // The server holds the transcript and the model does not repeat it (PLR lane V-1).
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: rawTranscript);
+            var normalized = responseNormalizer.NormalizeVoiceJson(
+                cleaned,
+                promptVersion: promptVersion,
+                serverTranscript: rawTranscript,
+                requireDayOutcome: isSortingPrompt);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
 
             // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful outbound Gemini call. The payload is the
@@ -274,23 +289,6 @@ internal sealed class GeminiAiProvider : IAiProvider
                 Success = false,
                 Error = ex.Message
             };
-        }
-    }
-
-    private static bool LooksLikeJsonObject(string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return false;
-        }
-
-        try
-        {
-            return JsonNode.Parse(GeminiJsonCleaner.Clean(content)) is JsonObject;
-        }
-        catch (JsonException)
-        {
-            return false;
         }
     }
 
@@ -436,7 +434,10 @@ internal sealed class GeminiAiProvider : IAiProvider
         using var timeout = CreateTimeoutToken(ct, ResolveStructurerTimeoutSeconds());
         var client = httpClientFactory.CreateClient("GeminiAiProvider");
 
-        var generationConfig = BuildGenerationConfig(structurer: true, thinkingBudget: null, responseJsonSchema: null);
+        JsonElement? streamSchema = AiAnswerInspector.PromptAsksForDayOutcome(systemPrompt) && _options.StructurerResponseSchema
+            ? StructurerResponseSchema.Json
+            : null;
+        var generationConfig = BuildGenerationConfig(structurer: true, thinkingBudget: null, responseJsonSchema: streamSchema);
 
         var requestBody = new JsonObject
         {

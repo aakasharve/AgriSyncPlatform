@@ -4,7 +4,8 @@ Last updated: 28 Nov 2026. Spec: `plr-d10-schedule-mechanism-pilot-2026-11-22`.
 
 > **Rule: before any change of model for any AI step, re-run the side-by-side test on the golden set and update this file.**
 > A model name or a vendor claim is a perishable fact. A change is made on measured results on our own data, not on brand
-> or on published numbers, and the new result goes in the "Comparison test" section below in the same change.
+> or on published numbers, and the new result goes in the "Measured baseline" section below in the same change. A candidate
+> has to beat that baseline.
 
 ## Decision (founder, 28 Nov 2026, for the 3 Dec pilot)
 
@@ -89,9 +90,30 @@ The full comparison note is in the private cofounder repo:
   answer that is actually cut off at the output cap is split in half and retried (logged, never silent). The answer cap is
   `Gemini:StructurerMaxOutputTokens` = 32,768 (half the model's 65,536; thinking tokens count against it). Sarvam
   speech-to-text piece-cutting (pieces of at most 30 seconds, `Sarvam:SttMaxParallelPieces`) is unchanged.
-- **Answer format.** Gemini JSON mode (`responseMimeType: application/json`). No response schema is sent for the sorting step:
-  the log's shape is defined by the 700-line prompt and its normalizer, and a hand-copied schema would have to be re-measured on
-  the golden set first (follow-up). An answer that is not a JSON object counts as a failed call (one more try, then the backup).
+- **Answer format.** Gemini JSON mode (`responseMimeType: application/json`) plus an ENFORCED response schema
+  (`responseJsonSchema`, `StructurerResponseSchema.cs`, switch `Gemini:StructurerResponseSchema`, on in the pilot). The schema
+  fixes the skeleton only: the answer is an object, `dayOutcome` is present and is one of the four values the app knows, and
+  the eight row buckets (`cropActivities`, `irrigation`, `labour`, `inputs`, `machinery`, `activityExpenses`, `observations`,
+  `plannedTasks`) are arrays of objects. The rows themselves are OPEN objects (`additionalProperties: true`, no property
+  list), and keys it does not name (`summary`, `disturbance`, `missingSegments`, `referenced_date`, ...) stay free, because a
+  field the schema forgot to name would be silently dropped by the model. The prompt text is not changed. The verification
+  (CoVe) prompt asks for a score, not a day, and gets no schema. Sarvam gets none (its strict mode is unverified).
+- **A broken answer is a failure, never a day** (CTO scope add, 28 Nov 2026, after the 20-sample test). Every answer, from
+  either sorter, is checked by `AiAnswerInspector` inside the call that has its own one retry; the normalizer checks again and
+  throws `BrokenModelAnswerException`.
+  - *Not JSON, not an object, empty, or no usable `dayOutcome` with no work row and no disturbance:* a failed call. It used to
+    become an empty `WORK_RECORDED` day that reported success (live: a 3.5 Flash-Lite answer with a stray
+    `- "femaleCount": 3` line lost the labour).
+  - *A key repeated with a different value:* a failed call. It used to keep the LAST value (live: Sarvam wrote
+    `"inputs":[2 products]` and later `"inputs":[]`, and the saved log had no products). A key repeated with the SAME value is
+    collapsed silently.
+  - What happens next is the normal chain: one retry, then the Sarvam backup (text only), and if everything fails the call
+    fails as a retryable "the AI failed this time" (HTTP 503 or 400 `AiParsingFailed`). The phone keeps the recording and his
+    words and understands them later (the unheard-voice path, आवाज नोंदी, decision D-59). No phone change is needed.
+  - Both cases are logged with the provider and model so they can be counted:
+    `[answer-check] provider=Gemini|Sarvam model=... problem=Unparseable|Empty|NotAnObject|ConflictingDuplicateKeys|NoDayOutcome|IdenticalRepeatedKeys`.
+  - Unchanged on purpose: an answer with work in it but no `dayOutcome` still defaults to `WORK_RECORDED`; the receipt and
+    sale-slip path (`NormalizeGenericJson`) keeps its old tolerance.
 - **Thinking.** Off (`Gemini:StructurerThinkingBudget` = 0): sorting is extraction, and thinking tokens cost money and eat the
   answer cap. If the API rejects a budget for this model, set `Gemini:StructurerThinkingLevel` (`minimal` or `low`) instead; it
   replaces the budget. A negative budget sends neither.
@@ -103,20 +125,41 @@ The full comparison note is in the private cofounder repo:
   `structFallback` (`none` when no sorting stage ran). The `Server-Timing` header is unchanged.
 - **Typed text** (no recording) and the streaming and evaluation parses go through the same sorter and backup.
 
-## Comparison test (golden set): status
+## Measured baseline (golden set, 28 Nov 2026): a candidate has to beat this
 
-The 20-sample side-by-side test is **running separately; the orchestrator adds its results here.** Plan: the same prompt on
-Sarvam 105B, Gemini 3.5 Flash-Lite and Gemini 3.8 Flash; 20 golden-set sentences plus 20 to 30 of the founder's own test-note
-transcripts (no other farmer's data); 3 passes; score per field: product names, doses and units, tank water and count, labour,
-done vs planned, mix grouping, valid answer format, seconds per call. Keep Sarvam unless Gemini is clearly better on products and
-doses (at least 5 points) or breaks the answer format less; if Gemini wins, take 3.5 Flash-Lite unless 3.8 Flash beats it by more
-than 2 points.
+**How it was measured.** The 20 golden-set sentences, 3 passes each (60 calls per model), with the byte-identical prompt of the
+test branch at `8c5c1a6e`. Scoring map written before any answer existed. A sentence passes when all of its main checks pass
+(product names, doses, tank water, labour, done vs planned, mix grouping, day outcome). "Clean 15" leaves out the 5 sentences
+that appear inside the prompt's own examples. Raw data and the scorer (outside the repo, read-only):
+`E:\APPS\Running App Versions\.tmp-evalcmp\` (`SCORING-MAP.md`, `scored-summary.json`, `examples.txt`). That run had no response
+schema and no answer check; the pilot settings above are what the baseline now stands for.
 
-| Model | Products | Doses and units | Tank water and count | Labour | Done vs planned | Valid JSON | Seconds per call |
-|---|---|---|---|---|---|---|---|
-| Sarvam 105B | pending | pending | pending | pending | pending | pending | pending |
-| Gemini 3.5 Flash-Lite | pending | pending | pending | pending | pending | pending | pending |
-| Gemini 3.8 Flash | pending | pending | pending | pending | pending | pending | pending |
+| | Sarvam 105B (`sarvam-105b-conversations`) | Gemini 3.1 Flash-Lite (live app today) | **Gemini 3.5 Flash-Lite (pilot)** | Gemini 3.8 Flash |
+|---|---|---|---|---|
+| Sentences passed, all 20 x 3 | 44 / 60 (73%) | 54 / 60 (90%) | **56 / 60 (93%)** | 59 / 60 (98%) |
+| Sentences passed, clean 15 x 3 | 36 / 45 (80%) | 42 / 45 (93%) | **41 / 45 (91%)** | 44 / 45 (98%) |
+| Product names | 40 / 51 | 48 / 51 | **51 / 51** | 50 / 51 |
+| Doses and units | 9 / 9 | 9 / 9 | **9 / 9** | 9 / 9 |
+| Tank water | 1 / 3 | 3 / 3 | **3 / 3** | 3 / 3 |
+| Labour | 13 / 15 | 15 / 15 | **13 / 15** | 15 / 15 |
+| Done vs planned | 75 / 75 | 75 / 75 | **75 / 75** | 75 / 75 |
+| Mix grouping | 2 / 9 | 6 / 9 | **9 / 9** | 9 / 9 |
+| Day outcome | 15 / 15 | 15 / 15 | **12 / 15** | 15 / 15 |
+| Broken answers | 0 (but a repeated `inputs` key lost the products twice) | 0 | **1** (pass 2, earthing-up: not valid JSON, labour lost) | 1 (cut off at the 4,096-token cap: thinking ran past it) |
+| Seconds per call, median / worst | 0.62 / 2.1 | 1.53 / 2.4 | **1.42 / 2.3** | 8.4 / 36.8 |
+| Rupees per call, median (cached tokens counted at full price) | 0.085 | 0.217 | **0.292** | 0.868 |
+
+**Decision from it.** 3.5 Flash-Lite stays the pilot's sorter: 93% against Sarvam's 73%, as fast as the live model, about a third
+of the price of 3.8 Flash, which scored 98% but had an 8.4 s median, a 36.8 s worst call and one answer that ran out of room.
+
+**Rule for a change.** A candidate is run the same way (same sentences, 3 passes, byte-identical prompt, the pilot settings) and
+has to beat 56 / 60 overall without scoring lower than the pilot model on any row above; its broken-answer count and its
+seconds per call are reported next to it, and a worse number needs the founder's word. Replace the pilot column here in the same
+change.
+
+**Known prompt-side items (recorded, NOT fixed here: a prompt change needs the founder's word).**
+- 3.5 Flash-Lite answers `IRRELEVANT_INPUT` for "आज काही काम नव्हतं" where `NO_WORK_PLANNED` is expected (day outcome 12 / 15).
+- The prompt's own Ethrel mix example (`MarathiPromptData.cs`, line 152) carries no `mixId`.
 
 ## Not part of this decision (after the pilot)
 
@@ -125,5 +168,9 @@ Admin-page model switches, once-only internet product lookups into the product l
 ## Not verified yet
 
 No real Gemini or Sarvam call was made for this change (all tests use fakes). To check with the real key: the model id
-`gemini-3.5-flash-lite` answers; `thinkingBudget: 0` is accepted for it; the answer is valid JSON for a real Marathi talk; a
-90-second talk is one call; `cachedTokens` appears in the log; the backup fires when Gemini is made to fail.
+`gemini-3.5-flash-lite` answers; `thinkingBudget: 0` is accepted for it; the response schema is accepted (in particular
+`additionalProperties: true` on the open rows; if the API refuses it, set `Gemini:StructurerResponseSchema` to `false` and the
+call falls back to JSON mode plus the answer check) and does not change what real answers contain (a row still carries `mixId`,
+`carrierVolume`, `sourceText`); the answer is valid JSON for a real Marathi talk; a 90-second talk is one call; `cachedTokens`
+appears in the log; the backup fires when Gemini is made to fail; the `[answer-check]` lines appear when an answer is broken.
+After the schema, re-run the golden-set test and replace the pilot column above.

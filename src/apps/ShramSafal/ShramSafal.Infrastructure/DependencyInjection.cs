@@ -236,6 +236,11 @@ public static class DependencyInjection
                 options.StructurerThinkingBudget = structurerThinkingBudget;
             }
 
+            if (bool.TryParse(section["StructurerResponseSchema"], out var structurerResponseSchema))
+            {
+                options.StructurerResponseSchema = structurerResponseSchema;
+            }
+
             if (!string.IsNullOrWhiteSpace(section["StructurerThinkingLevel"]))
             {
                 options.StructurerThinkingLevel = section["StructurerThinkingLevel"]!.Trim();

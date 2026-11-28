@@ -45,14 +45,16 @@ public sealed class AiResponseNormalizerSummaryTests
     }
 
     [Fact]
-    public void NormalizeVoiceJson_MalformedJson_LeavesSummaryBlankToo()
+    public void NormalizeVoiceJson_MalformedJson_ProducesNoDayAtAll_SoNoSummaryIsInventedEither()
     {
-        // The fallback-to-safe-defaults path went through the same EnsureString call.
+        // 28 Nov 2026: malformed JSON used to take a fallback-to-safe-defaults path (a blank summary on an empty
+        // WORK_RECORDED day that reported success). It is now a broken answer: nothing is produced, so there is no day, and no
+        // sentence on his behalf, to show.
         const string rawJson = "{ this is not valid json at all";
 
-        var root = JsonNode.Parse(_sut.NormalizeVoiceJson(rawJson))!.AsObject();
+        var act = () => _sut.NormalizeVoiceJson(rawJson);
 
-        root["summary"]!.GetValue<string>().Should().BeEmpty();
+        act.Should().Throw<BrokenModelAnswerException>();
     }
 
     [Fact]

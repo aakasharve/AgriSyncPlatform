@@ -6,7 +6,7 @@ namespace ShramSafal.Infrastructure.AI;
 
 internal sealed class AiResponseNormalizer
 {
-    private static readonly HashSet<string> AllowedDayOutcomes =
+    internal static readonly HashSet<string> AllowedDayOutcomes =
     [
         "WORK_RECORDED",
         "DISTURBANCE_RECORDED",
@@ -64,9 +64,23 @@ internal sealed class AiResponseNormalizer
         string schemaVersion = "1.0.0",
         string pipelineVersion = "gemini-server-v1",
         string promptVersion = "2026-02-22",
-        string? serverTranscript = null)
+        string? serverTranscript = null,
+        bool requireDayOutcome = false)
     {
-        var root = ParseJsonObject(rawJson);
+        // 28 Nov 2026 (CTO scope add) - a broken answer is a failure, never a day. An unparseable or empty answer used to come
+        // out of here as an empty WORK_RECORDED day that reported success, and a key repeated with a different value kept the
+        // last one, so a talk could lose its labour or its products and still read as saved. Now it throws, the provider turns
+        // that into a failed call, and the orchestrator retries once and then hands the transcript to the backup sorter; if
+        // that fails too the note is kept for later (the unheard-voice path). A key repeated with the SAME value is harmless
+        // and is collapsed. requireDayOutcome (the sorting prompt asks for one) also refuses an answer that names no day
+        // outcome and holds no work row and no disturbance: nothing in it could make a "work recorded" day.
+        var inspection = AiAnswerInspector.Inspect(rawJson, requireDayOutcome);
+        if (!inspection.IsUsable)
+        {
+            throw new BrokenModelAnswerException(inspection);
+        }
+
+        var root = ParseJsonObject(inspection.Text!);
         PromoteLegacyDailyLogShape(root);
         if (!string.IsNullOrWhiteSpace(serverTranscript))
         {

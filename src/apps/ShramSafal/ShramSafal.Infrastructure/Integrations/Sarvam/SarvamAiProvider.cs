@@ -85,6 +85,8 @@ internal sealed class SarvamAiProvider(
             // nothing. A correction ("बदला") is never segmented: its block asks for whole buckets, which segments
             // would repeat.
             var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
+            // 28 Nov 2026 (CTO scope add) - see AiAnswerInspector: the sorting prompt asks for a dayOutcome.
+            var isSortingPrompt = AiAnswerInspector.PromptAsksForDayOutcome(systemPrompt);
             var segmentTokens = isCorrection
                 ? int.MaxValue
                 : new StructuringBudget(_options.ChatMaxTokens > 0 ? _options.ChatMaxTokens : 2048).SegmentTokens;
@@ -120,7 +122,16 @@ internal sealed class SarvamAiProvider(
                         StructuringBudget.PredictedAnswerTokens(spoken),
                         completion.Usage ?? "(none)",
                         AnswerCensus.Describe(completion.Content));
-                    return SegmentAnswer.Ok(completion.Content);
+
+                    // 28 Nov 2026 (CTO scope add): an answer that cannot be used (not JSON, empty, a key such as "inputs" repeated
+                    // with a different value - live: two products, then []) is a FAILED call, never a successful day. It gets
+                    // the one more try, and then the failure reaches the orchestrator. A key repeated with the same value is
+                    // dropped. Logged with the provider name so the cases can be counted.
+                    var inspection = AiAnswerInspector.Inspect(GeminiJsonCleaner.Clean(completion.Content ?? string.Empty), isSortingPrompt);
+                    AiAnswerInspector.Log(logger, "Sarvam", _options.ChatModel, inspection);
+                    return inspection.IsUsable
+                        ? SegmentAnswer.Ok(inspection.Text)
+                        : SegmentAnswer.Failed(inspection.ErrorText, retryable: true);
                 },
                 logger,
                 ct,
@@ -139,7 +150,12 @@ internal sealed class SarvamAiProvider(
             var cleaned = GeminiJsonCleaner.Clean(structured.Content ?? "{}");
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
             // PLR lane V-1 — the server holds the transcript; the model no longer repeats it (its answer must fit).
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, pipelineVersion: "sarvam-server-v1", promptVersion: promptVersion, serverTranscript: transcript);
+            var normalized = responseNormalizer.NormalizeVoiceJson(
+                cleaned,
+                pipelineVersion: "sarvam-server-v1",
+                promptVersion: promptVersion,
+                serverTranscript: transcript,
+                requireDayOutcome: isSortingPrompt);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
 
             return new VoiceParseCanonicalResult

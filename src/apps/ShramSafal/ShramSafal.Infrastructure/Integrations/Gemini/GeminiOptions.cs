@@ -43,6 +43,14 @@ public sealed class GeminiOptions
     public int StructurerMaxOutputTokens { get; set; } = DefaultStructurerMaxOutputTokens;
 
     /// <summary>
+    /// Send an enforced response schema (the skeleton: an object, a <c>dayOutcome</c> of the four known values, the row buckets
+    /// as arrays of objects; rows stay open) with the sorting call, so the answer is valid JSON by construction. True in the
+    /// pilot. False sends JSON mode only (<c>responseMimeType</c>), for the case the API rejects the schema. See
+    /// <c>StructurerResponseSchema</c> and docs/ai/MODEL-SELECTION.md.
+    /// </summary>
+    public bool StructurerResponseSchema { get; set; } = true;
+
+    /// <summary>
     /// Deadline of ONE sorting call. Shorter than <see cref="TimeoutSeconds"/> on purpose: when Gemini is slow or stuck, the
     /// farmer should reach the Sarvam backup within about a minute, not two. 0 or less reads as the default.
     /// </summary>

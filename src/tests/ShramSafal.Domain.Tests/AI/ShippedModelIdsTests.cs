@@ -60,6 +60,8 @@ public sealed class ShippedModelIdsTests
         var maxOutput = gemini.GetProperty("StructurerMaxOutputTokens").GetInt32();
         Assert.InRange(maxOutput, 1, GeminiOptions.StructurerMaxOutputTokensCeiling);
         Assert.Equal(0, gemini.GetProperty("StructurerThinkingBudget").GetInt32());
+        // 28 Nov 2026 (CTO scope add): the enforced response schema for the sorting call is on in every shipped file.
+        Assert.True(gemini.GetProperty("StructurerResponseSchema").GetBoolean());
         Assert.InRange(gemini.GetProperty("StructurerTimeoutSeconds").GetInt32(), 1, gemini.GetProperty("TimeoutSeconds").GetInt32());
 
         // A pointer beside the model id, so nobody changes it without the decision record.
